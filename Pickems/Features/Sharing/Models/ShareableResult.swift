@@ -34,18 +34,18 @@ struct ShareableResult: Identifiable, Equatable {
         promoURL = AppConfig.appPromoURL
     }
 
-    init(season: SeasonStanding, tone: ShareTone = .auto) {
-        id = "season-\(season.season)-\(season.userId)"
+    init(season standing: SeasonStanding, tone: ShareTone = .auto) {
+        id = "season-\(standing.season)-\(standing.userId)"
         type = .seasonEnd
-        displayName = season.displayName
-        leagueName = season.leagueName
-        season = season.season
+        displayName = standing.displayName
+        leagueName = standing.leagueName
+        season = standing.season
         week = nil
-        rank = season.rank
-        totalPlayers = season.totalPlayers
-        headline = ShareTextBuilder.seasonHeadline(for: season)
-        statsLine = ShareTextBuilder.seasonStatsLine(for: season)
-        bragLine = ShareTextBuilder.seasonBragLine(for: season, tone: tone)
+        rank = standing.rank
+        totalPlayers = standing.totalPlayers
+        headline = ShareTextBuilder.seasonHeadline(for: standing)
+        statsLine = ShareTextBuilder.seasonStatsLine(for: standing)
+        bragLine = ShareTextBuilder.seasonBragLine(for: standing, tone: tone)
         promoURL = AppConfig.appPromoURL
     }
 

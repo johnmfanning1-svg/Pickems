@@ -1,0 +1,237 @@
+import SwiftUI
+
+@MainActor
+@Observable
+final class PicksViewModel {
+    var draftPicks: [String: String] = [:]
+    var showGameBrowse = false
+    var espnGames: [ESPNGame] = []
+    var isLoadingGames = false
+    var livePickCards: [String: ESPNLiveGameCard] = [:]
+    var showConfirmSubmit = false
+    var spreadEditGame: SlateGame?
+
+    private var liveRefreshTask: Task<Void, Never>?
+
+    func loadWeek(appState: AppState) async {
+        await appState.syncSelectedWeek()
+        if let picks = appState.pickService.userPick?.picks, !picks.isEmpty {
+            draftPicks = picks
+        }
+    }
+
+    func syncDraftFromServer(_ picks: [String: String]?) {
+        if let picks, !picks.isEmpty {
+            draftPicks = picks
+        }
+    }
+
+    func startLiveRefresh(week: WeekSummary, appState: AppState) {
+        liveRefreshTask = LiveScoreRefresh.start(existing: liveRefreshTask) { [weak self] in
+            await self?.refreshLiveResults(week: week, appState: appState)
+        }
+    }
+
+    func stopLiveRefresh() {
+        LiveScoreRefresh.stop(&liveRefreshTask)
+    }
+
+    func loadESPNGames(appState: AppState) async {
+        isLoadingGames = true
+        defer { isLoadingGames = false }
+        do {
+            let weekInfo = try await ESPNService.shared.currentWeek()
+            espnGames = try await ESPNService.shared.fetchScoreboard(week: weekInfo.weekNumber)
+        } catch {
+            appState.pickService.errorMessage = error.localizedDescription
+        }
+    }
+
+    func handleGameSelection(_ game: ESPNGame, appState: AppState) {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek,
+              let user = appState.authService.currentUser else { return }
+
+        Task {
+            do {
+                let rules = group.rules
+                if rules.selectionMode == .commissioner {
+                    try await appState.pickService.submitCommissionerGame(
+                        groupId: group.id,
+                        weekId: week.id,
+                        game: game.toSlateGame(),
+                        rules: rules
+                    )
+                } else {
+                    try await appState.pickService.submitNomination(
+                        groupId: group.id,
+                        weekId: week.id,
+                        nomination: Nomination(
+                            id: "",
+                            submittedBy: user.id,
+                            submitterName: user.displayName,
+                            espnEventId: game.espnEventId,
+                            spread: game.spread ?? 0,
+                            spreadTeamId: game.spreadTeamId ?? game.homeTeamId,
+                            homeTeamName: game.homeTeamName,
+                            awayTeamName: game.awayTeamName,
+                            kickoff: game.kickoff,
+                            createdAt: Date()
+                        ),
+                        rules: rules
+                    )
+                }
+                PickemsHaptics.success()
+                showGameBrowse = false
+            } catch {
+                appState.pickService.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func saveDraft(appState: AppState) {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek,
+              let user = appState.authService.currentUser else { return }
+        Task {
+            do {
+                try await appState.pickService.savePickDraft(
+                    groupId: group.id,
+                    weekId: week.id,
+                    userId: user.id,
+                    displayName: user.displayName,
+                    picks: draftPicks
+                )
+            } catch {
+                appState.pickService.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func submitPicks(week: WeekSummary, appState: AppState) {
+        guard let group = appState.groupService.selectedGroup,
+              let user = appState.authService.currentUser else { return }
+        Task {
+            do {
+                try await appState.pickService.submitPicks(
+                    groupId: group.id,
+                    weekId: week.id,
+                    userId: user.id,
+                    displayName: user.displayName,
+                    picks: draftPicks,
+                    deadline: week.pickDeadline
+                )
+                PickemsHaptics.success()
+            } catch {
+                appState.pickService.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func lockSlateEarly(appState: AppState) {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek else { return }
+        let kickoffs = appState.pickService.nominations.map(\.kickoff)
+        guard !kickoffs.isEmpty else { return }
+        Task {
+            do {
+                try await appState.groupService.lockSlateEarly(
+                    groupId: group.id,
+                    weekId: week.id,
+                    rules: group.rules,
+                    kickoffs: kickoffs
+                )
+            } catch {
+                appState.groupService.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func removeNomination(_ nomination: Nomination, rules: GroupRules, appState: AppState) {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek,
+              let userId = appState.currentUserId else { return }
+        Task {
+            do {
+                try await appState.pickService.removeNomination(
+                    groupId: group.id,
+                    weekId: week.id,
+                    nomination: nomination,
+                    rules: rules,
+                    isCommissioner: appState.isCommissioner,
+                    userId: userId
+                )
+            } catch {
+                appState.pickService.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func removeCommissionerGame(_ game: SlateGame, week: WeekSummary, appState: AppState) {
+        guard let group = appState.groupService.selectedGroup else { return }
+        Task {
+            do {
+                try await appState.pickService.removeCommissionerGame(
+                    groupId: group.id,
+                    weekId: week.id,
+                    gameId: game.id,
+                    weekStatus: week.status
+                )
+            } catch {
+                appState.pickService.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func updateSpread(_ game: SlateGame, spread: Double, spreadTeamId: String, appState: AppState) {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek else { return }
+        Task {
+            do {
+                try await appState.pickService.updateGameSpread(
+                    groupId: group.id,
+                    weekId: week.id,
+                    gameId: game.id,
+                    spread: spread,
+                    spreadTeamId: spreadTeamId
+                )
+            } catch {
+                appState.pickService.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func bulkImportScheduled(week: WeekSummary, rules: GroupRules, appState: AppState) async {
+        guard let group = appState.groupService.selectedGroup else { return }
+        do {
+            let espn = try await ESPNService.shared.fetchScoreboard(week: week.weekNumber)
+            let scheduled = espn.filter { $0.status == .scheduled }.map { $0.toSlateGame() }
+            try await appState.pickService.bulkImportGames(
+                groupId: group.id,
+                weekId: week.id,
+                games: scheduled,
+                rules: rules
+            )
+            PickemsHaptics.success()
+        } catch {
+            appState.pickService.errorMessage = error.localizedDescription
+        }
+    }
+
+    private func refreshLiveResults(week: WeekSummary, appState: AppState) async {
+        let slateIds = Set(appState.pickService.slateGames.map(\.espnEventId))
+        guard !slateIds.isEmpty else { return }
+        do {
+            let weekInfo = try await ESPNService.shared.currentWeek()
+            let cards = try await ESPNService.shared.liveGameCards(
+                week: weekInfo.weekNumber,
+                slateEventIds: slateIds,
+                userPicks: draftPicks,
+                slateGames: appState.pickService.slateGames
+            )
+            livePickCards = Dictionary(uniqueKeysWithValues: cards.map { ($0.espnEventId, $0) })
+        } catch {
+            // Live refresh is best-effort during locked weeks.
+        }
+    }
+}

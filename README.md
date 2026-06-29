@@ -1,109 +1,61 @@
 # Pickems
 
-Custom iOS SwiftUI app for the Fannypack
+College football pick'em iOS app built with SwiftUI and Firebase.
 
-## Features
-- Live ESPN CFB game data & spreads
-- Private league picks & standings
-- Groups and live game info tracking
-- **X (Twitter) and text message sharing** for weekly and end-of-year results
-- **Invite friends** to Pickems via X or text
+## Requirements
 
-Built with SwiftUI + Xcode.
+- Xcode 16+
+- Apple Developer Program ($99/yr)
+- Firebase project on Blaze plan with **$5 budget cap** (see setup below)
 
-## Open in Xcode
+## Firebase Setup
 
-```bash
-git clone https://github.com/johnmfanning1-svg/Pickems.git
-cd Pickems
-open Pickems.xcodeproj
-```
-
-1. Set your **Development Team** in Signing & Capabilities
-2. Set X OAuth Client ID in `Pickems/Features/Sharing/Utilities/AppConfig.swift`
-3. Build and run
-
-Full integration steps for an existing local project: **[docs/XCODE_SYNC.md](docs/XCODE_SYNC.md)**
-
-## Social Sharing
-
-Users can brag about weekly and season results, and invite friends to Pickems, via **X** or **text message**.
-
-### Results sharing
-
-1. **Share on X** — Pre-filled tweet with brag copy (no API key required)
-2. **Text Message** — Opens iMessage/SMS with pre-filled body and optional results card image
-3. **More Sharing Options** — iOS share sheet for AirDrop, copy, etc.
-4. **Post directly to X** — OAuth 2.0 PKCE + X API v2 (optional)
-
-### App invite sharing
-
-1. **Share App on X** — Pre-filled invite tweet with promo link and hashtags
-2. **Text Invite** — Pre-filled SMS/iMessage invite with App Store link
-3. **More Sharing Options** — Standard iOS share sheet
-
-### Wire into your standings views
-
-```swift
-// App entry
-SharingBootstrap {
-    YourExistingRootView()
-}
-
-// Weekly results
-ShareResultsButton(source: SharingIntegration.weeklySource(
-    userId: user.id,
-    displayName: user.name,
-    week: 7,
-    season: 2025,
-    leagueName: "Fannypack",
-    correctPicks: 8,
-    totalPicks: 10,
-    rank: 2,
-    totalPlayers: 12,
-    tiebreakerDelta: 3
-))
-
-// Season results
-ShareResultsButton(source: SharingIntegration.seasonSource(
-    userId: user.id,
-    displayName: user.name,
-    season: 2025,
-    leagueName: "Fannypack",
-    totalPoints: 87,
-    weeklyWins: 4,
-    rank: 2,
-    totalPlayers: 12
-))
-
-// Invite friends
-ShareAppButton(leagueName: "Fannypack", label: "Invite Friends")
-```
-
-### Key files
-
-| Area | Path |
-|------|------|
-| Xcode entry | `Pickems/App/PickemsApp.swift` |
-| Integration | `Pickems/Features/Sharing/Integration/` |
-| Share models | `Pickems/Features/Sharing/Models/` |
-| Services | `Pickems/Features/Sharing/Services/` |
-| UI | `Pickems/Features/Sharing/Views/` |
-| Xcode project | `Pickems.xcodeproj` |
-| Sync guide | `docs/XCODE_SYNC.md` |
-
-### Setup
-
-1. Open `Pickems.xcodeproj` (or sync sharing into your existing project — see `docs/XCODE_SYNC.md`)
-2. Merge `Pickems/Resources/InfoPlist-additions.xml` if using an existing Info.plist
-3. Create an app at [developer.x.com](https://developer.x.com) with OAuth 2.0 enabled
-4. Set Client ID in `AppConfig.swift` and register callback `pickems://x-callback`
-5. Update `appPromoURL` and `appStoreURL` when live
-
-### Regenerate Xcode project after adding files
+1. Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com) named `pickems-prod`
+2. Enable **Authentication** → Sign in with Apple only (passwordless)
+3. Create a Firestore database (production mode)
+4. Upgrade to **Blaze** plan and set billing budget: $1 alert, $5 cap in Google Cloud Console
+5. Register iOS app with bundle ID `FannypackInc.Pickems`
+6. Download `GoogleService-Info.plist` and replace the placeholder in `Pickems/Pickems/GoogleService-Info.plist`
+7. Deploy backend:
 
 ```bash
-python3 scripts/generate_xcode_project.py
+cd firebase
+npm install --prefix functions
+npm run build --prefix functions
+npx firebase-tools@latest deploy --only firestore:rules,functions
 ```
 
-Or with XcodeGen: `xcodegen generate`
+## Apple Setup
+
+1. Enable **Sign in with Apple** capability for `FannypackInc.Pickems` in Apple Developer portal
+2. Add push notification capability
+3. Configure APNs key in Firebase Console → Project Settings → Cloud Messaging
+
+## Project Structure
+
+```
+Pickems/Pickems/
+├── App/              App entry, tab navigation
+├── Core/             Models, services, scoring engine
+├── DesignSystem/     Dark theme, red accents, components
+├── Features/         Auth, Home, Groups, Picks, Profile
+firebase/
+├── firestore.rules
+└── functions/        Slate lock, scoring, push reminders
+```
+
+## Commissioner Settings
+
+Each group commissioner can configure:
+- **Selection mode**: Commissioner selects games OR members nominate
+- **Selections per member**: How many games each member nominates (member mode)
+- **Slate size**: Total games per week
+- **Deadline & tie-breaker** policies
+
+## App Store
+
+See [docs/APP_STORE.md](docs/APP_STORE.md) and [docs/privacy-policy.md](docs/privacy-policy.md).
+
+## Cost
+
+Designed for **$0/month** infrastructure at MVP scale using Firebase free tier.

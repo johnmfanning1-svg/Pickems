@@ -1,0 +1,155 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isGroupMember(groupId) {
+      return isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+    }
+
+    function isCommissioner(groupId) {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/groups/$(groupId)).data.commissionerId == request.auth.uid;
+    }
+
+    function isJoiningGroup() {
+      return request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1
+        && request.auth.uid in request.resource.data.memberIds
+        && !(request.auth.uid in resource.data.memberIds)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']);
+    }
+
+    function isLeavingGroup() {
+      return request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1
+        && request.auth.uid in resource.data.memberIds
+        && !(request.auth.uid in request.resource.data.memberIds)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']);
+    }
+
+    function commissionerGameUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['spread', 'spreadTeamId'])
+        || changed.hasOnly(['spread'])
+        || changed.hasOnly(['spreadTeamId']);
+    }
+
+    function memberWeekFieldUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['nominationCount'])
+        || (changed.hasOnly(['status', 'nominationCount'])
+            && resource.data.status == 'selection'
+            && request.resource.data.status == 'picking');
+    }
+
+    function commissionerWeekFieldUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['nominationCount'])
+        || changed.hasOnly(['status', 'nominationCount'])
+        || changed.hasOnly(['status', 'nominationCount', 'pickDeadline'])
+        || changed.hasOnly(['status', 'pickDeadline'])
+        || changed.hasOnly(['status', 'lockedAt'])
+        || changed.hasOnly(['status', 'lockedAt', 'pickDeadline']);
+    }
+
+    function weekData(groupId, weekId) {
+      return get(/databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)).data;
+    }
+
+    function picksVisibleToAll(groupId, weekId) {
+      let week = weekData(groupId, weekId);
+      return week.status in ['locked', 'scored']
+        || (week.keys().hasAll(['pickDeadline'])
+            && week.pickDeadline != null
+            && request.time >= week.pickDeadline);
+    }
+
+    function pickDeadlineOpen(groupId, weekId) {
+      let week = weekData(groupId, weekId);
+      return week.status == 'picking'
+        && (!week.keys().hasAll(['pickDeadline'])
+            || week.pickDeadline == null
+            || request.time < week.pickDeadline);
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /inviteCodes/{code} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['groupId'])
+        && isCommissioner(request.resource.data.groupId);
+      allow delete: if isSignedIn()
+        && isCommissioner(resource.data.groupId);
+    }
+
+    match /groups/{groupId} {
+      allow read: if isGroupMember(groupId);
+      allow create: if isSignedIn();
+      allow update: if isCommissioner(groupId) || isJoiningGroup() || isLeavingGroup();
+      allow delete: if isCommissioner(groupId);
+
+      match /members/{memberId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isSignedIn() && request.auth.uid == memberId;
+        allow update, delete: if isCommissioner(groupId) || (isSignedIn() && request.auth.uid == memberId);
+      }
+
+      match /weeks/{weekId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isCommissioner(groupId) || isGroupMember(groupId);
+        allow update: if isCommissioner(groupId) && commissionerWeekFieldUpdate()
+          || (isGroupMember(groupId) && memberWeekFieldUpdate());
+
+        match /nominations/{nominationId} {
+          allow read: if isGroupMember(groupId);
+          allow create: if isGroupMember(groupId)
+            && weekData(groupId, weekId).status == 'selection'
+            && request.resource.data.submittedBy == request.auth.uid;
+          allow update, delete: if isCommissioner(groupId)
+            || (isSignedIn() && resource.data.submittedBy == request.auth.uid);
+        }
+
+        match /games/{gameId} {
+          allow read: if isGroupMember(groupId);
+          allow create, delete: if isCommissioner(groupId);
+          allow update: if isCommissioner(groupId) && commissionerGameUpdate();
+        }
+
+        match /picks/{pickId} {
+          allow read: if isGroupMember(groupId)
+            && (pickId == request.auth.uid || picksVisibleToAll(groupId, weekId));
+          allow create, update: if isSignedIn()
+            && request.auth.uid == pickId
+            && isGroupMember(groupId)
+            && pickDeadlineOpen(groupId, weekId)
+            && (request.resource.data.isLocked == false
+                || (request.resource.data.isLocked == true
+                    && request.resource.data.submittedAt != null
+                    && (!resource.exists || resource.data.isLocked == false)));
+        }
+
+        match /submissions/{userId} {
+          allow read: if isGroupMember(groupId);
+          allow create, update: if isSignedIn()
+            && request.auth.uid == userId
+            && isGroupMember(groupId)
+            && request.resource.data.userId == userId
+            && !('picks' in request.resource.data);
+        }
+      }
+
+      match /standings/{standingId} {
+        allow read: if isGroupMember(groupId);
+        allow create, update: if isCommissioner(groupId);
+        allow delete: if false;
+      }
+    }
+  }
+}

@@ -1,34 +1,59 @@
 import SwiftUI
 
-/// Demo root view for the generated Xcode project.
-/// Replace this with your real Pickems navigation when syncing locally.
 struct RootView: View {
+    @Environment(AppState.self) private var appState
+
     var body: some View {
-        TabView {
-            WeeklyStandingsView()
-                .tabItem {
-                    Label("This Week", systemImage: "calendar")
-                }
+        Group {
+            #if DEBUG
+            if DevAuthBypass.isEnabled {
+                devBypassRoot
+            } else {
+                productionAuthRoot
+            }
+            #else
+            productionAuthRoot
+            #endif
+        }
+        .preferredColorScheme(.dark)
+        .background(PickemsColors.background)
+    }
 
-            SeasonStandingsView()
-                .tabItem {
-                    Label("Season", systemImage: "trophy")
-                }
-
-            XConnectionSettingsView()
-                .tabItem {
-                    Label("Settings", systemImage: "gearshape")
-                }
+    @ViewBuilder
+    private var devBypassRoot: some View {
+        if !appState.authService.authStateDetermined {
+            loadingView("Starting dev session…")
+        } else if appState.needsOnboarding {
+            OnboardingView()
+        } else {
+            MainTabView()
         }
     }
-}
 
-#if DEBUG
-struct RootView_Previews: PreviewProvider {
-    static var previews: some View {
-        SharingBootstrap {
-            RootView()
+    @ViewBuilder
+    private var productionAuthRoot: some View {
+        if !appState.authService.authStateDetermined {
+            loadingView("Loading your league…")
+        } else if appState.authService.isAuthenticated {
+            if appState.needsOnboarding {
+                OnboardingView()
+            } else {
+                MainTabView()
+            }
+        } else {
+            SignInView()
         }
     }
+
+    private func loadingView(_ message: String) -> some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .tint(PickemsColors.accent)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(PickemsColors.textSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(PickemsColors.background)
+    }
 }
-#endif

@@ -1,20 +1,15 @@
 # Xcode
-*.xcuserstate
-*.xcuserdatad
 DerivedData/
-*.xcodeproj/project.xcworkspace/
-*.xcodeproj/xcuserdata/
-*.xcworkspace/xcuserdata/
-build/
-*.app
+*.xcuserstate
+xcuserdata/
 
-# Swift Package Manager
-.build/
-Package.resolved
+# Firebase
+firebase/functions/node_modules/
+firebase/functions/lib/
+.firebase/
 
-# OS
+# macOS
 .DS_Store
-Thumbs.db
 
-# Environment
-.env
+# Secrets — never commit real Firebase config with live keys
+# GoogleService-Info.plist is included as placeholder; replace locally
