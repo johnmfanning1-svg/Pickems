@@ -53,8 +53,12 @@ struct ShareableResult: Identifiable, Equatable {
         ShareTextBuilder.composeTweet(for: self)
     }
 
+    var messageText: String {
+        ShareTextBuilder.composeMessage(for: self)
+    }
+
     var shareSheetText: String {
-        tweetText
+        messageText
     }
 }
 

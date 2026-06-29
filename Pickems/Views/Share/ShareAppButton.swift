@@ -1,7 +1,9 @@
 import SwiftUI
 
-struct ShareResultsButton: View {
-    let source: ShareSource
+struct ShareAppButton: View {
+    var leagueName: String? = nil
+    var label: String = "Invite Friends"
+
     @EnvironmentObject private var xAuthService: XAuthService
     @State private var showShareSheet = false
 
@@ -9,23 +11,22 @@ struct ShareResultsButton: View {
         Button {
             showShareSheet = true
         } label: {
-            Label("Share Results", systemImage: "square.and.arrow.up")
+            Label(label, systemImage: "person.2.fill")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(.black)
+        .buttonStyle(.bordered)
         .sheet(isPresented: $showShareSheet) {
-            ShareResultsSheet(source: source)
+            ShareAppSheet(leagueName: leagueName)
                 .environmentObject(xAuthService)
         }
     }
 }
 
 #if DEBUG
-struct ShareResultsButton_Previews: PreviewProvider {
+struct ShareAppButton_Previews: PreviewProvider {
     static var previews: some View {
-        ShareResultsButton(source: .weekly(DemoData.weeklyResult))
+        ShareAppButton(leagueName: "Fannypack")
             .environmentObject(XAuthService())
             .padding()
     }

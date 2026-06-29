@@ -22,7 +22,7 @@ struct SeasonStandingsView: View {
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                 } footer: {
-                    Text("Post your end-of-year results and let the league know who really won.")
+                    Text("Post your end-of-year results by text or X and let the league know who really won.")
                 }
             }
             .navigationTitle("Season \(standing.season)")

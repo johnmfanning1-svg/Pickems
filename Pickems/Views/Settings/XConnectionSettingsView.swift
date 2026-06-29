@@ -43,6 +43,14 @@ struct XConnectionSettingsView: View {
                     Text("Requires an X Developer app with OAuth 2.0 PKCE enabled. Set your Client ID in AppConfig.swift and register the \(AppConfig.xRedirectURI) callback URL.")
                 }
 
+                Section("Invite Friends") {
+                    ShareAppButton(leagueName: "Fannypack", label: "Share Pickems")
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                } footer: {
+                    Text("Invite friends to join Pickems via text or X.")
+                }
+
                 Section("Promotion") {
                     LabeledContent("App URL", value: AppConfig.appPromoURL)
                     LabeledContent("Hashtags", value: "\(AppConfig.cfbHashtag) \(AppConfig.appHashtag)")

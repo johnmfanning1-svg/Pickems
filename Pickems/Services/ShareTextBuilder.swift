@@ -12,6 +12,16 @@ enum ShareTextBuilder {
             .joined(separator: "\n")
     }
 
+    static func composeMessage(for result: ShareableResult) -> String {
+        var lines = [result.headline, result.statsLine, result.bragLine]
+        lines.append(result.promoURL)
+
+        return lines
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
+
     static func weeklyHeadline(for result: WeeklyResult) -> String {
         "Week \(result.week) Pickems 🏈"
     }

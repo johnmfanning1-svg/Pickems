@@ -32,6 +32,33 @@ final class ShareTextBuilderTests: XCTestCase {
         XCTAssertTrue(result.bragLine.contains("CROWN"))
     }
 
+    func testWeeklyMessageOmitsHashtags() {
+        let result = ShareableResult(weekly: DemoData.weeklyResult, tone: .fullDunk)
+        let message = result.messageText
+
+        XCTAssertTrue(message.contains("Week 7 Pickems"))
+        XCTAssertTrue(message.contains(AppConfig.appPromoURL))
+        XCTAssertFalse(message.contains(AppConfig.appHashtag))
+    }
+
+    func testAppInviteIncludesStoreLink() {
+        let message = AppShareContent.inviteMessage(leagueName: "Fannypack")
+        XCTAssertTrue(message.contains("Fannypack"))
+        XCTAssertTrue(message.contains(AppConfig.appStoreURL))
+    }
+
+    func testAppInviteTweetIncludesPromoAndHashtags() {
+        let tweet = AppShareContent.inviteTweet(leagueName: "Fannypack")
+        XCTAssertTrue(tweet.contains(AppConfig.appPromoURL))
+        XCTAssertTrue(tweet.contains(AppConfig.appHashtag))
+    }
+
+    func testSMSURLBuilds() {
+        let url = MessageURLBuilder.smsURL(body: "Join Pickems")
+        XCTAssertNotNil(url)
+        XCTAssertEqual(url?.scheme, "sms")
+    }
+
     func testXIntentURLBuilds() {
         let url = XURLBuilder.intentTweetURL(text: "Hello Pickems")
         XCTAssertNotNil(url)

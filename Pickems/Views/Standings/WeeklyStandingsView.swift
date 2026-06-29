@@ -21,7 +21,7 @@ struct WeeklyStandingsView: View {
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                 } footer: {
-                    Text("Share your weekly results to X and drive friends to Pickems.")
+                    Text("Share your weekly results via text, X, or other apps to drive friends to Pickems.")
                 }
             }
             .navigationTitle("Week \(result.week)")

@@ -23,6 +23,11 @@ final class XShareService: ObservableObject {
         UIApplication.shared.open(url)
     }
 
+    func openXIntent(text: String) {
+        guard let url = XURLBuilder.intentTweetURL(text: text) else { return }
+        UIApplication.shared.open(url)
+    }
+
     func shareSheetItems(for result: ShareableResult, image: UIImage?) -> [Any] {
         var items: [Any] = [result.shareSheetText]
         if let image {
@@ -31,7 +36,15 @@ final class XShareService: ObservableObject {
         return items
     }
 
+    func shareSheetItems(text: String) -> [Any] {
+        [text]
+    }
+
     func postDirectly(for result: ShareableResult) async throws {
+        try await postDirectly(text: result.tweetText)
+    }
+
+    func postDirectly(text: String) async throws {
         let accessToken = try await authService.validAccessToken()
 
         var request = URLRequest(url: XURLBuilder.postTweetURL())
@@ -39,7 +52,7 @@ final class XShareService: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
-        let payload: [String: Any] = ["text": result.tweetText]
+        let payload: [String: Any] = ["text": text]
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (data, response) = try await URLSession.shared.data(for: request)

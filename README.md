@@ -6,30 +6,39 @@ Custom iOS SwiftUI app for the Fannypack
 - Live ESPN CFB game data & spreads
 - Private league picks & standings
 - Groups and live game info tracking
-- **X (Twitter) sharing** for weekly and end-of-year results
+- **X (Twitter) and text message sharing** for weekly and end-of-year results
+- **Invite friends** to Pickems via X or text
 
 Built with SwiftUI + Xcode.
 
-## X / Twitter Social Sharing
+## Social Sharing
 
-Users can brag about weekly and season results on X to dunk on friends and drive traffic back to Pickems.
+Users can brag about weekly and season results, and invite friends to Pickems, via **X** or **text message**.
 
-### Sharing options
+### Results sharing
 
-1. **Open in X** — Uses `twitter.com/intent/tweet` with pre-filled brag text (no API key required)
-2. **Share image + text** — Renders a branded results card and opens the iOS share sheet
-3. **Post directly** — OAuth 2.0 PKCE + X API v2 for in-app posting (optional)
+1. **Share on X** — Pre-filled tweet with brag copy (no API key required)
+2. **Text Message** — Opens iMessage/SMS with pre-filled body and optional results card image
+3. **More Sharing Options** — iOS share sheet for AirDrop, copy, etc.
+4. **Post directly to X** — OAuth 2.0 PKCE + X API v2 (optional)
+
+### App invite sharing
+
+1. **Share App on X** — Pre-filled invite tweet with promo link and hashtags
+2. **Text Invite** — Pre-filled SMS/iMessage invite with App Store link
+3. **More Sharing Options** — Standard iOS share sheet
 
 ### Key files
 
 | Area | Path |
 |------|------|
-| Share models | `Pickems/Models/ShareableResult.swift`, `ShareSource.swift` |
-| Tweet copy | `Pickems/Services/ShareTextBuilder.swift` |
+| Share models | `Pickems/Models/ShareableResult.swift`, `ShareSource.swift`, `AppShareContent.swift` |
+| Tweet / message copy | `Pickems/Services/ShareTextBuilder.swift`, `AppShareTextBuilder.swift` |
+| Text messages | `Pickems/Services/MessageShareService.swift`, `Views/Share/MessageComposeView.swift` |
 | X OAuth | `Pickems/Services/XAuthService.swift` |
 | X posting | `Pickems/Services/XShareService.swift` |
-| Share card UI | `Pickems/Views/Share/ResultsShareCard.swift` |
-| Share flow | `Pickems/Views/Share/ShareResultsSheet.swift` |
+| Results share flow | `Pickems/Views/Share/ShareResultsSheet.swift` |
+| App invite flow | `Pickems/Views/Share/ShareAppSheet.swift`, `ShareAppButton.swift` |
 | Weekly hook | `Pickems/Views/Standings/WeeklyStandingsView.swift` |
 | Season hook | `Pickems/Views/Standings/SeasonStandingsView.swift` |
 | Settings | `Pickems/Views/Settings/XConnectionSettingsView.swift` |
@@ -64,9 +73,26 @@ ShareResultsButton(source: .weekly(userWeeklyResult))
 ShareResultsButton(source: .season(userSeasonStanding))
 ```
 
+Invite friends from settings or anywhere in the app:
+
+```swift
+ShareAppButton(leagueName: userLeagueName, label: "Invite Friends")
+```
+
 ### Share tone
 
 Users can pick **Auto**, **Humble Brag**, or **Full Dunk** before posting. Auto selects dunk copy for podium finishes and weekly wins.
+
+### Message format
+
+Weekly text example (no hashtags):
+
+```
+Week 7 Pickems 🏈
+2nd of 12 in Fannypack • 8/10 correct • TB +3
+Podium finish while the rest of the league is in shambles.
+https://pickems.app
+```
 
 ### Tweet format
 

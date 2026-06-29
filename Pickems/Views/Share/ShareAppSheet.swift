@@ -1,15 +1,13 @@
 import SwiftUI
 
-struct ShareResultsSheet: View {
-    let source: ShareSource
+struct ShareAppSheet: View {
+    var leagueName: String? = nil
 
     @EnvironmentObject private var xAuthService: XAuthService
     @Environment(\.dismiss) private var dismiss
 
-    @State private var tone: ShareTone = .auto
-    @State private var shareImage: UIImage?
-    @State private var showActivitySheet = false
     @State private var showMessageComposer = false
+    @State private var showActivitySheet = false
     @State private var isPosting = false
     @State private var showSuccess = false
     @State private var errorMessage: String?
@@ -18,31 +16,34 @@ struct ShareResultsSheet: View {
         XShareService(authService: xAuthService)
     }
 
-    private var resolvedResult: ShareableResult {
-        source.makeShareableResult(tone: tone)
+    private var messageText: String {
+        AppShareContent.inviteMessage(leagueName: leagueName)
+    }
+
+    private var tweetText: String {
+        AppShareContent.inviteTweet(leagueName: leagueName)
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    ResultsShareCard(result: resolvedResult)
-                        .frame(height: 220)
-                        .padding(.horizontal)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Invite Friends", systemImage: "person.2.fill")
+                            .font(.title2.weight(.bold))
 
-                    Picker("Tone", selection: $tone) {
-                        ForEach(ShareTone.allCases) { option in
-                            Text(option.label).tag(option)
-                        }
+                        Text("Share Pickems so your league can join, pick games, and talk trash all season.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    .pickerStyle(.segmented)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Preview")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
-                        Text(resolvedResult.messageText)
+                        Text(messageText)
                             .font(.body)
                             .padding()
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -53,9 +54,9 @@ struct ShareResultsSheet: View {
 
                     VStack(spacing: 12) {
                         Button {
-                            shareService.openXIntent(for: resolvedResult)
+                            shareService.openXIntent(text: tweetText)
                         } label: {
-                            Label("Share on X", systemImage: "arrow.up.right.square")
+                            Label("Share App on X", systemImage: "arrow.up.right.square")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
@@ -64,14 +65,13 @@ struct ShareResultsSheet: View {
                         Button {
                             sendTextMessage()
                         } label: {
-                            Label("Text Message", systemImage: "message.fill")
+                            Label("Text Invite", systemImage: "message.fill")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.green)
 
                         Button {
-                            shareImage = ShareCardRenderer.renderImage(for: resolvedResult)
                             showActivitySheet = true
                         } label: {
                             Label("More Sharing Options", systemImage: "square.and.arrow.up")
@@ -87,7 +87,7 @@ struct ShareResultsSheet: View {
                                     ProgressView()
                                         .frame(maxWidth: .infinity)
                                 } else {
-                                    Label("Post Directly to X", systemImage: "paperplane.fill")
+                                    Label("Post App Invite to X", systemImage: "paperplane.fill")
                                         .frame(maxWidth: .infinity)
                                 }
                             }
@@ -106,43 +106,32 @@ struct ShareResultsSheet: View {
                 }
                 .padding(.vertical)
             }
-            .navigationTitle("Share Results")
+            .navigationTitle("Share Pickems")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                 }
             }
-            .onAppear {
-                shareImage = ShareCardRenderer.renderImage(for: resolvedResult)
-            }
-            .onChange(of: tone) { _, _ in
-                shareImage = ShareCardRenderer.renderImage(for: resolvedResult)
-            }
             .sheet(isPresented: $showMessageComposer) {
-                MessageComposeView(
-                    body: resolvedResult.messageText,
-                    image: shareImage
-                )
+                MessageComposeView(body: messageText)
             }
             .sheet(isPresented: $showActivitySheet) {
-                ActivityView(items: shareService.shareSheetItems(for: resolvedResult, image: shareImage))
+                ActivityView(items: shareService.shareSheetItems(text: messageText))
             }
             .alert("Posted to X", isPresented: $showSuccess) {
                 Button("OK") { dismiss() }
             } message: {
-                Text("Your results are live. Go dunk on the timeline.")
+                Text("Your Pickems invite is live.")
             }
         }
     }
 
     private func sendTextMessage() {
-        shareImage = ShareCardRenderer.renderImage(for: resolvedResult)
-
         if MessageShareService.canSendText {
             showMessageComposer = true
         } else {
-            MessageShareService.openSMSFallback(body: resolvedResult.messageText)
+            MessageShareService.openSMSFallback(body: messageText)
         }
     }
 
@@ -152,7 +141,7 @@ struct ShareResultsSheet: View {
         defer { isPosting = false }
 
         do {
-            try await shareService.postDirectly(for: resolvedResult)
+            try await shareService.postDirectly(text: tweetText)
             showSuccess = true
         } catch {
             errorMessage = error.localizedDescription
@@ -161,9 +150,9 @@ struct ShareResultsSheet: View {
 }
 
 #if DEBUG
-struct ShareResultsSheet_Previews: PreviewProvider {
+struct ShareAppSheet_Previews: PreviewProvider {
     static var previews: some View {
-        ShareResultsSheet(source: .weekly(DemoData.weeklyResult))
+        ShareAppSheet(leagueName: "Fannypack")
             .environmentObject(XAuthService())
     }
 }
