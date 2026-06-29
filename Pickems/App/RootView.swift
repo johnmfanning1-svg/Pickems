@@ -1,18 +1,8 @@
 import SwiftUI
 
-@main
-struct PickemsApp: App {
-    @StateObject private var xAuthService = XAuthService()
-
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environmentObject(xAuthService)
-        }
-    }
-}
-
-struct ContentView: View {
+/// Demo root view for the generated Xcode project.
+/// Replace this with your real Pickems navigation when syncing locally.
+struct RootView: View {
     var body: some View {
         TabView {
             WeeklyStandingsView()
@@ -34,10 +24,11 @@ struct ContentView: View {
 }
 
 #if DEBUG
-struct ContentView_Previews: PreviewProvider {
+struct RootView_Previews: PreviewProvider {
     static var previews: some View {
-        ContentView()
-            .environmentObject(XAuthService())
+        SharingBootstrap {
+            RootView()
+        }
     }
 }
 #endif

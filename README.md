@@ -11,6 +11,20 @@ Custom iOS SwiftUI app for the Fannypack
 
 Built with SwiftUI + Xcode.
 
+## Open in Xcode
+
+```bash
+git clone https://github.com/johnmfanning1-svg/Pickems.git
+cd Pickems
+open Pickems.xcodeproj
+```
+
+1. Set your **Development Team** in Signing & Capabilities
+2. Set X OAuth Client ID in `Pickems/Features/Sharing/Utilities/AppConfig.swift`
+3. Build and run
+
+Full integration steps for an existing local project: **[docs/XCODE_SYNC.md](docs/XCODE_SYNC.md)**
+
 ## Social Sharing
 
 Users can brag about weekly and season results, and invite friends to Pickems, via **X** or **text message**.
@@ -28,90 +42,68 @@ Users can brag about weekly and season results, and invite friends to Pickems, v
 2. **Text Invite** — Pre-filled SMS/iMessage invite with App Store link
 3. **More Sharing Options** — Standard iOS share sheet
 
+### Wire into your standings views
+
+```swift
+// App entry
+SharingBootstrap {
+    YourExistingRootView()
+}
+
+// Weekly results
+ShareResultsButton(source: SharingIntegration.weeklySource(
+    userId: user.id,
+    displayName: user.name,
+    week: 7,
+    season: 2025,
+    leagueName: "Fannypack",
+    correctPicks: 8,
+    totalPicks: 10,
+    rank: 2,
+    totalPlayers: 12,
+    tiebreakerDelta: 3
+))
+
+// Season results
+ShareResultsButton(source: SharingIntegration.seasonSource(
+    userId: user.id,
+    displayName: user.name,
+    season: 2025,
+    leagueName: "Fannypack",
+    totalPoints: 87,
+    weeklyWins: 4,
+    rank: 2,
+    totalPlayers: 12
+))
+
+// Invite friends
+ShareAppButton(leagueName: "Fannypack", label: "Invite Friends")
+```
+
 ### Key files
 
 | Area | Path |
 |------|------|
-| Share models | `Pickems/Models/ShareableResult.swift`, `ShareSource.swift`, `AppShareContent.swift` |
-| Tweet / message copy | `Pickems/Services/ShareTextBuilder.swift`, `AppShareTextBuilder.swift` |
-| Text messages | `Pickems/Services/MessageShareService.swift`, `Views/Share/MessageComposeView.swift` |
-| X OAuth | `Pickems/Services/XAuthService.swift` |
-| X posting | `Pickems/Services/XShareService.swift` |
-| Results share flow | `Pickems/Views/Share/ShareResultsSheet.swift` |
-| App invite flow | `Pickems/Views/Share/ShareAppSheet.swift`, `ShareAppButton.swift` |
-| Weekly hook | `Pickems/Views/Standings/WeeklyStandingsView.swift` |
-| Season hook | `Pickems/Views/Standings/SeasonStandingsView.swift` |
-| Settings | `Pickems/Views/Settings/XConnectionSettingsView.swift` |
+| Xcode entry | `Pickems/App/PickemsApp.swift` |
+| Integration | `Pickems/Features/Sharing/Integration/` |
+| Share models | `Pickems/Features/Sharing/Models/` |
+| Services | `Pickems/Features/Sharing/Services/` |
+| UI | `Pickems/Features/Sharing/Views/` |
+| Xcode project | `Pickems.xcodeproj` |
+| Sync guide | `docs/XCODE_SYNC.md` |
 
 ### Setup
 
-1. Add the `Pickems/` source folder to your Xcode target.
-2. Merge `Pickems/Resources/InfoPlist-additions.xml` into your app `Info.plist`:
-   - URL scheme `pickems` for OAuth callback
-   - `twitter` in `LSApplicationQueriesSchemes` for X app deep links
-3. Create an app at [developer.x.com](https://developer.x.com) with OAuth 2.0 enabled.
-4. Set your Client ID in `Pickems/Utilities/AppConfig.swift`.
-5. Register callback URL: `pickems://x-callback`
-6. Update `appPromoURL` and `appStoreURL` when your marketing links are live.
+1. Open `Pickems.xcodeproj` (or sync sharing into your existing project — see `docs/XCODE_SYNC.md`)
+2. Merge `Pickems/Resources/InfoPlist-additions.xml` if using an existing Info.plist
+3. Create an app at [developer.x.com](https://developer.x.com) with OAuth 2.0 enabled
+4. Set Client ID in `AppConfig.swift` and register callback `pickems://x-callback`
+5. Update `appPromoURL` and `appStoreURL` when live
 
-### Integration with standings
+### Regenerate Xcode project after adding files
 
-When your scoring service finalizes results, trigger the share flow:
-
-```swift
-// After weekly scoring locks
-shareCoordinator.presentWeeklyShareIfEligible(weeklyResult)
-
-// After season ends
-shareCoordinator.presentSeasonShareIfEligible(seasonStanding)
+```bash
+python3 scripts/generate_xcode_project.py
 ```
 
-Wire `ShareResultsButton` into your real standings views:
-
-```swift
-ShareResultsButton(source: .weekly(userWeeklyResult))
-ShareResultsButton(source: .season(userSeasonStanding))
-```
-
-Invite friends from settings or anywhere in the app:
-
-```swift
-ShareAppButton(leagueName: userLeagueName, label: "Invite Friends")
-```
-
-### Share tone
-
-Users can pick **Auto**, **Humble Brag**, or **Full Dunk** before posting. Auto selects dunk copy for podium finishes and weekly wins.
-
-### Message format
-
-Weekly text example (no hashtags):
-
-```
-Week 7 Pickems 🏈
-2nd of 12 in Fannypack • 8/10 correct • TB +3
-Podium finish while the rest of the league is in shambles.
-https://pickems.app
-```
-
-### Tweet format
-
-Weekly example:
-
-```
-Week 7 Pickems 🏈
-2nd of 12 in Fannypack • 8/10 correct • TB +3
-Podium finish while the rest of the league is in shambles.
-https://pickems.app
-#CFB #Pickems
-```
-
-Season example:
-
-```
-2025 Fannypack — Final Standings
-🥈 2nd of 12 • 87 pts • 4 weekly wins • Best: Wk 5 (9/10)
-Runner-up. The only person who beat the whole league all year? Me, almost.
-https://pickems.app
-#CFB #Pickems
-```
+Or with XcodeGen: `xcodegen generate`
