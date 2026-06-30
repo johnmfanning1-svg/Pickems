@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Copies the Sharing feature into an existing local Pickems Xcode project.
+# Copies the Sharing and SmackTalk features into an existing local Pickems Xcode project.
 # Usage: ./scripts/sync-sharing-to-local.sh /path/to/your/Pickems
 
 if [[ $# -lt 1 ]]; then
@@ -20,6 +20,10 @@ rsync -av --delete \
   "$REPO_ROOT/Pickems/Features/Sharing/" \
   "$DEST_ROOT/Pickems/Features/Sharing/"
 
+rsync -av --delete \
+  "$REPO_ROOT/Pickems/Features/SmackTalk/" \
+  "$DEST_ROOT/Pickems/Features/SmackTalk/"
+
 mkdir -p "$DEST_ROOT/Pickems/App"
 rsync -av \
   "$REPO_ROOT/Pickems/App/SharingBootstrap.swift" \
@@ -31,8 +35,8 @@ rsync -av \
 
 echo ""
 echo "Next steps in Xcode:"
-echo "1. Add Pickems/Features/Sharing to your app target (if not already present)"
+echo "1. Add Pickems/Features/Sharing and Pickems/Features/SmackTalk to your app target"
 echo "2. Merge InfoPlist-additions.xml into your Info.plist"
-echo "3. Wrap your app root with SharingBootstrap { YourRootView() }"
-echo "4. Add ShareResultsButton and ShareAppButton to standings/settings"
+echo "3. Wrap your app root with SmackTalkBootstrap { SharingBootstrap { YourRootView() } }"
+echo "4. Add ShareResultsButton, SmackTalkButton, and ShareAppButton to standings/settings"
 echo "5. Set AppConfig.xClientID and your Development Team"

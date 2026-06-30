@@ -4,8 +4,10 @@ import SwiftUI
 struct PickemsApp: App {
     var body: some Scene {
         WindowGroup {
-            SharingBootstrap {
-                RootView()
+            SmackTalkBootstrap {
+                SharingBootstrap {
+                    RootView()
+                }
             }
         }
     }

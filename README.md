@@ -6,6 +6,7 @@ Custom iOS SwiftUI app for the Fannypack
 - Live ESPN CFB game data & spreads
 - Private league picks & standings
 - Groups and live game info tracking
+- **Week-to-week league smack talk** — group chat per league, per week
 - **X (Twitter) and text message sharing** for weekly and end-of-year results
 - **Invite friends** to Pickems via X or text
 
@@ -46,8 +47,10 @@ Users can brag about weekly and season results, and invite friends to Pickems, v
 
 ```swift
 // App entry
-SharingBootstrap {
-    YourExistingRootView()
+SmackTalkBootstrap {
+    SharingBootstrap {
+        YourExistingRootView()
+    }
 }
 
 // Weekly results
@@ -78,7 +81,44 @@ ShareResultsButton(source: SharingIntegration.seasonSource(
 
 // Invite friends
 ShareAppButton(leagueName: "Fannypack", label: "Invite Friends")
+
+// Smack talk for the current week
+SmackTalkButton(
+    context: SmackTalkIntegration.context(
+        userId: user.id,
+        displayName: user.name,
+        leagueId: league.id,
+        leagueName: league.name,
+        season: season,
+        week: week
+    ),
+    weeklyResult: weeklyResult
+)
 ```
+
+### Smack talk
+
+Each league gets a fresh group chat every week. Threads are keyed by `leagueId + season + week`, so Week 6 trash talk stays separate from Week 7.
+
+1. Wrap your app root with `SmackTalkBootstrap` (alongside `SharingBootstrap`)
+2. Add `SmackTalkButton` to weekly standings or a dedicated tab
+3. After scoring locks, post a system message:
+
+```swift
+@EnvironmentObject private var smackTalkService: LocalSmackTalkService
+
+try await smackTalkService.postSystemMessage(
+    text: SmackTalkIntegration.systemMessage(for: weeklyResult),
+    thread: SmackTalkIntegration.thread(
+        leagueId: league.id,
+        leagueName: league.name,
+        season: season,
+        week: week
+    )
+)
+```
+
+The included `LocalSmackTalkService` persists messages on-device for demo use. Swap in a Firestore-backed service that conforms to `SmackTalkServing` for production sync across league members.
 
 ### Key files
 
@@ -90,6 +130,7 @@ ShareAppButton(leagueName: "Fannypack", label: "Invite Friends")
 | Services | `Pickems/Features/Sharing/Services/` |
 | UI | `Pickems/Features/Sharing/Views/` |
 | Xcode project | `Pickems.xcodeproj` |
+| Smack talk | `Pickems/Features/SmackTalk/` |
 | Sync guide | `docs/XCODE_SYNC.md` |
 
 ### Setup

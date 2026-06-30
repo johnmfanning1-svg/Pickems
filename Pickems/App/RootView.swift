@@ -10,6 +10,11 @@ struct RootView: View {
                     Label("This Week", systemImage: "calendar")
                 }
 
+            SmackTalkTabView()
+                .tabItem {
+                    Label("Smack Talk", systemImage: "bubble.left.and.bubble.right.fill")
+                }
+
             SeasonStandingsView()
                 .tabItem {
                     Label("Season", systemImage: "trophy")
@@ -26,8 +31,10 @@ struct RootView: View {
 #if DEBUG
 struct RootView_Previews: PreviewProvider {
     static var previews: some View {
-        SharingBootstrap {
-            RootView()
+        SmackTalkBootstrap {
+            SharingBootstrap {
+                RootView()
+            }
         }
     }
 }

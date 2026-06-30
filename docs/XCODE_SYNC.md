@@ -32,6 +32,7 @@ Ensure these folders are in your app target’s **Compile Sources**:
 
 ```
 Pickems/Features/Sharing/
+Pickems/Features/SmackTalk/
 ```
 
 ### 2. Merge Info.plist entries
@@ -41,7 +42,7 @@ From `Pickems/Resources/InfoPlist-additions.xml`, add:
 - URL scheme: `pickems` (OAuth callback `pickems://x-callback`)
 - Query scheme: `twitter`
 
-### 3. Bootstrap sharing at app launch
+### 3. Bootstrap sharing and smack talk at app launch
 
 In your `@main` app file:
 
@@ -50,8 +51,10 @@ In your `@main` app file:
 struct PickemsApp: App {
     var body: some Scene {
         WindowGroup {
-            SharingBootstrap {
-                YourExistingRootView()
+            SmackTalkBootstrap {
+                SharingBootstrap {
+                    YourExistingRootView()
+                }
             }
         }
     }
@@ -116,6 +119,42 @@ Inject `ResultsShareCoordinator` from the environment (provided by `SharingBoots
 shareCoordinator.presentWeeklyShareIfEligible(weeklyResult)
 ```
 
+### 7. Week-to-week smack talk
+
+Add a chat entry point on weekly standings:
+
+```swift
+SmackTalkButton(
+    context: SmackTalkIntegration.context(
+        userId: currentUser.id,
+        displayName: currentUser.name,
+        leagueId: league.id,
+        leagueName: league.name,
+        season: season,
+        week: week
+    ),
+    weeklyResult: weeklyResult
+)
+```
+
+Post a system message when weekly scoring finalizes:
+
+```swift
+@EnvironmentObject private var smackTalkService: LocalSmackTalkService
+
+try await smackTalkService.postSystemMessage(
+    text: SmackTalkIntegration.systemMessage(for: weeklyResult),
+    thread: SmackTalkIntegration.thread(
+        leagueId: league.id,
+        leagueName: league.name,
+        season: season,
+        week: week
+    )
+)
+```
+
+For production, replace `LocalSmackTalkService` with a backend implementation of `SmackTalkServing` (Firestore recommended).
+
 ## Regenerating the Xcode project
 
 If you add new Swift files under `Pickems/`:
@@ -153,6 +192,12 @@ Pickems/
   Features/
     Sharing/
       Integration/            # SharingBootstrap, SharingIntegration
+      Models/
+      Services/
+      Views/
+      Utilities/
+    SmackTalk/
+      Integration/            # SmackTalkBootstrap, SmackTalkIntegration
       Models/
       Services/
       Views/

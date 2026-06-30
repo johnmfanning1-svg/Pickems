@@ -20,8 +20,21 @@ struct WeeklyStandingsView: View {
                     ShareResultsButton(source: .weekly(result))
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
+
+                    SmackTalkButton(
+                        context: SmackTalkIntegration.context(
+                            userId: result.userId,
+                            displayName: result.displayName,
+                            leagueId: SmackTalkDemoData.leagueId,
+                            leagueName: result.leagueName,
+                            season: result.season,
+                            week: result.week
+                        ),
+                        weeklyResult: result,
+                        label: "Open Week \(result.week) Smack Talk"
+                    )
                 } footer: {
-                    Text("Share your weekly results via text, X, or other apps to drive friends to Pickems.")
+                    Text("Share results or jump into this week's league smack talk.")
                 }
             }
             .navigationTitle("Week \(result.week)")
@@ -32,8 +45,10 @@ struct WeeklyStandingsView: View {
 #if DEBUG
 struct WeeklyStandingsView_Previews: PreviewProvider {
     static var previews: some View {
-        WeeklyStandingsView()
-            .environmentObject(XAuthService())
+        SmackTalkBootstrap {
+            WeeklyStandingsView()
+                .environmentObject(XAuthService())
+        }
     }
 }
 #endif
