@@ -100,6 +100,17 @@ ShareAppButton(leagueName: "Fannypack", label: "Invite Friends")
 4. Set Client ID in `AppConfig.swift` and register callback `pickems://x-callback`
 5. Update `appPromoURL` and `appStoreURL` when live
 
+### X MCP for Cursor (developers)
+
+This repo includes [hosted X MCP](https://docs.x.com/tools/mcp) so Cursor can search X, read API docs, and prototype sharing features while you build.
+
+1. Copy `.env.example` to `.env` and set `CLIENT_ID` / `CLIENT_SECRET` from your X developer app
+2. On that app, also register redirect URI `http://localhost:8080/callback` (for the MCP bridge; separate from the iOS `pickems://x-callback`)
+3. Open **Cursor → Settings → MCP** — `xapi` and `x-docs` should appear from `.cursor/mcp.json`
+4. On first `xapi` use, complete the browser OAuth login once; the bridge caches the token
+
+`x-docs` needs no credentials. Use both together to look up endpoints and try API calls without leaving the editor.
+
 ### Regenerate Xcode project after adding files
 
 ```bash
