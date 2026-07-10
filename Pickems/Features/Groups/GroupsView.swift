@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GroupsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.themePalette) private var theme
     @State private var showCommissionerSettings = false
 
     var body: some View {
@@ -38,7 +39,7 @@ struct GroupsView: View {
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 10)
                                         .background(PickemsColors.cardBackground)
-                                        .foregroundStyle(PickemsColors.accent)
+                                        .foregroundStyle(theme.accent)
                                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                 }
                                 .buttonStyle(.plain)
@@ -51,12 +52,15 @@ struct GroupsView: View {
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 10)
                                         .background(PickemsColors.cardBackground)
-                                        .foregroundStyle(PickemsColors.accent)
+                                        .foregroundStyle(theme.accent)
                                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                 }
                                 .buttonStyle(.plain)
                             }
                             .padding(.horizontal)
+
+                            DynastySectionView()
+                                .padding(.horizontal)
 
                             SocialShareCard(
                                 group: group,
@@ -141,7 +145,7 @@ struct GroupsView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
                     .background(PickemsColors.cardBackground)
-                    .foregroundStyle(PickemsColors.accent)
+                    .foregroundStyle(theme.accent)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -155,6 +159,7 @@ struct GroupsView: View {
 }
 
 struct GroupChip: View {
+    @Environment(\.themePalette) private var theme
     let name: String
     let isSelected: Bool
     let action: () -> Void
@@ -165,7 +170,7 @@ struct GroupChip: View {
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(isSelected ? PickemsColors.accent : PickemsColors.cardBackground)
+                .background(isSelected ? theme.accent : PickemsColors.cardBackground)
                 .foregroundStyle(.white)
                 .clipShape(Capsule())
                 .overlay(
@@ -185,6 +190,7 @@ struct GroupChip: View {
 
 struct LeaderboardView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.themePalette) private var theme
     @State private var showWeekly = true
 
     private var displayEntries: [StandingEntry] {
@@ -228,7 +234,7 @@ struct LeaderboardView: View {
                                 }
                             }
                             .font(.caption)
-                            .foregroundStyle(PickemsColors.accent)
+                            .foregroundStyle(theme.accent)
                             .accessibilityHint("Manually break a tie between players with the same record")
                         }
                     }

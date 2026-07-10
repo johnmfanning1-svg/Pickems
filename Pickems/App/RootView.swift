@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.themePalette) private var theme
 
     var body: some View {
         Group {
@@ -16,7 +17,7 @@ struct RootView: View {
             #endif
         }
         .preferredColorScheme(.dark)
-        .background(PickemsColors.background)
+        .background(PickemsAtmosphericBackground(palette: theme))
     }
 
     @ViewBuilder
@@ -48,12 +49,12 @@ struct RootView: View {
     private func loadingView(_ message: String) -> some View {
         VStack(spacing: 16) {
             ProgressView()
-                .tint(PickemsColors.accent)
+                .tint(theme.accent)
             Text(message)
                 .font(.subheadline)
                 .foregroundStyle(PickemsColors.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(PickemsColors.background)
+        .background(PickemsAtmosphericBackground(palette: theme))
     }
 }

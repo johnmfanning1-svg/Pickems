@@ -3,8 +3,10 @@ import SwiftUI
 enum PickemsColors {
     static let background = Color(red: 0.08, green: 0.08, blue: 0.10)
     static let cardBackground = Color(red: 0.14, green: 0.14, blue: 0.16)
-    static let accent = Color(red: 0.86, green: 0.15, blue: 0.15)
-    static let accentSecondary = Color(red: 0.65, green: 0.10, blue: 0.10)
+    static let defaultAccent = Color(red: 0.86, green: 0.15, blue: 0.15)
+    static let defaultAccentSecondary = Color(red: 0.65, green: 0.10, blue: 0.10)
+    static let accent = defaultAccent
+    static let accentSecondary = defaultAccentSecondary
     static let textPrimary = Color.white
     static let textSecondary = Color(white: 0.65)
     static let success = Color(red: 0.20, green: 0.78, blue: 0.35)
@@ -42,19 +44,45 @@ enum PickemsColors {
 }
 
 struct PickemsTheme {
-    static func apply() {
+    static func apply(palette: ThemePalette = .pickemsDefault) {
         let tabAppearance = UITabBarAppearance()
         tabAppearance.configureWithOpaqueBackground()
-        tabAppearance.backgroundColor = UIColor(PickemsColors.background)
+        tabAppearance.backgroundColor = UIKitColor(PickemsColors.background)
         UITabBar.appearance().standardAppearance = tabAppearance
         UITabBar.appearance().scrollEdgeAppearance = tabAppearance
+        UITabBar.appearance().tintColor = UIKitColor(palette.accent)
 
         let navAppearance = UINavigationBarAppearance()
         navAppearance.configureWithOpaqueBackground()
-        navAppearance.backgroundColor = UIColor(PickemsColors.background)
+        navAppearance.backgroundColor = UIKitColor(PickemsColors.background)
         navAppearance.titleTextAttributes = [.foregroundColor: UIColor.white]
         UINavigationBar.appearance().standardAppearance = navAppearance
         UINavigationBar.appearance().scrollEdgeAppearance = navAppearance
-        UINavigationBar.appearance().tintColor = UIColor(PickemsColors.accent)
+        UINavigationBar.appearance().tintColor = UIKitColor(palette.accent)
+    }
+
+    private static func UIKitColor(_ color: Color) -> UIColor {
+        UIColor(color)
+    }
+}
+
+struct PickemsAtmosphericBackground: View {
+    var palette: ThemePalette = .pickemsDefault
+
+    var body: some View {
+        ZStack {
+            PickemsColors.background
+            LinearGradient(
+                colors: [
+                    palette.atmospheric.opacity(0.28),
+                    palette.atmospheric.opacity(0.08),
+                    PickemsColors.background,
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+        }
+        .ignoresSafeArea()
     }
 }

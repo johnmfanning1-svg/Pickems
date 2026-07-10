@@ -148,6 +148,7 @@ struct CreateGroupWizardView: View {
                 )
                 try await appState.groupService.updateRules(groupId: group.id, rules: rules)
                 appState.authService.markOnboardingComplete(for: user.id)
+                appState.presentFavoriteTeamPromptIfNeeded()
                 PickemsHaptics.success()
                 onComplete()
                 dismiss()

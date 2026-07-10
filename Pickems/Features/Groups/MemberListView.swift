@@ -23,7 +23,8 @@ struct MemberListView: View {
                     ForEach(sortedMembers) { member in
                         MemberRow(
                             member: member,
-                            isCommissioner: member.id == appState.groupService.selectedGroup?.commissionerId
+                            isCommissioner: member.id == appState.groupService.selectedGroup?.commissionerId,
+                            career: appState.groupService.careerRecord(for: member.id)
                         )
                     }
                 } header: {
@@ -41,8 +42,10 @@ struct MemberListView: View {
 }
 
 struct MemberRow: View {
+    @Environment(\.themePalette) private var theme
     let member: GroupMember
     let isCommissioner: Bool
+    var career: CareerRecord? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -62,14 +65,24 @@ struct MemberRow: View {
                             .font(.caption2.weight(.semibold))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(PickemsColors.accent.opacity(0.25))
-                            .foregroundStyle(PickemsColors.accent)
+                            .background(theme.accent.opacity(0.25))
+                            .foregroundStyle(theme.accent)
                             .clipShape(Capsule())
+                    }
+                    if let titles = career?.titles, titles > 0 {
+                        Label("\(titles)", systemImage: "crown.fill")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(theme.accent)
                     }
                 }
                 Text("Joined \(member.joinedAt.formatted(date: .abbreviated, time: .omitted))")
                     .font(.caption)
                     .foregroundStyle(PickemsColors.textSecondary)
+                if let career {
+                    Text("Career \(career.recordLabel) · \(career.seasonsPlayed) seasons")
+                        .font(.caption2)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
             }
 
             Spacer()
@@ -91,6 +104,10 @@ struct MemberRow: View {
 
     private var accessibilityLabel: String {
         let role = isCommissioner ? ", commissioner" : ""
-        return "\(member.displayName)\(role). Season record \(member.seasonWins) wins, \(member.seasonLosses) losses. Batting average \(String(format: "%.3f", member.battingAverage))"
+        var label = "\(member.displayName)\(role). Season record \(member.seasonWins) wins, \(member.seasonLosses) losses. Batting average \(String(format: "%.3f", member.battingAverage))"
+        if let career {
+            label += ". Career \(career.recordLabel), \(career.titles) titles"
+        }
+        return label
     }
 }
