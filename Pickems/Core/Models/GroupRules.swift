@@ -57,10 +57,16 @@ struct GroupRules: Codable, Equatable {
     var tieBreaker: TieBreakerPolicy
     var customDeadlineHour: Int
     var customDeadlineMinute: Int
+    /// Each member may mark one slate game as double-weight.
+    var allowConfidencePick: Bool
+    /// Allow submissions after deadline with a win penalty.
+    var allowLatePicks: Bool
+    var latePickPenaltyWins: Int
 
     enum CodingKeys: String, CodingKey {
         case selectionMode, selectionsPerMember, slateSize, pickDeadline, tieBreaker
         case customDeadlineHour, customDeadlineMinute
+        case allowConfidencePick, allowLatePicks, latePickPenaltyWins
     }
 
     init(
@@ -70,7 +76,10 @@ struct GroupRules: Codable, Equatable {
         pickDeadline: DeadlinePolicy,
         tieBreaker: TieBreakerPolicy,
         customDeadlineHour: Int = 18,
-        customDeadlineMinute: Int = 0
+        customDeadlineMinute: Int = 0,
+        allowConfidencePick: Bool = false,
+        allowLatePicks: Bool = false,
+        latePickPenaltyWins: Int = 1
     ) {
         self.selectionMode = selectionMode
         self.selectionsPerMember = selectionsPerMember
@@ -79,6 +88,9 @@ struct GroupRules: Codable, Equatable {
         self.tieBreaker = tieBreaker
         self.customDeadlineHour = customDeadlineHour
         self.customDeadlineMinute = customDeadlineMinute
+        self.allowConfidencePick = allowConfidencePick
+        self.allowLatePicks = allowLatePicks
+        self.latePickPenaltyWins = latePickPenaltyWins
     }
 
     init(from decoder: Decoder) throws {
@@ -90,6 +102,9 @@ struct GroupRules: Codable, Equatable {
         tieBreaker = try container.decode(TieBreakerPolicy.self, forKey: .tieBreaker)
         customDeadlineHour = try container.decodeIfPresent(Int.self, forKey: .customDeadlineHour) ?? 18
         customDeadlineMinute = try container.decodeIfPresent(Int.self, forKey: .customDeadlineMinute) ?? 0
+        allowConfidencePick = try container.decodeIfPresent(Bool.self, forKey: .allowConfidencePick) ?? false
+        allowLatePicks = try container.decodeIfPresent(Bool.self, forKey: .allowLatePicks) ?? false
+        latePickPenaltyWins = try container.decodeIfPresent(Int.self, forKey: .latePickPenaltyWins) ?? 1
     }
 
     static let `default` = GroupRules(
@@ -99,6 +114,9 @@ struct GroupRules: Codable, Equatable {
         pickDeadline: .firstKickoff,
         tieBreaker: .commissionerOverride,
         customDeadlineHour: 18,
-        customDeadlineMinute: 0
+        customDeadlineMinute: 0,
+        allowConfidencePick: false,
+        allowLatePicks: false,
+        latePickPenaltyWins: 1
     )
 }

@@ -66,6 +66,7 @@ struct DynastySectionView: View {
                 Image(systemName: "trophy.fill")
                     .font(.title2)
                     .foregroundStyle(theme.accent)
+                    .symbolEffect(.bounce, value: archive.seasonYear)
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -73,7 +74,7 @@ struct DynastySectionView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(PickemsColors.textSecondary)
                     Text(archive.championDisplayName ?? "TBD")
-                        .font(.title3.bold())
+                        .font(PickemsTypography.display(24))
                         .foregroundStyle(PickemsColors.textPrimary)
                     if let champ = archive.finalStandings.first {
                         Text("\(champ.seasonWins)-\(champ.seasonLosses) · \(archive.weekCount) weeks")
@@ -84,6 +85,7 @@ struct DynastySectionView: View {
                 Spacer()
             }
         }
+        .pickemsAppear()
     }
 
     private func careerRow(_ career: CareerRecord) -> some View {

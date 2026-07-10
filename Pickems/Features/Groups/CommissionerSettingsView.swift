@@ -7,6 +7,7 @@ struct CommissionerSettingsView: View {
 
     let group: PickemGroup
     @State private var rules: GroupRules
+    @State private var isPublic: Bool
     @State private var isSaving = false
     @State private var showCloseSeasonConfirm = false
     @State private var closeSeasonError: String?
@@ -14,6 +15,7 @@ struct CommissionerSettingsView: View {
     init(group: PickemGroup) {
         self.group = group
         _rules = State(initialValue: group.rules)
+        _isPublic = State(initialValue: group.isPublic)
     }
 
     private var seasonYearToClose: Int {
@@ -81,10 +83,38 @@ struct CommissionerSettingsView: View {
                         }
                     }
                     .listRowBackground(PickemsColors.cardBackground)
+
+                    Toggle("Confidence pick (2x one game)", isOn: $rules.allowConfidencePick)
+                        .listRowBackground(PickemsColors.cardBackground)
+                    Toggle("Allow late picks", isOn: $rules.allowLatePicks)
+                        .listRowBackground(PickemsColors.cardBackground)
+                    if rules.allowLatePicks {
+                        Stepper(
+                            "Late penalty: \(rules.latePickPenaltyWins) win(s)",
+                            value: $rules.latePickPenaltyWins,
+                            in: 1...3
+                        )
+                        .listRowBackground(PickemsColors.cardBackground)
+                    }
                 } header: {
                     sectionHeader("Deadlines & Ties", help: PickemsHelp.pickDeadline)
                 } footer: {
                     Text("Changes apply to future weeks. Existing locked weeks are not affected.")
+                }
+
+                Section {
+                    Toggle("List in Discover", isOn: $isPublic)
+                        .listRowBackground(PickemsColors.cardBackground)
+                    NavigationLink {
+                        SubmissionStatusView()
+                    } label: {
+                        Label("Submission chase", systemImage: "person.crop.circle.badge.clock")
+                    }
+                    .listRowBackground(PickemsColors.cardBackground)
+                } header: {
+                    Text("Visibility & Chase")
+                } footer: {
+                    Text("Public leagues appear in Discover. Submission chase shows who still needs to lock picks.")
                 }
 
                 Section {
@@ -117,7 +147,7 @@ struct CommissionerSettingsView: View {
                 } header: {
                     Text("Dynasty")
                 } footer: {
-                    Text("Archives final standings, awards the champion, updates career records, and resets season W–L for the next year.")
+                    Text("Archives final standings and resets season W–L. Auto-close also runs mid-January via Cloud Functions.")
                 }
             }
             .scrollContentBackground(.hidden)
@@ -163,6 +193,7 @@ struct CommissionerSettingsView: View {
         Task {
             do {
                 try await appState.groupService.updateRules(groupId: group.id, rules: rules)
+                try await appState.groupService.setPublic(groupId: group.id, isPublic: isPublic)
                 PickemsHaptics.success()
                 dismiss()
             } catch {

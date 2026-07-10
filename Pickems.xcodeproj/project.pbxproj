@@ -13,6 +13,9 @@
 		48D60C4A896BE81E11AA2BBE /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = CB07AC943EE21624587BDCE6 /* FirebaseAuth */; };
 		A1B2C3D4E5F60718293A4B5D /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F60718293A4B5E /* FirebaseStorage */; };
 		F4C621BAF1B5640887A363D1 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = A8CDA2F5030591C06A2E55C7 /* FirebaseCore */; };
+
+		B10000000000000000000016 /* PickemsWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* PickemsWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B1000000000000000000001A /* PickemsWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* PickemsWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -30,6 +33,21 @@
 			remoteGlobalIDString = 9849E60D2FEEC2BD00CC6B9A;
 			remoteInfo = Pickems;
 		};
+
+		B10000000000000000000015 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9849E6062FEEC2BC00CC6B9A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B10000000000000000000005;
+			remoteInfo = PickemsWidget;
+		};
+		B1000000000000000000001C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9849E6062FEEC2BC00CC6B9A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B10000000000000000000006;
+			remoteInfo = PickemsWatch;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +55,9 @@
 		9849E61F2FEEC2C400CC6B9A /* PickemsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PickemsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9849E6292FEEC2C400CC6B9A /* PickemsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PickemsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		ECFD4FA4AB8FE060898049FC /* GoogleService-Info.plist */ = {isa = PBXFileReference; explicitFileType = text.plist; name = "GoogleService-Info.plist"; path = "Pickems/GoogleService-Info.plist"; sourceTree = "<group>"; };
+
+		B10000000000000000000003 /* PickemsWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PickemsWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000000000000000000004 /* PickemsWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PickemsWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -62,6 +83,21 @@
 			);
 			target = 9849E6282FEEC2C400CC6B9A /* PickemsUITests */;
 		};
+
+		B10000000000000000000017 /* Exceptions for "PickemsWidget" folder in "PickemsWidget" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B10000000000000000000005 /* PickemsWidget */;
+		};
+		B10000000000000000000018 /* Exceptions for "PickemsWatch" folder in "PickemsWatch" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B10000000000000000000006 /* PickemsWatch */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -83,6 +119,23 @@
 		9849E62C2FEEC2C400CC6B9A /* PickemsUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = PickemsUITests;
+			sourceTree = "<group>";
+		};
+
+		B10000000000000000000001 /* PickemsWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B10000000000000000000017 /* Exceptions for "PickemsWidget" folder in "PickemsWidget" target */,
+			);
+			path = PickemsWidget;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000002 /* PickemsWatch */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B10000000000000000000018 /* Exceptions for "PickemsWatch" folder in "PickemsWatch" target */,
+			);
+			path = PickemsWatch;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -114,6 +167,21 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+
+		B10000000000000000000008 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1000000000000000000000B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -121,6 +189,8 @@
 			isa = PBXGroup;
 			children = (
 				9849E6102FEEC2BD00CC6B9A /* Pickems */,
+				B10000000000000000000001 /* PickemsWidget */,
+				B10000000000000000000002 /* PickemsWatch */,
 				9849E6222FEEC2C400CC6B9A /* PickemsTests */,
 				9849E62C2FEEC2C400CC6B9A /* PickemsUITests */,
 				9849E60F2FEEC2BD00CC6B9A /* Products */,
@@ -132,6 +202,8 @@
 			isa = PBXGroup;
 			children = (
 				9849E60E2FEEC2BD00CC6B9A /* Pickems.app */,
+				B10000000000000000000003 /* PickemsWidget.appex */,
+				B10000000000000000000004 /* PickemsWatch.app */,
 				9849E61F2FEEC2C400CC6B9A /* PickemsTests.xctest */,
 				9849E6292FEEC2C400CC6B9A /* PickemsUITests.xctest */,
 			);
@@ -148,10 +220,14 @@
 				9849E60A2FEEC2BD00CC6B9A /* Sources */,
 				9849E60B2FEEC2BD00CC6B9A /* Frameworks */,
 				9849E60C2FEEC2BD00CC6B9A /* Resources */,
+				B10000000000000000000013 /* Embed Foundation Extensions */,
+				B10000000000000000000019 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B10000000000000000000014 /* PBXTargetDependency */,
+				B1000000000000000000001B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				9849E6102FEEC2BD00CC6B9A /* Pickems */,
@@ -214,6 +290,51 @@
 			productReference = 9849E6292FEEC2C400CC6B9A /* PickemsUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+
+		B10000000000000000000005 /* PickemsWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B10000000000000000000011 /* Build configuration list for PBXNativeTarget "PickemsWidget" */;
+			buildPhases = (
+				B10000000000000000000007 /* Sources */,
+				B10000000000000000000008 /* Frameworks */,
+				B10000000000000000000009 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B10000000000000000000001 /* PickemsWidget */,
+			);
+			name = PickemsWidget;
+			packageProductDependencies = (
+			);
+			productName = PickemsWidget;
+			productReference = B10000000000000000000003 /* PickemsWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		B10000000000000000000006 /* PickemsWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B10000000000000000000012 /* Build configuration list for PBXNativeTarget "PickemsWatch" */;
+			buildPhases = (
+				B1000000000000000000000A /* Sources */,
+				B1000000000000000000000B /* Frameworks */,
+				B1000000000000000000000C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B10000000000000000000002 /* PickemsWatch */,
+			);
+			name = PickemsWatch;
+			packageProductDependencies = (
+			);
+			productName = PickemsWatch;
+			productReference = B10000000000000000000004 /* PickemsWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -235,6 +356,12 @@
 						CreatedOnToolsVersion = 26.6;
 						TestTargetID = 9849E60D2FEEC2BD00CC6B9A;
 					};
+					B10000000000000000000005 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					B10000000000000000000006 = {
+						CreatedOnToolsVersion = 26.6;
+					};
 				};
 			};
 			buildConfigurationList = 9849E6092FEEC2BC00CC6B9A /* Build configuration list for PBXProject "Pickems" */;
@@ -255,6 +382,8 @@
 			projectRoot = "";
 			targets = (
 				9849E60D2FEEC2BD00CC6B9A /* Pickems */,
+				B10000000000000000000005 /* PickemsWidget */,
+				B10000000000000000000006 /* PickemsWatch */,
 				9849E61E2FEEC2C400CC6B9A /* PickemsTests */,
 				9849E6282FEEC2C400CC6B9A /* PickemsUITests */,
 			);
@@ -284,7 +413,48 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+
+		B10000000000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1000000000000000000000C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
+
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B10000000000000000000013 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B10000000000000000000016 /* PickemsWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B10000000000000000000019 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				B1000000000000000000001A /* PickemsWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		9849E60A2FEEC2BD00CC6B9A /* Sources */ = {
@@ -308,6 +478,21 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+
+		B10000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1000000000000000000000A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -320,6 +505,17 @@
 			isa = PBXTargetDependency;
 			target = 9849E60D2FEEC2BD00CC6B9A /* Pickems */;
 			targetProxy = 9849E62A2FEEC2C400CC6B9A /* PBXContainerItemProxy */;
+		};
+
+		B10000000000000000000014 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B10000000000000000000005 /* PickemsWidget */;
+			targetProxy = B10000000000000000000015 /* PBXContainerItemProxy */;
+		};
+		B1000000000000000000001B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B10000000000000000000006 /* PickemsWatch */;
+			targetProxy = B1000000000000000000001C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -603,6 +799,117 @@
 			};
 			name = Release;
 		};
+
+		B1000000000000000000000D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PickemsWidget/PickemsWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 22A943P8SJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PickemsWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Pickems;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = FannypackInc.Pickems.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B1000000000000000000000E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PickemsWidget/PickemsWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 22A943P8SJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PickemsWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Pickems;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = FannypackInc.Pickems.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B1000000000000000000000F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PickemsWatch/PickemsWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 22A943P8SJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PickemsWatch/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Pickems;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = FannypackInc.Pickems;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = FannypackInc.Pickems.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Debug;
+		};
+		B10000000000000000000010 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PickemsWatch/PickemsWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 22A943P8SJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PickemsWatch/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Pickems;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = FannypackInc.Pickems;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = FannypackInc.Pickems.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -638,6 +945,25 @@
 			buildConfigurations = (
 				9849E63B2FEEC2C400CC6B9A /* Debug */,
 				9849E63C2FEEC2C400CC6B9A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+
+		B10000000000000000000011 /* Build configuration list for PBXNativeTarget "PickemsWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B1000000000000000000000D /* Debug */,
+				B1000000000000000000000E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B10000000000000000000012 /* Build configuration list for PBXNativeTarget "PickemsWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B1000000000000000000000F /* Debug */,
+				B10000000000000000000010 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

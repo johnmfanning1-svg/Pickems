@@ -4,6 +4,7 @@ import SwiftUI
 @Observable
 final class PicksViewModel {
     var draftPicks: [String: String] = [:]
+    var confidenceGameId: String?
     var showGameBrowse = false
     var espnGames: [ESPNGame] = []
     var isLoadingGames = false
@@ -18,11 +19,15 @@ final class PicksViewModel {
         if let picks = appState.pickService.userPick?.picks, !picks.isEmpty {
             draftPicks = picks
         }
+        confidenceGameId = appState.pickService.userPick?.confidenceGameId
     }
 
-    func syncDraftFromServer(_ picks: [String: String]?) {
+    func syncDraftFromServer(_ picks: [String: String]?, confidenceGameId: String? = nil) {
         if let picks, !picks.isEmpty {
             draftPicks = picks
+        }
+        if let confidenceGameId {
+            self.confidenceGameId = confidenceGameId
         }
     }
 
@@ -73,8 +78,14 @@ final class PicksViewModel {
                             espnEventId: game.espnEventId,
                             spread: game.spread ?? 0,
                             spreadTeamId: game.spreadTeamId ?? game.homeTeamId,
+                            homeTeamId: game.homeTeamId,
                             homeTeamName: game.homeTeamName,
+                            homeTeamAbbreviation: game.homeTeamAbbreviation,
+                            homeTeamLogoURL: game.homeTeamLogoURL,
+                            awayTeamId: game.awayTeamId,
                             awayTeamName: game.awayTeamName,
+                            awayTeamAbbreviation: game.awayTeamAbbreviation,
+                            awayTeamLogoURL: game.awayTeamLogoURL,
                             kickoff: game.kickoff,
                             createdAt: Date()
                         ),
@@ -100,7 +111,8 @@ final class PicksViewModel {
                     weekId: week.id,
                     userId: user.id,
                     displayName: user.displayName,
-                    picks: draftPicks
+                    picks: draftPicks,
+                    confidenceGameId: group.rules.allowConfidencePick ? confidenceGameId : nil
                 )
             } catch {
                 appState.pickService.errorMessage = error.localizedDescription
@@ -119,7 +131,9 @@ final class PicksViewModel {
                     userId: user.id,
                     displayName: user.displayName,
                     picks: draftPicks,
-                    deadline: week.pickDeadline
+                    deadline: week.pickDeadline,
+                    confidenceGameId: group.rules.allowConfidencePick ? confidenceGameId : nil,
+                    allowLatePicks: group.rules.allowLatePicks
                 )
                 PickemsHaptics.success()
             } catch {
@@ -135,6 +149,10 @@ final class PicksViewModel {
         guard !kickoffs.isEmpty else { return }
         Task {
             do {
+                try await appState.pickService.materializeNominationsIfNeeded(
+                    groupId: group.id,
+                    weekId: week.id
+                )
                 try await appState.groupService.lockSlateEarly(
                     groupId: group.id,
                     weekId: week.id,

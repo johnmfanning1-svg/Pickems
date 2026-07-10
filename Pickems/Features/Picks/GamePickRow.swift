@@ -5,7 +5,11 @@ struct GamePickRow: View {
     let selectedTeamId: String?
     var isDisabled: Bool = false
     var liveCard: ESPNLiveGameCard? = nil
+    var showConfidenceToggle: Bool = false
+    var isConfidence: Bool = false
+    var onConfidenceToggle: (() -> Void)? = nil
     let onSelect: (String) -> Void
+    @Environment(\.themePalette) private var theme
 
     var body: some View {
         PickemsCard {
@@ -34,6 +38,20 @@ struct GamePickRow: View {
                     }
                 }
 
+                if showConfidenceToggle {
+                    Button {
+                        onConfidenceToggle?()
+                    } label: {
+                        Label(
+                            isConfidence ? "Confidence pick (2x)" : "Make confidence pick",
+                            systemImage: isConfidence ? "bolt.circle.fill" : "bolt.circle"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(isConfidence ? theme.accent : PickemsColors.textSecondary)
+                    }
+                    .disabled(isDisabled)
+                }
+
                 Text(game.kickoff.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption2)
                     .foregroundStyle(PickemsColors.textSecondary)
@@ -52,7 +70,7 @@ struct GamePickRow: View {
         case .loss:
             Label("Loss", systemImage: "xmark.circle.fill")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(PickemsColors.accent)
+                .foregroundStyle(theme.accent)
         case .push:
             Label("Push", systemImage: "minus.circle.fill")
                 .font(.caption.weight(.semibold))
@@ -89,10 +107,10 @@ struct GamePickRow: View {
             }
             .frame(maxWidth: .infinity)
             .padding(8)
-            .background(selectedTeamId == teamId ? PickemsColors.accent.opacity(0.3) : Color.clear)
+            .background(selectedTeamId == teamId ? theme.accent.opacity(0.3) : Color.clear)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(selectedTeamId == teamId ? PickemsColors.accent : Color.clear, lineWidth: 2)
+                    .stroke(selectedTeamId == teamId ? theme.accent : Color.clear, lineWidth: 2)
             )
         }
         .disabled(isDisabled)

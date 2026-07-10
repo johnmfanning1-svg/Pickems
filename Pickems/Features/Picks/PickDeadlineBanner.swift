@@ -3,12 +3,13 @@ import SwiftUI
 struct PickDeadlineBanner: View {
     let deadline: Date
     let isPast: Bool
+    @Environment(\.themePalette) private var theme
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: isPast ? "lock.fill" : "clock.fill")
                 .font(.title3)
-                .foregroundStyle(isPast ? PickemsColors.accent : PickemsColors.warning)
+                .foregroundStyle(isPast ? theme.accent : PickemsColors.warning)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -32,7 +33,7 @@ struct PickDeadlineBanner: View {
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(
-                    (isPast ? PickemsColors.accent : PickemsColors.warning).opacity(0.2),
+                    (isPast ? theme.accent : PickemsColors.warning).opacity(0.2),
                     lineWidth: 1
                 )
         )

@@ -3,6 +3,7 @@ import SwiftUI
 struct JoinGroupSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.themePalette) private var theme
 
     @State var initialCode: String
     @State private var inviteCode = ""
@@ -29,7 +30,7 @@ struct JoinGroupSheet: View {
                 if let errorMessage {
                     Section {
                         Text(errorMessage)
-                            .foregroundStyle(PickemsColors.accent)
+                            .foregroundStyle(theme.accent)
                             .font(.caption)
                     }
                 }

@@ -36,6 +36,7 @@ struct ShareSheet: UIViewControllerRepresentable {
 
 struct InviteShareButton: View {
     let group: PickemGroup
+    @Environment(\.themePalette) private var theme
     @State private var showShareSheet = false
 
     var body: some View {
@@ -47,7 +48,7 @@ struct InviteShareButton: View {
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
-                .background(PickemsColors.accent)
+                .background(theme.accent)
                 .foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }

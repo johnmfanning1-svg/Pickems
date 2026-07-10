@@ -3,14 +3,18 @@ import SwiftUI
 struct LeaderboardRow: View {
     let entry: StandingEntry
     var showWeekly: Bool = false
+    var streak: Int = 0
+    var isPerfectSaturday: Bool = false
+    @Environment(\.themePalette) private var theme
 
     var body: some View {
         HStack(spacing: 12) {
             Text("#\(entry.rank)")
-                .font(.headline.monospacedDigit())
-                .foregroundStyle(PickemsColors.accent)
+                .font(PickemsTypography.display(18))
+                .foregroundStyle(theme.accent)
                 .frame(width: 36, alignment: .leading)
                 .accessibilityHidden(true)
+                .pickemsRankMotion(trigger: entry.rank)
 
             InitialsAvatar(
                 initials: String(entry.displayName.prefix(2)).uppercased(),
@@ -23,10 +27,13 @@ struct LeaderboardRow: View {
                 Text(entry.displayName)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(PickemsColors.textPrimary)
-                if entry.isTied {
-                    Text("Tied")
-                        .font(.caption)
-                        .foregroundStyle(PickemsColors.warning)
+                HStack(spacing: 6) {
+                    if entry.isTied {
+                        Text("Tied")
+                            .font(.caption)
+                            .foregroundStyle(PickemsColors.warning)
+                    }
+                    StreakBadgeView(streak: streak, isPerfect: isPerfectSaturday)
                 }
             }
 

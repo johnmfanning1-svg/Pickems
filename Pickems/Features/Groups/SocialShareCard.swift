@@ -3,6 +3,7 @@ import SwiftUI
 struct SocialShareCard: View {
     let group: PickemGroup
     let standings: GroupStandings?
+    @Environment(\.themePalette) private var theme
 
     var body: some View {
         ShareLink(item: shareText) {
@@ -11,7 +12,7 @@ struct SocialShareCard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
                 .background(PickemsColors.cardBackground)
-                .foregroundStyle(PickemsColors.accent)
+                .foregroundStyle(theme.accent)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)

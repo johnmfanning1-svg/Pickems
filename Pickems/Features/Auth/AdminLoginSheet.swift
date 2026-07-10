@@ -4,6 +4,7 @@ import SwiftUI
 struct AdminLoginSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.themePalette) private var theme
     @State private var gatePassword = ""
     @State private var email = DevAdminConfig.defaultEmail
     @State private var firebasePassword = DevAdminConfig.defaultFirebasePassword
@@ -67,7 +68,7 @@ struct AdminLoginSheet: View {
                     if let errorMessage {
                         Text(errorMessage)
                             .font(.caption)
-                            .foregroundStyle(PickemsColors.accent)
+                            .foregroundStyle(theme.accent)
                     }
                 }
                 .padding()

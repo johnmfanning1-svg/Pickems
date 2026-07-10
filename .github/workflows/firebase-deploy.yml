@@ -1,0 +1,36 @@
+name: Deploy Firebase
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "firebase/**"
+      - ".github/workflows/firebase-deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: firebase/functions/package-lock.json
+
+      - name: Deploy rules + functions
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -z "$FIREBASE_TOKEN" ]; then
+            echo "Missing FIREBASE_TOKEN repository secret."
+            echo "Create one with: npx firebase-tools@latest login:ci"
+            echo "Then: gh secret set FIREBASE_TOKEN"
+            exit 1
+          fi
+          chmod +x scripts/deploy-firebase.sh
+          ./scripts/deploy-firebase.sh

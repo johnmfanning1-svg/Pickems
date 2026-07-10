@@ -10,18 +10,29 @@ enum GameBrowseFilter: String, CaseIterable, Identifiable {
 }
 
 struct GameBrowseView: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.themePalette) private var theme
     let games: [ESPNGame]
     let onSelect: (ESPNGame) -> Void
 
     @State private var searchText = ""
     @State private var filter: GameBrowseFilter = .all
 
+    private var favoriteTeamId: String? {
+        appState.authService.currentUser?.favoriteTeamId
+    }
+
     private var filteredGames: [ESPNGame] {
-        games
+        let base = games
             .filter { matchesSearch($0) }
             .filter { matchesFilter($0) }
-            .sorted { $0.kickoff < $1.kickoff }
+        return base.sorted { lhs, rhs in
+            let lFav = isFavoriteGame(lhs)
+            let rFav = isFavoriteGame(rhs)
+            if lFav != rFav { return lFav && !rFav }
+            return lhs.kickoff < rhs.kickoff
+        }
     }
 
     var body: some View {
@@ -31,11 +42,24 @@ struct GameBrowseView: View {
                     .padding(.horizontal)
                     .padding(.top, 8)
 
+                if let fav = filteredGames.first(where: isFavoriteGame) {
+                    HStack {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(theme.accent)
+                        Text("Your team is on the board — \(fav.awayTeamAbbreviation) @ \(fav.homeTeamAbbreviation)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(PickemsColors.textSecondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                }
+
                 List(filteredGames) { game in
                     Button {
                         onSelect(game)
                     } label: {
-                        GameBrowseRow(game: game)
+                        GameBrowseRow(game: game, isFavoriteHighlight: isFavoriteGame(game))
                     }
                     .listRowBackground(PickemsColors.cardBackground)
                 }
@@ -67,6 +91,11 @@ struct GameBrowseView: View {
         }
     }
 
+    private func isFavoriteGame(_ game: ESPNGame) -> Bool {
+        guard let favoriteTeamId else { return false }
+        return game.homeTeamId == favoriteTeamId || game.awayTeamId == favoriteTeamId
+    }
+
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -78,7 +107,7 @@ struct GameBrowseView: View {
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .background(filter == option ? PickemsColors.accent : PickemsColors.cardBackground)
+                            .background(filter == option ? theme.accent : PickemsColors.cardBackground)
                             .foregroundStyle(filter == option ? .white : PickemsColors.textPrimary)
                             .clipShape(Capsule())
                     }
@@ -120,9 +149,16 @@ struct GameBrowseView: View {
 
 struct GameBrowseRow: View {
     let game: ESPNGame
+    var isFavoriteHighlight: Bool = false
+    @Environment(\.themePalette) private var theme
 
     var body: some View {
         HStack(spacing: 12) {
+            if isFavoriteHighlight {
+                Image(systemName: "star.fill")
+                    .font(.caption)
+                    .foregroundStyle(theme.accent)
+            }
             teamBadge(
                 abbr: game.awayTeamAbbreviation,
                 logo: game.awayTeamLogoURL
@@ -146,7 +182,7 @@ struct GameBrowseRow: View {
                 if let spread = game.spreadDisplayLabel {
                     Text(spread)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(PickemsColors.accent)
+                        .foregroundStyle(theme.accent)
                 }
                 Text(game.kickoff.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption2)

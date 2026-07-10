@@ -5,6 +5,8 @@ enum DeepLinkAction: Equatable {
     case openPicks
     case openGroups
     case openHome
+    case openDiscover
+    case openLiveSlate
 }
 
 enum DeepLinkRouter {
@@ -24,8 +26,10 @@ enum DeepLinkRouter {
         switch type {
         case "week_scored", "deadline_reminder", "deadline_locked":
             return .openPicks
-        case "deadline_passed":
+        case "deadline_passed", "season_closed":
             return .openGroups
+        case "game_final", "took_the_lead":
+            return .openLiveSlate
         default:
             return .openHome
         }
@@ -38,10 +42,12 @@ enum DeepLinkRouter {
                 return .joinGroup(inviteCode: code.uppercased())
             }
             return nil
-        case "picks":
-            return .openPicks
+        case "picks", "live":
+            return path.lowercased() == "live" ? .openLiveSlate : .openPicks
         case "groups":
             return .openGroups
+        case "discover":
+            return .openDiscover
         default:
             return nil
         }
