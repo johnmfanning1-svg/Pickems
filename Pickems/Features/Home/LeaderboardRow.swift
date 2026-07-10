@@ -3,12 +3,13 @@ import SwiftUI
 struct LeaderboardRow: View {
     let entry: StandingEntry
     var showWeekly: Bool = false
+    @Environment(\.themePalette) private var theme
 
     var body: some View {
         HStack(spacing: 12) {
             Text("#\(entry.rank)")
                 .font(.headline.monospacedDigit())
-                .foregroundStyle(PickemsColors.accent)
+                .foregroundStyle(theme.accent)
                 .frame(width: 36, alignment: .leading)
                 .accessibilityHidden(true)
 

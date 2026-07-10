@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LiveGameRow: View {
     let card: ESPNLiveGameCard
+    @Environment(\.themePalette) private var theme
 
     var body: some View {
         PickemsCard {
@@ -88,7 +89,7 @@ struct LiveGameRow: View {
     private var pickResultColor: Color {
         switch card.pickResult {
         case .win: return PickemsColors.success
-        case .loss: return PickemsColors.accent
+        case .loss: return theme.accent
         case .push: return PickemsColors.textSecondary
         case .pending, .none: return PickemsColors.warning
         }

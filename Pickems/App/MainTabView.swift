@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.themePalette) private var theme
 
     var body: some View {
         @Bindable var appState = appState
@@ -26,6 +27,6 @@ struct MainTabView: View {
                 .tag(AppTab.profile)
                 .accessibilityHint("Display name and notification settings")
         }
-        .tint(PickemsColors.accent)
+        .tint(theme.accent)
     }
 }

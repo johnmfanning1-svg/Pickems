@@ -3,6 +3,7 @@ import AuthenticationServices
 
 struct SignInView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.themePalette) private var theme
     @State private var showAdminLogin = false
 
     var body: some View {
@@ -11,7 +12,7 @@ struct SignInView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "football.fill")
                         .font(.system(size: 64))
-                        .foregroundStyle(PickemsColors.accent)
+                        .foregroundStyle(theme.accent)
                     Text("Pickems")
                         .font(.largeTitle.bold())
                         .foregroundStyle(PickemsColors.textPrimary)
@@ -48,13 +49,13 @@ struct SignInView: View {
 
                 if appState.authService.isLoading {
                     ProgressView()
-                        .tint(PickemsColors.accent)
+                        .tint(theme.accent)
                 }
 
                 if let error = appState.authService.errorMessage {
                     Text(error)
                         .font(.caption)
-                        .foregroundStyle(PickemsColors.accent)
+                        .foregroundStyle(theme.accent)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }

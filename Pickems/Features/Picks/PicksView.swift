@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PicksView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.themePalette) private var theme
     @State private var viewModel = PicksViewModel()
 
     var body: some View {
@@ -116,7 +117,7 @@ struct PicksView: View {
                     GamePickRow(game: game, selectedTeamId: nil, onSelect: { _ in })
                     HStack {
                         Button("Edit Spread") { viewModel.spreadEditGame = game }
-                            .font(.caption).foregroundStyle(PickemsColors.accent)
+                            .font(.caption).foregroundStyle(theme.accent)
                         Spacer()
                         Button(role: .destructive) {
                             viewModel.removeCommissionerGame(game, week: week, appState: appState)
@@ -169,7 +170,7 @@ struct PicksView: View {
                             Button(role: .destructive) {
                                 viewModel.removeNomination(nom, rules: rules, appState: appState)
                             } label: {
-                                Image(systemName: "trash").foregroundStyle(PickemsColors.accent)
+                                Image(systemName: "trash").foregroundStyle(theme.accent)
                             }
                         }
                     }
@@ -212,7 +213,7 @@ struct PicksView: View {
                     }
                     if appState.isCommissioner && !pastDeadline {
                         Button("Edit Spread") { viewModel.spreadEditGame = game }
-                            .font(.caption).foregroundStyle(PickemsColors.accent)
+                            .font(.caption).foregroundStyle(theme.accent)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 24)
                     }
@@ -254,19 +255,19 @@ struct PicksView: View {
                     Label("Season History", systemImage: "calendar")
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .foregroundStyle(PickemsColors.accent)
+                        .foregroundStyle(theme.accent)
                 }
                 NavigationLink { PickHistoryView() } label: {
                     Label("This Week's Picks", systemImage: "clock.arrow.circlepath")
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .foregroundStyle(PickemsColors.accent)
+                        .foregroundStyle(theme.accent)
                 }
                 NavigationLink { GroupPicksView() } label: {
                     Label("View Group Picks", systemImage: "person.3")
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .foregroundStyle(PickemsColors.accent)
+                        .foregroundStyle(theme.accent)
                 }
             }
             .padding(.horizontal)

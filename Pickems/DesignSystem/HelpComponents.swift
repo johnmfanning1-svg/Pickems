@@ -25,6 +25,7 @@ enum PickemsHaptics {
 struct HelpDetailView: View {
     let topic: HelpTopic
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.themePalette) private var theme
 
     var body: some View {
         NavigationStack {
@@ -45,7 +46,7 @@ struct HelpDetailView: View {
                                 HStack(alignment: .top, spacing: 10) {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.caption)
-                                        .foregroundStyle(PickemsColors.accent)
+                                        .foregroundStyle(theme.accent)
                                         .padding(.top, 2)
                                         .accessibilityHidden(true)
                                     Text(tip)
@@ -135,12 +136,13 @@ struct ContextualTipBanner: View {
     let icon: String
     let message: String
     var help: HelpTopic? = nil
+    @Environment(\.themePalette) private var theme
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundStyle(PickemsColors.accent)
+                .foregroundStyle(theme.accent)
                 .accessibilityHidden(true)
 
             Text(message)
@@ -159,7 +161,7 @@ struct ContextualTipBanner: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(PickemsColors.accent.opacity(0.15), lineWidth: 1)
+                .strokeBorder(theme.accent.opacity(0.15), lineWidth: 1)
         )
         .padding(.horizontal)
         .accessibilityElement(children: .combine)

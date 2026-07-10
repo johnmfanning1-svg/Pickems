@@ -6,6 +6,7 @@ struct GamePickRow: View {
     var isDisabled: Bool = false
     var liveCard: ESPNLiveGameCard? = nil
     let onSelect: (String) -> Void
+    @Environment(\.themePalette) private var theme
 
     var body: some View {
         PickemsCard {
@@ -52,7 +53,7 @@ struct GamePickRow: View {
         case .loss:
             Label("Loss", systemImage: "xmark.circle.fill")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(PickemsColors.accent)
+                .foregroundStyle(theme.accent)
         case .push:
             Label("Push", systemImage: "minus.circle.fill")
                 .font(.caption.weight(.semibold))
@@ -89,10 +90,10 @@ struct GamePickRow: View {
             }
             .frame(maxWidth: .infinity)
             .padding(8)
-            .background(selectedTeamId == teamId ? PickemsColors.accent.opacity(0.3) : Color.clear)
+            .background(selectedTeamId == teamId ? theme.accent.opacity(0.3) : Color.clear)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(selectedTeamId == teamId ? PickemsColors.accent : Color.clear, lineWidth: 2)
+                    .stroke(selectedTeamId == teamId ? theme.accent : Color.clear, lineWidth: 2)
             )
         }
         .disabled(isDisabled)

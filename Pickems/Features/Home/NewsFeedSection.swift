@@ -67,12 +67,13 @@ struct NewsCard: View {
 
 struct WeekRecapCard: View {
     let recapText: String
+    @Environment(\.themePalette) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Week Recap", systemImage: "text.quote")
                 .font(.headline)
-                .foregroundStyle(PickemsColors.accent)
+                .foregroundStyle(theme.accent)
 
             Text(recapText)
                 .font(.subheadline)
@@ -82,7 +83,7 @@ struct WeekRecapCard: View {
             ShareLink(item: recapText) {
                 Label("Share Recap", systemImage: "square.and.arrow.up")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(PickemsColors.accent)
+                    .foregroundStyle(theme.accent)
             }
         }
         .padding()
@@ -91,7 +92,7 @@ struct WeekRecapCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(PickemsColors.accent.opacity(0.2), lineWidth: 1)
+                .strokeBorder(theme.accent.opacity(0.2), lineWidth: 1)
         )
         .padding(.horizontal)
     }

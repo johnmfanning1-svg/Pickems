@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.themePalette) private var theme
     @State private var viewModel = HomeViewModel()
 
     var body: some View {
@@ -133,7 +134,7 @@ struct HomeView: View {
                 QuickActionCard(
                     title: "Submit Picks",
                     icon: "checkmark.circle.fill",
-                    color: PickemsColors.accent,
+                    color: theme.accent,
                     accessibilityHint: "Opens the Picks tab to submit your spread picks"
                 ) {
                     PickemsHaptics.selection()
@@ -209,7 +210,7 @@ struct HomeView: View {
     private func statusColor(_ status: WeekStatus) -> Color {
         switch status {
         case .selection: return PickemsColors.warning
-        case .picking: return PickemsColors.accent
+        case .picking: return theme.accent
         case .locked: return PickemsColors.textSecondary
         case .scored: return PickemsColors.success
         }

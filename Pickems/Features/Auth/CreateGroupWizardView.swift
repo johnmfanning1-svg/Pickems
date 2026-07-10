@@ -3,6 +3,7 @@ import SwiftUI
 struct CreateGroupWizardView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.themePalette) private var theme
 
     @State private var step = 0
     @State private var groupName = ""
@@ -16,7 +17,7 @@ struct CreateGroupWizardView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 ProgressView(value: Double(step + 1), total: 3)
-                    .tint(PickemsColors.accent)
+                    .tint(theme.accent)
                     .padding()
 
                 TabView(selection: $step) {
@@ -125,7 +126,7 @@ struct CreateGroupWizardView: View {
             if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
-                    .foregroundStyle(PickemsColors.accent)
+                    .foregroundStyle(theme.accent)
             }
 
             Spacer()

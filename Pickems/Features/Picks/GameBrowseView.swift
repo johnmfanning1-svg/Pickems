@@ -11,6 +11,7 @@ enum GameBrowseFilter: String, CaseIterable, Identifiable {
 
 struct GameBrowseView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.themePalette) private var theme
     let games: [ESPNGame]
     let onSelect: (ESPNGame) -> Void
 
@@ -78,7 +79,7 @@ struct GameBrowseView: View {
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .background(filter == option ? PickemsColors.accent : PickemsColors.cardBackground)
+                            .background(filter == option ? theme.accent : PickemsColors.cardBackground)
                             .foregroundStyle(filter == option ? .white : PickemsColors.textPrimary)
                             .clipShape(Capsule())
                     }
@@ -120,6 +121,7 @@ struct GameBrowseView: View {
 
 struct GameBrowseRow: View {
     let game: ESPNGame
+    @Environment(\.themePalette) private var theme
 
     var body: some View {
         HStack(spacing: 12) {
@@ -146,7 +148,7 @@ struct GameBrowseRow: View {
                 if let spread = game.spreadDisplayLabel {
                     Text(spread)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(PickemsColors.accent)
+                        .foregroundStyle(theme.accent)
                 }
                 Text(game.kickoff.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption2)
