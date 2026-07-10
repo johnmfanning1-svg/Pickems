@@ -3,6 +3,7 @@ import Combine
 import CryptoKit
 import Foundation
 import Security
+import UIKit
 
 @MainActor
 final class XAuthService: NSObject, ObservableObject {
@@ -201,7 +202,7 @@ final class XAuthService: NSObject, ObservableObject {
 
     private static func randomURLSafeString(length: Int) -> String {
         let charset = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
-        return String((0..<length).map { _ in charset.randomElement()! })
+        return String((0..<length).map { _ in charset.randomElement() ?? "a" })
     }
 
     private static func codeChallenge(for verifier: String) -> String {
@@ -217,6 +218,6 @@ final class XAuthService: NSObject, ObservableObject {
 
 extension XAuthService: ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        ASPresentationAnchor()
+        UIApplication.shared.pickemsKeyWindow ?? ASPresentationAnchor()
     }
 }

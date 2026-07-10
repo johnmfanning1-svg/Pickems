@@ -30,12 +30,15 @@ final class AuthService {
         return isSignedIn
     }
 
-    private let auth = Auth.auth()
-    private let db = Firestore.firestore()
+    /// Lazily resolved so `AppState()` construction cannot call into Firebase before
+    /// `FirebaseBootstrap.configureIfNeeded()` finishes (TestFlight launch abort).
+    private lazy var auth = Auth.auth()
+    private lazy var db = Firestore.firestore()
     private var authListener: AuthStateDidChangeListenerHandle?
     private var currentNonce: String?
     /// Bumps on intentional sign-out-before-sign-in so stale listener tasks cannot wipe the new session.
     private var authEpoch = 0
+    private var didStart = false
 
     private static func onboardingKey(for userId: String) -> String {
         "pickems.onboarding.complete.\(userId)"
@@ -47,6 +50,12 @@ final class AuthService {
             authStateDetermined = true
         }
         #endif
+    }
+
+    /// Attach the auth state listener. Call only after Firebase is configured.
+    func start() {
+        guard !didStart else { return }
+        didStart = true
 
         authListener = auth.addStateDidChangeListener { [weak self] _, user in
             Task { @MainActor in

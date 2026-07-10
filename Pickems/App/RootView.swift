@@ -5,6 +5,19 @@ struct RootView: View {
     @Environment(\.themePalette) private var theme
 
     var body: some View {
+        Group {
+            if appState.firebaseBootFailed {
+                bootFailureView
+            } else {
+                destinationContent
+            }
+        }
+        .preferredColorScheme(.dark)
+        .background(PickemsAtmosphericBackground(palette: theme))
+    }
+
+    @ViewBuilder
+    private var destinationContent: some View {
         // Touch observable auth/onboarding fields so SwiftUI leaves SignInView after login.
         let destination = authDestination
         Group {
@@ -27,8 +40,6 @@ struct RootView: View {
                 MainTabView()
             }
         }
-        .preferredColorScheme(.dark)
-        .background(PickemsAtmosphericBackground(palette: theme))
         .onChange(of: destination) { previous, next in
             AppEvents.track(.rootDestinationChanged, metadata: [
                 "from": "\(previous)",
@@ -37,6 +48,24 @@ struct RootView: View {
                 "needs_onboarding": appState.needsOnboarding ? "true" : "false",
             ])
         }
+    }
+
+    private var bootFailureView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(PickemsColors.warning)
+            Text("Pickems couldn’t start")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(PickemsColors.textPrimary)
+            Text("Firebase configuration is missing from this build. Delete the app, reinstall from TestFlight, and try again.")
+                .font(.subheadline)
+                .foregroundStyle(PickemsColors.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(PickemsAtmosphericBackground(palette: theme))
     }
 
     private var authDestination: AuthRootDestination {

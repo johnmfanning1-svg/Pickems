@@ -16,40 +16,16 @@ struct SharingBootstrap<Content: View>: View {
         content
             .environmentObject(xAuthService)
             .environmentObject(shareCoordinator)
-            .sheet(isPresented: weeklySheetBinding) {
-                if let result = shareCoordinator.pendingWeeklyShare {
-                    ShareResultsSheet(source: .weekly(result))
-                        .environmentObject(xAuthService)
-                }
+            // Use `sheet(item:)` — `sheet(isPresented:)` with `if let` content can present an
+            // empty hierarchy and crash SwiftUI on TestFlight when the binding flickers.
+            .sheet(item: $shareCoordinator.pendingWeeklyShare) { result in
+                ShareResultsSheet(source: .weekly(result))
+                    .environmentObject(xAuthService)
             }
-            .sheet(isPresented: seasonSheetBinding) {
-                if let standing = shareCoordinator.pendingSeasonShare {
-                    ShareResultsSheet(source: .season(standing))
-                        .environmentObject(xAuthService)
-                }
+            .sheet(item: $shareCoordinator.pendingSeasonShare) { standing in
+                ShareResultsSheet(source: .season(standing))
+                    .environmentObject(xAuthService)
             }
-    }
-
-    private var weeklySheetBinding: Binding<Bool> {
-        Binding(
-            get: { shareCoordinator.pendingWeeklyShare != nil },
-            set: { isPresented in
-                if !isPresented {
-                    shareCoordinator.clearWeekly()
-                }
-            }
-        )
-    }
-
-    private var seasonSheetBinding: Binding<Bool> {
-        Binding(
-            get: { shareCoordinator.pendingSeasonShare != nil },
-            set: { isPresented in
-                if !isPresented {
-                    shareCoordinator.clearSeason()
-                }
-            }
-        )
     }
 }
 

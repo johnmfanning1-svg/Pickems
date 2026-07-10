@@ -5,7 +5,7 @@ import UIKit
 @MainActor
 enum AvatarService {
     static func uploadAvatar(userId: String, image: UIImage) async throws -> String {
-        guard let data = image.jpegData(compressionQuality: 0.75) else {
+        guard let data = ImageResizer.resizedJPEGData(from: image) else {
             throw AvatarError.invalidImage
         }
 
@@ -13,9 +13,16 @@ enum AvatarService {
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
 
-        _ = try await ref.putDataAsync(data, metadata: metadata)
-        let url = try await ref.downloadURL()
-        return url.absoluteString
+        do {
+            _ = try await ref.putDataAsync(data, metadata: metadata)
+            let url = try await ref.downloadURL()
+            return url.absoluteString
+        } catch {
+            CrashReport.record(error, code: "avatar_upload_failed", metadata: [
+                "uid": AppEvents.shortUID(userId),
+            ])
+            throw error
+        }
     }
 
     enum AvatarError: LocalizedError {

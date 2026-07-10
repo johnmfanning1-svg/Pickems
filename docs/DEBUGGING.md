@@ -8,6 +8,17 @@
    - Subsystem: `FannypackInc.Pickems` (or the app bundle id)
    - Category: `auth`, `onboarding`, `session`, `events`, `firestore`, `network`, `notifications`, `picks`
 
+## Instant launch crash (TestFlight)
+
+A healthy cold launch always logs `app.launch` before any auth work. If the process dies with **no** `app.launch` line:
+
+1. Firebase never finished configuring — confirm `GoogleService-Info.plist` is in the app bundle (Target → Build Phases → Copy Bundle Resources).
+2. `Messaging.messaging()` must not run before `FirebaseApp.configure()`. Auth / Messaging / Firestore clients are started from `AppState.configure()` after bootstrap.
+3. `UNUserNotificationCenter` delegates must use the **completion-handler** APIs. The `async` variants trap under Swift 6 / `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` when UserNotifications calls back off-main.
+4. Watch companion must declare `WKApplication = YES` (see `PickemsWatch/Info.plist`).
+
+Delete + reinstall does **not** clear the Firebase Auth keychain for the same team/bundle. A “fresh” install can still restore a session and run `onAuthStateReady` immediately.
+
 ## Auth / onboarding trail
 
 A healthy first-run sequence looks like:
@@ -40,7 +51,7 @@ Device Crashlytics is not readable from this cloud environment without Firebase 
 3. Look for `auth.*_failed`, `groups.listener_error`, `session.bootstrap_failed`, or Crashlytics non-fatals with `pickems_code`.
 4. Custom Crashlytics keys set after login: `is_signed_in`, `needs_onboarding`, `favorite_team_id`, `group_count`.
 
-Overlapping login callbacks (Sign In button + `isSignedIn` onChange) are serialized with an `authReadyGeneration` counter so stale work cannot finish out of order.
+Overlapping login callbacks (Sign In button + `isSignedIn` onChange) are serialized with an `authReadyGeneration` counter / single-flight task so stale work cannot finish out of order.
 
 ## Favorite team contrast
 
