@@ -10,15 +10,44 @@ final class NotificationService: NSObject {
     var isAuthorized = false
     var fcmToken: String?
     private var pendingUserId: String?
+    private var didStart = false
 
+    /// Do **not** touch `Messaging.messaging()` in `init`. AppState constructs this service
+    /// during `PickemsApp.init`; Messaging before `FirebaseApp.configure()` aborts launch.
     override init() {
         super.init()
+    }
+
+    /// Call only after `FirebaseBootstrap.configureIfNeeded()` succeeds.
+    func start() {
+        guard !didStart else { return }
+        guard FirebaseBootstrap.configureIfNeeded() else {
+            AppLog.error(AppLog.notifications, "skip Messaging start — Firebase not configured")
+            return
+        }
+        didStart = true
         Messaging.messaging().delegate = self
+        AppLog.debug(AppLog.notifications, "Messaging delegate attached")
+    }
+
+    func requestPermissionIfNeeded() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
+        case .notDetermined:
+            await requestPermission()
+        case .authorized, .provisional, .ephemeral:
+            isAuthorized = true
+            UIApplication.shared.registerForRemoteNotifications()
+        default:
+            isAuthorized = false
+        }
     }
 
     func requestPermission() async {
         let center = UNUserNotificationCenter.current()
         do {
+            // Prefer the async API — the completion-handler form traps under MainActor
+            // isolation when the system invokes the handler off-main (Swift 6).
             let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
             isAuthorized = granted
             AppEvents.track(.notificationsPermission, metadata: [

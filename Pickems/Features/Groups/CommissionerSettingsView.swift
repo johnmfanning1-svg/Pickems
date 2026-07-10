@@ -106,7 +106,10 @@ struct CommissionerSettingsView: View {
                     Toggle("List in Discover", isOn: $isPublic)
                         .listRowBackground(PickemsColors.cardBackground)
                     NavigationLink {
-                        SubmissionStatusView()
+                        SubmissionStatusView(
+                            members: appState.groupService.members,
+                            submissions: appState.pickService.submissions
+                        )
                     } label: {
                         Label("Submission chase", systemImage: "person.crop.circle.badge.clock")
                     }

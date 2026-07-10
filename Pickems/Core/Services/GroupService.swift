@@ -17,7 +17,8 @@ final class GroupService {
     var isClosingSeason = false
     var errorMessage: String?
 
-    private let db = Firestore.firestore()
+    /// Lazy so constructing `AppState` cannot touch Firestore before Firebase configure.
+    private lazy var db = Firestore.firestore()
     private var groupListener: ListenerRegistration?
     private var weekListener: ListenerRegistration?
     private var standingsListener: ListenerRegistration?

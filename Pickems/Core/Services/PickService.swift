@@ -12,7 +12,8 @@ final class PickService {
     var isLoading = false
     var errorMessage: String?
 
-    private let db = Firestore.firestore()
+    /// Lazy so constructing `AppState` cannot touch Firestore before Firebase configure.
+    private lazy var db = Firestore.firestore()
     private var nominationsListener: ListenerRegistration?
     private var gamesListener: ListenerRegistration?
     private var pickListener: ListenerRegistration?

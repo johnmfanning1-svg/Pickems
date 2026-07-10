@@ -1,6 +1,6 @@
 import Foundation
 
-enum DeepLinkAction: Equatable {
+enum DeepLinkAction: Equatable, Sendable {
     case joinGroup(inviteCode: String)
     case openPicks
     case openGroups
@@ -10,7 +10,8 @@ enum DeepLinkAction: Equatable {
 }
 
 enum DeepLinkRouter {
-    static func parse(url: URL) -> DeepLinkAction? {
+    /// nonisolated: AppDelegate notification callbacks run off the main actor under Swift 6.
+    nonisolated static func parse(url: URL) -> DeepLinkAction? {
         if url.scheme?.lowercased() == "pickems" {
             return parseHost(path: url.host ?? "", query: url.queryItems)
         }
@@ -21,7 +22,8 @@ enum DeepLinkRouter {
         return nil
     }
 
-    static func parseNotification(userInfo: [AnyHashable: Any]) -> DeepLinkAction? {
+    /// nonisolated: must be safe to call from `UNUserNotificationCenter` completion handlers.
+    nonisolated static func parseNotification(userInfo: [AnyHashable: Any]) -> DeepLinkAction? {
         guard let type = userInfo["type"] as? String else { return nil }
         switch type {
         case "week_scored", "deadline_reminder", "deadline_locked":
@@ -35,7 +37,7 @@ enum DeepLinkRouter {
         }
     }
 
-    private static func parseHost(path: String, query: [URLQueryItem]?) -> DeepLinkAction? {
+    nonisolated private static func parseHost(path: String, query: [URLQueryItem]?) -> DeepLinkAction? {
         switch path.lowercased() {
         case "join":
             if let code = query?.first(where: { $0.name == "code" })?.value, !code.isEmpty {
@@ -55,7 +57,7 @@ enum DeepLinkRouter {
 }
 
 private extension URL {
-    var queryItems: [URLQueryItem]? {
+    nonisolated var queryItems: [URLQueryItem]? {
         URLComponents(url: self, resolvingAgainstBaseURL: false)?.queryItems
     }
 }

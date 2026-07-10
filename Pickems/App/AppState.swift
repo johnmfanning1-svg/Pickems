@@ -22,12 +22,19 @@ final class AppState {
     var pendingInviteCode: String?
     var showJoinGroupSheet = false
     var showFavoriteTeamPicker = false
+    /// Set when Firebase failed to boot; RootView can show a non-crash error screen.
+    var firebaseBootFailed = false
 
     /// Bumps on each `onAuthStateReady` so overlapping login callbacks cannot finish out of order.
     private var authReadyGeneration = 0
+    private var authReadyTask: Task<Void, Never>?
 
     func configure() {
-        FirebaseBootstrap.configureIfNeeded()
+        let ok = FirebaseBootstrap.configureIfNeeded()
+        firebaseBootFailed = !ok
+        guard ok else { return }
+        authService.start()
+        notificationService.start()
         appTheme.sync(from: authService.currentUser)
     }
 
@@ -41,6 +48,11 @@ final class AppState {
         }
         #endif
 
+        guard !firebaseBootFailed else {
+            AppEvents.track(.sessionBootstrapFailed, metadata: ["reason": "firebase_boot_failed"])
+            return
+        }
+
         guard authService.authStateDetermined, authService.isAuthenticated else {
             AppEvents.track(.sessionBootstrapSkipped, metadata: [
                 "auth_determined": authService.authStateDetermined ? "true" : "false",
@@ -53,6 +65,20 @@ final class AppState {
     }
 
     func onAuthStateReady() async {
+        if let authReadyTask, !authReadyTask.isCancelled {
+            await authReadyTask.value
+            return
+        }
+
+        let task = Task { @MainActor in
+            await performAuthStateReady()
+        }
+        authReadyTask = task
+        await task.value
+        authReadyTask = nil
+    }
+
+    private func performAuthStateReady() async {
         authReadyGeneration += 1
         let generation = authReadyGeneration
         CrashReport.breadcrumb("session.on_auth_ready_begin", metadata: [
@@ -88,6 +114,7 @@ final class AppState {
 
         appTheme.sync(from: authService.currentUser)
         groupService.loadGroups(for: userId)
+        CrashReport.setUserID(userId)
         CrashReport.setValue(needsOnboarding ? "true" : "false", forKey: "needs_onboarding")
         CrashReport.setValue(authService.currentUser?.favoriteTeamId ?? "none", forKey: "favorite_team_id")
         AppEvents.track(.sessionBootstrapReady, metadata: [
@@ -99,7 +126,7 @@ final class AppState {
 
         // Defer so RootView can leave onboarding and any auth sheets can dismiss first.
         scheduleFavoriteTeamPrompt()
-        await notificationService.requestPermission()
+        await notificationService.requestPermissionIfNeeded()
 
         guard generation == authReadyGeneration else {
             AppLog.info(AppLog.session, "onAuthStateReady superseded after notifications", metadata: [

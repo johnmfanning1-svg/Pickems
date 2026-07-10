@@ -7,8 +7,12 @@ struct PickemsApp: App {
     @State private var appState: AppState
 
     init() {
-        FirebaseBootstrap.configureIfNeeded()
-        _appState = State(initialValue: AppState())
+        // Idempotent with AppDelegate — whichever runs first wins. Must precede AppState
+        // service startup (Auth listener / Messaging delegate).
+        _ = FirebaseBootstrap.configureIfNeeded()
+        let state = AppState()
+        state.configure()
+        _appState = State(initialValue: state)
     }
 
     var body: some Scene {
@@ -17,11 +21,13 @@ struct PickemsApp: App {
                 RootView()
                     .environment(appState)
                     .environment(\.themePalette, appState.appTheme.palette)
-                    .task {
-                        appState.configure()
-                        appDelegate.onDeepLink = { [appState] action in
+                    .onAppear {
+                        appDelegate.setDeepLinkHandler { action in
                             appState.handleDeepLink(action)
                         }
+                    }
+                    .task {
+                        appState.configure()
                         await appState.bootstrapSession()
                     }
                     .onChange(of: appState.authService.currentUser?.favoriteTeamId) { _, _ in
