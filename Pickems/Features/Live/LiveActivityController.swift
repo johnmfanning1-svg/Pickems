@@ -24,7 +24,8 @@ enum LiveActivityController {
               let week = appState.groupService.currentWeek,
               let user = appState.authService.currentUser else { return }
 
-        let shouldRun = week.status == .locked || (week.status == .picking && appState.pickService.slateGames.contains { $0.status == .inProgress })
+        let shouldRun = week.status == .locked
+            || (week.status == .picking && appState.pickService.slateGames.contains { $0.status == .inProgress })
         let ranked = appState.rankedStandings(weekly: true)
         let mine = ranked.first(where: { $0.id == user.id })
         let nextGame = appState.pickService.slateGames
