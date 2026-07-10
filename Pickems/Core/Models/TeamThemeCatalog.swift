@@ -1,6 +1,6 @@
 import Foundation
 
-/// Curated CFB team colors chosen for contrast on Pickems' dark UI.
+/// Curated CFB team colors. Accents are contrast-adjusted at palette build time for the dark UI.
 enum TeamThemeCatalog {
     static let teams: [FavoriteTeam] = [
         // SEC

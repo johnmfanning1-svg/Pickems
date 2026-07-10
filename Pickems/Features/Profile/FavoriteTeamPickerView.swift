@@ -2,7 +2,6 @@ import SwiftUI
 
 struct FavoriteTeamPickerView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.themePalette) private var theme
     @Environment(\.dismiss) private var dismiss
 
     var isOnboardingPrompt: Bool = false
@@ -58,7 +57,7 @@ struct FavoriteTeamPickerView: View {
                     Section {
                         Text(errorMessage)
                             .font(.caption)
-                            .foregroundStyle(theme.accent)
+                            .foregroundStyle(PickemsColors.warning)
                             .listRowBackground(PickemsColors.cardBackground)
                     }
                 }
@@ -134,6 +133,11 @@ struct FavoriteTeamRow: View {
     let team: FavoriteTeam
     let isSelected: Bool
 
+    private var palette: ThemePalette { .from(team: team) }
+    private var primaryOnFill: Color {
+        ColorContrast.onAccent(for: ColorContrast.RGB.from(hex: team.primaryHex)).color
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
@@ -148,7 +152,7 @@ struct FavoriteTeamRow: View {
                         default:
                             Text(team.abbreviation)
                                 .font(.caption2.bold())
-                                .foregroundStyle(.white)
+                                .foregroundStyle(primaryOnFill)
                         }
                     }
                     .frame(width: 28, height: 28)
@@ -174,7 +178,7 @@ struct FavoriteTeamRow: View {
 
             if isSelected {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(team.primaryColor)
+                    .foregroundStyle(palette.accent)
             }
         }
         .padding(.vertical, 4)

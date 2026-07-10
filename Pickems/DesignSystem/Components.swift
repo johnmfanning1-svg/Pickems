@@ -81,7 +81,7 @@ struct PrimaryButton: View {
             HStack(spacing: 8) {
                 if isLoading {
                     ProgressView()
-                        .tint(.white)
+                        .tint(theme.onAccent)
                 }
                 Text(title)
                     .font(.headline)
@@ -89,7 +89,7 @@ struct PrimaryButton: View {
             .frame(maxWidth: .infinity)
             .padding()
             .background(theme.accent)
-            .foregroundStyle(.white)
+            .foregroundStyle(theme.onAccent)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .disabled(isLoading)
