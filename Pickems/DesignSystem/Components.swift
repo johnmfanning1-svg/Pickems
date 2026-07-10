@@ -67,6 +67,7 @@ struct SeasonWeekHeader: View {
 }
 
 struct PrimaryButton: View {
+    @Environment(\.themePalette) private var theme
     let title: String
     var isLoading: Bool = false
     var accessibilityHint: String? = nil
@@ -87,7 +88,7 @@ struct PrimaryButton: View {
             }
             .frame(maxWidth: .infinity)
             .padding()
-            .background(PickemsColors.accent)
+            .background(theme.accent)
             .foregroundStyle(.white)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
@@ -97,6 +98,7 @@ struct PrimaryButton: View {
 }
 
 struct SecondaryButton: View {
+    @Environment(\.themePalette) private var theme
     let title: String
     let icon: String?
     let action: () -> Void
@@ -123,11 +125,11 @@ struct SecondaryButton: View {
             .padding(.vertical, 10)
             .padding(.horizontal, 14)
             .background(PickemsColors.cardBackground)
-            .foregroundStyle(PickemsColors.accent)
+            .foregroundStyle(theme.accent)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(PickemsColors.accent.opacity(0.35), lineWidth: 1)
+                    .strokeBorder(theme.accent.opacity(0.35), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)

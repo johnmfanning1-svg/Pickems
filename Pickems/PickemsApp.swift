@@ -16,12 +16,16 @@ struct PickemsApp: App {
             SharingBootstrap {
                 RootView()
                     .environment(appState)
+                    .environment(\.themePalette, appState.appTheme.palette)
                     .task {
                         appState.configure()
                         appDelegate.onDeepLink = { [appState] action in
                             appState.handleDeepLink(action)
                         }
                         await appState.bootstrapSession()
+                    }
+                    .onChange(of: appState.authService.currentUser?.favoriteTeamId) { _, _ in
+                        appState.appTheme.sync(from: appState.authService.currentUser)
                     }
                     .onOpenURL { url in
                         if let action = DeepLinkRouter.parse(url: url) {
@@ -40,6 +44,12 @@ struct PickemsApp: App {
                         set: { appState.showJoinGroupSheet = $0 }
                     )) {
                         JoinGroupSheet(initialCode: appState.pendingInviteCode ?? "")
+                    }
+                    .sheet(isPresented: Binding(
+                        get: { appState.showFavoriteTeamPicker },
+                        set: { appState.showFavoriteTeamPicker = $0 }
+                    )) {
+                        FavoriteTeamPickerView(isOnboardingPrompt: true)
                     }
             }
         }

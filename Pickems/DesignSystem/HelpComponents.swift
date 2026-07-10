@@ -180,6 +180,16 @@ extension View {
     }
 
     func pickemsScreenBackground() -> some View {
-        self.background(PickemsColors.background)
+        modifier(PickemsScreenBackgroundModifier())
+    }
+}
+
+private struct PickemsScreenBackgroundModifier: ViewModifier {
+    @Environment(\.themePalette) private var theme
+
+    func body(content: Content) -> some View {
+        content.background {
+            PickemsAtmosphericBackground(palette: theme)
+        }
     }
 }

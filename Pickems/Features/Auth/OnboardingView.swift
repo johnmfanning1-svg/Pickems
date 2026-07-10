@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OnboardingView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.themePalette) private var theme
     @State private var inviteCode = ""
     @State private var mode: OnboardingMode = .join
     @State private var isWorking = false
@@ -20,7 +21,7 @@ struct OnboardingView: View {
                     VStack(spacing: 8) {
                         Image(systemName: "football.fill")
                             .font(.system(size: 44))
-                            .foregroundStyle(PickemsColors.accent)
+                            .foregroundStyle(theme.accent)
                             .symbolRenderingMode(.hierarchical)
                             .accessibilityHidden(true)
 
@@ -52,7 +53,7 @@ struct OnboardingView: View {
 
                     if isWorking {
                         ProgressView()
-                            .tint(PickemsColors.accent)
+                            .tint(theme.accent)
                             .accessibilityLabel("Working")
                     }
 

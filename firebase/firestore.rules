@@ -150,6 +150,18 @@ service cloud.firestore {
         allow create, update: if isCommissioner(groupId);
         allow delete: if false;
       }
+
+      match /seasons/{seasonId} {
+        allow read: if isGroupMember(groupId);
+        allow create, update: if isCommissioner(groupId);
+        allow delete: if isCommissioner(groupId);
+      }
+
+      match /career/{userId} {
+        allow read: if isGroupMember(groupId);
+        allow create, update: if isCommissioner(groupId);
+        allow delete: if isCommissioner(groupId);
+      }
     }
   }
 }

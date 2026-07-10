@@ -3,8 +3,14 @@ import Charts
 
 struct StatsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.themePalette) private var theme
     @State private var stats: PlayerSeasonStats?
     @State private var isLoading = true
+
+    private var career: CareerRecord? {
+        guard let userId = appState.authService.currentUser?.id else { return nil }
+        return appState.groupService.careerRecord(for: userId)
+    }
 
     var body: some View {
         ScrollView {
@@ -14,6 +20,9 @@ struct StatsView: View {
                         .padding(.top, 40)
                 } else if let stats {
                     summaryCards(stats)
+                    if let career {
+                        careerSection(career)
+                    }
                     if !stats.weeklyRecords.isEmpty {
                         chartSection(stats)
                     }
@@ -50,6 +59,23 @@ struct StatsView: View {
         }
     }
 
+    private func careerSection(_ career: CareerRecord) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Career Dynasty")
+                .font(.headline)
+                .foregroundStyle(PickemsColors.textPrimary)
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                statCard(title: "Titles", value: "\(career.titles)")
+                statCard(title: "Career", value: career.recordLabel)
+                statCard(title: "Seasons", value: "\(career.seasonsPlayed)")
+                if let best = career.bestFinish {
+                    statCard(title: "Best Finish", value: "#\(best)")
+                }
+            }
+        }
+    }
+
     private func chartSection(_ stats: PlayerSeasonStats) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Weekly Record")
@@ -66,7 +92,7 @@ struct StatsView: View {
                     x: .value("Week", "W\(record.week)"),
                     y: .value("Losses", record.losses)
                 )
-                .foregroundStyle(PickemsColors.accent)
+                .foregroundStyle(theme.accent)
             }
             .frame(height: 200)
             .chartYAxisLabel("Games")

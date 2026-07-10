@@ -3,6 +3,7 @@ import PhotosUI
 
 struct ProfileView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.themePalette) private var theme
     @State private var displayName = ""
     @State private var didSave = false
     @State private var selectedPhoto: PhotosPickerItem?
@@ -12,12 +13,14 @@ struct ProfileView: View {
     @State private var showLeaveConfirm = false
     @State private var showDeleteConfirm = false
     @State private var showSignOutConfirm = false
+    @State private var showTeamPicker = false
     @State private var managementError: String?
 
     var body: some View {
         NavigationStack {
             Form {
                 accountSection
+                favoriteTeamSection
                 notificationsSection
                 sharingSection
                 leaguesSection
@@ -38,6 +41,9 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showCreateWizard) {
                 CreateGroupWizardView()
+            }
+            .sheet(isPresented: $showTeamPicker) {
+                FavoriteTeamPickerView()
             }
             .confirmationDialog("Leave this league?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
                 Button("Leave League", role: .destructive) { leaveGroup() }
@@ -74,7 +80,7 @@ struct ProfileView: View {
                             Image(systemName: "camera.fill")
                                 .font(.caption2)
                                 .padding(4)
-                                .background(PickemsColors.accent)
+                                .background(theme.accent)
                                 .clipShape(Circle())
                         }
                     }
@@ -99,6 +105,51 @@ struct ProfileView: View {
             .listRowBackground(PickemsColors.cardBackground)
         } header: {
             Text("Account")
+        }
+    }
+
+    private var favoriteTeamSection: some View {
+        Section {
+            Button {
+                showTeamPicker = true
+            } label: {
+                HStack(spacing: 12) {
+                    if let team = appState.authService.currentUser?.favoriteTeam {
+                        ZStack {
+                            Circle()
+                                .fill(team.primaryColor)
+                                .frame(width: 36, height: 36)
+                            if let url = URL(string: team.resolvedLogoURL) {
+                                AsyncImage(url: url) { phase in
+                                    if case .success(let image) = phase {
+                                        image.resizable().scaledToFit()
+                                    }
+                                }
+                                .frame(width: 24, height: 24)
+                            }
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(team.name)
+                                .foregroundStyle(PickemsColors.textPrimary)
+                            Text("Themes accents across Pickems")
+                                .font(.caption)
+                                .foregroundStyle(PickemsColors.textSecondary)
+                        }
+                    } else {
+                        Label("Choose Favorite Team", systemImage: "shield.lefthalf.filled")
+                            .foregroundStyle(theme.accent)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
+            }
+            .listRowBackground(PickemsColors.cardBackground)
+        } header: {
+            Text("Team Theme")
+        } footer: {
+            Text("Your favorite team colors the app accents and atmosphere for you.")
         }
     }
 
@@ -196,7 +247,7 @@ struct ProfileView: View {
             if let managementError {
                 Text(managementError)
                     .font(.caption)
-                    .foregroundStyle(PickemsColors.accent)
+                    .foregroundStyle(theme.accent)
                     .listRowBackground(PickemsColors.cardBackground)
             }
         } header: {

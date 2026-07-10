@@ -214,6 +214,46 @@ final class AuthService {
         }
     }
 
+    func updateFavoriteTeam(_ team: FavoriteTeam?) async throws {
+        guard let uid = currentUserId else { return }
+        var data: [String: Any] = [:]
+        if let team {
+            data = [
+                "favoriteTeamId": team.id,
+                "favoriteTeamName": team.name,
+                "favoriteTeamAbbreviation": team.abbreviation,
+                "favoriteTeamLogoURL": team.resolvedLogoURL,
+            ]
+        } else {
+            data = [
+                "favoriteTeamId": FieldValue.delete(),
+                "favoriteTeamName": FieldValue.delete(),
+                "favoriteTeamAbbreviation": FieldValue.delete(),
+                "favoriteTeamLogoURL": FieldValue.delete(),
+            ]
+        }
+        try await db.user(uid).updateData(data)
+        currentUser?.favoriteTeamId = team?.id
+        currentUser?.favoriteTeamName = team?.name
+        currentUser?.favoriteTeamAbbreviation = team?.abbreviation
+        currentUser?.favoriteTeamLogoURL = team?.resolvedLogoURL
+        if let team {
+            markFavoriteTeamPromptDismissed(for: uid)
+        }
+    }
+
+    private static func favoriteTeamPromptKey(for userId: String) -> String {
+        "pickems.favoriteTeam.promptDismissed.\(userId)"
+    }
+
+    func hasDismissedFavoriteTeamPrompt(for userId: String) -> Bool {
+        UserDefaults.standard.bool(forKey: Self.favoriteTeamPromptKey(for: userId))
+    }
+
+    func markFavoriteTeamPromptDismissed(for userId: String) {
+        UserDefaults.standard.set(true, forKey: Self.favoriteTeamPromptKey(for: userId))
+    }
+
     func signOut() throws {
         try auth.signOut()
         currentUser = nil

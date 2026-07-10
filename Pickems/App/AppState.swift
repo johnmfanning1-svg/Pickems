@@ -16,14 +16,16 @@ final class AppState {
     let groupService = GroupService()
     let pickService = PickService()
     let notificationService = NotificationService()
+    let appTheme = AppTheme()
 
     var selectedTab: AppTab = .home
     var pendingInviteCode: String?
     var showJoinGroupSheet = false
+    var showFavoriteTeamPicker = false
 
     func configure() {
         FirebaseBootstrap.configureIfNeeded()
-        PickemsTheme.apply()
+        appTheme.sync(from: authService.currentUser)
     }
 
     func bootstrapSession() async {
@@ -44,6 +46,8 @@ final class AppState {
         if authService.currentUser == nil {
             await authService.refreshSession()
         }
+        appTheme.sync(from: authService.currentUser)
+        presentFavoriteTeamPromptIfNeeded()
         groupService.loadGroups(for: userId)
         await notificationService.requestPermission()
         await notificationService.saveToken(for: userId)

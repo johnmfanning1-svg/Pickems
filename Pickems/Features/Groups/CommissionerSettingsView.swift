@@ -2,15 +2,28 @@ import SwiftUI
 
 struct CommissionerSettingsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.themePalette) private var theme
     @Environment(\.dismiss) private var dismiss
 
     let group: PickemGroup
     @State private var rules: GroupRules
     @State private var isSaving = false
+    @State private var showCloseSeasonConfirm = false
+    @State private var closeSeasonError: String?
 
     init(group: PickemGroup) {
         self.group = group
         _rules = State(initialValue: group.rules)
+    }
+
+    private var seasonYearToClose: Int {
+        appState.groupService.cfbWeek?.seasonYear
+            ?? appState.groupService.currentWeek?.seasonYear
+            ?? Calendar.current.component(.year, from: Date())
+    }
+
+    private var seasonAlreadyClosed: Bool {
+        appState.groupService.seasonArchives.contains { $0.seasonYear == seasonYearToClose }
     }
 
     var body: some View {
@@ -73,6 +86,39 @@ struct CommissionerSettingsView: View {
                 } footer: {
                     Text("Changes apply to future weeks. Existing locked weeks are not affected.")
                 }
+
+                Section {
+                    if seasonAlreadyClosed {
+                        LabeledContent("Season \(seasonYearToClose)", value: "Archived")
+                            .listRowBackground(PickemsColors.cardBackground)
+                    } else {
+                        Button(role: .destructive) {
+                            showCloseSeasonConfirm = true
+                        } label: {
+                            if appState.groupService.isClosingSeason {
+                                HStack {
+                                    ProgressView()
+                                    Text("Closing Season \(seasonYearToClose)…")
+                                }
+                            } else {
+                                Label("Close Season \(seasonYearToClose)", systemImage: "trophy.fill")
+                            }
+                        }
+                        .disabled(appState.groupService.isClosingSeason)
+                        .listRowBackground(PickemsColors.cardBackground)
+                    }
+
+                    if let closeSeasonError {
+                        Text(closeSeasonError)
+                            .font(.caption)
+                            .foregroundStyle(theme.accent)
+                            .listRowBackground(PickemsColors.cardBackground)
+                    }
+                } header: {
+                    Text("Dynasty")
+                } footer: {
+                    Text("Archives final standings, awards the champion, updates career records, and resets season W–L for the next year.")
+                }
             }
             .scrollContentBackground(.hidden)
             .pickemsScreenBackground()
@@ -87,6 +133,16 @@ struct CommissionerSettingsView: View {
                         .fontWeight(.semibold)
                         .disabled(isSaving)
                 }
+            }
+            .confirmationDialog(
+                "Close Season \(seasonYearToClose)?",
+                isPresented: $showCloseSeasonConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Close Season", role: .destructive) { closeSeason() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This archives \(seasonYearToClose) standings and resets everyone’s season record. This cannot be undone.")
             }
         }
     }
@@ -113,6 +169,18 @@ struct CommissionerSettingsView: View {
                 appState.groupService.errorMessage = error.localizedDescription
             }
             isSaving = false
+        }
+    }
+
+    private func closeSeason() {
+        closeSeasonError = nil
+        Task {
+            do {
+                try await appState.groupService.closeSeason(groupId: group.id, seasonYear: seasonYearToClose)
+                PickemsHaptics.success()
+            } catch {
+                closeSeasonError = error.localizedDescription
+            }
         }
     }
 

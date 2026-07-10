@@ -5,12 +5,20 @@ struct UserProfile: Codable, Identifiable, Equatable {
     var displayName: String
     var avatarColorHex: String
     var avatarImageURL: String?
+    var favoriteTeamId: String? = nil
+    var favoriteTeamName: String? = nil
+    var favoriteTeamAbbreviation: String? = nil
+    var favoriteTeamLogoURL: String? = nil
     var createdAt: Date
 
     var initials: String {
         let parts = displayName.split(separator: " ")
         let letters = parts.prefix(2).compactMap { $0.first }
         return String(letters).uppercased()
+    }
+
+    var favoriteTeam: FavoriteTeam? {
+        TeamThemeCatalog.team(id: favoriteTeamId)
     }
 }
 

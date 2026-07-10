@@ -39,9 +39,18 @@ extension AppState {
         )
         if markOnboarding {
             authService.markOnboardingComplete(for: user.id)
+            presentFavoriteTeamPromptIfNeeded()
         }
         groupService.loadGroups(for: user.id)
         pendingInviteCode = nil
+    }
+
+    func presentFavoriteTeamPromptIfNeeded() {
+        guard let userId = currentUserId else { return }
+        guard !needsOnboarding else { return }
+        guard authService.currentUser?.favoriteTeamId == nil else { return }
+        guard !authService.hasDismissedFavoriteTeamPrompt(for: userId) else { return }
+        showFavoriteTeamPicker = true
     }
 
     func rankedStandings(weekly: Bool) -> [StandingEntry] {

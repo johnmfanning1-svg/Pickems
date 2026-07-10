@@ -11,6 +11,8 @@ enum FirestoreCollection {
     static let submissions = "submissions"
     static let members = "members"
     static let standings = "standings"
+    static let seasons = "seasons"
+    static let career = "career"
 }
 
 enum FirestoreDocument {
@@ -48,6 +50,8 @@ extension DocumentReference {
     var weeks: CollectionReference { collection(FirestoreCollection.weeks) }
     var members: CollectionReference { collection(FirestoreCollection.members) }
     var standings: CollectionReference { collection(FirestoreCollection.standings) }
+    var seasons: CollectionReference { collection(FirestoreCollection.seasons) }
+    var career: CollectionReference { collection(FirestoreCollection.career) }
 }
 
 extension DocumentReference {

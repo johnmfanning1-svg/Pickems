@@ -11,14 +11,20 @@ final class GroupService {
     var standings: GroupStandings?
     var currentWeek: WeekSummary?
     var cfbWeek: CFBWeekInfo?
+    var seasonArchives: [SeasonArchive] = []
+    var careerRecords: [CareerRecord] = []
     var isLoading = false
+    var isClosingSeason = false
     var errorMessage: String?
 
     private let db = Firestore.firestore()
     private var groupListener: ListenerRegistration?
     private var weekListener: ListenerRegistration?
     private var standingsListener: ListenerRegistration?
+    private var seasonsListener: ListenerRegistration?
+    private var careerListener: ListenerRegistration?
     private var observedWeekId: String?
+    private var observedGroupId: String?
 
     func loadGroups(for userId: String) {
         groupListener?.remove()
@@ -194,6 +200,8 @@ final class GroupService {
                 currentWeek = nil
                 standings = nil
                 members = []
+                seasonArchives = []
+                careerRecords = []
             }
         }
     }
@@ -215,6 +223,14 @@ final class GroupService {
         for member in members.documents {
             try await member.reference.delete()
         }
+        let seasons = try await groupRef.collection("seasons").getDocuments()
+        for season in seasons.documents {
+            try await season.reference.delete()
+        }
+        let careers = try await groupRef.collection("career").getDocuments()
+        for career in careers.documents {
+            try await career.reference.delete()
+        }
         try await groupRef.collection("standings").document("current").delete()
         try await db.collection("inviteCodes").document(group.inviteCode).delete()
         try await groupRef.delete()
@@ -225,6 +241,8 @@ final class GroupService {
             currentWeek = nil
             standings = nil
             self.members = []
+            seasonArchives = []
+            careerRecords = []
         }
     }
 
@@ -372,10 +390,116 @@ final class GroupService {
             .setData(from: standings)
     }
 
+    /// Archives the given season year, updates career totals, and resets current-season W–L.
+    func closeSeason(groupId: String, seasonYear: Int) async throws {
+        guard let group = groups.first(where: { $0.id == groupId })
+                ?? selectedGroup,
+              group.id == groupId else {
+            throw GroupError.groupNotFound
+        }
+        guard group.commissionerId == Auth.auth().currentUser?.uid else {
+            throw GroupError.notCommissioner
+        }
+        guard !seasonArchives.contains(where: { $0.seasonYear == seasonYear }) else {
+            throw GroupError.seasonAlreadyClosed
+        }
+
+        isClosingSeason = true
+        defer { isClosingSeason = false }
+
+        let groupRef = db.collection("groups").document(groupId)
+        let membersSnapshot = try await groupRef.collection("members").getDocuments()
+        let currentMembers = membersSnapshot.documents.compactMap { try? $0.data(as: GroupMember.self) }
+        guard !currentMembers.isEmpty else {
+            throw GroupError.noMembersToArchive
+        }
+
+        let weeksSnapshot = try await groupRef.collection("weeks")
+            .whereField("seasonYear", isEqualTo: seasonYear)
+            .getDocuments()
+        let weekCount = weeksSnapshot.documents.count
+
+        let archive = SeasonCloseEngine.makeArchive(
+            seasonYear: seasonYear,
+            groupId: groupId,
+            members: currentMembers,
+            weekCount: weekCount
+        )
+
+        var careerUpdates: [(DocumentReference, CareerRecord)] = []
+        for member in currentMembers {
+            let finish = archive.finalStandings.first(where: { $0.id == member.id })?.rank
+                ?? archive.finalStandings.count
+            let wonTitle = archive.championUserId == member.id
+            let careerRef = groupRef.collection("career").document(member.id)
+            let existingSnap = try await careerRef.getDocument()
+            let existing = try? existingSnap.data(as: CareerRecord.self)
+            let updated = SeasonCloseEngine.updatedCareer(
+                existing: existing,
+                member: member,
+                finish: finish,
+                wonTitle: wonTitle
+            )
+            careerUpdates.append((careerRef, updated))
+        }
+
+        let batch = db.batch()
+        let seasonRef = groupRef.collection("seasons").document(archive.id)
+        try batch.setData(from: archive, forDocument: seasonRef)
+
+        for (careerRef, updated) in careerUpdates {
+            try batch.setData(from: updated, forDocument: careerRef)
+        }
+
+        for member in currentMembers {
+            batch.updateData(
+                ["seasonWins": 0, "seasonLosses": 0],
+                forDocument: groupRef.collection("members").document(member.id)
+            )
+        }
+
+        if var standings {
+            standings.entries = standings.entries.map { entry in
+                var copy = entry
+                copy.seasonWins = 0
+                copy.seasonLosses = 0
+                copy.weeklyWins = 0
+                copy.weeklyLosses = 0
+                return copy
+            }
+            standings.updatedAt = Date()
+            try batch.setData(from: standings, forDocument: groupRef.collection("standings").document("current"))
+            self.standings = standings
+        }
+
+        try await batch.commit()
+
+        members = currentMembers.map { member in
+            var copy = member
+            copy.seasonWins = 0
+            copy.seasonLosses = 0
+            return copy
+        }
+        careerRecords = careerUpdates.map(\.1)
+        if seasonArchives.contains(where: { $0.id == archive.id }) == false {
+            seasonArchives = ([archive] + seasonArchives).sorted { $0.seasonYear > $1.seasonYear }
+        }
+    }
+
+    func careerRecord(for userId: String) -> CareerRecord? {
+        careerRecords.first { $0.id == userId }
+    }
+
     private func observeGroupDetails(groupId: String, weekId: String) {
         weekListener?.remove()
         standingsListener?.remove()
+        if observedGroupId != groupId {
+            seasonsListener?.remove()
+            careerListener?.remove()
+            observeDynasty(groupId: groupId)
+        }
         observedWeekId = weekId
+        observedGroupId = groupId
 
         weekListener = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
@@ -398,6 +522,29 @@ final class GroupService {
                 .collection("members").getDocuments()
             members = membersSnapshot.documents.compactMap { try? $0.data(as: GroupMember.self) }
         }
+    }
+
+    private func observeDynasty(groupId: String) {
+        seasonsListener = db.collection("groups").document(groupId)
+            .collection("seasons")
+            .order(by: "seasonYear", descending: true)
+            .addSnapshotListener { [weak self] snapshot, _ in
+                Task { @MainActor in
+                    self?.seasonArchives = snapshot?.documents.compactMap {
+                        try? $0.data(as: SeasonArchive.self)
+                    } ?? []
+                }
+            }
+
+        careerListener = db.collection("groups").document(groupId)
+            .collection("career")
+            .addSnapshotListener { [weak self] snapshot, _ in
+                Task { @MainActor in
+                    self?.careerRecords = snapshot?.documents.compactMap {
+                        try? $0.data(as: CareerRecord.self)
+                    } ?? []
+                }
+            }
     }
 
     private func backfillInviteCodeIndexes(for userId: String) async {
@@ -424,6 +571,8 @@ final class GroupService {
         case groupNotFound
         case notCommissioner
         case cannotLeaveAsSoleCommissioner
+        case seasonAlreadyClosed
+        case noMembersToArchive
 
         var errorDescription: String? {
             switch self {
@@ -431,6 +580,8 @@ final class GroupService {
             case .groupNotFound: return "Group not found."
             case .notCommissioner: return "Only the commissioner can delete this group."
             case .cannotLeaveAsSoleCommissioner: return "Transfer commissioner role or delete the group before leaving."
+            case .seasonAlreadyClosed: return "That season is already archived."
+            case .noMembersToArchive: return "No members to archive for this season."
             }
         }
     }
