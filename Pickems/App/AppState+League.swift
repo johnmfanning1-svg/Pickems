@@ -33,25 +33,45 @@ extension AppState {
 
     func joinGroup(inviteCode: String, markOnboarding: Bool = true) async throws {
         guard let user = authService.currentUser else {
-            throw GroupService.GroupError.signInRequired
+            let error = GroupService.GroupError.signInRequired
+            AppEvents.failure(.onboardingJoinFailed, error: error, metadata: [
+                "reason": "missing_profile",
+            ])
+            throw error
         }
-        try await groupService.joinGroup(
-            inviteCode: inviteCode,
-            userId: user.id,
-            displayName: user.displayName,
-            avatarColorHex: user.avatarColorHex
-        )
-        if markOnboarding {
-            finishOnboarding(for: user.id)
+        AppEvents.track(.onboardingJoinStarted, metadata: [
+            "uid": AppEvents.shortUID(user.id),
+            "code_length": "\(inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).count)",
+        ])
+        do {
+            try await groupService.joinGroup(
+                inviteCode: inviteCode,
+                userId: user.id,
+                displayName: user.displayName,
+                avatarColorHex: user.avatarColorHex
+            )
+            if markOnboarding {
+                finishOnboarding(for: user.id)
+            }
+            groupService.loadGroups(for: user.id)
+            pendingInviteCode = nil
+            AppEvents.track(.onboardingJoinSucceeded, metadata: [
+                "uid": AppEvents.shortUID(user.id),
+                "group_id": groupService.selectedGroup?.id ?? "nil",
+            ])
+        } catch {
+            AppEvents.failure(.onboardingJoinFailed, error: error, metadata: [
+                "uid": AppEvents.shortUID(user.id),
+            ])
+            throw error
         }
-        groupService.loadGroups(for: user.id)
-        pendingInviteCode = nil
     }
 
     /// Marks onboarding complete, lands on Home, and schedules the favorite-team prompt.
     func finishOnboarding(for userId: String) {
         authService.markOnboardingComplete(for: userId)
         selectedTab = .home
+        CrashReport.setValue("false", forKey: "needs_onboarding")
         scheduleFavoriteTeamPrompt()
     }
 
@@ -61,6 +81,9 @@ extension AppState {
         guard authService.currentUser?.favoriteTeamId == nil else { return }
         guard !authService.hasDismissedFavoriteTeamPrompt(for: userId) else { return }
         showFavoriteTeamPicker = true
+        AppEvents.track(.favoriteTeamPromptPresented, metadata: [
+            "uid": AppEvents.shortUID(userId),
+        ])
     }
 
     /// Present after any overlapping sheet (create-league wizard) has dismissed.

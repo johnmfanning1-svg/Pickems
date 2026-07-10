@@ -30,6 +30,11 @@ final class PickService {
                 Task { @MainActor in
                     if let error {
                         self?.errorMessage = error.localizedDescription
+                        AppEvents.failure(.picksListenerError, error: error, metadata: [
+                            "listener": "nominations",
+                            "group_id": groupId,
+                            "week_id": weekId,
+                        ], recordNonFatal: false)
                         return
                     }
                     self?.nominations = snapshot?.documents.compactMap { try? $0.data(as: Nomination.self) } ?? []
@@ -42,6 +47,11 @@ final class PickService {
                 Task { @MainActor in
                     if let error {
                         self?.errorMessage = error.localizedDescription
+                        AppEvents.failure(.picksListenerError, error: error, metadata: [
+                            "listener": "games",
+                            "group_id": groupId,
+                            "week_id": weekId,
+                        ], recordNonFatal: false)
                         return
                     }
                     self?.slateGames = snapshot?.documents.compactMap { try? $0.data(as: SlateGame.self) } ?? []
@@ -54,6 +64,11 @@ final class PickService {
                 Task { @MainActor in
                     if let error {
                         self?.errorMessage = error.localizedDescription
+                        AppEvents.failure(.picksListenerError, error: error, metadata: [
+                            "listener": "user_pick",
+                            "group_id": groupId,
+                            "week_id": weekId,
+                        ], recordNonFatal: false)
                         return
                     }
                     self?.userPick = try? snapshot?.data(as: UserPick.self)
@@ -66,6 +81,11 @@ final class PickService {
                 Task { @MainActor in
                     if let error {
                         self?.errorMessage = error.localizedDescription
+                        AppEvents.failure(.picksListenerError, error: error, metadata: [
+                            "listener": "submissions",
+                            "group_id": groupId,
+                            "week_id": weekId,
+                        ], recordNonFatal: false)
                         return
                     }
                     self?.submissions = snapshot?.documents.compactMap {

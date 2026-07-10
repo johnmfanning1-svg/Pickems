@@ -140,8 +140,12 @@ struct CreateGroupWizardView: View {
             errorMessage = nil
             defer { isWorking = false }
 
-            guard let user = appState.authService.currentUser else {
+            guard let user = await resolvedUser() else {
                 errorMessage = "No signed-in user. Sign in to continue."
+                AppLog.notice(AppLog.onboarding, "create league aborted — no profile", metadata: [
+                    "signed_in": appState.authService.isSignedIn ? "true" : "false",
+                    "uid": AppEvents.shortUID(appState.authService.currentUserId),
+                ])
                 return
             }
             do {
@@ -158,7 +162,22 @@ struct CreateGroupWizardView: View {
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription
+                AppLog.error(AppLog.onboarding, "create league wizard failed", error: error)
             }
         }
+    }
+
+    private func resolvedUser() async -> UserProfile? {
+        if let user = appState.authService.currentUser { return user }
+        await appState.authService.refreshSession()
+        if let user = appState.authService.currentUser { return user }
+
+        #if DEBUG
+        if DevAuthBypass.isEnabled {
+            await appState.authService.activateDevBypass()
+        }
+        #endif
+
+        return appState.authService.currentUser
     }
 }

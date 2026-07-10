@@ -12,6 +12,7 @@
 		3854C8A4EDD33F6D22EE4CFF /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = B5030E13AC27480B2A9E0B20 /* FirebaseMessaging */; };
 		48D60C4A896BE81E11AA2BBE /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = CB07AC943EE21624587BDCE6 /* FirebaseAuth */; };
 		A1B2C3D4E5F60718293A4B5D /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F60718293A4B5E /* FirebaseStorage */; };
+		C8A5H171C5F1B3B45300001 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = C8A5H171C5F1B3B45300002 /* FirebaseCrashlytics */; };
 		F4C621BAF1B5640887A363D1 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = A8CDA2F5030591C06A2E55C7 /* FirebaseCore */; };
 
 		B10000000000000000000016 /* PickemsWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* PickemsWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -150,6 +151,7 @@
 				356C10D6F6BFF3A6DBBE3772 /* FirebaseFirestore in Frameworks */,
 				3854C8A4EDD33F6D22EE4CFF /* FirebaseMessaging in Frameworks */,
 				A1B2C3D4E5F60718293A4B5D /* FirebaseStorage in Frameworks */,
+				C8A5H171C5F1B3B45300001 /* FirebaseCrashlytics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -239,6 +241,7 @@
 				73652EE60A8921FD33F954C2 /* FirebaseFirestore */,
 				B5030E13AC27480B2A9E0B20 /* FirebaseMessaging */,
 				A1B2C3D4E5F60718293A4B5E /* FirebaseStorage */,
+				C8A5H171C5F1B3B45300002 /* FirebaseCrashlytics */,
 			);
 			productName = Pickems;
 			productReference = 9849E60E2FEEC2BD00CC6B9A /* Pickems.app */;
@@ -1006,6 +1009,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E8E659C1013CDE353D048F2C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseAuth;
+		};
+		C8A5H171C5F1B3B45300002 /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E8E659C1013CDE353D048F2C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

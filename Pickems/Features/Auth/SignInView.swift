@@ -73,6 +73,9 @@ struct SignInView: View {
                             }
                         case .failure(let error):
                             appState.authService.errorMessage = error.localizedDescription
+                            AppEvents.failure(.authAppleFailed, error: error, metadata: [
+                                "phase": "authorization_sheet",
+                            ])
                         }
                     }
                 }

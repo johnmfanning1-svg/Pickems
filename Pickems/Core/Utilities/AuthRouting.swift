@@ -1,10 +1,19 @@
 import Foundation
 
-enum AuthRootDestination: Equatable {
+enum AuthRootDestination: Equatable, CustomStringConvertible {
     case loading
     case signIn
     case onboarding
     case main
+
+    var description: String {
+        switch self {
+        case .loading: return "loading"
+        case .signIn: return "signIn"
+        case .onboarding: return "onboarding"
+        case .main: return "main"
+        }
+    }
 }
 
 enum AuthRouting {

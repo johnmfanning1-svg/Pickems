@@ -29,6 +29,14 @@ struct RootView: View {
         }
         .preferredColorScheme(.dark)
         .background(PickemsAtmosphericBackground(palette: theme))
+        .onChange(of: destination) { previous, next in
+            AppEvents.track(.rootDestinationChanged, metadata: [
+                "from": "\(previous)",
+                "to": "\(next)",
+                "signed_in": appState.authService.isSignedIn ? "true" : "false",
+                "needs_onboarding": appState.needsOnboarding ? "true" : "false",
+            ])
+        }
     }
 
     private var authDestination: AuthRootDestination {

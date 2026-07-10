@@ -13,6 +13,8 @@ enum FirebaseBootstrap {
         Firestore.firestore().settings.cacheSettings = PersistentCacheSettings(
             sizeBytes: 100 * 1024 * 1024 as NSNumber
         )
+        CrashReport.configureAfterFirebase()
+        AppEvents.track(.appLaunch)
         didConfigure = true
     }
 }

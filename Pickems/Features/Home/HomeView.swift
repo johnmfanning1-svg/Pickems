@@ -16,6 +16,14 @@ struct HomeView: View {
                     heroPulse
                         .pickemsAppear()
 
+                    if let error = viewModel.errorMessage {
+                        ContextualTipBanner(
+                            icon: "exclamationmark.triangle.fill",
+                            message: error
+                        )
+                        .padding(.horizontal)
+                    }
+
                     if let week = appState.groupService.currentWeek,
                        week.status == .scored,
                        let group = appState.groupService.selectedGroup {

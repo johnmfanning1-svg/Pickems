@@ -56,14 +56,32 @@ final class AuthService {
                 #endif
                 let epoch = self.authEpoch
                 self.authStateDetermined = true
+                AppEvents.track(.authStateChanged, metadata: [
+                    "signed_in": user != nil ? "true" : "false",
+                    "uid": AppEvents.shortUID(user?.uid),
+                    "epoch": "\(epoch)",
+                ])
                 if let user {
                     self.applySignedIn(uid: user.uid)
                     await self.loadUserProfile(uid: user.uid)
                     // A newer sign-in/out started while we were loading — don't clobber it.
-                    guard epoch == self.authEpoch else { return }
+                    guard epoch == self.authEpoch else {
+                        AppEvents.track(.authEpochStaleIgnored, metadata: [
+                            "uid": AppEvents.shortUID(user.uid),
+                            "epoch": "\(epoch)",
+                            "current_epoch": "\(self.authEpoch)",
+                        ])
+                        return
+                    }
                     self.applySignedIn(uid: user.uid)
                 } else {
-                    guard epoch == self.authEpoch else { return }
+                    guard epoch == self.authEpoch else {
+                        AppEvents.track(.authEpochStaleIgnored, metadata: [
+                            "epoch": "\(epoch)",
+                            "current_epoch": "\(self.authEpoch)",
+                        ])
+                        return
+                    }
                     self.applySignedOut()
                 }
             }
@@ -100,6 +118,10 @@ final class AuthService {
     func markOnboardingComplete(for userId: String) {
         UserDefaults.standard.set(true, forKey: Self.onboardingKey(for: userId))
         onboardingRevision += 1
+        AppEvents.track(.onboardingMarkedComplete, metadata: [
+            "uid": AppEvents.shortUID(userId),
+            "revision": "\(onboardingRevision)",
+        ])
     }
 
     func prepareAppleSignIn() -> String {
@@ -112,25 +134,37 @@ final class AuthService {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
+        AppEvents.track(.authAppleStarted)
 
         guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
               let tokenData = appleIDCredential.identityToken,
               let idToken = String(data: tokenData, encoding: .utf8),
               let nonce = currentNonce else {
-            throw AuthError.invalidCredential
+            let error = AuthError.invalidCredential
+            AppEvents.failure(.authAppleFailed, error: error, metadata: ["reason": "missing_credential_or_nonce"])
+            throw error
         }
 
-        let credential = OAuthProvider.appleCredential(
-            withIDToken: idToken,
-            rawNonce: nonce,
-            fullName: appleIDCredential.fullName
-        )
-        let result = try await auth.signIn(with: credential)
-        let displayName = formattedName(from: appleIDCredential.fullName)
-            ?? result.user.displayName
-            ?? "Player"
-        await ensureUserProfile(uid: result.user.uid, displayName: displayName)
-        applySignedIn(uid: result.user.uid)
+        do {
+            let credential = OAuthProvider.appleCredential(
+                withIDToken: idToken,
+                rawNonce: nonce,
+                fullName: appleIDCredential.fullName
+            )
+            let result = try await auth.signIn(with: credential)
+            let displayName = formattedName(from: appleIDCredential.fullName)
+                ?? result.user.displayName
+                ?? "Player"
+            await ensureUserProfile(uid: result.user.uid, displayName: displayName)
+            applySignedIn(uid: result.user.uid)
+            AppEvents.track(.authAppleSucceeded, metadata: [
+                "uid": AppEvents.shortUID(result.user.uid),
+            ])
+        } catch {
+            errorMessage = error.localizedDescription
+            AppEvents.failure(.authAppleFailed, error: error)
+            throw error
+        }
     }
 
     func signUp(email: String, password: String, displayName: String) async throws {
@@ -145,21 +179,35 @@ final class AuthService {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
+        AppEvents.track(.authSignUpStarted)
 
         do {
             try await replaceSessionIfNeeded()
             let result = try await auth.createUser(withEmail: trimmedEmail, password: password)
             let changeRequest = result.user.createProfileChangeRequest()
             changeRequest.displayName = trimmedName
-            try? await changeRequest.commitChanges()
+            do {
+                try await changeRequest.commitChanges()
+            } catch {
+                AppLog.error(AppLog.auth, "displayName commit failed after sign-up", error: error, metadata: [
+                    "uid": AppEvents.shortUID(result.user.uid),
+                ])
+            }
             await ensureUserProfile(uid: result.user.uid, displayName: trimmedName)
             applySignedIn(uid: result.user.uid)
+            AppEvents.track(.authSignUpSucceeded, metadata: [
+                "uid": AppEvents.shortUID(result.user.uid),
+            ])
         } catch let error as AuthError {
             errorMessage = error.localizedDescription
+            AppEvents.failure(.authSignUpFailed, error: error)
             throw error
         } catch {
             let mapped = Self.mapEmailPasswordError(error as NSError)
             errorMessage = mapped.localizedDescription
+            AppEvents.failure(.authSignUpFailed, error: mapped, metadata: [
+                "underlying": AppLog.describe(error),
+            ])
             throw mapped
         }
     }
@@ -174,6 +222,7 @@ final class AuthService {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
+        AppEvents.track(.authSignInStarted)
 
         do {
             try await replaceSessionIfNeeded()
@@ -181,12 +230,19 @@ final class AuthService {
             let displayName = result.user.displayName ?? "Player"
             await ensureUserProfile(uid: result.user.uid, displayName: displayName)
             applySignedIn(uid: result.user.uid)
+            AppEvents.track(.authSignInSucceeded, metadata: [
+                "uid": AppEvents.shortUID(result.user.uid),
+            ])
         } catch let error as AuthError {
             errorMessage = error.localizedDescription
+            AppEvents.failure(.authSignInFailed, error: error)
             throw error
         } catch {
             let mapped = Self.mapEmailPasswordError(error as NSError)
             errorMessage = mapped.localizedDescription
+            AppEvents.failure(.authSignInFailed, error: mapped, metadata: [
+                "underlying": AppLog.describe(error),
+            ])
             throw mapped
         }
     }
@@ -198,12 +254,15 @@ final class AuthService {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
+        AppEvents.track(.authPasswordResetStarted)
 
         do {
             try await auth.sendPasswordReset(withEmail: trimmedEmail)
+            AppEvents.track(.authPasswordResetSucceeded)
         } catch {
             let mapped = Self.mapEmailPasswordError(error as NSError)
             errorMessage = mapped.localizedDescription
+            AppEvents.failure(.authPasswordResetFailed, error: mapped)
             throw mapped
         }
     }
@@ -336,13 +395,30 @@ final class AuthService {
                 "favoriteTeamLogoURL": FieldValue.delete(),
             ]
         }
-        try await db.user(uid).updateData(data)
-        currentUser?.favoriteTeamId = team?.id
-        currentUser?.favoriteTeamName = team?.name
-        currentUser?.favoriteTeamAbbreviation = team?.abbreviation
-        currentUser?.favoriteTeamLogoURL = team?.resolvedLogoURL
-        if let team {
-            markFavoriteTeamPromptDismissed(for: uid)
+        do {
+            try await db.user(uid).updateData(data)
+            currentUser?.favoriteTeamId = team?.id
+            currentUser?.favoriteTeamName = team?.name
+            currentUser?.favoriteTeamAbbreviation = team?.abbreviation
+            currentUser?.favoriteTeamLogoURL = team?.resolvedLogoURL
+            if let team {
+                markFavoriteTeamPromptDismissed(for: uid)
+                AppEvents.track(.favoriteTeamSelected, metadata: [
+                    "uid": AppEvents.shortUID(uid),
+                    "team_id": team.id,
+                    "team": team.abbreviation,
+                ])
+            } else {
+                AppEvents.track(.favoriteTeamCleared, metadata: [
+                    "uid": AppEvents.shortUID(uid),
+                ])
+            }
+        } catch {
+            AppEvents.failure(.favoriteTeamFailed, error: error, metadata: [
+                "uid": AppEvents.shortUID(uid),
+                "team_id": team?.id ?? "nil",
+            ])
+            throw error
         }
     }
 
@@ -360,14 +436,22 @@ final class AuthService {
 
     func signOut() throws {
         authEpoch += 1
+        let uid = currentUserId
         try auth.signOut()
         applySignedOut()
         authStateDetermined = true
         onboardingRevision += 1
+        AppEvents.track(.authSignOut, metadata: [
+            "uid": AppEvents.shortUID(uid),
+        ])
+        CrashReport.setUserID(nil)
     }
 
     func refreshSession() async {
-        guard let uid = auth.currentUser?.uid else { return }
+        guard let uid = auth.currentUser?.uid else {
+            AppLog.notice(AppLog.auth, "refreshSession skipped — no Firebase user")
+            return
+        }
         await loadUserProfile(uid: uid)
         applySignedIn(uid: uid)
     }
@@ -376,6 +460,9 @@ final class AuthService {
     private func replaceSessionIfNeeded() async throws {
         guard auth.currentUser != nil else { return }
         authEpoch += 1
+        AppLog.info(AppLog.auth, "replacing existing session before email auth", metadata: [
+            "epoch": "\(authEpoch)",
+        ])
         try auth.signOut()
         // Keep isSignedIn true-ish UX via loading spinner; clear profile until new session lands.
         currentUser = nil
@@ -383,14 +470,18 @@ final class AuthService {
     }
 
     private func applySignedIn(uid: String?) {
-        guard uid != nil else { return }
+        guard let uid else { return }
         isSignedIn = true
         authStateDetermined = true
+        CrashReport.setUserID(uid)
+        CrashReport.setValue("true", forKey: "is_signed_in")
     }
 
     private func applySignedOut() {
         currentUser = nil
         isSignedIn = false
+        CrashReport.setUserID(nil)
+        CrashReport.setValue("false", forKey: "is_signed_in")
     }
 
     private func loadUserProfile(uid: String) async {
@@ -399,14 +490,31 @@ final class AuthService {
             if let profile = try? doc.data(as: UserProfile.self) {
                 currentUser = profile
                 errorMessage = nil
+                AppEvents.track(.authProfileLoaded, metadata: [
+                    "uid": AppEvents.shortUID(uid),
+                    "source": "firestore",
+                    "has_favorite_team": profile.favoriteTeamId != nil ? "true" : "false",
+                ])
                 return
             }
+            AppLog.notice(AppLog.auth, "profile document missing or undecodable — using fallback", metadata: [
+                "uid": AppEvents.shortUID(uid),
+                "exists": doc.exists ? "true" : "false",
+            ])
         } catch {
             let nsError = error as NSError
             let isOffline = nsError.domain == FirestoreErrorDomain
                 && nsError.code == FirestoreErrorCode.unavailable.rawValue
             if !isOffline {
                 errorMessage = error.localizedDescription
+                AppEvents.failure(.authProfileSyncFailed, error: error, metadata: [
+                    "uid": AppEvents.shortUID(uid),
+                    "phase": "load",
+                ])
+            } else {
+                AppLog.info(AppLog.auth, "profile load offline — using fallback", metadata: [
+                    "uid": AppEvents.shortUID(uid),
+                ])
             }
         }
 
@@ -429,17 +537,38 @@ final class AuthService {
                 currentUser = profile
                 cacheAvatarColor(profile.avatarColorHex, for: uid)
                 errorMessage = nil
+                AppEvents.track(.authProfileLoaded, metadata: [
+                    "uid": AppEvents.shortUID(uid),
+                    "source": "ensure_existing",
+                ])
                 return
             }
             try await ref.setData(from: fallback)
             currentUser = fallback
             cacheAvatarColor(fallback.avatarColorHex, for: uid)
             errorMessage = nil
+            AppEvents.track(.authProfileLoaded, metadata: [
+                "uid": AppEvents.shortUID(uid),
+                "source": "ensure_created",
+            ])
         } catch {
             // Auth succeeded — keep going with a local profile; Firestore syncs when online.
             currentUser = fallback
             cacheAvatarColor(fallback.avatarColorHex, for: uid)
-            try? await ref.setData(from: fallback, merge: true)
+            AppEvents.failure(.authProfileSyncFailed, error: error, metadata: [
+                "uid": AppEvents.shortUID(uid),
+                "phase": "ensure",
+            ], recordNonFatal: true)
+            AppEvents.track(.authProfileFallback, metadata: [
+                "uid": AppEvents.shortUID(uid),
+            ])
+            do {
+                try await ref.setData(from: fallback, merge: true)
+            } catch {
+                AppLog.error(AppLog.auth, "profile merge retry failed", error: error, metadata: [
+                    "uid": AppEvents.shortUID(uid),
+                ])
+            }
         }
     }
 
@@ -454,6 +583,10 @@ final class AuthService {
             createdAt: Date()
         )
         cacheAvatarColor(color, for: uid)
+        AppEvents.track(.authProfileFallback, metadata: [
+            "uid": AppEvents.shortUID(uid),
+            "source": "local",
+        ])
     }
 
     private func cachedAvatarColor(for uid: String) -> String? {

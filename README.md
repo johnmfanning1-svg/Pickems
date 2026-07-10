@@ -62,6 +62,27 @@ firebase/
 - Discover public leagues + rivalry head-to-head
 - Home Screen widgets / Live Activities / Watch (sources + App Group)
 
+## Debugging
+
+Pickems logs structured events via `OSLog` (`AppLog` / `AppEvents`) and records non-fatals to **Firebase Crashlytics** when linked.
+
+In Console.app, filter by subsystem `FannypackInc.Pickems` (or your bundle id) and categories such as `auth`, `onboarding`, `session`, `events`, `firestore`.
+
+Useful event names:
+
+| Event | When |
+|-------|------|
+| `auth.sign_in_failed` / `auth.sign_up_failed` | Email auth failure |
+| `auth.apple_failed` | Sign in with Apple failure |
+| `root.destination_changed` | Left/entered Sign In, Onboarding, or Home |
+| `onboarding.join_failed` / `onboarding.create_failed` | League join/create failure |
+| `auth.profile_sync_failed` | Firestore profile write/load issue |
+| `groups.decode_dropped` | Group document could not be decoded |
+
+Emails, passwords, and tokens are redacted from event metadata.
+
+See [docs/DEBUGGING.md](docs/DEBUGGING.md) for Console.app filters and a healthy auth event trail.
+
 ## Commissioner Settings
 
 - Selection mode, slate size, deadlines, tie-breakers
