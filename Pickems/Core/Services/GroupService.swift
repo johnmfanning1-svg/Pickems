@@ -28,17 +28,39 @@ final class GroupService {
 
     func loadGroups(for userId: String) {
         groupListener?.remove()
+        AppLog.info(AppLog.firestore, "loadGroups listener attached", metadata: [
+            "uid": AppEvents.shortUID(userId),
+        ])
         groupListener = db.collection("groups")
             .whereField("memberIds", arrayContains: userId)
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
                     if let error {
                         self?.errorMessage = error.localizedDescription
+                        AppEvents.failure(.groupsListenerError, error: error, metadata: [
+                            "uid": AppEvents.shortUID(userId),
+                        ])
                         return
                     }
+                    var dropped = 0
                     self?.groups = snapshot?.documents.compactMap { doc in
-                        try? doc.data(as: PickemGroup.self)
+                        do {
+                            return try doc.data(as: PickemGroup.self)
+                        } catch {
+                            dropped += 1
+                            AppEvents.track(.groupsDecodeDropped, metadata: [
+                                "doc_id": doc.documentID,
+                                "error": AppLog.describe(error),
+                            ])
+                            return nil
+                        }
                     } ?? []
+                    if dropped > 0 {
+                        AppLog.notice(AppLog.firestore, "dropped undecodable group docs", metadata: [
+                            "count": "\(dropped)",
+                            "kept": "\(self?.groups.count ?? 0)",
+                        ])
+                    }
                     Task { @MainActor in
                         await self?.backfillInviteCodeIndexes(for: userId)
                     }
@@ -48,6 +70,7 @@ final class GroupService {
                     if let groupId = self?.selectedGroup?.id {
                         await self?.syncCurrentWeekFromESPN(groupId: groupId)
                     }
+                    CrashReport.setValue("\(self?.groups.count ?? 0)", forKey: "group_count")
                 }
             }
     }
@@ -101,36 +124,50 @@ final class GroupService {
     }
 
     func createGroup(name: String, commissionerId: String, displayName: String) async throws -> PickemGroup {
-        let inviteCode = generateInviteCode()
-        let groupRef = db.collection("groups").document()
-        let group = PickemGroup(
-            id: groupRef.documentID,
-            name: name,
-            inviteCode: inviteCode,
-            commissionerId: commissionerId,
-            memberIds: [commissionerId],
-            rules: .default,
-            createdAt: Date()
-        )
-        try await groupRef.setData(from: group)
-        try await db.collection("inviteCodes").document(inviteCode).setData(["groupId": groupRef.documentID])
+        AppEvents.track(.onboardingCreateStarted, metadata: [
+            "uid": AppEvents.shortUID(commissionerId),
+        ])
+        do {
+            let inviteCode = generateInviteCode()
+            let groupRef = db.collection("groups").document()
+            let group = PickemGroup(
+                id: groupRef.documentID,
+                name: name,
+                inviteCode: inviteCode,
+                commissionerId: commissionerId,
+                memberIds: [commissionerId],
+                rules: .default,
+                createdAt: Date()
+            )
+            try await groupRef.setData(from: group)
+            try await db.collection("inviteCodes").document(inviteCode).setData(["groupId": groupRef.documentID])
 
-        let member = GroupMember(
-            id: commissionerId,
-            displayName: displayName,
-            avatarColorHex: AvatarColors.randomHex(),
-            role: .commissioner,
-            joinedAt: Date(),
-            seasonWins: 0,
-            seasonLosses: 0
-        )
-        try await groupRef.collection("members").document(commissionerId).setData(from: member)
-        selectedGroup = group
-        if !groups.contains(where: { $0.id == group.id }) {
-            groups.append(group)
+            let member = GroupMember(
+                id: commissionerId,
+                displayName: displayName,
+                avatarColorHex: AvatarColors.randomHex(),
+                role: .commissioner,
+                joinedAt: Date(),
+                seasonWins: 0,
+                seasonLosses: 0
+            )
+            try await groupRef.collection("members").document(commissionerId).setData(from: member)
+            selectedGroup = group
+            if !groups.contains(where: { $0.id == group.id }) {
+                groups.append(group)
+            }
+            await syncCurrentWeekFromESPN(groupId: group.id)
+            AppEvents.track(.onboardingCreateSucceeded, metadata: [
+                "uid": AppEvents.shortUID(commissionerId),
+                "group_id": group.id,
+            ])
+            return group
+        } catch {
+            AppEvents.failure(.onboardingCreateFailed, error: error, metadata: [
+                "uid": AppEvents.shortUID(commissionerId),
+            ])
+            throw error
         }
-        await syncCurrentWeekFromESPN(groupId: group.id)
-        return group
     }
 
     func joinGroup(inviteCode: String, userId: String, displayName: String, avatarColorHex: String) async throws {
@@ -535,24 +572,43 @@ final class GroupService {
 
         weekListener = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
-            .addSnapshotListener { [weak self] snapshot, _ in
+            .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
+                    if let error {
+                        AppEvents.failure(.weekListenerError, error: error, metadata: [
+                            "listener": "week",
+                            "group_id": groupId,
+                            "week_id": weekId,
+                        ], recordNonFatal: false)
+                    }
                     self?.currentWeek = try? snapshot?.data(as: WeekSummary.self)
                 }
             }
 
         standingsListener = db.collection("groups").document(groupId)
             .collection("standings").document("current")
-            .addSnapshotListener { [weak self] snapshot, _ in
+            .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
+                    if let error {
+                        AppEvents.failure(.weekListenerError, error: error, metadata: [
+                            "listener": "standings",
+                            "group_id": groupId,
+                        ], recordNonFatal: false)
+                    }
                     self?.standings = try? snapshot?.data(as: GroupStandings.self)
                 }
             }
 
         Task {
-            let membersSnapshot = try await db.collection("groups").document(groupId)
-                .collection("members").getDocuments()
-            members = membersSnapshot.documents.compactMap { try? $0.data(as: GroupMember.self) }
+            do {
+                let membersSnapshot = try await db.collection("groups").document(groupId)
+                    .collection("members").getDocuments()
+                members = membersSnapshot.documents.compactMap { try? $0.data(as: GroupMember.self) }
+            } catch {
+                AppLog.error(AppLog.firestore, "members fetch failed", error: error, metadata: [
+                    "group_id": groupId,
+                ])
+            }
         }
     }
 
@@ -605,6 +661,7 @@ final class GroupService {
         case cannotLeaveAsSoleCommissioner
         case seasonAlreadyClosed
         case noMembersToArchive
+        case signInRequired
 
         var errorDescription: String? {
             switch self {
@@ -614,6 +671,7 @@ final class GroupService {
             case .cannotLeaveAsSoleCommissioner: return "Transfer commissioner role or delete the group before leaving."
             case .seasonAlreadyClosed: return "That season is already archived."
             case .noMembersToArchive: return "No members to archive for this season."
+            case .signInRequired: return "Sign in to continue."
             }
         }
     }

@@ -25,7 +25,7 @@ struct MainTabView: View {
             ProfileView()
                 .tabItem { Label("Profile", systemImage: "person.fill") }
                 .tag(AppTab.profile)
-                .accessibilityHint("Display name and notification settings")
+                .accessibilityHint("Display name, favorite team, and notification settings")
         }
         .tint(theme.accent)
     }

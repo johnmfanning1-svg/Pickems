@@ -39,6 +39,19 @@ struct PickemsApp: App {
                         guard determined, appState.authService.isAuthenticated else { return }
                         Task { await appState.onAuthStateReady() }
                     }
+                    .onChange(of: appState.authService.isSignedIn) { _, signedIn in
+                        #if DEBUG
+                        guard !DevAuthBypass.isEnabled else { return }
+                        #endif
+                        guard signedIn else { return }
+                        Task { await appState.onAuthStateReady() }
+                    }
+                    .onChange(of: appState.needsOnboarding) { wasOnboarding, needsOnboarding in
+                        if wasOnboarding, !needsOnboarding {
+                            appState.selectedTab = .home
+                            appState.scheduleFavoriteTeamPrompt()
+                        }
+                    }
                     .sheet(isPresented: Binding(
                         get: { appState.showJoinGroupSheet },
                         set: { appState.showJoinGroupSheet = $0 }

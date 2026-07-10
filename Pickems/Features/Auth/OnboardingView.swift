@@ -8,6 +8,7 @@ struct OnboardingView: View {
     @State private var isWorking = false
     @State private var localError: String?
     @State private var showCreateWizard = false
+    @State private var showFavoriteTeamPicker = false
 
     enum OnboardingMode: String, CaseIterable {
         case join = "Join Group"
@@ -36,6 +37,8 @@ struct OnboardingView: View {
                             .multilineTextAlignment(.center)
                     }
                     .padding(.top, 8)
+
+                    favoriteTeamSection
 
                     Picker("Mode", selection: $mode) {
                         ForEach(OnboardingMode.allCases, id: \.self) { mode in
@@ -72,12 +75,64 @@ struct OnboardingView: View {
             .sheet(isPresented: $showCreateWizard) {
                 CreateGroupWizardView()
             }
+            .sheet(isPresented: $showFavoriteTeamPicker) {
+                FavoriteTeamPickerView()
+            }
             .onAppear {
                 if let pending = appState.pendingInviteCode, !pending.isEmpty {
                     inviteCode = pending
                     mode = .join
                 }
             }
+        }
+    }
+
+    private var favoriteTeamSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Favorite Team")
+                .font(.headline)
+                .foregroundStyle(PickemsColors.textPrimary)
+
+            Button {
+                showFavoriteTeamPicker = true
+            } label: {
+                HStack(spacing: 12) {
+                    if let team = appState.authService.currentUser?.favoriteTeam {
+                        ZStack {
+                            Circle()
+                                .fill(team.primaryColor)
+                                .frame(width: 36, height: 36)
+                            if let url = URL(string: team.resolvedLogoURL) {
+                                AsyncImage(url: url) { phase in
+                                    if case .success(let image) = phase {
+                                        image.resizable().scaledToFit()
+                                    }
+                                }
+                                .frame(width: 24, height: 24)
+                            }
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(team.name)
+                                .foregroundStyle(PickemsColors.textPrimary)
+                            Text("Tap to change")
+                                .font(.caption)
+                                .foregroundStyle(PickemsColors.textSecondary)
+                        }
+                    } else {
+                        Label("Choose your team", systemImage: "shield.lefthalf.filled")
+                            .foregroundStyle(theme.accent)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
+                .padding(14)
+                .background(PickemsColors.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the favorite team picker")
         }
     }
 
@@ -126,7 +181,7 @@ struct OnboardingView: View {
             defer { isWorking = false }
 
             guard let user = await resolvedUser() else {
-                localError = "No signed-in user. Sign in with Apple to continue."
+                localError = "No signed-in user. Sign in to continue."
                 return
             }
             do {

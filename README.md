@@ -11,7 +11,7 @@ College football pick'em iOS app built with SwiftUI and Firebase.
 ## Firebase Setup
 
 1. Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com) named `pickems-prod`
-2. Enable **Authentication** → Sign in with Apple only (passwordless)
+2. Enable **Authentication** → **Sign in with Apple** and **Email/Password**
 3. Create a Firestore database (production mode)
 4. Upgrade to **Blaze** plan and set billing budget: $1 alert, $5 cap in Google Cloud Console
 5. Register iOS app with bundle ID `FannypackInc.Pickems`
@@ -61,6 +61,27 @@ firebase/
 - Confidence picks + late-pick policy (commissioner)
 - Discover public leagues + rivalry head-to-head
 - Home Screen widgets / Live Activities / Watch (sources + App Group)
+
+## Debugging
+
+Pickems logs structured events via `OSLog` (`AppLog` / `AppEvents`) and records non-fatals to **Firebase Crashlytics** when linked.
+
+In Console.app, filter by subsystem `FannypackInc.Pickems` (or your bundle id) and categories such as `auth`, `onboarding`, `session`, `events`, `firestore`.
+
+Useful event names:
+
+| Event | When |
+|-------|------|
+| `auth.sign_in_failed` / `auth.sign_up_failed` | Email auth failure |
+| `auth.apple_failed` | Sign in with Apple failure |
+| `root.destination_changed` | Left/entered Sign In, Onboarding, or Home |
+| `onboarding.join_failed` / `onboarding.create_failed` | League join/create failure |
+| `auth.profile_sync_failed` | Firestore profile write/load issue |
+| `groups.decode_dropped` | Group document could not be decoded |
+
+Emails, passwords, and tokens are redacted from event metadata.
+
+See [docs/DEBUGGING.md](docs/DEBUGGING.md) for Console.app filters and a healthy auth event trail.
 
 ## Commissioner Settings
 
