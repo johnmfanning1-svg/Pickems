@@ -11,7 +11,7 @@ College football pick'em iOS app built with SwiftUI and Firebase.
 ## Firebase Setup
 
 1. Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com) named `pickems-prod`
-2. Enable **Authentication** → Sign in with Apple only (passwordless)
+2. Enable **Authentication** → **Sign in with Apple** and **Email/Password**
 3. Create a Firestore database (production mode)
 4. Upgrade to **Blaze** plan and set billing budget: $1 alert, $5 cap in Google Cloud Console
 5. Register iOS app with bundle ID `FannypackInc.Pickems`

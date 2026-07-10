@@ -47,8 +47,9 @@ final class AppState {
             await authService.refreshSession()
         }
         appTheme.sync(from: authService.currentUser)
-        presentFavoriteTeamPromptIfNeeded()
         groupService.loadGroups(for: userId)
+        // Defer so RootView can leave onboarding and any auth sheets can dismiss first.
+        scheduleFavoriteTeamPrompt()
         await notificationService.requestPermission()
         await notificationService.saveToken(for: userId)
         processPendingInviteIfNeeded()

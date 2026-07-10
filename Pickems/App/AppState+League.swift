@@ -13,9 +13,13 @@ extension AppState {
 
     var needsOnboarding: Bool {
         _ = authService.onboardingRevision
-        guard let userId = currentUserId else { return true }
-        let hasGroup = !groupService.groups.isEmpty || groupService.selectedGroup != nil
-        return !hasGroup && !authService.hasCompletedOnboarding(for: userId)
+        _ = groupService.groups
+        _ = groupService.selectedGroup
+        return AuthRouting.needsOnboarding(
+            userId: currentUserId,
+            hasGroup: !groupService.groups.isEmpty || groupService.selectedGroup != nil,
+            hasCompletedOnboarding: currentUserId.map { authService.hasCompletedOnboarding(for: $0) } ?? false
+        )
     }
 
     /// Sync ESPN week, then attach Firestore listeners for picks/nominations.
@@ -29,7 +33,7 @@ extension AppState {
 
     func joinGroup(inviteCode: String, markOnboarding: Bool = true) async throws {
         guard let user = authService.currentUser else {
-            throw GroupService.GroupError.invalidInviteCode
+            throw GroupService.GroupError.signInRequired
         }
         try await groupService.joinGroup(
             inviteCode: inviteCode,
@@ -38,11 +42,17 @@ extension AppState {
             avatarColorHex: user.avatarColorHex
         )
         if markOnboarding {
-            authService.markOnboardingComplete(for: user.id)
-            presentFavoriteTeamPromptIfNeeded()
+            finishOnboarding(for: user.id)
         }
         groupService.loadGroups(for: user.id)
         pendingInviteCode = nil
+    }
+
+    /// Marks onboarding complete, lands on Home, and schedules the favorite-team prompt.
+    func finishOnboarding(for userId: String) {
+        authService.markOnboardingComplete(for: userId)
+        selectedTab = .home
+        scheduleFavoriteTeamPrompt()
     }
 
     func presentFavoriteTeamPromptIfNeeded() {
@@ -51,6 +61,14 @@ extension AppState {
         guard authService.currentUser?.favoriteTeamId == nil else { return }
         guard !authService.hasDismissedFavoriteTeamPrompt(for: userId) else { return }
         showFavoriteTeamPicker = true
+    }
+
+    /// Present after any overlapping sheet (create-league wizard) has dismissed.
+    func scheduleFavoriteTeamPrompt(delayNanoseconds: UInt64 = 450_000_000) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: delayNanoseconds)
+            presentFavoriteTeamPromptIfNeeded()
+        }
     }
 
     func rankedStandings(weekly: Bool) -> [StandingEntry] {

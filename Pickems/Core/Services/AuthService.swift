@@ -9,6 +9,9 @@ import CryptoKit
 final class AuthService {
     var currentUser: UserProfile?
     var authStateDetermined = false
+    /// Observable Firebase session flag. Do not read `Auth.auth().currentUser` from views —
+    /// that value is not tracked by `@Observable`, so RootView would never leave SignInView.
+    private(set) var isSignedIn = false
     var isLoading = false
     var errorMessage: String?
     private(set) var onboardingRevision = 0
@@ -24,13 +27,15 @@ final class AuthService {
             return true
         }
         #endif
-        return auth.currentUser != nil
+        return isSignedIn
     }
 
     private let auth = Auth.auth()
     private let db = Firestore.firestore()
     private var authListener: AuthStateDidChangeListenerHandle?
     private var currentNonce: String?
+    /// Bumps on intentional sign-out-before-sign-in so stale listener tasks cannot wipe the new session.
+    private var authEpoch = 0
 
     private static func onboardingKey(for userId: String) -> String {
         "pickems.onboarding.complete.\(userId)"
@@ -49,11 +54,17 @@ final class AuthService {
                 #if DEBUG
                 if DevAuthBypass.isEnabled { return }
                 #endif
+                let epoch = self.authEpoch
                 self.authStateDetermined = true
                 if let user {
+                    self.applySignedIn(uid: user.uid)
                     await self.loadUserProfile(uid: user.uid)
+                    // A newer sign-in/out started while we were loading — don't clobber it.
+                    guard epoch == self.authEpoch else { return }
+                    self.applySignedIn(uid: user.uid)
                 } else {
-                    self.currentUser = nil
+                    guard epoch == self.authEpoch else { return }
+                    self.applySignedOut()
                 }
             }
         }
@@ -68,12 +79,14 @@ final class AuthService {
 
         if auth.currentUser != nil {
             await refreshSession()
+            applySignedIn(uid: auth.currentUser?.uid)
             return
         }
 
         do {
             let result = try await auth.signInAnonymously()
             await ensureUserProfile(uid: result.user.uid, displayName: DevAuthBypass.displayName)
+            applySignedIn(uid: result.user.uid)
         } catch {
             errorMessage = "Dev bypass auth failed: \(error.localizedDescription). Enable Anonymous sign-in in Firebase Console."
         }
@@ -117,6 +130,82 @@ final class AuthService {
             ?? result.user.displayName
             ?? "Player"
         await ensureUserProfile(uid: result.user.uid, displayName: displayName)
+        applySignedIn(uid: result.user.uid)
+    }
+
+    func signUp(email: String, password: String, displayName: String) async throws {
+        let trimmedEmail = Self.normalizedEmail(email)
+        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        try Self.validateEmail(trimmedEmail)
+        try Self.validatePassword(password)
+        guard !trimmedName.isEmpty else {
+            throw AuthError.displayNameRequired
+        }
+
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            try await replaceSessionIfNeeded()
+            let result = try await auth.createUser(withEmail: trimmedEmail, password: password)
+            let changeRequest = result.user.createProfileChangeRequest()
+            changeRequest.displayName = trimmedName
+            try? await changeRequest.commitChanges()
+            await ensureUserProfile(uid: result.user.uid, displayName: trimmedName)
+            applySignedIn(uid: result.user.uid)
+        } catch let error as AuthError {
+            errorMessage = error.localizedDescription
+            throw error
+        } catch {
+            let mapped = Self.mapEmailPasswordError(error as NSError)
+            errorMessage = mapped.localizedDescription
+            throw mapped
+        }
+    }
+
+    func signIn(email: String, password: String) async throws {
+        let trimmedEmail = Self.normalizedEmail(email)
+        try Self.validateEmail(trimmedEmail)
+        guard !password.isEmpty else {
+            throw AuthError.passwordRequired
+        }
+
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            try await replaceSessionIfNeeded()
+            let result = try await auth.signIn(withEmail: trimmedEmail, password: password)
+            let displayName = result.user.displayName ?? "Player"
+            await ensureUserProfile(uid: result.user.uid, displayName: displayName)
+            applySignedIn(uid: result.user.uid)
+        } catch let error as AuthError {
+            errorMessage = error.localizedDescription
+            throw error
+        } catch {
+            let mapped = Self.mapEmailPasswordError(error as NSError)
+            errorMessage = mapped.localizedDescription
+            throw mapped
+        }
+    }
+
+    func sendPasswordReset(email: String) async throws {
+        let trimmedEmail = Self.normalizedEmail(email)
+        try Self.validateEmail(trimmedEmail)
+
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            try await auth.sendPasswordReset(withEmail: trimmedEmail)
+        } catch {
+            let mapped = Self.mapEmailPasswordError(error as NSError)
+            errorMessage = mapped.localizedDescription
+            throw mapped
+        }
     }
 
     #if DEBUG
@@ -125,74 +214,89 @@ final class AuthService {
             throw AuthError.invalidAdminPassword
         }
 
-        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard trimmedEmail.contains("@"), trimmedEmail.count >= 5 else {
-            throw AuthError.adminInvalidEmail
-        }
-        guard firebasePassword.count >= 6 else {
-            throw AuthError.adminPasswordTooWeak
-        }
+        let trimmedEmail = Self.normalizedEmail(email)
+        try Self.validateEmail(trimmedEmail)
+        try Self.validatePassword(firebasePassword)
 
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
 
-        if auth.currentUser != nil {
-            try auth.signOut()
+        do {
+            try await replaceSessionIfNeeded()
+            let authResult = try await resolveAdminAuthSession(
+                email: trimmedEmail,
+                password: firebasePassword
+            )
+            await ensureUserProfile(uid: authResult.user.uid, displayName: DevAdminConfig.displayName)
+            applySignedIn(uid: authResult.user.uid)
+        } catch let error as AuthError {
+            errorMessage = error.localizedDescription
+            throw error
+        } catch {
+            let mapped = Self.mapEmailPasswordError(error as NSError)
+            errorMessage = mapped.localizedDescription
+            throw mapped
         }
-
-        let authResult = try await resolveAdminAuthSession(
-            email: trimmedEmail,
-            password: firebasePassword
-        )
-        await ensureUserProfile(uid: authResult.user.uid, displayName: DevAdminConfig.displayName)
     }
 
     private func resolveAdminAuthSession(email: String, password: String) async throws -> AuthDataResult {
         do {
-            return try await createAdminUser(email: email, password: password)
+            let result = try await auth.createUser(withEmail: email, password: password)
+            let changeRequest = result.user.createProfileChangeRequest()
+            changeRequest.displayName = DevAdminConfig.displayName
+            try? await changeRequest.commitChanges()
+            return result
         } catch {
             let nsError = error as NSError
             let code = AuthErrorCode(_bridgedNSError: nsError)
             if code == .emailAlreadyInUse {
-                return try await signInExistingAdmin(email: email, password: password)
+                return try await auth.signIn(withEmail: email, password: password)
             }
-            throw mapAdminFirebaseError(nsError, email: email)
+            throw Self.mapEmailPasswordError(nsError)
+        }
+    }
+    #endif
+
+    private static func normalizedEmail(_ email: String) -> String {
+        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func validateEmail(_ email: String) throws {
+        guard email.contains("@"), email.contains("."), email.count >= 5 else {
+            throw AuthError.invalidEmail
         }
     }
 
-    private func signInExistingAdmin(email: String, password: String) async throws -> AuthDataResult {
-        do {
-            return try await auth.signIn(withEmail: email, password: password)
-        } catch {
-            throw mapAdminFirebaseError(error as NSError, email: email)
+    private static func validatePassword(_ password: String) throws {
+        guard password.count >= 6 else {
+            throw AuthError.passwordTooWeak
         }
     }
 
-    private func createAdminUser(email: String, password: String) async throws -> AuthDataResult {
-        let result = try await auth.createUser(withEmail: email, password: password)
-        let changeRequest = result.user.createProfileChangeRequest()
-        changeRequest.displayName = DevAdminConfig.displayName
-        try? await changeRequest.commitChanges()
-        return result
-    }
-
-    private func mapAdminFirebaseError(_ error: NSError, email: String) -> AuthError {
+    private static func mapEmailPasswordError(_ error: NSError) -> AuthError {
         let code = AuthErrorCode(_bridgedNSError: error)
         switch code {
         case .operationNotAllowed:
             return .emailPasswordNotEnabled
         case .invalidEmail:
-            return .adminInvalidEmail
+            return .invalidEmail
+        case .emailAlreadyInUse:
+            return .emailAlreadyInUse
         case .weakPassword:
-            return .adminPasswordTooWeak
-        case .wrongPassword, .invalidCredential:
-            return .adminCredentialRejected(email: email, detail: error.localizedDescription)
+            return .passwordTooWeak
+        case .wrongPassword, .invalidCredential, .userNotFound:
+            return .invalidEmailOrPassword
+        case .userDisabled:
+            return .accountDisabled
+        case .tooManyRequests:
+            return .tooManyRequests
+        case .networkError:
+            return .networkError
         default:
-            return .adminFirebaseError(detail: error.localizedDescription)
+            return .firebaseError(detail: error.localizedDescription)
         }
     }
-    #endif
 
     func updateDisplayName(_ name: String) async throws {
         guard let uid = auth.currentUser?.uid else { return }
@@ -255,8 +359,9 @@ final class AuthService {
     }
 
     func signOut() throws {
+        authEpoch += 1
         try auth.signOut()
-        currentUser = nil
+        applySignedOut()
         authStateDetermined = true
         onboardingRevision += 1
     }
@@ -264,6 +369,28 @@ final class AuthService {
     func refreshSession() async {
         guard let uid = auth.currentUser?.uid else { return }
         await loadUserProfile(uid: uid)
+        applySignedIn(uid: uid)
+    }
+
+    /// Clears any existing Firebase session before email/password auth so we don't mix identities.
+    private func replaceSessionIfNeeded() async throws {
+        guard auth.currentUser != nil else { return }
+        authEpoch += 1
+        try auth.signOut()
+        // Keep isSignedIn true-ish UX via loading spinner; clear profile until new session lands.
+        currentUser = nil
+        isSignedIn = false
+    }
+
+    private func applySignedIn(uid: String?) {
+        guard uid != nil else { return }
+        isSignedIn = true
+        authStateDetermined = true
+    }
+
+    private func applySignedOut() {
+        currentUser = nil
+        isSignedIn = false
     }
 
     private func loadUserProfile(uid: String) async {
@@ -374,32 +501,49 @@ final class AuthService {
     enum AuthError: LocalizedError {
         case invalidCredential
         case invalidAdminPassword
-        case adminInvalidEmail
-        case adminPasswordTooWeak
-        case adminCredentialRejected(email: String, detail: String)
-        case adminFirebaseError(detail: String)
+        case invalidEmail
+        case passwordRequired
+        case passwordTooWeak
+        case displayNameRequired
+        case emailAlreadyInUse
+        case invalidEmailOrPassword
+        case accountDisabled
+        case tooManyRequests
+        case networkError
         case emailPasswordNotEnabled
+        case firebaseError(detail: String)
 
         var errorDescription: String? {
             switch self {
-            case .invalidCredential: return "Invalid Apple Sign In credential."
-            case .invalidAdminPassword: return "Incorrect admin gate password."
-            case .adminInvalidEmail: return "Enter a valid email for the Firebase admin account."
-            case .adminPasswordTooWeak: return "Firebase password must be at least 6 characters."
-            case .adminCredentialRejected(let email, let detail):
-                return """
-                Firebase rejected sign-in for \(email).
-                \(detail)
-                Use the exact email and password from Firebase Console → Authentication → Users, \
-                or delete that user and tap Sign In to auto-create.
-                """
-            case .adminFirebaseError(let detail):
-                return "Firebase auth error: \(detail)"
+            case .invalidCredential:
+                return "Invalid Apple Sign In credential."
+            case .invalidAdminPassword:
+                return "Incorrect admin gate password."
+            case .invalidEmail:
+                return "Enter a valid email address."
+            case .passwordRequired:
+                return "Enter your password."
+            case .passwordTooWeak:
+                return "Password must be at least 6 characters."
+            case .displayNameRequired:
+                return "Enter a display name so your crew knows who you are."
+            case .emailAlreadyInUse:
+                return "An account already exists for that email. Sign in instead."
+            case .invalidEmailOrPassword:
+                return "Incorrect email or password."
+            case .accountDisabled:
+                return "This account has been disabled."
+            case .tooManyRequests:
+                return "Too many attempts. Try again in a few minutes."
+            case .networkError:
+                return "Network error. Check your connection and try again."
             case .emailPasswordNotEnabled:
                 return """
                 Email/Password sign-in is disabled. In Firebase Console → Authentication → Sign-in method, \
                 enable Email/Password, then run: npx firebase-tools deploy --only auth
                 """
+            case .firebaseError(let detail):
+                return "Sign-in error: \(detail)"
             }
         }
     }

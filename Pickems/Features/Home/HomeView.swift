@@ -7,6 +7,7 @@ struct HomeView: View {
     @State private var viewModel = HomeViewModel()
     @State private var coverMoment = CoverMomentPresenter()
     @State private var showMore = false
+    @State private var showFavoriteTeamPicker = false
 
     var body: some View {
         NavigationStack {
@@ -107,6 +108,9 @@ struct HomeView: View {
                     shareSource: coverMoment.shareSource
                 )
             }
+            .sheet(isPresented: $showFavoriteTeamPicker) {
+                FavoriteTeamPickerView()
+            }
         }
     }
 
@@ -138,6 +142,33 @@ struct HomeView: View {
                     .font(PickemsTypography.display(34))
                     .foregroundStyle(PickemsColors.textPrimary)
                     .padding(.horizontal)
+
+                Button {
+                    showFavoriteTeamPicker = true
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "shield.lefthalf.filled")
+                            .foregroundStyle(theme.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Choose your favorite team")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(PickemsColors.textPrimary)
+                            Text("Theme Pickems around your colors")
+                                .font(.caption)
+                                .foregroundStyle(PickemsColors.textSecondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(PickemsColors.textSecondary)
+                    }
+                    .padding(14)
+                    .background(PickemsColors.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal)
+                .accessibilityHint("Opens the favorite team picker")
             }
 
             if let cfbWeek = viewModel.cfbWeek ?? appState.groupService.cfbWeek {

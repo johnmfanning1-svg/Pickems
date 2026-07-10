@@ -605,6 +605,7 @@ final class GroupService {
         case cannotLeaveAsSoleCommissioner
         case seasonAlreadyClosed
         case noMembersToArchive
+        case signInRequired
 
         var errorDescription: String? {
             switch self {
@@ -614,6 +615,7 @@ final class GroupService {
             case .cannotLeaveAsSoleCommissioner: return "Transfer commissioner role or delete the group before leaving."
             case .seasonAlreadyClosed: return "That season is already archived."
             case .noMembersToArchive: return "No members to archive for this season."
+            case .signInRequired: return "Sign in to continue."
             }
         }
     }

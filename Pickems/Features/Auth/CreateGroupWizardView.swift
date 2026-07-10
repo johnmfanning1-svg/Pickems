@@ -140,7 +140,10 @@ struct CreateGroupWizardView: View {
             errorMessage = nil
             defer { isWorking = false }
 
-            guard let user = appState.authService.currentUser else { return }
+            guard let user = appState.authService.currentUser else {
+                errorMessage = "No signed-in user. Sign in to continue."
+                return
+            }
             do {
                 let group = try await appState.groupService.createGroup(
                     name: groupName.isEmpty ? "My Pickems" : groupName,
@@ -148,8 +151,8 @@ struct CreateGroupWizardView: View {
                     displayName: user.displayName
                 )
                 try await appState.groupService.updateRules(groupId: group.id, rules: rules)
-                appState.authService.markOnboardingComplete(for: user.id)
-                appState.presentFavoriteTeamPromptIfNeeded()
+                appState.groupService.loadGroups(for: user.id)
+                appState.finishOnboarding(for: user.id)
                 PickemsHaptics.success()
                 onComplete()
                 dismiss()
