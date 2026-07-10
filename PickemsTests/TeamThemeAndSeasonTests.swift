@@ -46,6 +46,72 @@ struct TeamThemeCatalogTests {
         #expect(profile.favoriteTeam?.name == "Ohio State")
         #expect(TeamThemeCatalog.palette(for: profile).favoriteTeamAbbreviation == "OSU")
     }
+
+    @Test func auburnAccentPrefersReadableOrangeOverNavy() {
+        let team = TeamThemeCatalog.team(id: "2")
+        #expect(team?.name == "Auburn")
+        let palette = TeamThemeCatalog.palette(for: "2")
+        let background = ColorContrast.appBackground
+        let navy = ColorContrast.RGB.from(hex: "#0C2340")
+        let orange = ColorContrast.RGB.from(hex: "#E87722")
+        let chosen = ColorContrast.accessibleAccent(candidates: [navy, orange], against: background)
+
+        #expect(ColorContrast.contrastRatio(navy, background) < 4.5)
+        #expect(ColorContrast.contrastRatio(chosen, background) >= 4.5)
+        // Orange already clears the bar, so it should win over lightened navy.
+        #expect(chosen.hex == orange.hex)
+        #expect(palette.favoriteTeamId == "2")
+        #expect(ColorContrast.contrastRatio(
+            ColorContrast.onAccent(for: chosen),
+            chosen
+        ) >= 4.5)
+    }
+
+    @Test func everyCatalogTeamProducesReadableAccent() {
+        let background = ColorContrast.appBackground
+        for team in TeamThemeCatalog.sortedTeams {
+            let primary = ColorContrast.RGB.from(hex: team.primaryHex)
+            let secondary = ColorContrast.RGB.from(hex: team.secondaryHex)
+            let accent = ColorContrast.accessibleAccent(
+                candidates: [primary, secondary],
+                against: background
+            )
+            let onAccent = ColorContrast.onAccent(for: accent)
+            #expect(
+                ColorContrast.contrastRatio(accent, background) >= 4.5,
+                "\(team.name) accent \(accent.hex) must read on dark UI"
+            )
+            #expect(
+                ColorContrast.contrastRatio(onAccent, accent) >= 4.5,
+                "\(team.name) onAccent must read on accent fill \(accent.hex)"
+            )
+        }
+    }
+
+    @Test func darkPrimaryTeamsMeetAccentContrast() {
+        // Auburn, Michigan, Penn State, Notre Dame — dark primaries that fail raw on black.
+        for teamId in ["2", "130", "213", "87"] {
+            let team = try #require(TeamThemeCatalog.team(id: teamId))
+            let background = ColorContrast.appBackground
+            let primary = ColorContrast.RGB.from(hex: team.primaryHex)
+            let secondary = ColorContrast.RGB.from(hex: team.secondaryHex)
+            let accent = ColorContrast.accessibleAccent(
+                candidates: [primary, secondary],
+                against: background
+            )
+            #expect(
+                ColorContrast.contrastRatio(accent, background) >= 4.5,
+                "\(team.name) accent \(accent.hex) must read on dark UI"
+            )
+        }
+    }
+
+    @Test func lightAccentFillsGetDarkOnAccent() {
+        let gold = ColorContrast.RGB.from(hex: "#FFCD00")
+        let onGold = ColorContrast.onAccent(for: gold)
+        #expect(ColorContrast.contrastRatio(onGold, gold) >= 4.5)
+        #expect(onGold.luminance < 0.5)
+    }
 }
 
 struct SeasonCloseEngineTests {

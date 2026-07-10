@@ -200,7 +200,7 @@ struct GroupChip: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(isSelected ? theme.accent : PickemsColors.cardBackground)
-                .foregroundStyle(.white)
+                .foregroundStyle(isSelected ? theme.onAccent : PickemsColors.textPrimary)
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()

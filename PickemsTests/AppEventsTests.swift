@@ -28,5 +28,6 @@ struct AppEventsTests {
         #expect(AppEvent.authSignInFailed.rawValue == "auth.sign_in_failed")
         #expect(AppEvent.rootDestinationChanged.rawValue == "root.destination_changed")
         #expect(AppEvent.onboardingJoinSucceeded.rawValue == "onboarding.join_succeeded")
+        #expect(AppEvent.sessionBootstrapFailed.rawValue == "session.bootstrap_failed")
     }
 }

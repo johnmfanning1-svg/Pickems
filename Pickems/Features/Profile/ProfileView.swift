@@ -79,6 +79,7 @@ struct ProfileView: View {
                         .overlay(alignment: .bottomTrailing) {
                             Image(systemName: "camera.fill")
                                 .font(.caption2)
+                                .foregroundStyle(theme.onAccent)
                                 .padding(4)
                                 .background(theme.accent)
                                 .clipShape(Circle())

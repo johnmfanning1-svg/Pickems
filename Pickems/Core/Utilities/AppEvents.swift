@@ -7,6 +7,7 @@ enum AppEvent: String, CaseIterable {
     case sessionBootstrapStarted = "session.bootstrap_started"
     case sessionBootstrapReady = "session.bootstrap_ready"
     case sessionBootstrapSkipped = "session.bootstrap_skipped"
+    case sessionBootstrapFailed = "session.bootstrap_failed"
     case rootDestinationChanged = "root.destination_changed"
 
     // Auth

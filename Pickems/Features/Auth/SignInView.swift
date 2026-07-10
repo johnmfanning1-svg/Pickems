@@ -88,7 +88,7 @@ struct SignInView: View {
                 if let error = appState.authService.errorMessage {
                     Text(error)
                         .font(.caption)
-                        .foregroundStyle(theme.accent)
+                        .foregroundStyle(PickemsColors.warning)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }

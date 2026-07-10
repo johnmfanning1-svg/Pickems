@@ -108,7 +108,7 @@ struct GameBrowseView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .background(filter == option ? theme.accent : PickemsColors.cardBackground)
-                            .foregroundStyle(filter == option ? .white : PickemsColors.textPrimary)
+                            .foregroundStyle(filter == option ? theme.onAccent : PickemsColors.textPrimary)
                             .clipShape(Capsule())
                     }
                 }

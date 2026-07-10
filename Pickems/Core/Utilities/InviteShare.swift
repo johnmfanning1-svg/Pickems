@@ -49,7 +49,7 @@ struct InviteShareButton: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
                 .background(theme.accent)
-                .foregroundStyle(.white)
+                .foregroundStyle(theme.onAccent)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
