@@ -60,7 +60,7 @@ struct PicksView: View {
                 await viewModel.loadWeek(appState: appState)
             }
             .onChange(of: appState.pickService.userPick?.picks) { _, newPicks in
-                viewModel.syncDraftFromServer(newPicks)
+                viewModel.syncDraftFromServer(newPicks, confidenceGameId: appState.pickService.userPick?.confidenceGameId)
             }
         }
     }
@@ -206,7 +206,15 @@ struct PicksView: View {
                     GamePickRow(
                         game: game,
                         selectedTeamId: viewModel.draftPicks[game.id],
-                        isDisabled: appState.pickService.userPick?.isLocked == true || pastDeadline
+                        isDisabled: appState.pickService.userPick?.isLocked == true || pastDeadline,
+                        showConfidenceToggle: appState.groupService.selectedGroup?.rules.allowConfidencePick == true
+                            && appState.pickService.userPick?.isLocked != true
+                            && !pastDeadline,
+                        isConfidence: viewModel.confidenceGameId == game.id,
+                        onConfidenceToggle: {
+                            viewModel.confidenceGameId = viewModel.confidenceGameId == game.id ? nil : game.id
+                            viewModel.saveDraft(appState: appState)
+                        }
                     ) { teamId in
                         viewModel.draftPicks[game.id] = teamId
                         viewModel.saveDraft(appState: appState)

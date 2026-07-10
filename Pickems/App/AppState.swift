@@ -61,9 +61,9 @@ final class AppState {
             if authService.isAuthenticated {
                 showJoinGroupSheet = true
             }
-        case .openPicks:
+        case .openPicks, .openLiveSlate:
             selectedTab = .picks
-        case .openGroups:
+        case .openGroups, .openDiscover:
             selectedTab = .groups
         case .openHome:
             selectedTab = .home

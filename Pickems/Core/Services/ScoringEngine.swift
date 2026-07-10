@@ -13,7 +13,11 @@ enum ScoringEngine {
         return pickedTeamId == coveredTeamId
     }
 
-    static func scorePicks(picks: [String: String], games: [SlateGame]) -> (wins: Int, losses: Int, pushes: Int) {
+    static func scorePicks(
+        picks: [String: String],
+        games: [SlateGame],
+        confidenceGameId: String? = nil
+    ) -> (wins: Int, losses: Int, pushes: Int) {
         var wins = 0
         var losses = 0
         var pushes = 0
@@ -21,9 +25,10 @@ enum ScoringEngine {
 
         for (gameId, pickedTeamId) in picks {
             guard let game = gamesById[gameId] else { continue }
+            let weight = (confidenceGameId == gameId) ? 2 : 1
             switch isPickCorrect(pickedTeamId: pickedTeamId, game: game) {
-            case .some(true): wins += 1
-            case .some(false): losses += 1
+            case .some(true): wins += weight
+            case .some(false): losses += weight
             case .none: pushes += 1
             }
         }

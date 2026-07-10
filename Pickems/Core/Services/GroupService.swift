@@ -362,6 +362,38 @@ final class GroupService {
         selectedGroup?.rules = rules
     }
 
+    func setPublic(groupId: String, isPublic: Bool) async throws {
+        guard let group = groups.first(where: { $0.id == groupId }) ?? selectedGroup,
+              group.id == groupId else {
+            throw GroupError.groupNotFound
+        }
+        guard group.commissionerId == Auth.auth().currentUser?.uid else {
+            throw GroupError.notCommissioner
+        }
+
+        try await db.collection("groups").document(groupId).updateData(["isPublic": isPublic])
+        let indexRef = db.collection("publicLeagues").document(groupId)
+        if isPublic {
+            try await indexRef.setData([
+                "groupId": groupId,
+                "name": group.name,
+                "inviteCode": group.inviteCode,
+                "memberCount": group.memberCount,
+                "updatedAt": FieldValue.serverTimestamp(),
+            ])
+        } else {
+            try await indexRef.delete()
+        }
+
+        if var g = selectedGroup, g.id == groupId {
+            g.isPublic = isPublic
+            selectedGroup = g
+        }
+        if let idx = groups.firstIndex(where: { $0.id == groupId }) {
+            groups[idx].isPublic = isPublic
+        }
+    }
+
     func lockSlateEarly(groupId: String, weekId: String, rules: GroupRules, kickoffs: [Date]) async throws {
         let updates = WeekTransition.lockEarlyUpdates(rules: rules, kickoffs: kickoffs)
         try await db.week(groupId: groupId, weekId: weekId).updateData(updates)

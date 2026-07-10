@@ -44,6 +44,35 @@ struct GroupsView: View {
                                 }
                                 .buttonStyle(.plain)
 
+                                NavigationLink {
+                                    RivalryView()
+                                } label: {
+                                    Label("Rivalry", systemImage: "person.line.dotted.person.fill")
+                                        .font(.subheadline.weight(.semibold))
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(PickemsColors.cardBackground)
+                                        .foregroundStyle(theme.accent)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.horizontal)
+
+                            HStack(spacing: 12) {
+                                NavigationLink {
+                                    DiscoverLeaguesView()
+                                } label: {
+                                    Label("Discover", systemImage: "globe")
+                                        .font(.subheadline.weight(.semibold))
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(PickemsColors.cardBackground)
+                                        .foregroundStyle(theme.accent)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+
                                 Button {
                                     appState.showJoinGroupSheet = true
                                 } label: {

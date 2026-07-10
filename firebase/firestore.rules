@@ -163,5 +163,10 @@ service cloud.firestore {
         allow delete: if isCommissioner(groupId);
       }
     }
+
+    match /publicLeagues/{groupId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && isCommissioner(groupId);
+    }
   }
 }

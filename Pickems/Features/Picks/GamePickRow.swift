@@ -5,6 +5,9 @@ struct GamePickRow: View {
     let selectedTeamId: String?
     var isDisabled: Bool = false
     var liveCard: ESPNLiveGameCard? = nil
+    var showConfidenceToggle: Bool = false
+    var isConfidence: Bool = false
+    var onConfidenceToggle: (() -> Void)? = nil
     let onSelect: (String) -> Void
     @Environment(\.themePalette) private var theme
 
@@ -33,6 +36,20 @@ struct GamePickRow: View {
                     if let result = liveCard?.pickResult {
                         pickResultBadge(result)
                     }
+                }
+
+                if showConfidenceToggle {
+                    Button {
+                        onConfidenceToggle?()
+                    } label: {
+                        Label(
+                            isConfidence ? "Confidence pick (2x)" : "Make confidence pick",
+                            systemImage: isConfidence ? "bolt.circle.fill" : "bolt.circle"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(isConfidence ? theme.accent : PickemsColors.textSecondary)
+                    }
+                    .disabled(isDisabled)
                 }
 
                 Text(game.kickoff.formatted(date: .abbreviated, time: .shortened))

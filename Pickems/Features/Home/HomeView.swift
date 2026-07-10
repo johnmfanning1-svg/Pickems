@@ -1,19 +1,19 @@
 import SwiftUI
 
+/// Redesigned Home: first viewport = brand pulse for this week only.
 struct HomeView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
     @State private var viewModel = HomeViewModel()
+    @State private var coverMoment = CoverMomentPresenter()
+    @State private var showMore = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    weekHeader
-
-                    greetingHeader
-
-                    quickActionsSection
+                VStack(alignment: .leading, spacing: 20) {
+                    heroPulse
+                        .pickemsAppear()
 
                     if let week = appState.groupService.currentWeek,
                        week.status == .scored,
@@ -24,6 +24,24 @@ struct HomeView: View {
                             standings: appState.groupService.standings,
                             userId: appState.authService.currentUser?.id
                         ))
+                        .pickemsAppear()
+
+                        if let awards = week.awards {
+                            WeekAwardsBanner(awards: awards)
+                                .padding(.horizontal)
+                        } else if week.status == .scored {
+                            let computed = WeekAwardsEngine.compute(
+                                picks: appState.pickService.allPicks,
+                                games: appState.pickService.slateGames,
+                                members: appState.groupService.members
+                            )
+                            WeekAwardsBanner(awards: WeekAwards(
+                                sharpshooterUserId: computed.sharpshooterUserId,
+                                heartbreakerUserId: computed.heartbreakerUserId,
+                                contrarianUserId: computed.contrarianUserId
+                            ))
+                            .padding(.horizontal)
+                        }
 
                         if let shareSource = appState.weeklyShareSource() {
                             ShareResultsButton(source: shareSource)
@@ -31,67 +49,30 @@ struct HomeView: View {
                         }
                     }
 
-                    groupCard
-
-                    if viewModel.isLoading && viewModel.liveGames.isEmpty {
-                        ProgressView("Loading CFB scores…")
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .accessibilityLabel("Loading college football scores")
-                    } else if let error = viewModel.errorMessage, viewModel.liveGames.isEmpty {
-                        ContextualTipBanner(
-                            icon: "exclamationmark.triangle.fill",
-                            message: error
-                        )
-                    }
-
-                    if !viewModel.newsItems.isEmpty {
-                        NewsFeedSection(items: viewModel.newsItems)
-                    }
-
-                    if !viewModel.slateGames.isEmpty {
-                        LiveScoreboardSection(
-                            games: viewModel.slateGames,
-                            title: "Your Slate",
-                            subtitle: "Games you picked this week",
-                            help: PickemsHelp.liveScores
-                        )
-                    }
-
-                    LiveScoreboardSection(
-                        games: viewModel.slateGames.isEmpty
-                            ? viewModel.liveGames
-                            : Array(viewModel.liveGames.filter { !$0.isSlateGame }.prefix(6)),
-                        title: viewModel.slateGames.isEmpty ? "CFB This Week" : "Other Games",
-                        subtitle: viewModel.slateGames.isEmpty
-                            ? "Live scores from ESPN"
-                            : "More games on the board",
-                        help: PickemsHelp.liveScores
-                    )
-
-                    if appState.groupService.standings != nil {
-                        let topEntries = appState.rankedStandings(weekly: true).prefix(3)
-
-                        VStack(alignment: .leading, spacing: 12) {
-                            PickemsSectionHeader(
-                                title: "Top Standings",
-                                subtitle: "This week's leaders",
-                                help: PickemsHelp.standingsPreview
-                            )
-
-                            ForEach(Array(topEntries)) { entry in
-                                LeaderboardRow(entry: entry, showWeekly: true)
-                                    .padding(.horizontal)
-                            }
+                    if showMore {
+                        moreSections
+                    } else {
+                        Button {
+                            withAnimation(.easeInOut) { showMore = true }
+                        } label: {
+                            Label("Scores, news & standings", systemImage: "chevron.down.circle.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(theme.accent)
+                                .frame(maxWidth: .infinity)
                         }
+                        .padding(.horizontal)
+                        .padding(.top, 4)
                     }
                 }
                 .padding(.vertical)
             }
             .pickemsScreenBackground()
-            .navigationTitle("Home")
+            .navigationTitle("Pickems")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    groupSwitcher
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     HelpToolbarButton(topic: PickemsHelp.homeOverview)
                 }
@@ -102,9 +83,29 @@ struct HomeView: View {
             .task(id: refreshKey) {
                 await appState.syncSelectedWeek()
                 viewModel.startLiveUpdates(appState: appState)
+                WidgetSnapshotService.publish(from: appState)
+                LiveActivityController.sync(from: appState)
+            }
+            .onChange(of: appState.pickService.slateGames) { _, _ in
+                coverMoment.observe(appState: appState)
+                WidgetSnapshotService.publish(from: appState)
+                LiveActivityController.sync(from: appState)
+            }
+            .onChange(of: appState.groupService.standings) { _, _ in
+                WidgetSnapshotService.publish(from: appState)
+                LiveActivityController.sync(from: appState)
             }
             .onDisappear {
                 viewModel.stopLiveUpdates()
+            }
+            .sheet(isPresented: $coverMoment.isPresented) {
+                CoverMomentView(
+                    gameLabel: coverMoment.gameLabel,
+                    resultTitle: coverMoment.resultTitle,
+                    recordText: coverMoment.recordText,
+                    rankText: coverMoment.rankText,
+                    shareSource: coverMoment.shareSource
+                )
             }
         }
     }
@@ -115,86 +116,168 @@ struct HomeView: View {
         return "\(groupId)-\(weekId)"
     }
 
-    private var greetingHeader: some View {
-        Text("Hi, \(appState.authService.currentUser?.displayName ?? "Player")")
-            .font(.title2.bold())
-            .foregroundStyle(PickemsColors.textPrimary)
-            .padding(.horizontal)
-            .accessibilityAddTraits(.isHeader)
-    }
-
-    private var quickActionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            PickemsSectionHeader(
-                title: "Quick Actions",
-                subtitle: "Jump to picks or standings"
-            )
-
-            HStack(spacing: 12) {
-                QuickActionCard(
-                    title: "Submit Picks",
-                    icon: "checkmark.circle.fill",
-                    color: theme.accent,
-                    accessibilityHint: "Opens the Picks tab to submit your spread picks"
-                ) {
-                    PickemsHaptics.selection()
-                    appState.selectedTab = .picks
-                }
-                QuickActionCard(
-                    title: "Leaderboard",
-                    icon: "trophy.fill",
-                    color: PickemsColors.warning,
-                    accessibilityHint: "Opens the Groups tab to view standings"
-                ) {
-                    PickemsHaptics.selection()
-                    appState.selectedTab = .groups
-                }
-            }
-            .padding(.horizontal)
-        }
-    }
-
-    @ViewBuilder
-    private var weekHeader: some View {
-        if let cfbWeek = viewModel.cfbWeek ?? appState.groupService.cfbWeek {
-            SeasonWeekHeader(label: cfbWeek.label)
-        } else if let week = appState.groupService.currentWeek {
-            SeasonWeekHeader(label: week.displayLabel)
-        }
-    }
-
-    @ViewBuilder
-    private var groupCard: some View {
-        if let group = appState.groupService.selectedGroup {
-            VStack(alignment: .leading, spacing: 8) {
-                PickemsSectionHeader(
-                    title: group.name,
-                    subtitle: "\(group.memberCount) members",
-                    help: PickemsHelp.weekStatus
-                )
-
-                PickemsCard {
-                    HStack {
-                        if let week = appState.groupService.currentWeek {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(weekStatusLabel(week.status))
-                                    .font(.subheadline)
-                                    .foregroundStyle(PickemsColors.textPrimary)
-                                StatusBadge(
-                                    text: week.status.rawValue.capitalized,
-                                    color: statusColor(week.status)
-                                )
+    private var heroPulse: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if let team = appState.authService.currentUser?.favoriteTeam {
+                HStack(spacing: 8) {
+                    if let url = URL(string: team.resolvedLogoURL) {
+                        AsyncImage(url: url) { phase in
+                            if case .success(let image) = phase {
+                                image.resizable().scaledToFit()
                             }
                         }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(PickemsColors.textSecondary)
-                            .accessibilityHidden(true)
+                        .frame(width: 28, height: 28)
+                    }
+                    Text("Pickems")
+                        .font(PickemsTypography.display(34))
+                        .foregroundStyle(PickemsColors.textPrimary)
+                }
+                .padding(.horizontal)
+            } else {
+                Text("Pickems")
+                    .font(PickemsTypography.display(34))
+                    .foregroundStyle(PickemsColors.textPrimary)
+                    .padding(.horizontal)
+            }
+
+            if let cfbWeek = viewModel.cfbWeek ?? appState.groupService.cfbWeek {
+                Text(cfbWeek.label)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .padding(.horizontal)
+            }
+
+            if let group = appState.groupService.selectedGroup {
+                PickemsCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(group.name)
+                                    .font(.headline)
+                                if let week = appState.groupService.currentWeek {
+                                    Text(weekStatusLabel(week.status))
+                                        .font(.subheadline)
+                                        .foregroundStyle(PickemsColors.textSecondary)
+                                }
+                            }
+                            Spacer()
+                            if let week = appState.groupService.currentWeek {
+                                StatusBadge(text: week.status.rawValue.capitalized, color: statusColor(week.status))
+                                    .pickemsPulse(enabled: week.status == .locked)
+                            }
+                        }
+
+                        if let entry = myStanding {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text("#\(entry.rank)")
+                                    .font(PickemsTypography.rank)
+                                    .foregroundStyle(theme.accent)
+                                    .pickemsRankMotion(trigger: entry.rank)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(entry.weeklyWins)–\(entry.weeklyLosses) this week")
+                                        .font(.subheadline.weight(.semibold))
+                                    Text("Season \(entry.seasonWins)–\(entry.seasonLosses)")
+                                        .font(.caption)
+                                        .foregroundStyle(PickemsColors.textSecondary)
+                                }
+                                Spacer()
+                            }
+                        }
+
+                        HStack(spacing: 10) {
+                            PrimaryButton(title: ctaTitle) {
+                                appState.selectedTab = .picks
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal)
+            } else {
+                EmptyStateView(
+                    icon: "person.3.fill",
+                    title: "Join a league",
+                    message: "Create or join a group to start this week's pulse."
+                )
             }
+        }
+    }
+
+    private var moreSections: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            if !viewModel.slateGames.isEmpty {
+                LiveScoreboardSection(
+                    games: viewModel.slateGames,
+                    title: "Your Slate",
+                    subtitle: "Games you picked this week",
+                    help: PickemsHelp.liveScores
+                )
+            }
+
+            if !viewModel.newsItems.isEmpty {
+                NewsFeedSection(items: viewModel.newsItems)
+            }
+
+            LiveScoreboardSection(
+                games: viewModel.slateGames.isEmpty
+                    ? viewModel.liveGames
+                    : Array(viewModel.liveGames.filter { !$0.isSlateGame }.prefix(6)),
+                title: viewModel.slateGames.isEmpty ? "CFB This Week" : "Other Games",
+                subtitle: viewModel.slateGames.isEmpty
+                    ? "Live scores from ESPN"
+                    : "More games on the board",
+                help: PickemsHelp.liveScores
+            )
+
+            if appState.groupService.standings != nil {
+                let topEntries = appState.rankedStandings(weekly: true).prefix(3)
+                VStack(alignment: .leading, spacing: 12) {
+                    PickemsSectionHeader(
+                        title: "Top Standings",
+                        subtitle: "This week's leaders",
+                        help: PickemsHelp.standingsPreview
+                    )
+                    ForEach(Array(topEntries)) { entry in
+                        LeaderboardRow(entry: entry, showWeekly: true)
+                            .padding(.horizontal)
+                    }
+                }
+            }
+        }
+        .pickemsAppear()
+    }
+
+    private var groupSwitcher: some View {
+        Menu {
+            ForEach(appState.groupService.groups) { group in
+                Button {
+                    appState.groupService.selectGroup(group)
+                } label: {
+                    if appState.groupService.selectedGroup?.id == group.id {
+                        Label(group.name, systemImage: "checkmark")
+                    } else {
+                        Text(group.name)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.left.arrow.right.circle")
+                .foregroundStyle(theme.accent)
+        }
+        .accessibilityLabel("Switch league")
+    }
+
+    private var myStanding: StandingEntry? {
+        guard let userId = appState.authService.currentUser?.id else { return nil }
+        return appState.rankedStandings(weekly: true).first { $0.id == userId }
+    }
+
+    private var ctaTitle: String {
+        switch appState.groupService.currentWeek?.status {
+        case .selection: return "Build Slate"
+        case .picking: return "Submit Picks"
+        case .locked: return "Watch Live"
+        case .scored: return "See Results"
+        case .none: return "Open Picks"
         }
     }
 
@@ -214,40 +297,5 @@ struct HomeView: View {
         case .locked: return PickemsColors.textSecondary
         case .scored: return PickemsColors.success
         }
-    }
-}
-
-struct QuickActionCard: View {
-    let title: String
-    let icon: String
-    let color: Color
-    var accessibilityHint: String = ""
-    var action: () -> Void = {}
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.title2)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(color)
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(PickemsColors.textPrimary)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .padding(.horizontal, 8)
-            .background(PickemsColors.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityHint(accessibilityHint)
     }
 }

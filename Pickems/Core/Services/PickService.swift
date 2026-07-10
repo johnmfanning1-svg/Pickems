@@ -124,15 +124,49 @@ final class PickService {
         let allKickoffs = (nominations + [nomination]).map(\.kickoff)
 
         if ScoringEngine.isSlateComplete(nominationCount: newCount, slateSize: rules.slateSize) {
+            try await materializeNominationsIfNeeded(groupId: groupId, weekId: weekId)
             try await transitionToPicking(
                 groupId: groupId,
                 weekId: weekId,
                 rules: rules,
                 kickoffs: allKickoffs,
-                nominationCount: newCount
+                nominationCount: newCount,
+                lockSlate: true
             )
         } else {
             try await weekRef.updateData(["nominationCount": newCount])
+        }
+    }
+
+    /// Converts nominations into slate games when the games collection is empty.
+    func materializeNominationsIfNeeded(groupId: String, weekId: String) async throws {
+        let weekRef = db.collection("groups").document(groupId).collection("weeks").document(weekId)
+        let gamesSnap = try await weekRef.collection("games").getDocuments()
+        guard gamesSnap.documents.isEmpty else { return }
+
+        let nomsSnap = try await weekRef.collection("nominations").getDocuments()
+        let nominations = nomsSnap.documents.compactMap { try? $0.data(as: Nomination.self) }
+        for nom in nominations {
+            let game = SlateGame(
+                id: nom.espnEventId,
+                espnEventId: nom.espnEventId,
+                homeTeamId: nom.homeTeamId ?? "home",
+                homeTeamName: nom.homeTeamName,
+                homeTeamAbbreviation: nom.homeTeamAbbreviation ?? String(nom.homeTeamName.prefix(4)).uppercased(),
+                homeTeamLogoURL: nom.homeTeamLogoURL,
+                awayTeamId: nom.awayTeamId ?? "away",
+                awayTeamName: nom.awayTeamName,
+                awayTeamAbbreviation: nom.awayTeamAbbreviation ?? String(nom.awayTeamName.prefix(4)).uppercased(),
+                awayTeamLogoURL: nom.awayTeamLogoURL,
+                spread: abs(nom.spread),
+                spreadTeamId: nom.spreadTeamId,
+                kickoff: nom.kickoff,
+                status: .scheduled,
+                homeScore: nil,
+                awayScore: nil,
+                winnerTeamId: nil
+            )
+            try await weekRef.collection("games").document(game.id).setData(from: game)
         }
     }
 
@@ -202,7 +236,14 @@ final class PickService {
         try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
     }
 
-    func savePickDraft(groupId: String, weekId: String, userId: String, displayName: String, picks: [String: String]) async throws {
+    func savePickDraft(
+        groupId: String,
+        weekId: String,
+        userId: String,
+        displayName: String,
+        picks: [String: String],
+        confidenceGameId: String? = nil
+    ) async throws {
         let ref = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
             .collection("picks").document(userId)
@@ -213,7 +254,8 @@ final class PickService {
             displayName: displayName,
             picks: picks,
             submittedAt: nil,
-            isLocked: false
+            isLocked: false,
+            confidenceGameId: confidenceGameId
         )
         try await ref.setData(from: pick)
         try await syncSubmission(
@@ -226,8 +268,17 @@ final class PickService {
         )
     }
 
-    func submitPicks(groupId: String, weekId: String, userId: String, displayName: String, picks: [String: String], deadline: Date?) async throws {
-        if ScoringEngine.isPastDeadline(deadline: deadline) {
+    func submitPicks(
+        groupId: String,
+        weekId: String,
+        userId: String,
+        displayName: String,
+        picks: [String: String],
+        deadline: Date?,
+        confidenceGameId: String? = nil,
+        allowLatePicks: Bool = false
+    ) async throws {
+        if ScoringEngine.isPastDeadline(deadline: deadline), !allowLatePicks {
             throw PickError.deadlinePassed
         }
         let requiredGameIds = Set(slateGames.map(\.id))
@@ -245,7 +296,8 @@ final class PickService {
             displayName: displayName,
             picks: picks,
             submittedAt: Date(),
-            isLocked: true
+            isLocked: true,
+            confidenceGameId: confidenceGameId
         )
         try await ref.setData(from: pick)
         try await syncSubmission(

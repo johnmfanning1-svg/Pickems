@@ -30,6 +30,8 @@ struct PickemGroup: Codable, Identifiable, Equatable {
     var memberIds: [String]
     var rules: GroupRules
     var createdAt: Date
+    /// When true, league appears in Discover for anyone signed in.
+    var isPublic: Bool = false
 
     var memberCount: Int { memberIds.count }
 }
@@ -64,10 +66,17 @@ struct WeekSummary: Codable, Identifiable, Equatable {
     var lockedAt: Date?
     var pickDeadline: Date?
     var nominationCount: Int
+    var awards: WeekAwards? = nil
 
     var displayLabel: String {
         "Season \(seasonYear) | Week \(weekNumber)"
     }
+}
+
+struct WeekAwards: Codable, Equatable {
+    var sharpshooterUserId: String?
+    var heartbreakerUserId: String?
+    var contrarianUserId: String?
 }
 
 struct SlateGame: Codable, Identifiable, Equatable {
@@ -118,8 +127,14 @@ struct Nomination: Codable, Identifiable, Equatable {
     var espnEventId: String
     var spread: Double
     var spreadTeamId: String
+    var homeTeamId: String?
     var homeTeamName: String
+    var homeTeamAbbreviation: String?
+    var homeTeamLogoURL: String?
+    var awayTeamId: String?
     var awayTeamName: String
+    var awayTeamAbbreviation: String?
+    var awayTeamLogoURL: String?
     var kickoff: Date
     var createdAt: Date
 }
@@ -131,6 +146,8 @@ struct UserPick: Codable, Identifiable, Equatable {
     var picks: [String: String]
     var submittedAt: Date?
     var isLocked: Bool
+    /// Optional double-weight game when confidence picks are enabled.
+    var confidenceGameId: String? = nil
 }
 
 /// Public submission metadata — readable by all group members before the pick deadline.

@@ -10,6 +10,7 @@ enum GameBrowseFilter: String, CaseIterable, Identifiable {
 }
 
 struct GameBrowseView: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themePalette) private var theme
     let games: [ESPNGame]
@@ -18,11 +19,20 @@ struct GameBrowseView: View {
     @State private var searchText = ""
     @State private var filter: GameBrowseFilter = .all
 
+    private var favoriteTeamId: String? {
+        appState.authService.currentUser?.favoriteTeamId
+    }
+
     private var filteredGames: [ESPNGame] {
-        games
+        let base = games
             .filter { matchesSearch($0) }
             .filter { matchesFilter($0) }
-            .sorted { $0.kickoff < $1.kickoff }
+        return base.sorted { lhs, rhs in
+            let lFav = isFavoriteGame(lhs)
+            let rFav = isFavoriteGame(rhs)
+            if lFav != rFav { return lFav && !rFav }
+            return lhs.kickoff < rhs.kickoff
+        }
     }
 
     var body: some View {
@@ -32,11 +42,24 @@ struct GameBrowseView: View {
                     .padding(.horizontal)
                     .padding(.top, 8)
 
+                if let fav = filteredGames.first(where: isFavoriteGame) {
+                    HStack {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(theme.accent)
+                        Text("Your team is on the board — \(fav.awayTeamAbbreviation) @ \(fav.homeTeamAbbreviation)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(PickemsColors.textSecondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                }
+
                 List(filteredGames) { game in
                     Button {
                         onSelect(game)
                     } label: {
-                        GameBrowseRow(game: game)
+                        GameBrowseRow(game: game, isFavoriteHighlight: isFavoriteGame(game))
                     }
                     .listRowBackground(PickemsColors.cardBackground)
                 }
@@ -66,6 +89,11 @@ struct GameBrowseView: View {
                 }
             }
         }
+    }
+
+    private func isFavoriteGame(_ game: ESPNGame) -> Bool {
+        guard let favoriteTeamId else { return false }
+        return game.homeTeamId == favoriteTeamId || game.awayTeamId == favoriteTeamId
     }
 
     private var filterBar: some View {
@@ -121,10 +149,16 @@ struct GameBrowseView: View {
 
 struct GameBrowseRow: View {
     let game: ESPNGame
+    var isFavoriteHighlight: Bool = false
     @Environment(\.themePalette) private var theme
 
     var body: some View {
         HStack(spacing: 12) {
+            if isFavoriteHighlight {
+                Image(systemName: "star.fill")
+                    .font(.caption)
+                    .foregroundStyle(theme.accent)
+            }
             teamBadge(
                 abbr: game.awayTeamAbbreviation,
                 logo: game.awayTeamLogoURL
