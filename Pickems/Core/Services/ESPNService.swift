@@ -6,6 +6,8 @@ actor ESPNService {
     private var scoreboardCache: [String: CachedScoreboard] = [:]
     private var weekCache: CFBWeekInfo?
     private var weekCacheTime: Date?
+    private var rankingsCache: [String: Int]?
+    private var rankingsCacheTime: Date?
     private let browseCacheTTL: TimeInterval = 15 * 60
     private let liveCacheTTL: TimeInterval = 60
 
@@ -22,7 +24,7 @@ actor ESPNService {
             return weekCache
         }
 
-        let url = URL(string: "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?seasontype=2")!
+        let url = URL(string: "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?seasontype=2&groups=80")!
         let (data, response) = try await URLSession.shared.data(from: url)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw ESPNError.requestFailed
@@ -53,7 +55,8 @@ actor ESPNService {
         var components = URLComponents(string: "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard")!
         components.queryItems = [
             URLQueryItem(name: "week", value: String(week)),
-            URLQueryItem(name: "seasontype", value: String(seasonType))
+            URLQueryItem(name: "seasontype", value: String(seasonType)),
+            URLQueryItem(name: "groups", value: "80")
         ]
 
         guard let url = components.url else { throw ESPNError.invalidURL }
@@ -63,9 +66,43 @@ actor ESPNService {
         }
 
         let decoded = try JSONDecoder().decode(ESPNScoreboardResponse.self, from: data)
-        let games = (decoded.events ?? []).compactMap { parseEvent($0) }
+        let pollRanks = (try? await top25RanksByTeamId()) ?? [:]
+        let games = (decoded.events ?? []).compactMap { parseEvent($0, pollRanks: pollRanks) }
         scoreboardCache[cacheKey] = CachedScoreboard(games: games, fetchedAt: Date())
         return games
+    }
+
+    /// AP Top 25 team id → current rank (1...25).
+    func top25RanksByTeamId(forceRefresh: Bool = false) async throws -> [String: Int] {
+        if !forceRefresh,
+           let rankingsCache,
+           let rankingsCacheTime,
+           Date().timeIntervalSince(rankingsCacheTime) < browseCacheTTL {
+            return rankingsCache
+        }
+
+        let url = URL(string: "https://site.api.espn.com/apis/site/v2/sports/football/college-football/rankings")!
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw ESPNError.requestFailed
+        }
+
+        let decoded = try JSONDecoder().decode(ESPNRankingsResponse.self, from: data)
+        let apPoll = decoded.rankings?.first(where: { $0.type == "ap" })
+            ?? decoded.rankings?.first(where: { ($0.name ?? "").localizedCaseInsensitiveContains("AP Top 25") })
+            ?? decoded.rankings?.first
+
+        var ranks: [String: Int] = [:]
+        for entry in apPoll?.ranks ?? [] {
+            guard let teamId = entry.team?.id,
+                  let current = entry.current,
+                  (1...25).contains(current) else { continue }
+            ranks[teamId] = current
+        }
+
+        rankingsCache = ranks
+        rankingsCacheTime = Date()
+        return ranks
     }
 
     func fetchGame(eventId: String) async throws -> ESPNGame? {
@@ -79,7 +116,8 @@ actor ESPNService {
         guard let url = components.url else { throw ESPNError.invalidURL }
         let (data, _) = try await URLSession.shared.data(from: url)
         let decoded = try JSONDecoder().decode(ESPNScoreboardResponse.self, from: data)
-        return decoded.events?.first.flatMap { parseEvent($0) }
+        let pollRanks = (try? await top25RanksByTeamId()) ?? [:]
+        return decoded.events?.first.flatMap { parseEvent($0, pollRanks: pollRanks) }
     }
 
     func liveGameCards(
@@ -89,6 +127,7 @@ actor ESPNService {
         slateGames: [SlateGame] = []
     ) async throws -> [ESPNLiveGameCard] {
         let espnGames = try await fetchScoreboard(week: week, live: true)
+            .sorted(by: Self.isHigherPriority)
         let slateByEventId = Dictionary(uniqueKeysWithValues: slateGames.map { ($0.espnEventId, $0) })
 
         return espnGames.map { game in
@@ -125,6 +164,17 @@ actor ESPNService {
         }
     }
 
+    nonisolated static func isHigherPriority(_ lhs: ESPNGame, _ rhs: ESPNGame) -> Bool {
+        CFBGamePriority.areInPriorityOrder(
+            lhsTier: lhs.priorityTier,
+            lhsBestRank: lhs.bestRank,
+            lhsKickoff: lhs.kickoff,
+            rhsTier: rhs.priorityTier,
+            rhsBestRank: rhs.bestRank,
+            rhsKickoff: rhs.kickoff
+        )
+    }
+
     private func pickOutcome(game: ESPNGame, slateGame: SlateGame?, pickedTeamId: String?) -> ESPNLiveGameCard.PickResult? {
         guard pickedTeamId != nil else { return nil }
         let scoringGame = slateGame ?? game.toSlateGame()
@@ -153,7 +203,10 @@ actor ESPNService {
         }
     }
 
-    private func parseEvent(_ event: ESPNScoreboardResponse.ESPNEvent) -> ESPNGame? {
+    private func parseEvent(
+        _ event: ESPNScoreboardResponse.ESPNEvent,
+        pollRanks: [String: Int]
+    ) -> ESPNGame? {
         guard let competition = event.competitions?.first,
               let competitors = competition.competitors,
               competitors.count == 2 else { return nil }
@@ -181,10 +234,14 @@ actor ESPNService {
             homeTeamName: home.team.displayName,
             homeTeamAbbreviation: home.team.abbreviation,
             homeTeamLogoURL: home.team.logo ?? home.team.logos?.first?.href,
+            homeConferenceId: home.team.conferenceId,
+            homeRank: resolvedRank(curated: home.curatedRank?.current, poll: pollRanks[home.team.id]),
             awayTeamId: away.team.id,
             awayTeamName: away.team.displayName,
             awayTeamAbbreviation: away.team.abbreviation,
             awayTeamLogoURL: away.team.logo ?? away.team.logos?.first?.href,
+            awayConferenceId: away.team.conferenceId,
+            awayRank: resolvedRank(curated: away.curatedRank?.current, poll: pollRanks[away.team.id]),
             kickoff: kickoff,
             spread: spread,
             spreadTeamId: spreadTeamId,
@@ -192,6 +249,16 @@ actor ESPNService {
             homeScore: Int(home.score ?? ""),
             awayScore: Int(away.score ?? "")
         )
+    }
+
+    private func resolvedRank(curated: Int?, poll: Int?) -> Int? {
+        if let curated, (1...25).contains(curated) {
+            return curated
+        }
+        if let poll, (1...25).contains(poll) {
+            return poll
+        }
+        return nil
     }
 
     private func parseSpread(from odds: ESPNScoreboardResponse.ESPNOdds?, homeId: String, awayId: String) -> Double? {
@@ -232,5 +299,24 @@ private struct ESPNScoreboardMetaResponse: Decodable {
 
     struct ESPNWeek: Decodable {
         let number: Int
+    }
+}
+
+private struct ESPNRankingsResponse: Decodable {
+    let rankings: [ESPNRankingPoll]?
+
+    struct ESPNRankingPoll: Decodable {
+        let name: String?
+        let type: String?
+        let ranks: [ESPNRankingEntry]?
+    }
+
+    struct ESPNRankingEntry: Decodable {
+        let current: Int?
+        let team: ESPNRankingTeam?
+    }
+
+    struct ESPNRankingTeam: Decodable {
+        let id: String
     }
 }

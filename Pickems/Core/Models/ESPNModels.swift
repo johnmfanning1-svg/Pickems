@@ -8,10 +8,14 @@ struct ESPNGame: Identifiable, Equatable {
     let homeTeamName: String
     let homeTeamAbbreviation: String
     let homeTeamLogoURL: String?
+    let homeConferenceId: String?
+    let homeRank: Int?
     let awayTeamId: String
     let awayTeamName: String
     let awayTeamAbbreviation: String
     let awayTeamLogoURL: String?
+    let awayConferenceId: String?
+    let awayRank: Int?
     let kickoff: Date
     let spread: Double?
     let spreadTeamId: String?
@@ -52,6 +56,11 @@ struct ESPNScoreboardResponse: Decodable {
         let homeAway: String
         let team: ESPNTeam
         let score: String?
+        let curatedRank: ESPNCuratedRank?
+    }
+
+    struct ESPNCuratedRank: Decodable {
+        let current: Int?
     }
 
     struct ESPNTeam: Decodable {
@@ -60,6 +69,7 @@ struct ESPNScoreboardResponse: Decodable {
         let abbreviation: String
         let logo: String?
         let logos: [ESPNLogo]?
+        let conferenceId: String?
     }
 
     struct ESPNLogo: Decodable {
