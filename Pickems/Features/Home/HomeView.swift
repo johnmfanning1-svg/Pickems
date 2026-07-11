@@ -262,7 +262,7 @@ struct HomeView: View {
                     : Array(viewModel.liveGames.filter { !$0.isSlateGame }.prefix(6)),
                 title: viewModel.slateGames.isEmpty ? "CFB This Week" : "Other Games",
                 subtitle: viewModel.slateGames.isEmpty
-                    ? "Live scores from ESPN"
+                    ? "Top 25, SEC, then Group of 5"
                     : "More games on the board",
                 help: PickemsHelp.liveScores
             )
