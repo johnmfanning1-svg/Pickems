@@ -14,9 +14,9 @@ enum AppConfig {
     /// App Store product page (Apple ID 6785697079).
     static let appStoreURL = "https://apps.apple.com/app/id6785697079"
 
-    /// Hosted legal pages (GitHub Pages from /docs until pickems.app is live).
-    static let privacyPolicyURL = URL(string: "https://johnmfanning1-svg.github.io/Pickems/privacy-policy.html")
-    static let termsOfServiceURL = URL(string: "https://johnmfanning1-svg.github.io/Pickems/terms.html")
+    /// Hosted legal pages. Prefer GitHub Pages once enabled; raw GitHub works for App Review now.
+    static let privacyPolicyURL = URL(string: "https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/cursor/app-store-approval-fixes-e1a6/docs/privacy-policy.html")
+    static let termsOfServiceURL = URL(string: "https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/cursor/app-store-approval-fixes-e1a6/docs/terms.html")
 
     static var isXSharingConfigured: Bool {
         !xClientID.isEmpty && xClientID != "YOUR_X_CLIENT_ID"

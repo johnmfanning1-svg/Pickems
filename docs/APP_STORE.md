@@ -60,14 +60,14 @@ Password: <set in Firebase>
 > 4. Use “Join Another League” to open the join sheet safely.
 > 5. Account deletion is available under Profile → Delete Account.
 >
-> Privacy Policy: https://johnmfanning1-svg.github.io/Pickems/privacy-policy.html
-> Terms: https://johnmfanning1-svg.github.io/Pickems/terms.html
+> Privacy Policy: https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/cursor/app-store-approval-fixes-e1a6/docs/privacy-policy.html
+> Terms: https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/cursor/app-store-approval-fixes-e1a6/docs/terms.html
 
 **Invite code:** seed a stable public/private league and paste the 6-character code here before submit.
 
 ## Hosting legal pages
 
-Enable GitHub Pages for this repo (Settings → Pages → Deploy from branch `main` / folder `/docs`) so the Privacy/Terms URLs resolve. Until then, temporarily host the HTML files anywhere HTTPS and update `AppConfig.privacyPolicyURL` / `termsOfServiceURL`.
+`AppConfig` currently points at raw GitHub URLs on this branch (HTTPS, readable). For a nicer rendered page, enable GitHub Pages (Settings → Pages → Deploy from branch `main` / folder `/docs`) and switch `AppConfig.privacyPolicyURL` / `termsOfServiceURL` to `https://johnmfanning1-svg.github.io/Pickems/...`.
 
 ## Preflight checklist
 
