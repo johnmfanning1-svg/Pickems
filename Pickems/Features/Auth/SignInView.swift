@@ -93,6 +93,18 @@ struct SignInView: View {
                         .padding(.horizontal)
                 }
 
+                HStack(spacing: 16) {
+                    if let privacyURL = AppConfig.privacyPolicyURL {
+                        Link("Privacy", destination: privacyURL)
+                    }
+                    if let termsURL = AppConfig.termsOfServiceURL {
+                        Link("Terms", destination: termsURL)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(PickemsColors.textSecondary)
+                .padding(.top, 4)
+
                 #if DEBUG
                 Button("Admin") {
                     showAdminLogin = true
@@ -113,10 +125,12 @@ struct SignInView: View {
         }
         .sheet(isPresented: $showForgotPassword) {
             ForgotPasswordSheet(prefilledEmail: email)
+                .pickemsEnvironment(appState)
         }
         #if DEBUG
         .sheet(isPresented: $showAdminLogin) {
             AdminLoginSheet()
+                .pickemsEnvironment(appState)
         }
         #endif
     }

@@ -28,6 +28,9 @@ enum AppEvent: String, CaseIterable {
     case authPasswordResetStarted = "auth.password_reset_started"
     case authPasswordResetSucceeded = "auth.password_reset_succeeded"
     case authPasswordResetFailed = "auth.password_reset_failed"
+    case authDeleteAccountStarted = "auth.delete_account_started"
+    case authDeleteAccountSucceeded = "auth.delete_account_succeeded"
+    case authDeleteAccountFailed = "auth.delete_account_failed"
     case authEpochStaleIgnored = "auth.epoch_stale_ignored"
 
     // Onboarding / leagues

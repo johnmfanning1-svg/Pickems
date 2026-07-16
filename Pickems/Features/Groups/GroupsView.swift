@@ -59,34 +59,34 @@ struct GroupsView: View {
                             }
                             .padding(.horizontal)
 
-                            HStack(spacing: 12) {
-                                NavigationLink {
-                                    DiscoverLeaguesView()
-                                } label: {
-                                    Label("Discover", systemImage: "globe")
-                                        .font(.subheadline.weight(.semibold))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .background(PickemsColors.cardBackground)
-                                        .foregroundStyle(theme.accent)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                }
-                                .buttonStyle(.plain)
-
-                                Button {
-                                    appState.showJoinGroupSheet = true
-                                } label: {
-                                    Label("Join", systemImage: "person.badge.plus")
-                                        .font(.subheadline.weight(.semibold))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .background(PickemsColors.cardBackground)
-                                        .foregroundStyle(theme.accent)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                }
-                                .buttonStyle(.plain)
+                            NavigationLink {
+                                DiscoverLeaguesView()
+                            } label: {
+                                Label("Discover Public Leagues", systemImage: "globe")
+                                    .font(.subheadline.weight(.semibold))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(PickemsColors.cardBackground)
+                                    .foregroundStyle(theme.accent)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             }
+                            .buttonStyle(.plain)
                             .padding(.horizontal)
+
+                            Button {
+                                appState.showJoinGroupSheet = true
+                            } label: {
+                                Label("Join Another League", systemImage: "person.badge.plus")
+                                    .font(.subheadline.weight(.semibold))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(PickemsColors.cardBackground)
+                                    .foregroundStyle(theme.accent)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal)
+                            .accessibilityHint("Enter an invite code for a different league")
 
                             DynastySectionView()
                                 .padding(.horizontal)
@@ -112,9 +112,27 @@ struct GroupsView: View {
                 }
             }
             .sheet(isPresented: $showCommissionerSettings) {
-                if let group = appState.groupService.selectedGroup {
-                    CommissionerSettingsView(group: group)
+                // Always emit a concrete root view + explicit environment.
+                // Empty `if let` sheet content crashed App Review 1.0 (EXC_BREAKPOINT in SheetBridge).
+                Group {
+                    if let group = appState.groupService.selectedGroup {
+                        CommissionerSettingsView(group: group)
+                    } else {
+                        NavigationStack {
+                            ContentUnavailableView(
+                                "No League Selected",
+                                systemImage: "person.3",
+                                description: Text("Select a league, then open Commissioner Settings again.")
+                            )
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("Close") { showCommissionerSettings = false }
+                                }
+                            }
+                        }
+                    }
                 }
+                .pickemsEnvironment(appState)
             }
         }
     }
