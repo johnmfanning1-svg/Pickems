@@ -456,6 +456,56 @@ final class AuthService {
         CrashReport.setUserID(nil)
     }
 
+    /// Permanently deletes the signed-in user's Auth account and profile data (Guideline 5.1.1(v)).
+    /// Caller should leave/dissolve leagues first.
+    func deleteAccount() async throws {
+        guard let user = auth.currentUser else {
+            throw AuthError.notSignedIn
+        }
+        let uid = user.uid
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        AppEvents.track(.authDeleteAccountStarted, metadata: [
+            "uid": AppEvents.shortUID(uid),
+        ])
+
+        do {
+            try? await AvatarService.deleteAvatar(userId: uid)
+            try? await db.user(uid).delete()
+            UserDefaults.standard.removeObject(forKey: Self.onboardingKey(for: uid))
+            UserDefaults.standard.removeObject(forKey: Self.favoriteTeamPromptKey(for: uid))
+
+            authEpoch += 1
+            try await user.delete()
+            applySignedOut()
+            authStateDetermined = true
+            onboardingRevision += 1
+            AppEvents.track(.authDeleteAccountSucceeded, metadata: [
+                "uid": AppEvents.shortUID(uid),
+            ])
+            CrashReport.setUserID(nil)
+        } catch {
+            let mapped = Self.mapDeleteAccountError(error as NSError)
+            errorMessage = mapped.localizedDescription
+            AppEvents.failure(.authDeleteAccountFailed, error: mapped, metadata: [
+                "uid": AppEvents.shortUID(uid),
+            ])
+            throw mapped
+        }
+    }
+
+    private static func mapDeleteAccountError(_ error: NSError) -> AuthError {
+        let code = AuthErrorCode(_bridgedNSError: error)
+        switch code {
+        case .requiresRecentLogin:
+            return .requiresRecentLogin
+        default:
+            return mapEmailPasswordError(error)
+        }
+    }
+
     func refreshSession() async {
         guard let uid = auth.currentUser?.uid else {
             AppLog.notice(AppLog.auth, "refreshSession skipped — no Firebase user")
@@ -653,6 +703,8 @@ final class AuthService {
         case tooManyRequests
         case networkError
         case emailPasswordNotEnabled
+        case notSignedIn
+        case requiresRecentLogin
         case firebaseError(detail: String)
 
         var errorDescription: String? {
@@ -684,6 +736,10 @@ final class AuthService {
                 Email/Password sign-in is disabled. In Firebase Console → Authentication → Sign-in method, \
                 enable Email/Password, then run: npx firebase-tools deploy --only auth
                 """
+            case .notSignedIn:
+                return "You need to be signed in to delete your account."
+            case .requiresRecentLogin:
+                return "For security, sign out, sign back in, then delete your account."
             case .firebaseError(let detail):
                 return "Sign-in error: \(detail)"
             }

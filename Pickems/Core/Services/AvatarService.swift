@@ -25,6 +25,21 @@ enum AvatarService {
         }
     }
 
+    static func deleteAvatar(userId: String) async throws {
+        let ref = Storage.storage().reference().child("avatars/\(userId).jpg")
+        do {
+            try await ref.delete()
+        } catch {
+            let nsError = error as NSError
+            // Already gone is fine during account deletion.
+            if nsError.domain == StorageErrorDomain,
+               nsError.code == StorageErrorCode.objectNotFound.rawValue {
+                return
+            }
+            throw error
+        }
+    }
+
     enum AvatarError: LocalizedError {
         case invalidImage
         var errorDescription: String? { "Could not process the selected photo." }

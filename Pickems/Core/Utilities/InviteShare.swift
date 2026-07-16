@@ -7,8 +7,8 @@ enum InviteShare {
 
         Invite code: \(group.inviteCode)
 
-        1. Download Pickems from the App Store (TestFlight link coming soon)
-        2. Sign in with Apple
+        1. Download Pickems: \(AppConfig.appStoreURL)
+        2. Sign in with Apple or email
         3. Tap Join Group and enter the code above
 
         Let's run it this CFB season!

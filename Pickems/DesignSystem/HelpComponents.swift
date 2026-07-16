@@ -82,6 +82,7 @@ struct HelpDetailView: View {
 struct HelpInfoButton: View {
     let topic: HelpTopic
     var size: Font = .body
+    @Environment(\.themePalette) private var theme
 
     @State private var showHelp = false
 
@@ -100,6 +101,7 @@ struct HelpInfoButton: View {
         .accessibilityHint(topic.title)
         .sheet(isPresented: $showHelp) {
             HelpDetailView(topic: topic)
+                .environment(\.themePalette, theme)
         }
     }
 }

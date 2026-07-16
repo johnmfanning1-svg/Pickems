@@ -13,6 +13,8 @@ struct ProfileView: View {
     @State private var showLeaveConfirm = false
     @State private var showDeleteConfirm = false
     @State private var showSignOutConfirm = false
+    @State private var showDeleteAccountConfirm = false
+    @State private var isDeletingAccount = false
     @State private var showTeamPicker = false
     @State private var managementError: String?
 
@@ -22,8 +24,11 @@ struct ProfileView: View {
                 accountSection
                 favoriteTeamSection
                 notificationsSection
-                sharingSection
+                if AppConfig.isXSharingConfigured {
+                    sharingSection
+                }
                 leaguesSection
+                legalSection
                 saveSection
                 accountActionsSection
             }
@@ -38,12 +43,15 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showJoinSheet) {
                 JoinGroupSheet(initialCode: "")
+                    .pickemsEnvironment(appState)
             }
             .sheet(isPresented: $showCreateWizard) {
                 CreateGroupWizardView()
+                    .pickemsEnvironment(appState)
             }
             .sheet(isPresented: $showTeamPicker) {
                 FavoriteTeamPickerView()
+                    .pickemsEnvironment(appState)
             }
             .confirmationDialog("Leave this league?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
                 Button("Leave League", role: .destructive) { leaveGroup() }
@@ -58,6 +66,16 @@ struct ProfileView: View {
             .confirmationDialog("Sign out of Pickems?", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
                 Button("Sign Out", role: .destructive) { signOut() }
                 Button("Cancel", role: .cancel) {}
+            }
+            .confirmationDialog(
+                "Delete your Pickems account?",
+                isPresented: $showDeleteAccountConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Account", role: .destructive) { deleteAccount() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently deletes your profile, avatar, and league memberships. This cannot be undone.")
             }
             .onChange(of: selectedPhoto) { _, item in
                 uploadAvatar(from: item)
@@ -282,6 +300,25 @@ struct ProfileView: View {
         }
     }
 
+    private var legalSection: some View {
+        Section {
+            if let privacyURL = AppConfig.privacyPolicyURL {
+                Link(destination: privacyURL) {
+                    Label("Privacy Policy", systemImage: "hand.raised.fill")
+                }
+                .listRowBackground(PickemsColors.cardBackground)
+            }
+            if let termsURL = AppConfig.termsOfServiceURL {
+                Link(destination: termsURL) {
+                    Label("Terms of Service", systemImage: "doc.text.fill")
+                }
+                .listRowBackground(PickemsColors.cardBackground)
+            }
+        } header: {
+            Text("Legal")
+        }
+    }
+
     private var accountActionsSection: some View {
         Section {
             Button(role: .destructive) {
@@ -290,6 +327,24 @@ struct ProfileView: View {
                 Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
             }
             .listRowBackground(PickemsColors.cardBackground)
+            .disabled(isDeletingAccount)
+
+            Button(role: .destructive) {
+                showDeleteAccountConfirm = true
+            } label: {
+                if isDeletingAccount {
+                    HStack {
+                        ProgressView()
+                        Text("Deleting Account…")
+                    }
+                } else {
+                    Label("Delete Account", systemImage: "trash")
+                }
+            }
+            .listRowBackground(PickemsColors.cardBackground)
+            .disabled(isDeletingAccount)
+        } footer: {
+            Text("Deleting your account permanently removes your profile, avatar, and league memberships.")
         }
     }
 
@@ -341,6 +396,27 @@ struct ProfileView: View {
             try appState.authService.signOut()
         } catch {
             managementError = error.localizedDescription
+        }
+    }
+
+    private func deleteAccount() {
+        Task {
+            isDeletingAccount = true
+            defer { isDeletingAccount = false }
+            do {
+                // Leave / dissolve leagues before Auth user deletion.
+                let groups = appState.groupService.groups
+                if let userId = appState.authService.currentUserId {
+                    for group in groups {
+                        try await appState.groupService.leaveGroup(groupId: group.id, userId: userId)
+                    }
+                }
+                try await appState.authService.deleteAccount()
+                PickemsHaptics.success()
+            } catch {
+                managementError = error.localizedDescription
+                PickemsHaptics.warning()
+            }
         }
     }
 }

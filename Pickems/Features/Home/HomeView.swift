@@ -115,9 +115,11 @@ struct HomeView: View {
                     rankText: coverMoment.rankText,
                     shareSource: coverMoment.shareSource
                 )
+                .pickemsEnvironment(appState)
             }
             .sheet(isPresented: $showFavoriteTeamPicker) {
                 FavoriteTeamPickerView()
+                    .pickemsEnvironment(appState)
             }
         }
     }

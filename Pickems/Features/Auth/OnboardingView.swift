@@ -74,9 +74,11 @@ struct OnboardingView: View {
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showCreateWizard) {
                 CreateGroupWizardView()
+                    .pickemsEnvironment(appState)
             }
             .sheet(isPresented: $showFavoriteTeamPicker) {
                 FavoriteTeamPickerView()
+                    .pickemsEnvironment(appState)
             }
             .onAppear {
                 if let pending = appState.pendingInviteCode, !pending.isEmpty {
