@@ -13,10 +13,15 @@ final class PickService {
     var errorMessage: String?
 
     /// Lazy so constructing `AppState` cannot touch Firestore before Firebase configure.
+    @ObservationIgnored
     private lazy var db = Firestore.firestore()
+    @ObservationIgnored
     private var nominationsListener: ListenerRegistration?
+    @ObservationIgnored
     private var gamesListener: ListenerRegistration?
+    @ObservationIgnored
     private var pickListener: ListenerRegistration?
+    @ObservationIgnored
     private var submissionsListener: ListenerRegistration?
 
     func observeWeek(groupId: String, weekId: String, userId: String) {

@@ -106,6 +106,8 @@ service cloud.firestore {
         allow create: if isCommissioner(groupId) || isGroupMember(groupId);
         allow update: if isCommissioner(groupId) && commissionerWeekFieldUpdate()
           || (isGroupMember(groupId) && memberWeekFieldUpdate());
+        // Commissioner tears down week docs when dissolving a league (deleteGroup).
+        allow delete: if isCommissioner(groupId);
 
         match /nominations/{nominationId} {
           allow read: if isGroupMember(groupId);
@@ -133,6 +135,9 @@ service cloud.firestore {
                 || (request.resource.data.isLocked == true
                     && request.resource.data.submittedAt != null
                     && (!resource.exists || resource.data.isLocked == false)));
+          // Members can remove their own pick; commissioner clears picks on league teardown.
+          allow delete: if isCommissioner(groupId)
+            || (isSignedIn() && request.auth.uid == pickId);
         }
 
         match /submissions/{userId} {
@@ -142,13 +147,16 @@ service cloud.firestore {
             && isGroupMember(groupId)
             && request.resource.data.userId == userId
             && !('picks' in request.resource.data);
+          allow delete: if isCommissioner(groupId)
+            || (isSignedIn() && request.auth.uid == userId);
         }
       }
 
       match /standings/{standingId} {
         allow read: if isGroupMember(groupId);
         allow create, update: if isCommissioner(groupId);
-        allow delete: if false;
+        // Commissioner removes standings when dissolving a league (deleteGroup).
+        allow delete: if isCommissioner(groupId);
       }
 
       match /seasons/{seasonId} {

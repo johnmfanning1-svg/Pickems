@@ -26,6 +26,15 @@ struct AppStoreComplianceTests {
         #expect(AppConfig.appStoreURL.contains("6785697079") || AppConfig.appStoreURL.contains("apps.apple.com"))
     }
 
+    @Test func legalURLsPointAtMainBranchDocs() {
+        let privacy = AppConfig.privacyPolicyURL?.absoluteString ?? ""
+        let terms = AppConfig.termsOfServiceURL?.absoluteString ?? ""
+        #expect(privacy.contains("/main/docs/privacy-policy.html"))
+        #expect(terms.contains("/main/docs/terms.html"))
+        #expect(!privacy.contains("cursor/"))
+        #expect(!terms.contains("cursor/"))
+    }
+
     @Test func unfinishedXIntegrationIsHidden() {
         #expect(AppConfig.isXSharingConfigured == false)
     }

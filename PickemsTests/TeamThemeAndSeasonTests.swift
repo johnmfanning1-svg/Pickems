@@ -88,7 +88,7 @@ struct TeamThemeCatalogTests {
         }
     }
 
-    @Test func darkPrimaryTeamsMeetAccentContrast() {
+    @Test func darkPrimaryTeamsMeetAccentContrast() throws {
         // Auburn, Michigan, Penn State, Notre Dame — dark primaries that fail raw on black.
         for teamId in ["2", "130", "213", "87"] {
             let team = try #require(TeamThemeCatalog.team(id: teamId))

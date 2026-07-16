@@ -13,3 +13,4 @@ firebase/functions/lib/
 
 # Secrets — never commit real Firebase config with live keys
 # GoogleService-Info.plist is included as placeholder; replace locally
+build/

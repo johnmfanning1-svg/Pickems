@@ -32,12 +32,20 @@ final class AuthService {
 
     /// Lazily resolved so `AppState()` construction cannot call into Firebase before
     /// `FirebaseBootstrap.configureIfNeeded()` finishes (TestFlight launch abort).
+    /// `@ObservationIgnored` keeps these as true `lazy` storage — `@Observable` would
+    /// otherwise rewrite them into computed init-accessors and fail to compile.
+    @ObservationIgnored
     private lazy var auth = Auth.auth()
+    @ObservationIgnored
     private lazy var db = Firestore.firestore()
+    @ObservationIgnored
     private var authListener: AuthStateDidChangeListenerHandle?
+    @ObservationIgnored
     private var currentNonce: String?
     /// Bumps on intentional sign-out-before-sign-in so stale listener tasks cannot wipe the new session.
+    @ObservationIgnored
     private var authEpoch = 0
+    @ObservationIgnored
     private var didStart = false
 
     private static func onboardingKey(for userId: String) -> String {

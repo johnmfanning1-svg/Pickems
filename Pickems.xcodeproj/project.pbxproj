@@ -223,13 +223,11 @@
 				9849E60B2FEEC2BD00CC6B9A /* Frameworks */,
 				9849E60C2FEEC2BD00CC6B9A /* Resources */,
 				B10000000000000000000013 /* Embed Foundation Extensions */,
-				B10000000000000000000019 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				B10000000000000000000014 /* PBXTargetDependency */,
-				B1000000000000000000001B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				9849E6102FEEC2BD00CC6B9A /* Pickems */,
@@ -530,7 +528,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Pickems/Pickems.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 123;
+				CURRENT_PROJECT_VERSION = 124;
 				DEVELOPMENT_TEAM = 22A943P8SJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -546,7 +544,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.3;
+				MARKETING_VERSION = 1.2.4;
 				PRODUCT_BUNDLE_IDENTIFIER = FannypackInc.Pickems;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -566,7 +564,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Pickems/Pickems.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 123;
+				CURRENT_PROJECT_VERSION = 124;
 				DEVELOPMENT_TEAM = 22A943P8SJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -582,7 +580,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.3;
+				MARKETING_VERSION = 1.2.4;
 				PRODUCT_BUNDLE_IDENTIFIER = FannypackInc.Pickems;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -808,7 +806,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PickemsWidget/PickemsWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 123;
+				CURRENT_PROJECT_VERSION = 124;
 				DEVELOPMENT_TEAM = 22A943P8SJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PickemsWidget/Info.plist;
@@ -819,7 +817,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.2.3;
+				MARKETING_VERSION = 1.2.4;
 				PRODUCT_BUNDLE_IDENTIFIER = FannypackInc.Pickems.widget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -835,7 +833,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PickemsWidget/PickemsWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 123;
+				CURRENT_PROJECT_VERSION = 124;
 				DEVELOPMENT_TEAM = 22A943P8SJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PickemsWidget/Info.plist;
@@ -846,7 +844,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.2.3;
+				MARKETING_VERSION = 1.2.4;
 				PRODUCT_BUNDLE_IDENTIFIER = FannypackInc.Pickems.widget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -862,7 +860,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PickemsWatch/PickemsWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 123;
+				CURRENT_PROJECT_VERSION = 124;
 				DEVELOPMENT_TEAM = 22A943P8SJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PickemsWatch/Info.plist;
@@ -873,7 +871,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.3;
+				MARKETING_VERSION = 1.2.4;
 				PRODUCT_BUNDLE_IDENTIFIER = FannypackInc.Pickems.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -891,7 +889,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PickemsWatch/PickemsWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 123;
+				CURRENT_PROJECT_VERSION = 124;
 				DEVELOPMENT_TEAM = 22A943P8SJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PickemsWatch/Info.plist;
@@ -902,7 +900,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.3;
+				MARKETING_VERSION = 1.2.4;
 				PRODUCT_BUNDLE_IDENTIFIER = FannypackInc.Pickems.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;

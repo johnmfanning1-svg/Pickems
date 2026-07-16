@@ -40,11 +40,13 @@ struct PicksView: View {
                 GameBrowseView(games: viewModel.espnGames) { game in
                     viewModel.handleGameSelection(game, appState: appState)
                 }
+                .pickemsEnvironment(appState)
             }
             .sheet(item: $viewModel.spreadEditGame) { game in
                 SpreadEditorSheet(game: game) { spread, spreadTeamId in
                     viewModel.updateSpread(game, spread: spread, spreadTeamId: spreadTeamId, appState: appState)
                 }
+                .pickemsEnvironment(appState)
             }
             .confirmationDialog("Submit your picks?", isPresented: $viewModel.showConfirmSubmit, titleVisibility: .visible) {
                 Button("Submit Picks") {

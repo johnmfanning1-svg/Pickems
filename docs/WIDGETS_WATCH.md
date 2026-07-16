@@ -24,7 +24,7 @@ Entitlements:
 1. Open `Pickems.xcodeproj`
 2. Select **PickemsWidget** and **PickemsWatch** → Signing & Capabilities → choose Team `22A943P8SJ` (already set)
 3. Confirm App Groups capability shows `group.FannypackInc.Pickems` for all three targets
-4. Build the **Pickems** scheme (embeds widget + watch)
+4. Build the **Pickems** scheme (embeds widget; Watch is **not** embedded in 1.2.4 App Store builds — re-add Embed Watch Content when watchOS SDK is available)
 
 ## Live Activities
 

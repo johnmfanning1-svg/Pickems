@@ -2,8 +2,8 @@
 
 ## Version
 
-- **Marketing version:** 1.2.3
-- **Build:** 123
+- **Marketing version:** 1.2.4
+- **Build:** 124
 - **Bundle ID:** `FannypackInc.Pickems`
 - **Apple ID:** 6785697079
 
@@ -30,15 +30,16 @@ Root cause: SwiftUI sheets reading `@Environment(AppState.self)` without a guara
 
 Those fixed launch/auth issues; they did **not** cover the sheet environment trap Apple hit.
 
-## Fixes in 1.2.3 (this submission)
+## Fixes in 1.2.3 / 1.2.4 (this submission)
 
 1. **Sheet environment crash** — forward `AppState` + theme into all major sheets; harden Commissioner Settings sheet
 2. **Groups UX** — rename Join → “Join Another League”; Discover as full-width (clearer when already in a league)
 3. **Account deletion (5.1.1(v))** — Profile → Delete Account; Firestore/Storage rules allow self-delete
 4. **Privacy Manifest** — `PrivacyInfo.xcprivacy`
-5. **Privacy Policy + Terms** — docs + in-app Profile links
+5. **Privacy Policy + Terms** — docs + in-app Profile links (stable `main` URLs)
 6. **Invite copy** — remove “TestFlight coming soon”; real App Store URL
 7. **Hide unfinished X Connect** until client ID is configured
+8. **1.2.4 sweep** — forward environment into Picks `GameBrowseView` sheet; encryption export flag; **Watch app not embedded** for this iPhone App Store build (Watch target remains in repo)
 
 ## App Review Information (paste into App Store Connect)
 
@@ -60,20 +61,19 @@ Password: <set in Firebase>
 > 4. Use “Join Another League” to open the join sheet safely.
 > 5. Account deletion is available under Profile → Delete Account.
 >
-> Privacy Policy: https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/cursor/app-store-approval-fixes-e1a6/docs/privacy-policy.html
-> Terms: https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/cursor/app-store-approval-fixes-e1a6/docs/terms.html
+> Privacy Policy: https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/main/docs/privacy-policy.html
+> Terms: https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/main/docs/terms.html
 
 **Invite code:** seed a stable public/private league and paste the 6-character code here before submit.
 
 ## Hosting legal pages
 
-`AppConfig` currently points at raw GitHub URLs on this branch (HTTPS, readable). For a nicer rendered page, enable GitHub Pages (Settings → Pages → Deploy from branch `main` / folder `/docs`) and switch `AppConfig.privacyPolicyURL` / `termsOfServiceURL` to `https://johnmfanning1-svg.github.io/Pickems/...`.
+`AppConfig` points at raw GitHub URLs on `main` (HTTPS, publicly reachable). For a nicer rendered page, enable GitHub Pages (Settings → Pages → Deploy from branch `main` / folder `/docs`) and switch `AppConfig.privacyPolicyURL` / `termsOfServiceURL` to `https://johnmfanning1-svg.github.io/Pickems/...`.
 
 ## Preflight checklist
 
 - [ ] Seed App Review demo account + invite code in Connect notes
-- [ ] Enable GitHub Pages (or update legal URLs)
 - [ ] Deploy Firestore + Storage rules (`firebase deploy --only firestore:rules,storage`)
-- [ ] Archive 1.2.3 (123) and submit
+- [ ] Archive 1.2.4 (124) → TestFlight for PO acceptance, then App Store submit
 - [ ] Confirm Sign in with Apple capability on the App ID
 - [ ] App Privacy questionnaire matches `PrivacyInfo.xcprivacy` / privacy policy

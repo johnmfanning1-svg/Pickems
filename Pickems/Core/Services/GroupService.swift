@@ -18,13 +18,21 @@ final class GroupService {
     var errorMessage: String?
 
     /// Lazy so constructing `AppState` cannot touch Firestore before Firebase configure.
+    @ObservationIgnored
     private lazy var db = Firestore.firestore()
+    @ObservationIgnored
     private var groupListener: ListenerRegistration?
+    @ObservationIgnored
     private var weekListener: ListenerRegistration?
+    @ObservationIgnored
     private var standingsListener: ListenerRegistration?
+    @ObservationIgnored
     private var seasonsListener: ListenerRegistration?
+    @ObservationIgnored
     private var careerListener: ListenerRegistration?
+    @ObservationIgnored
     private var observedWeekId: String?
+    @ObservationIgnored
     private var observedGroupId: String?
 
     func loadGroups(for userId: String) {
