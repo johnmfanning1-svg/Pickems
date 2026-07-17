@@ -3,6 +3,8 @@ import Foundation
 struct UserProfile: Codable, Identifiable, Equatable {
     var id: String
     var displayName: String
+    /// Normalized uniqueness key for `handles/{handleKey}` (lowercase display name).
+    var handleKey: String? = nil
     var avatarColorHex: String
     var avatarImageURL: String?
     var favoriteTeamId: String? = nil
@@ -12,9 +14,12 @@ struct UserProfile: Codable, Identifiable, Equatable {
     var createdAt: Date
 
     var initials: String {
-        let parts = displayName.split(separator: " ")
-        let letters = parts.prefix(2).compactMap { $0.first }
-        return String(letters).uppercased()
+        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = trimmed.split(separator: " ").filter { !$0.isEmpty }
+        if parts.count >= 2 {
+            return String(parts.prefix(2).compactMap(\.first)).uppercased()
+        }
+        return String(trimmed.prefix(2)).uppercased()
     }
 
     var favoriteTeam: FavoriteTeam? {

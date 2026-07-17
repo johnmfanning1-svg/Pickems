@@ -186,11 +186,14 @@ final class AuthService {
 
     func signUp(email: String, password: String, displayName: String) async throws {
         let trimmedEmail = Self.normalizedEmail(email)
-        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         try Self.validateEmail(trimmedEmail)
         try Self.validatePassword(password)
-        guard !trimmedName.isEmpty else {
-            throw AuthError.displayNameRequired
+        let trimmedName: String
+        switch DisplayNameRules.validate(displayName) {
+        case .success(let value):
+            trimmedName = value
+        case .failure(let error):
+            throw mapDisplayNameValidation(error)
         }
 
         isLoading = true
@@ -211,6 +214,25 @@ final class AuthService {
                 ])
             }
             await ensureUserProfile(uid: result.user.uid, displayName: trimmedName)
+            // Reserve unique nickname before treating sign-up as complete.
+            do {
+                try await claimDisplayName(
+                    trimmedName,
+                    key: DisplayNameRules.uniquenessKey(for: trimmedName),
+                    previousKey: "",
+                    uid: result.user.uid
+                )
+            } catch {
+                try? await result.user.delete()
+                applySignedOut()
+                throw error
+            }
+            try? await db.user(result.user.uid).updateData([
+                "displayName": trimmedName,
+                "handleKey": DisplayNameRules.uniquenessKey(for: trimmedName),
+            ])
+            currentUser?.displayName = trimmedName
+            currentUser?.handleKey = DisplayNameRules.uniquenessKey(for: trimmedName)
             applySignedIn(uid: result.user.uid)
             AppEvents.track(.authSignUpSucceeded, metadata: [
                 "uid": AppEvents.shortUID(result.user.uid),
@@ -376,11 +398,111 @@ final class AuthService {
 
     func updateDisplayName(_ name: String) async throws {
         guard let uid = auth.currentUser?.uid else { return }
+        let validated: String
+        switch DisplayNameRules.validate(name) {
+        case .success(let value):
+            validated = value
+        case .failure(let error):
+            throw mapDisplayNameValidation(error)
+        }
+        let newKey = DisplayNameRules.uniquenessKey(for: validated)
+        let previousKey = currentUser?.handleKey
+            ?? DisplayNameRules.uniquenessKey(for: currentUser?.displayName ?? "")
+
+        try await claimDisplayName(validated, key: newKey, previousKey: previousKey, uid: uid)
+
         let changeRequest = auth.currentUser?.createProfileChangeRequest()
-        changeRequest?.displayName = name
+        changeRequest?.displayName = validated
         try await changeRequest?.commitChanges()
-        try await db.user(uid).updateData(["displayName": name])
-        currentUser?.displayName = name
+        try await db.user(uid).updateData([
+            "displayName": validated,
+            "handleKey": newKey,
+        ])
+        currentUser?.displayName = validated
+        currentUser?.handleKey = newKey
+        AppEvents.track(.authDisplayNameUpdated, metadata: [
+            "uid": AppEvents.shortUID(uid),
+        ])
+    }
+
+    private func mapDisplayNameValidation(_ error: DisplayNameRules.ValidationError) -> AuthError {
+        switch error {
+        case .tooShort: return .displayNameTooShort
+        case .tooLong: return .displayNameTooLong
+        case .invalidCharacters: return .displayNameInvalid
+        case .taken: return .displayNameTaken
+        }
+    }
+
+    /// Atomically reserves `handles/{key}` so nicknames stay unique across the app.
+    private func claimDisplayName(
+        _ displayName: String,
+        key: String,
+        previousKey: String,
+        uid: String
+    ) async throws {
+        let newRef = db.handle(key)
+        let shouldReleasePrevious = !previousKey.isEmpty && previousKey != key
+        let oldRef = shouldReleasePrevious ? db.handle(previousKey) : nil
+
+        do {
+            _ = try await db.runTransaction { transaction, errorPointer in
+                do {
+                    let newSnap = try transaction.getDocument(newRef)
+                    if newSnap.exists {
+                        let owner = newSnap.data()?["userId"] as? String
+                        if owner != uid {
+                            let taken = NSError(
+                                domain: "Pickems.HandleClaim",
+                                code: 409,
+                                userInfo: [NSLocalizedDescriptionKey: "taken"]
+                            )
+                            errorPointer?.pointee = taken
+                            return nil
+                        }
+                    }
+                    if let oldRef {
+                        let oldSnap = try transaction.getDocument(oldRef)
+                        if oldSnap.exists,
+                           (oldSnap.data()?["userId"] as? String) == uid {
+                            transaction.deleteDocument(oldRef)
+                        }
+                    }
+                    transaction.setData([
+                        "userId": uid,
+                        "displayName": displayName,
+                        "updatedAt": FieldValue.serverTimestamp(),
+                    ], forDocument: newRef)
+                    return true
+                } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+            }
+        } catch {
+            let ns = error as NSError
+            if ns.domain == "Pickems.HandleClaim", ns.code == 409 {
+                throw AuthError.displayNameTaken
+            }
+            throw AuthError.firebaseError(detail: error.localizedDescription)
+        }
+    }
+
+    private func releaseDisplayNameHandle(for uid: String) async {
+        let key = currentUser?.handleKey
+            ?? DisplayNameRules.uniquenessKey(for: currentUser?.displayName ?? "")
+        guard !key.isEmpty else { return }
+        let ref = db.handle(key)
+        do {
+            let snap = try await ref.getDocument()
+            if snap.exists, (snap.data()?["userId"] as? String) == uid {
+                try await ref.delete()
+            }
+        } catch {
+            AppLog.error(AppLog.auth, "handle release failed", error: error, metadata: [
+                "uid": AppEvents.shortUID(uid),
+            ])
+        }
     }
 
     func updateAvatarURL(_ url: String?) async throws {
@@ -480,6 +602,7 @@ final class AuthService {
         ])
 
         do {
+            await releaseDisplayNameHandle(for: uid)
             try? await AvatarService.deleteAvatar(userId: uid)
             try? await db.user(uid).delete()
             UserDefaults.standard.removeObject(forKey: Self.onboardingKey(for: uid))
@@ -705,6 +828,10 @@ final class AuthService {
         case passwordRequired
         case passwordTooWeak
         case displayNameRequired
+        case displayNameTooShort
+        case displayNameTooLong
+        case displayNameInvalid
+        case displayNameTaken
         case emailAlreadyInUse
         case invalidEmailOrPassword
         case accountDisabled
@@ -729,6 +856,14 @@ final class AuthService {
                 return "Password must be at least 6 characters."
             case .displayNameRequired:
                 return "Enter a display name so your crew knows who you are."
+            case .displayNameTooShort:
+                return DisplayNameRules.ValidationError.tooShort.errorDescription
+            case .displayNameTooLong:
+                return DisplayNameRules.ValidationError.tooLong.errorDescription
+            case .displayNameInvalid:
+                return DisplayNameRules.ValidationError.invalidCharacters.errorDescription
+            case .displayNameTaken:
+                return DisplayNameRules.ValidationError.taken.errorDescription
             case .emailAlreadyInUse:
                 return "An account already exists for that email. Sign in instead."
             case .invalidEmailOrPassword:

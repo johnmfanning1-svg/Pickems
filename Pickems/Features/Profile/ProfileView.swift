@@ -5,7 +5,9 @@ struct ProfileView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
     @State private var displayName = ""
-    @State private var didSave = false
+    @State private var isSavingDisplayName = false
+    @State private var displayNameError: String?
+    @State private var didSaveDisplayName = false
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isUploadingAvatar = false
     @State private var showJoinSheet = false
@@ -29,7 +31,6 @@ struct ProfileView: View {
                 }
                 leaguesSection
                 legalSection
-                saveSection
                 accountActionsSection
             }
             .scrollContentBackground(.hidden)
@@ -106,15 +107,50 @@ struct ProfileView: View {
                     .buttonStyle(.plain)
                     .disabled(isUploadingAvatar)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        TextField("Display Name", text: $displayName)
-                            .onAppear { displayName = user.displayName }
-                        if isUploadingAvatar {
+                    VStack(alignment: .leading, spacing: 6) {
+                        TextField("Nickname or handle", text: $displayName)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .onAppear {
+                                displayName = user.displayName
+                                displayNameError = nil
+                                didSaveDisplayName = false
+                            }
+                            .onChange(of: displayName) { _, _ in
+                                displayNameError = nil
+                                didSaveDisplayName = false
+                            }
+
+                        if isDisplayNameDirty {
+                            Button {
+                                saveDisplayName()
+                            } label: {
+                                HStack {
+                                    if isSavingDisplayName {
+                                        ProgressView()
+                                    }
+                                    Text(isSavingDisplayName ? "Saving…" : "Save Display Name")
+                                        .font(.subheadline.weight(.semibold))
+                                    Spacer()
+                                    if didSaveDisplayName {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundStyle(PickemsColors.success)
+                                    }
+                                }
+                            }
+                            .disabled(isSavingDisplayName || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+
+                        if let displayNameError {
+                            Text(displayNameError)
+                                .font(.caption)
+                                .foregroundStyle(PickemsColors.warning)
+                        } else if isUploadingAvatar {
                             Text("Uploading photo…")
                                 .font(.caption)
                                 .foregroundStyle(PickemsColors.textSecondary)
                         } else {
-                            Text("Tap avatar to upload a photo")
+                            Text("Unique across Pickems — nickname or handle, not just your legal name.")
                                 .font(.caption)
                                 .foregroundStyle(PickemsColors.textSecondary)
                         }
@@ -124,7 +160,14 @@ struct ProfileView: View {
             .listRowBackground(PickemsColors.cardBackground)
         } header: {
             Text("Account")
+        } footer: {
+            Text("3–20 characters. Letters, numbers, spaces, periods, hyphens, or underscores. Must be unique.")
         }
+    }
+
+    private var isDisplayNameDirty: Bool {
+        let current = appState.authService.currentUser?.displayName ?? ""
+        return DisplayNameRules.normalize(displayName) != DisplayNameRules.normalize(current)
     }
 
     private var favoriteTeamSection: some View {
@@ -278,28 +321,6 @@ struct ProfileView: View {
         }
     }
 
-    private var saveSection: some View {
-        Section {
-            Button {
-                Task {
-                    try? await appState.authService.updateDisplayName(displayName)
-                    PickemsHaptics.success()
-                    didSave = true
-                }
-            } label: {
-                HStack {
-                    Text("Save Display Name")
-                    Spacer()
-                    if didSave {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(PickemsColors.success)
-                    }
-                }
-            }
-            .listRowBackground(PickemsColors.cardBackground)
-        }
-    }
-
     private var legalSection: some View {
         Section {
             if let privacyURL = AppConfig.privacyPolicyURL {
@@ -345,6 +366,29 @@ struct ProfileView: View {
             .disabled(isDeletingAccount)
         } footer: {
             Text("Deleting your account permanently removes your profile, avatar, and league memberships.")
+        }
+    }
+
+    private func saveDisplayName() {
+        Task {
+            isSavingDisplayName = true
+            displayNameError = nil
+            defer { isSavingDisplayName = false }
+            do {
+                try await appState.authService.updateDisplayName(displayName)
+                if let userId = appState.authService.currentUserId {
+                    await appState.groupService.syncMemberDisplayName(
+                        userId: userId,
+                        displayName: DisplayNameRules.normalize(displayName)
+                    )
+                }
+                displayName = DisplayNameRules.normalize(displayName)
+                didSaveDisplayName = true
+                PickemsHaptics.success()
+            } catch {
+                displayNameError = error.localizedDescription
+                PickemsHaptics.warning()
+            }
         }
     }
 

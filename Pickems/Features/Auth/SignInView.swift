@@ -154,7 +154,9 @@ struct SignInView: View {
         VStack(alignment: .leading, spacing: 14) {
             if mode == .createAccount {
                 fieldLabel("Display name")
-                TextField("How you'll show up in leagues", text: $displayName)
+                TextField("Unique nickname or handle", text: $displayName)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                     .textFieldStyle(.pickems)
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled()

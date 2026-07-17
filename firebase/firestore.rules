@@ -80,6 +80,19 @@ service cloud.firestore {
       allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
     }
 
+    // Unique nickname / handle reservations (doc id = lowercase normalized display name).
+    match /handles/{handleKey} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasAll(['userId', 'displayName']);
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+    }
+
     match /inviteCodes/{code} {
       allow read: if isSignedIn();
       allow create: if isSignedIn()

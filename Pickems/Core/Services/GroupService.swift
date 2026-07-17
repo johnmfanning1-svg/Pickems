@@ -215,6 +215,26 @@ final class GroupService {
         await syncCurrentWeekFromESPN(groupId: group.id)
     }
 
+    /// Keeps league member rows in sync when a user changes their unique display name.
+    func syncMemberDisplayName(userId: String, displayName: String) async {
+        for group in groups {
+            let ref = db.collection("groups").document(group.id)
+                .collection("members").document(userId)
+            do {
+                try await ref.updateData(["displayName": displayName])
+                if let idx = members.firstIndex(where: { $0.id == userId }),
+                   selectedGroup?.id == group.id {
+                    members[idx].displayName = displayName
+                }
+            } catch {
+                AppLog.error(AppLog.firestore, "member displayName sync failed", error: error, metadata: [
+                    "group_id": group.id,
+                    "uid": AppEvents.shortUID(userId),
+                ])
+            }
+        }
+    }
+
     func leaveGroup(groupId: String, userId: String) async throws {
         guard let group = groups.first(where: { $0.id == groupId }) else {
             throw GroupError.groupNotFound

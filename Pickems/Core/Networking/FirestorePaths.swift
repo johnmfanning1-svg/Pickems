@@ -2,6 +2,7 @@ import FirebaseFirestore
 
 enum FirestoreCollection {
     static let users = "users"
+    static let handles = "handles"
     static let groups = "groups"
     static let inviteCodes = "inviteCodes"
     static let weeks = "weeks"
@@ -43,6 +44,10 @@ extension Firestore {
 
     func inviteCode(_ code: String) -> DocumentReference {
         collection(FirestoreCollection.inviteCodes).document(code)
+    }
+
+    func handle(_ key: String) -> DocumentReference {
+        collection(FirestoreCollection.handles).document(key)
     }
 }
 

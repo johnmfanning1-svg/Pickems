@@ -10,8 +10,13 @@ struct FavoriteTeamPickerView: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
 
+    private var selectedTeam: FavoriteTeam? {
+        appState.authService.currentUser?.favoriteTeam
+    }
+
     private var teams: [FavoriteTeam] {
         TeamThemeCatalog.team(matching: searchText)
+            .filter { $0.id != selectedTeam?.id }
     }
 
     var body: some View {
@@ -26,31 +31,46 @@ struct FavoriteTeamPickerView: View {
                     }
                 }
 
+                if let selectedTeam {
+                    Section {
+                        FavoriteTeamRow(team: selectedTeam, isSelected: true)
+                            .listRowBackground(PickemsColors.cardBackground)
+
+                        Button(role: .destructive) {
+                            clearSelection()
+                        } label: {
+                            Label("Clear favorite team", systemImage: "xmark.circle")
+                        }
+                        .listRowBackground(PickemsColors.cardBackground)
+                        .accessibilityHint("Removes your team theme and uses the default Pickems look")
+                    } header: {
+                        Text("Current Team")
+                    }
+                } else if !isOnboardingPrompt {
+                    Section {
+                        Button {
+                            clearSelection()
+                        } label: {
+                            Label("Using default Pickems theme", systemImage: "paintbrush")
+                        }
+                        .disabled(true)
+                        .listRowBackground(PickemsColors.cardBackground)
+                    } header: {
+                        Text("Current Team")
+                    }
+                }
+
                 Section {
                     ForEach(teams) { team in
                         Button {
                             select(team)
                         } label: {
-                            FavoriteTeamRow(
-                                team: team,
-                                isSelected: appState.authService.currentUser?.favoriteTeamId == team.id
-                            )
+                            FavoriteTeamRow(team: team, isSelected: false)
                         }
                         .listRowBackground(PickemsColors.cardBackground)
                     }
                 } header: {
                     Text("College Football Teams")
-                }
-
-                if !isOnboardingPrompt || appState.authService.currentUser?.favoriteTeamId != nil {
-                    Section {
-                        Button(role: .destructive) {
-                            clearSelection()
-                        } label: {
-                            Label("Use Default Pickems Theme", systemImage: "paintbrush")
-                        }
-                        .listRowBackground(PickemsColors.cardBackground)
-                    }
                 }
 
                 if let errorMessage {
@@ -80,6 +100,12 @@ struct FavoriteTeamPickerView: View {
                 } else {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") { dismiss() }
+                    }
+                    if selectedTeam != nil {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Clear") { clearSelection() }
+                                .foregroundStyle(PickemsColors.warning)
+                        }
                     }
                 }
             }

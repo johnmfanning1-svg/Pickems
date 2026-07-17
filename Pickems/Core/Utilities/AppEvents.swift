@@ -31,6 +31,7 @@ enum AppEvent: String, CaseIterable {
     case authDeleteAccountStarted = "auth.delete_account_started"
     case authDeleteAccountSucceeded = "auth.delete_account_succeeded"
     case authDeleteAccountFailed = "auth.delete_account_failed"
+    case authDisplayNameUpdated = "auth.display_name_updated"
     case authEpochStaleIgnored = "auth.epoch_stale_ignored"
 
     // Onboarding / leagues

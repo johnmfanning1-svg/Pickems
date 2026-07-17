@@ -6,7 +6,6 @@ struct HomeView: View {
     @Environment(\.themePalette) private var theme
     @State private var viewModel = HomeViewModel()
     @State private var coverMoment = CoverMomentPresenter()
-    @State private var showMore = false
     @State private var showFavoriteTeamPicker = false
 
     var body: some View {
@@ -58,26 +57,15 @@ struct HomeView: View {
                         }
                     }
 
-                    if showMore {
-                        moreSections
-                    } else {
-                        Button {
-                            withAnimation(.easeInOut) { showMore = true }
-                        } label: {
-                            Label("Scores, news & standings", systemImage: "chevron.down.circle.fill")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(theme.accent)
-                                .frame(maxWidth: .infinity)
-                        }
-                        .padding(.horizontal)
-                        .padding(.top, 4)
-                    }
+                    // Scores, CFB This Week, and news stay expanded by default.
+                    moreSections
                 }
                 .padding(.vertical)
             }
             .pickemsScreenBackground()
-            .navigationTitle("Pickems")
-            .navigationBarTitleDisplayMode(.large)
+            // Brand lives in `heroPulse` only — large nav title duplicated "Pickems" / left empty space.
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     groupSwitcher
@@ -132,27 +120,18 @@ struct HomeView: View {
 
     private var heroPulse: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if let team = appState.authService.currentUser?.favoriteTeam {
-                HStack(spacing: 8) {
-                    if let url = URL(string: team.resolvedLogoURL) {
-                        AsyncImage(url: url) { phase in
-                            if case .success(let image) = phase {
-                                image.resizable().scaledToFit()
-                            }
-                        }
-                        .frame(width: 28, height: 28)
-                    }
-                    Text("Pickems")
-                        .font(PickemsTypography.display(34))
-                        .foregroundStyle(PickemsColors.textPrimary)
-                }
-                .padding(.horizontal)
-            } else {
+            HStack(spacing: 10) {
+                brandMark
                 Text("Pickems")
                     .font(PickemsTypography.display(34))
                     .foregroundStyle(PickemsColors.textPrimary)
-                    .padding(.horizontal)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Pickems")
 
+            if appState.authService.currentUser?.favoriteTeam == nil {
                 Button {
                     showFavoriteTeamPicker = true
                 } label: {
@@ -285,6 +264,30 @@ struct HomeView: View {
             }
         }
         .pickemsAppear()
+    }
+
+    @ViewBuilder
+    private var brandMark: some View {
+        if let team = appState.authService.currentUser?.favoriteTeam,
+           let url = URL(string: team.resolvedLogoURL) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFit()
+                default:
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.title2)
+                        .foregroundStyle(theme.accent)
+                }
+            }
+            .frame(width: 32, height: 32)
+            .accessibilityHidden(true)
+        } else {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.title2)
+                .foregroundStyle(theme.accent)
+                .accessibilityHidden(true)
+        }
     }
 
     private var groupSwitcher: some View {

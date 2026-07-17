@@ -43,4 +43,9 @@ struct AppStoreComplianceTests {
         #expect(AuthService.AuthError.requiresRecentLogin.errorDescription != nil)
         #expect(AuthService.AuthError.notSignedIn.errorDescription != nil)
     }
+
+    @Test func displayNameUniquenessErrorsAreUserFacing() {
+        #expect(AuthService.AuthError.displayNameTaken.errorDescription != nil)
+        #expect(AuthService.AuthError.displayNameInvalid.errorDescription != nil)
+    }
 }
