@@ -82,6 +82,8 @@ struct HelpDetailView: View {
 struct HelpInfoButton: View {
     let topic: HelpTopic
     var size: Font = .body
+    /// When set, parent presents help (required inside `Form` section headers — nested sheets/taps fail there).
+    var presentedTopic: Binding<HelpTopic?>? = nil
     @Environment(\.themePalette) private var theme
 
     @State private var showHelp = false
@@ -89,14 +91,21 @@ struct HelpInfoButton: View {
     var body: some View {
         Button {
             PickemsHaptics.lightImpact()
-            showHelp = true
+            if let presentedTopic {
+                presentedTopic.wrappedValue = topic
+            } else {
+                showHelp = true
+            }
         } label: {
             Image(systemName: "info.circle")
                 .font(size)
                 .foregroundStyle(PickemsColors.textSecondary)
                 .symbolRenderingMode(.hierarchical)
+                .frame(minWidth: 44, minHeight: 28, alignment: .trailing)
+                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        // `.borderless` is required for tappable buttons inside Form/List headers & rows.
+        .buttonStyle(.borderless)
         .accessibilityLabel("Help")
         .accessibilityHint(topic.title)
         .sheet(isPresented: $showHelp) {
@@ -130,7 +139,8 @@ struct PickemsSectionHeader: View {
             }
         }
         .padding(.horizontal)
-        .accessibilityElement(children: .combine)
+        // Keep children separate so the help button remains tappable/accessible.
+        .accessibilityElement(children: .contain)
     }
 }
 

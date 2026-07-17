@@ -2,8 +2,11 @@ import Foundation
 
 struct UserProfile: Codable, Identifiable, Equatable {
     var id: String
+    /// Unique public username / handle shown in leagues.
     var displayName: String
-    /// Normalized uniqueness key for `handles/{handleKey}` (lowercase display name).
+    var firstName: String? = nil
+    var lastName: String? = nil
+    /// Normalized uniqueness key for `handles/{handleKey}` (lowercase username).
     var handleKey: String? = nil
     var avatarColorHex: String
     var avatarImageURL: String?
@@ -13,12 +16,21 @@ struct UserProfile: Codable, Identifiable, Equatable {
     var favoriteTeamLogoURL: String? = nil
     var createdAt: Date
 
+    var fullName: String? {
+        let first = firstName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let last = lastName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let joined = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+        return joined.isEmpty ? nil : joined
+    }
+
     var initials: String {
-        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = trimmed.split(separator: " ").filter { !$0.isEmpty }
-        if parts.count >= 2 {
-            return String(parts.prefix(2).compactMap(\.first)).uppercased()
+        if let first = firstName?.first, let last = lastName?.first {
+            return "\(first)\(last)".uppercased()
         }
+        if let first = firstName?.prefix(2), !first.isEmpty {
+            return String(first).uppercased()
+        }
+        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         return String(trimmed.prefix(2)).uppercased()
     }
 

@@ -1,13 +1,20 @@
 import SwiftUI
 import PhotosUI
+import UserNotifications
 
 struct ProfileView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
-    @State private var displayName = ""
-    @State private var isSavingDisplayName = false
-    @State private var displayNameError: String?
-    @State private var didSaveDisplayName = false
+
+    @State private var firstName = ""
+    @State private var lastName = ""
+    @State private var username = ""
+    @State private var isSavingProfile = false
+    @State private var profileError: String?
+    @State private var profileSavedMessage: String?
+    @State private var usernameAvailability: AuthService.UsernameAvailability?
+    @State private var usernameCheckTask: Task<Void, Never>?
+
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isUploadingAvatar = false
     @State private var showJoinSheet = false
@@ -19,6 +26,13 @@ struct ProfileView: View {
     @State private var isDeletingAccount = false
     @State private var showTeamPicker = false
     @State private var managementError: String?
+    @State private var presentedHelp: HelpTopic?
+
+    @FocusState private var focusedField: ProfileField?
+
+    private enum ProfileField: Hashable {
+        case firstName, lastName, username
+    }
 
     var body: some View {
         NavigationStack {
@@ -39,8 +53,29 @@ struct ProfileView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    HelpToolbarButton(topic: PickemsHelp.profileOverview)
+                    HelpInfoButton(
+                        topic: PickemsHelp.profileOverview,
+                        presentedTopic: $presentedHelp
+                    )
                 }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
+                        .fontWeight(.semibold)
+                }
+                if isProfileDirty {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(isSavingProfile ? "Saving…" : "Save") {
+                            saveProfile()
+                        }
+                        .disabled(isSavingProfile || !canSaveProfile)
+                        .fontWeight(.semibold)
+                    }
+                }
+            }
+            .sheet(item: $presentedHelp) { topic in
+                HelpDetailView(topic: topic)
+                    .environment(\.themePalette, theme)
             }
             .sheet(isPresented: $showJoinSheet) {
                 JoinGroupSheet(initialCode: "")
@@ -81,13 +116,22 @@ struct ProfileView: View {
             .onChange(of: selectedPhoto) { _, item in
                 uploadAvatar(from: item)
             }
+            .onAppear {
+                loadProfileFields()
+                Task { await appState.notificationService.refreshAuthorizationStatus() }
+            }
+            .onChange(of: appState.authService.currentUser) { _, _ in
+                if !isProfileDirty { loadProfileFields() }
+            }
         }
     }
 
+    // MARK: - Account
+
     private var accountSection: some View {
         Section {
-            HStack(spacing: 16) {
-                if let user = appState.authService.currentUser {
+            if let user = appState.authService.currentUser {
+                HStack(spacing: 16) {
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
                         InitialsAvatar(
                             initials: user.initials,
@@ -104,71 +148,125 @@ struct ProfileView: View {
                                 .clipShape(Circle())
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.borderless)
                     .disabled(isUploadingAvatar)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        TextField("Nickname or handle", text: $displayName)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .onAppear {
-                                displayName = user.displayName
-                                displayNameError = nil
-                                didSaveDisplayName = false
-                            }
-                            .onChange(of: displayName) { _, _ in
-                                displayNameError = nil
-                                didSaveDisplayName = false
-                            }
-
-                        if isDisplayNameDirty {
-                            Button {
-                                saveDisplayName()
-                            } label: {
-                                HStack {
-                                    if isSavingDisplayName {
-                                        ProgressView()
-                                    }
-                                    Text(isSavingDisplayName ? "Saving…" : "Save Display Name")
-                                        .font(.subheadline.weight(.semibold))
-                                    Spacer()
-                                    if didSaveDisplayName {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(PickemsColors.success)
-                                    }
-                                }
-                            }
-                            .disabled(isSavingDisplayName || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-
-                        if let displayNameError {
-                            Text(displayNameError)
-                                .font(.caption)
-                                .foregroundStyle(PickemsColors.warning)
-                        } else if isUploadingAvatar {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(user.fullName ?? "Add your name")
+                            .font(.headline)
+                            .foregroundStyle(PickemsColors.textPrimary)
+                        Text("@\(user.displayName)")
+                            .font(.subheadline)
+                            .foregroundStyle(PickemsColors.textSecondary)
+                        if isUploadingAvatar {
                             Text("Uploading photo…")
                                 .font(.caption)
                                 .foregroundStyle(PickemsColors.textSecondary)
                         } else {
-                            Text("Unique across Pickems — nickname or handle, not just your legal name.")
+                            Text("Tap photo to change")
                                 .font(.caption)
                                 .foregroundStyle(PickemsColors.textSecondary)
                         }
                     }
                 }
+                .listRowBackground(PickemsColors.cardBackground)
+
+                TextField("First name", text: $firstName)
+                    .textContentType(.givenName)
+                    .textInputAutocapitalization(.words)
+                    .focused($focusedField, equals: .firstName)
+                    .listRowBackground(PickemsColors.cardBackground)
+
+                TextField("Last name", text: $lastName)
+                    .textContentType(.familyName)
+                    .textInputAutocapitalization(.words)
+                    .focused($focusedField, equals: .lastName)
+                    .listRowBackground(PickemsColors.cardBackground)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("@")
+                            .foregroundStyle(PickemsColors.textSecondary)
+                        TextField("username", text: $username)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .textContentType(.username)
+                            .focused($focusedField, equals: .username)
+                            .onChange(of: username) { _, newValue in
+                                profileError = nil
+                                profileSavedMessage = nil
+                                scheduleUsernameCheck(newValue)
+                            }
+                            .submitLabel(.done)
+                            .onSubmit { focusedField = nil }
+                    }
+
+                    usernameStatusRow
+
+                    if isProfileDirty {
+                        Button {
+                            focusedField = nil
+                            saveProfile()
+                        } label: {
+                            HStack {
+                                if isSavingProfile { ProgressView() }
+                                Text(isSavingProfile ? "Saving…" : "Save profile")
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(isSavingProfile || !canSaveProfile)
+                    }
+
+                    if let profileError {
+                        Text(profileError)
+                            .font(.caption)
+                            .foregroundStyle(PickemsColors.warning)
+                    } else if let profileSavedMessage {
+                        Text(profileSavedMessage)
+                            .font(.caption)
+                            .foregroundStyle(PickemsColors.success)
+                    }
+                }
+                .listRowBackground(PickemsColors.cardBackground)
             }
-            .listRowBackground(PickemsColors.cardBackground)
         } header: {
             Text("Account")
         } footer: {
-            Text("3–20 characters. Letters, numbers, spaces, periods, hyphens, or underscores. Must be unique.")
+            Text("First and last name are for your account. Username is unique and shown in leagues (letters, numbers, underscore).")
         }
     }
 
-    private var isDisplayNameDirty: Bool {
-        let current = appState.authService.currentUser?.displayName ?? ""
-        return DisplayNameRules.normalize(displayName) != DisplayNameRules.normalize(current)
+    @ViewBuilder
+    private var usernameStatusRow: some View {
+        switch usernameAvailability {
+        case .available:
+            if isUsernameDirty {
+                Label("Username is available", systemImage: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.success)
+            }
+        case .taken:
+            Label("Username is taken", systemImage: "xmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(PickemsColors.warning)
+        case .invalid(let error):
+            if isUsernameDirty {
+                Text(error.localizedDescription ?? "Invalid username")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.warning)
+            }
+        case .none:
+            if isUsernameDirty {
+                Text("Checking availability…")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+            }
+        }
     }
+
+    // MARK: - Team / Notifications / etc.
 
     private var favoriteTeamSection: some View {
         Section {
@@ -207,6 +305,7 @@ struct ProfileView: View {
                         .foregroundStyle(PickemsColors.textSecondary)
                 }
             }
+            .buttonStyle(.borderless)
             .listRowBackground(PickemsColors.cardBackground)
         } header: {
             Text("Team Theme")
@@ -217,32 +316,92 @@ struct ProfileView: View {
 
     private var notificationsSection: some View {
         Section {
-            LabeledContent {
-                Text(appState.notificationService.isAuthorized ? "On" : "Off")
-                    .foregroundStyle(
-                        appState.notificationService.isAuthorized
-                            ? PickemsColors.success
-                            : PickemsColors.textSecondary
-                    )
-            } label: {
-                Label("Push Notifications", systemImage: "bell.fill")
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Game & league alerts", systemImage: "bell.fill")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textPrimary)
+
+                Text(notificationExplanation)
+                    .font(.subheadline)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                notificationActionControls
             }
             .listRowBackground(PickemsColors.cardBackground)
-
-            if !appState.notificationService.isAuthorized {
-                Button {
-                    Task { await appState.notificationService.requestPermission() }
-                } label: {
-                    Label("Enable Notifications", systemImage: "bell.badge")
-                }
-                .listRowBackground(PickemsColors.cardBackground)
-            }
         } header: {
             HStack {
                 Text("Notifications")
                 Spacer()
-                HelpInfoButton(topic: PickemsHelp.notifications, size: .caption)
+                HelpInfoButton(
+                    topic: PickemsHelp.notifications,
+                    size: .body,
+                    presentedTopic: $presentedHelp
+                )
             }
+        } footer: {
+            Text(notificationFooter)
+        }
+    }
+
+    @ViewBuilder
+    private var notificationActionControls: some View {
+        switch appState.notificationService.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            HStack {
+                Label("Enabled", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(PickemsColors.success)
+                Spacer()
+                Button("Open Settings") {
+                    appState.notificationService.openSystemSettings()
+                }
+                .buttonStyle(.borderless)
+                .font(.subheadline.weight(.semibold))
+            }
+        case .denied:
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Off — blocked in iOS Settings", systemImage: "bell.slash.fill")
+                    .foregroundStyle(PickemsColors.warning)
+                Button {
+                    appState.notificationService.openSystemSettings()
+                } label: {
+                    Text("Enable in Settings")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(theme.accent)
+            }
+        case .notDetermined:
+            Button {
+                Task { await appState.notificationService.requestPermission() }
+            } label: {
+                Text("Allow notifications")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(theme.accent)
+        @unknown default:
+            Button("Refresh status") {
+                Task { await appState.notificationService.refreshAuthorizationStatus() }
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+
+    private var notificationExplanation: String {
+        "Pickems can alert you when pick deadlines are approaching and when your week is scored. We do not send marketing spam."
+    }
+
+    private var notificationFooter: String {
+        switch appState.notificationService.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return "To turn alerts off, use Open Settings → Notifications."
+        case .denied:
+            return "iOS blocked alerts for Pickems. Use Enable in Settings to change that."
+        default:
+            return "You’ll get an iOS permission prompt when you tap Allow notifications."
         }
     }
 
@@ -271,6 +430,7 @@ struct ProfileView: View {
             } label: {
                 Label("Join Another League", systemImage: "person.badge.plus")
             }
+            .buttonStyle(.borderless)
             .listRowBackground(PickemsColors.cardBackground)
 
             Button {
@@ -278,6 +438,7 @@ struct ProfileView: View {
             } label: {
                 Label("Create New League", systemImage: "plus.circle")
             }
+            .buttonStyle(.borderless)
             .listRowBackground(PickemsColors.cardBackground)
 
             if let group = appState.groupService.selectedGroup {
@@ -295,6 +456,7 @@ struct ProfileView: View {
                     } label: {
                         Label("Delete League", systemImage: "trash")
                     }
+                    .buttonStyle(.borderless)
                     .listRowBackground(PickemsColors.cardBackground)
                 } else {
                     Button(role: .destructive) {
@@ -302,6 +464,7 @@ struct ProfileView: View {
                     } label: {
                         Label("Leave League", systemImage: "rectangle.portrait.and.arrow.right")
                     }
+                    .buttonStyle(.borderless)
                     .listRowBackground(PickemsColors.cardBackground)
                 }
             }
@@ -316,7 +479,11 @@ struct ProfileView: View {
             HStack {
                 Text("Leagues")
                 Spacer()
-                HelpInfoButton(topic: PickemsHelp.inviteFriends, size: .caption)
+                HelpInfoButton(
+                    topic: PickemsHelp.inviteFriends,
+                    size: .body,
+                    presentedTopic: $presentedHelp
+                )
             }
         }
     }
@@ -347,6 +514,7 @@ struct ProfileView: View {
             } label: {
                 Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
             }
+            .buttonStyle(.borderless)
             .listRowBackground(PickemsColors.cardBackground)
             .disabled(isDeletingAccount)
 
@@ -362,6 +530,7 @@ struct ProfileView: View {
                     Label("Delete Account", systemImage: "trash")
                 }
             }
+            .buttonStyle(.borderless)
             .listRowBackground(PickemsColors.cardBackground)
             .disabled(isDeletingAccount)
         } footer: {
@@ -369,24 +538,90 @@ struct ProfileView: View {
         }
     }
 
-    private func saveDisplayName() {
+    // MARK: - Profile save helpers
+
+    private var isUsernameDirty: Bool {
+        let current = appState.authService.currentUser?.displayName ?? ""
+        return DisplayNameRules.normalize(username) != DisplayNameRules.normalize(current)
+    }
+
+    private var isLegalNameDirty: Bool {
+        let user = appState.authService.currentUser
+        return PersonNameRules.normalize(firstName) != PersonNameRules.normalize(user?.firstName ?? "")
+            || PersonNameRules.normalize(lastName) != PersonNameRules.normalize(user?.lastName ?? "")
+    }
+
+    private var isProfileDirty: Bool {
+        isUsernameDirty || isLegalNameDirty
+    }
+
+    private var canSaveProfile: Bool {
+        guard case .success = PersonNameRules.validate(firstName, field: "first name"),
+              case .success = PersonNameRules.validate(lastName, field: "last name") else {
+            return false
+        }
+        if isUsernameDirty {
+            if case .available = usernameAvailability { return true }
+            return false
+        }
+        return isLegalNameDirty
+    }
+
+    private func loadProfileFields() {
+        guard let user = appState.authService.currentUser else { return }
+        firstName = user.firstName ?? ""
+        lastName = user.lastName ?? ""
+        username = user.displayName
+        profileError = nil
+        profileSavedMessage = nil
+        usernameAvailability = nil
+    }
+
+    private func scheduleUsernameCheck(_ raw: String) {
+        usernameCheckTask?.cancel()
+        usernameAvailability = nil
+        let trimmed = DisplayNameRules.normalize(raw)
+        guard !trimmed.isEmpty, isUsernameDirty else { return }
+        usernameCheckTask = Task {
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            let result = await appState.authService.checkUsernameAvailability(trimmed)
+            guard !Task.isCancelled else { return }
+            usernameAvailability = result
+        }
+    }
+
+    private func saveProfile() {
         Task {
-            isSavingDisplayName = true
-            displayNameError = nil
-            defer { isSavingDisplayName = false }
+            isSavingProfile = true
+            profileError = nil
+            profileSavedMessage = nil
+            defer { isSavingProfile = false }
             do {
-                try await appState.authService.updateDisplayName(displayName)
-                if let userId = appState.authService.currentUserId {
-                    await appState.groupService.syncMemberDisplayName(
-                        userId: userId,
-                        displayName: DisplayNameRules.normalize(displayName)
+                if isLegalNameDirty {
+                    try await appState.authService.updateLegalName(
+                        firstName: firstName,
+                        lastName: lastName
                     )
                 }
-                displayName = DisplayNameRules.normalize(displayName)
-                didSaveDisplayName = true
+                if isUsernameDirty {
+                    try await appState.authService.updateDisplayName(username)
+                    if let userId = appState.authService.currentUserId {
+                        await appState.groupService.syncMemberDisplayName(
+                            userId: userId,
+                            displayName: DisplayNameRules.normalize(username)
+                        )
+                    }
+                    username = DisplayNameRules.normalize(username)
+                }
+                firstName = PersonNameRules.normalize(firstName)
+                lastName = PersonNameRules.normalize(lastName)
+                usernameAvailability = nil
+                profileSavedMessage = "Profile saved."
+                focusedField = nil
                 PickemsHaptics.success()
             } catch {
-                displayNameError = error.localizedDescription
+                profileError = error.localizedDescription
                 PickemsHaptics.warning()
             }
         }
@@ -448,7 +683,6 @@ struct ProfileView: View {
             isDeletingAccount = true
             defer { isDeletingAccount = false }
             do {
-                // Leave / dissolve leagues before Auth user deletion.
                 let groups = appState.groupService.groups
                 if let userId = appState.authService.currentUserId {
                     for group in groups {

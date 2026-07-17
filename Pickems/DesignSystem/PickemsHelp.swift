@@ -155,18 +155,23 @@ enum PickemsHelp {
     static let profileOverview = HelpTopic(
         id: "profile.overview",
         title: "Profile",
-        message: "Manage your display name and notification preferences.",
+        message: "Manage your name, unique username, team theme, leagues, and notification preferences.",
         tips: [
-            "Enable push notifications for deadline reminders and scored weeks.",
-            "Your invite code is shown under League when you're in a group."
+            "First and last name identify your account; username is what friends see in leagues.",
+            "Usernames must be unique (letters, numbers, underscore).",
+            "Push alerts cover pick deadlines and scored weeks — change them anytime in iOS Settings."
         ]
     )
 
     static let notifications = HelpTopic(
         id: "profile.notifications",
         title: "Notifications",
-        message: "Pickems sends reminders before pick deadlines and updates when your week is scored.",
-        tips: ["You can change notification settings anytime in iOS Settings → Pickems."]
+        message: "Pickems can send push alerts for pick deadline reminders and when your week finishes scoring. Nothing else.",
+        tips: [
+            "Tap Allow notifications the first time to get the iOS permission prompt.",
+            "If alerts are Off, open Settings to re-enable them for Pickems.",
+            "You can turn system notifications off anytime in iOS Settings → Pickems → Notifications."
+        ]
     )
 
     // MARK: - Onboarding

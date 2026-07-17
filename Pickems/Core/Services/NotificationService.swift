@@ -8,6 +8,8 @@ import UIKit
 @Observable
 final class NotificationService: NSObject {
     var isAuthorized = false
+    /// Raw iOS authorization status for accurate Profile UI.
+    var authorizationStatus: UNAuthorizationStatus = .notDetermined
     var fcmToken: String?
     private var pendingUserId: String?
     private var didStart = false
@@ -28,11 +30,23 @@ final class NotificationService: NSObject {
         didStart = true
         Messaging.messaging().delegate = self
         AppLog.debug(AppLog.notifications, "Messaging delegate attached")
+        Task { await refreshAuthorizationStatus() }
+    }
+
+    func refreshAuthorizationStatus() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        authorizationStatus = settings.authorizationStatus
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            isAuthorized = true
+        default:
+            isAuthorized = false
+        }
     }
 
     func requestPermissionIfNeeded() async {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        switch settings.authorizationStatus {
+        await refreshAuthorizationStatus()
+        switch authorizationStatus {
         case .notDetermined:
             await requestPermission()
         case .authorized, .provisional, .ephemeral:
@@ -49,7 +63,7 @@ final class NotificationService: NSObject {
             // Prefer the async API — the completion-handler form traps under MainActor
             // isolation when the system invokes the handler off-main (Swift 6).
             let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
-            isAuthorized = granted
+            await refreshAuthorizationStatus()
             AppEvents.track(.notificationsPermission, metadata: [
                 "granted": granted ? "true" : "false",
             ])
@@ -63,7 +77,14 @@ final class NotificationService: NSObject {
                 "granted": "false",
                 "error": AppLog.describe(error),
             ])
+            await refreshAuthorizationStatus()
         }
+    }
+
+    /// Opens iOS Settings → Pickems so the user can flip system notification permission.
+    func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     func saveToken(for userId: String) async {

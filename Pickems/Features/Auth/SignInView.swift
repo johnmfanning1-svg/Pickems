@@ -7,6 +7,8 @@ struct SignInView: View {
     @State private var mode: AuthMode = .signIn
     @State private var email = ""
     @State private var password = ""
+    @State private var firstName = ""
+    @State private var lastName = ""
     @State private var displayName = ""
     @State private var confirmPassword = ""
     @State private var showForgotPassword = false
@@ -153,13 +155,27 @@ struct SignInView: View {
     private var emailPasswordForm: some View {
         VStack(alignment: .leading, spacing: 14) {
             if mode == .createAccount {
-                fieldLabel("Display name")
-                TextField("Unique nickname or handle", text: $displayName)
+                fieldLabel("First name")
+                TextField("First name", text: $firstName)
+                    .textFieldStyle(.pickems)
+                    .textContentType(.givenName)
+                    .textInputAutocapitalization(.words)
+
+                fieldLabel("Last name")
+                TextField("Last name", text: $lastName)
+                    .textFieldStyle(.pickems)
+                    .textContentType(.familyName)
+                    .textInputAutocapitalization(.words)
+
+                fieldLabel("Username")
+                TextField("unique_handle", text: $displayName)
+                    .textFieldStyle(.pickems)
+                    .textContentType(.username)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .textFieldStyle(.pickems)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
+                Text("Shown in leagues. Letters, numbers, underscore. Must be unique.")
+                    .font(.caption2)
+                    .foregroundStyle(PickemsColors.textSecondary)
             }
 
             fieldLabel("Email")
@@ -217,7 +233,9 @@ struct SignInView: View {
             return false
         }
         if mode == .createAccount {
-            return !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return !firstName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !lastName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 && password == confirmPassword
                 && password.count >= 6
         }
@@ -240,7 +258,9 @@ struct SignInView: View {
                 try await appState.authService.signUp(
                     email: email,
                     password: password,
-                    displayName: displayName
+                    displayName: displayName,
+                    firstName: firstName,
+                    lastName: lastName
                 )
             }
             await appState.onAuthStateReady()

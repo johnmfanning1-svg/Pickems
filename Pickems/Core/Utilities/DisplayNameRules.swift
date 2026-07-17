@@ -1,33 +1,29 @@
 import Foundation
 
+/// Unique public username (handle) shown in leagues.
 enum DisplayNameRules {
     static let minLength = 3
     static let maxLength = 20
 
-    /// Trim + collapse internal whitespace.
     static func normalize(_ raw: String) -> String {
-        raw
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        raw.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Case-insensitive uniqueness key stored in `handles/{key}`.
-    static func uniquenessKey(for displayName: String) -> String {
-        normalize(displayName).lowercased()
+    static func uniquenessKey(for username: String) -> String {
+        normalize(username).lowercased()
     }
 
-    /// Nickname / handle: letters, numbers, spaces, underscore, hyphen, period.
+    /// Username: letters, numbers, underscore only (no spaces).
     static func validate(_ raw: String) -> Result<String, ValidationError> {
         let name = normalize(raw)
         guard name.count >= minLength else { return .failure(.tooShort) }
         guard name.count <= maxLength else { return .failure(.tooLong) }
 
-        let allowed = CharacterSet.alphanumerics
-            .union(CharacterSet(charactersIn: " ._-"))
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_"))
         guard name.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
             return .failure(.invalidCharacters)
         }
-        // Block names that are only punctuation/spaces after normalize (already trimmed).
         guard name.contains(where: \.isLetter) || name.contains(where: \.isNumber) else {
             return .failure(.invalidCharacters)
         }
@@ -43,13 +39,57 @@ enum DisplayNameRules {
         var errorDescription: String? {
             switch self {
             case .tooShort:
-                return "Display name must be at least \(DisplayNameRules.minLength) characters."
+                return "Username must be at least \(DisplayNameRules.minLength) characters."
             case .tooLong:
-                return "Display name must be \(DisplayNameRules.maxLength) characters or fewer."
+                return "Username must be \(DisplayNameRules.maxLength) characters or fewer."
             case .invalidCharacters:
-                return "Use letters, numbers, spaces, periods, hyphens, or underscores."
+                return "Usernames can only use letters, numbers, and underscores."
             case .taken:
-                return "That display name is already taken. Try another nickname or handle."
+                return "That username is taken. Try another."
+            }
+        }
+    }
+}
+
+enum PersonNameRules {
+    static let minLength = 1
+    static let maxLength = 40
+
+    static func normalize(_ raw: String) -> String {
+        raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+
+    static func validate(_ raw: String, field: String) -> Result<String, ValidationError> {
+        let name = normalize(raw)
+        guard name.count >= minLength else {
+            return .failure(.required(field))
+        }
+        guard name.count <= maxLength else {
+            return .failure(.tooLong(field))
+        }
+        let allowed = CharacterSet.letters
+            .union(.init(charactersIn: " -'"))
+        guard name.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
+            return .failure(.invalid(field))
+        }
+        return .success(name)
+    }
+
+    enum ValidationError: LocalizedError, Equatable {
+        case required(String)
+        case tooLong(String)
+        case invalid(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .required(let field):
+                return "Enter your \(field)."
+            case .tooLong(let field):
+                return "\(field.capitalized) must be \(PersonNameRules.maxLength) characters or fewer."
+            case .invalid(let field):
+                return "\(field.capitalized) can only use letters, spaces, hyphens, or apostrophes."
             }
         }
     }

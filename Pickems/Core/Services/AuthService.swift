@@ -169,10 +169,25 @@ final class AuthService {
                 fullName: appleIDCredential.fullName
             )
             let result = try await auth.signIn(with: credential)
-            let displayName = formattedName(from: appleIDCredential.fullName)
-                ?? result.user.displayName
-                ?? "Player"
-            await ensureUserProfile(uid: result.user.uid, displayName: displayName)
+            let first = appleIDCredential.fullName?.givenName
+            let last = appleIDCredential.fullName?.familyName
+            let displayName = result.user.displayName
+                ?? suggestedUsername(firstName: first, lastName: last, uid: result.user.uid)
+            await ensureUserProfile(
+                uid: result.user.uid,
+                displayName: displayName,
+                firstName: first,
+                lastName: last
+            )
+            // Persist legal name when Apple provides it (only on first authorization).
+            var legalName: [String: Any] = [:]
+            if let first { legalName["firstName"] = first }
+            if let last { legalName["lastName"] = last }
+            if !legalName.isEmpty {
+                try? await db.user(result.user.uid).setData(legalName, merge: true)
+                if currentUser?.firstName == nil { currentUser?.firstName = first }
+                if currentUser?.lastName == nil { currentUser?.lastName = last }
+            }
             applySignedIn(uid: result.user.uid)
             AppEvents.track(.authAppleSucceeded, metadata: [
                 "uid": AppEvents.shortUID(result.user.uid),
@@ -184,16 +199,34 @@ final class AuthService {
         }
     }
 
-    func signUp(email: String, password: String, displayName: String) async throws {
+    func signUp(
+        email: String,
+        password: String,
+        displayName: String,
+        firstName: String,
+        lastName: String
+    ) async throws {
         let trimmedEmail = Self.normalizedEmail(email)
         try Self.validateEmail(trimmedEmail)
         try Self.validatePassword(password)
-        let trimmedName: String
+        let username: String
         switch DisplayNameRules.validate(displayName) {
         case .success(let value):
-            trimmedName = value
+            username = value
         case .failure(let error):
             throw mapDisplayNameValidation(error)
+        }
+        let first: String
+        let last: String
+        switch PersonNameRules.validate(firstName, field: "first name") {
+        case .success(let value): first = value
+        case .failure(let error):
+            throw AuthError.firebaseError(detail: error.localizedDescription ?? "Enter your first name.")
+        }
+        switch PersonNameRules.validate(lastName, field: "last name") {
+        case .success(let value): last = value
+        case .failure(let error):
+            throw AuthError.firebaseError(detail: error.localizedDescription ?? "Enter your last name.")
         }
 
         isLoading = true
@@ -205,7 +238,7 @@ final class AuthService {
             try await replaceSessionIfNeeded()
             let result = try await auth.createUser(withEmail: trimmedEmail, password: password)
             let changeRequest = result.user.createProfileChangeRequest()
-            changeRequest.displayName = trimmedName
+            changeRequest.displayName = username
             do {
                 try await changeRequest.commitChanges()
             } catch {
@@ -213,12 +246,17 @@ final class AuthService {
                     "uid": AppEvents.shortUID(result.user.uid),
                 ])
             }
-            await ensureUserProfile(uid: result.user.uid, displayName: trimmedName)
-            // Reserve unique nickname before treating sign-up as complete.
+            await ensureUserProfile(
+                uid: result.user.uid,
+                displayName: username,
+                firstName: first,
+                lastName: last
+            )
+            // Reserve unique username before treating sign-up as complete.
             do {
                 try await claimDisplayName(
-                    trimmedName,
-                    key: DisplayNameRules.uniquenessKey(for: trimmedName),
+                    username,
+                    key: DisplayNameRules.uniquenessKey(for: username),
                     previousKey: "",
                     uid: result.user.uid
                 )
@@ -228,11 +266,15 @@ final class AuthService {
                 throw error
             }
             try? await db.user(result.user.uid).updateData([
-                "displayName": trimmedName,
-                "handleKey": DisplayNameRules.uniquenessKey(for: trimmedName),
+                "displayName": username,
+                "handleKey": DisplayNameRules.uniquenessKey(for: username),
+                "firstName": first,
+                "lastName": last,
             ])
-            currentUser?.displayName = trimmedName
-            currentUser?.handleKey = DisplayNameRules.uniquenessKey(for: trimmedName)
+            currentUser?.displayName = username
+            currentUser?.handleKey = DisplayNameRules.uniquenessKey(for: username)
+            currentUser?.firstName = first
+            currentUser?.lastName = last
             applySignedIn(uid: result.user.uid)
             AppEvents.track(.authSignUpSucceeded, metadata: [
                 "uid": AppEvents.shortUID(result.user.uid),
@@ -396,6 +438,7 @@ final class AuthService {
         }
     }
 
+    /// Unique public username shown in leagues.
     func updateDisplayName(_ name: String) async throws {
         guard let uid = auth.currentUser?.uid else { return }
         let validated: String
@@ -423,6 +466,58 @@ final class AuthService {
         AppEvents.track(.authDisplayNameUpdated, metadata: [
             "uid": AppEvents.shortUID(uid),
         ])
+    }
+
+    func updateLegalName(firstName: String, lastName: String) async throws {
+        guard let uid = auth.currentUser?.uid else { return }
+        let first: String
+        let last: String
+        switch PersonNameRules.validate(firstName, field: "first name") {
+        case .success(let value): first = value
+        case .failure(let error): throw AuthError.firebaseError(detail: error.localizedDescription ?? "")
+        }
+        switch PersonNameRules.validate(lastName, field: "last name") {
+        case .success(let value): last = value
+        case .failure(let error): throw AuthError.firebaseError(detail: error.localizedDescription ?? "")
+        }
+        try await db.user(uid).updateData([
+            "firstName": first,
+            "lastName": last,
+        ])
+        currentUser?.firstName = first
+        currentUser?.lastName = last
+    }
+
+    /// `.available` / `.taken` / `.invalid` for live username feedback before save.
+    func checkUsernameAvailability(_ raw: String) async -> UsernameAvailability {
+        switch DisplayNameRules.validate(raw) {
+        case .failure(let error):
+            return .invalid(error)
+        case .success(let username):
+            let key = DisplayNameRules.uniquenessKey(for: username)
+            if key == (currentUser?.handleKey ?? DisplayNameRules.uniquenessKey(for: currentUser?.displayName ?? "")) {
+                return .available(username)
+            }
+            do {
+                let snap = try await db.handle(key).getDocument()
+                if snap.exists {
+                    let owner = snap.data()?["userId"] as? String
+                    if owner == auth.currentUser?.uid {
+                        return .available(username)
+                    }
+                    return .taken
+                }
+                return .available(username)
+            } catch {
+                return .invalid(.invalidCharacters)
+            }
+        }
+    }
+
+    enum UsernameAvailability: Equatable {
+        case available(String)
+        case taken
+        case invalid(DisplayNameRules.ValidationError)
     }
 
     private func mapDisplayNameValidation(_ error: DisplayNameRules.ValidationError) -> AuthError {
@@ -711,11 +806,18 @@ final class AuthService {
         applyLocalProfileFallback(uid: uid)
     }
 
-    private func ensureUserProfile(uid: String, displayName: String) async {
+    private func ensureUserProfile(
+        uid: String,
+        displayName: String,
+        firstName: String? = nil,
+        lastName: String? = nil
+    ) async {
         let ref = db.user(uid)
         let fallback = UserProfile(
             id: uid,
             displayName: displayName,
+            firstName: firstName,
+            lastName: lastName,
             avatarColorHex: cachedAvatarColor(for: uid) ?? AvatarColors.randomHex(),
             avatarImageURL: nil,
             createdAt: Date()
@@ -787,6 +889,17 @@ final class AuthService {
         UserDefaults.standard.set(hex, forKey: "pickems.avatar.\(uid)")
     }
 
+    private func suggestedUsername(firstName: String?, lastName: String?, uid: String) -> String {
+        let base = [firstName, lastName]
+            .compactMap { $0?.lowercased() }
+            .joined()
+            .filter { $0.isLetter || $0.isNumber || $0 == "_" }
+        if base.count >= DisplayNameRules.minLength {
+            return String(base.prefix(DisplayNameRules.maxLength))
+        }
+        return "user_" + String(uid.prefix(6)).lowercased()
+    }
+
     private func formattedName(from components: PersonNameComponents?) -> String? {
         guard let components else { return nil }
         let formatter = PersonNameComponentsFormatter()
@@ -855,7 +968,7 @@ final class AuthService {
             case .passwordTooWeak:
                 return "Password must be at least 6 characters."
             case .displayNameRequired:
-                return "Enter a display name so your crew knows who you are."
+                return "Enter a username so your crew knows who you are."
             case .displayNameTooShort:
                 return DisplayNameRules.ValidationError.tooShort.errorDescription
             case .displayNameTooLong:
