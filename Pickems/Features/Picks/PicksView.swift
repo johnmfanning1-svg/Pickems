@@ -56,10 +56,21 @@ struct PicksView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("You won't be able to change picks after submitting.")
+                Text("You can still edit your picks until the first game kicks off.")
+            }
+            .confirmationDialog("Submit your nominations?", isPresented: $viewModel.showConfirmNominations, titleVisibility: .visible) {
+                Button("Submit Nominations") {
+                    viewModel.submitNominations(appState: appState)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You can still swap your games until the slate locks at the first kickoff.")
             }
             .task(id: appState.groupService.selectedGroup?.id) {
                 await viewModel.loadWeek(appState: appState)
+            }
+            .onChange(of: appState.groupService.currentWeek?.id) { _, _ in
+                viewModel.refreshNominationSubmissionState(appState: appState)
             }
             .onChange(of: appState.pickService.userPick?.picks) { _, newPicks in
                 viewModel.syncDraftFromServer(newPicks, confidenceGameId: appState.pickService.userPick?.confidenceGameId)
@@ -137,6 +148,7 @@ struct PicksView: View {
     private func memberNominationUI(week: WeekSummary, rules: GroupRules) -> some View {
         let userId = appState.currentUserId ?? ""
         let userNoms = appState.pickService.nominations.filter { $0.submittedBy == userId }.count
+        let atLimit = userNoms >= rules.selectionsPerMember
 
         return VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
@@ -152,13 +164,17 @@ struct PicksView: View {
                 .padding(.horizontal)
             }
 
-            PrimaryButton(title: "Nominate Game", isLoading: viewModel.isLoadingGames) {
-                Task {
-                    await viewModel.loadESPNGames(appState: appState)
-                    viewModel.showGameBrowse = true
+            if atLimit {
+                nominationSubmitSection(userNoms: userNoms, rules: rules)
+            } else {
+                PrimaryButton(title: "Nominate Game", isLoading: viewModel.isLoadingGames) {
+                    Task {
+                        await viewModel.loadESPNGames(appState: appState)
+                        viewModel.showGameBrowse = true
+                    }
                 }
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
 
             ForEach(appState.pickService.nominations) { nom in
                 PickemsCard {
@@ -182,6 +198,38 @@ struct PicksView: View {
         }
     }
 
+    @ViewBuilder
+    private func nominationSubmitSection(userNoms: Int, rules: GroupRules) -> some View {
+        if viewModel.didSubmitNominations {
+            PickemsCard {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Nominations submitted", systemImage: "checkmark.seal.fill")
+                        .font(.headline)
+                        .foregroundStyle(PickemsColors.success)
+                    Text("Your \(userNoms) game\(userNoms == 1 ? "" : "s") \(userNoms == 1 ? "is" : "are") in. You can still edit them until the slate locks at the first kickoff.")
+                        .font(.caption)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("You've picked your \(rules.selectionsPerMember) game\(rules.selectionsPerMember == 1 ? "" : "s"). Submit to lock in your nominations.")
+                    .font(.subheadline)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal)
+
+                PrimaryButton(title: "Submit Nominations") {
+                    viewModel.showConfirmNominations = true
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+
     private func pickingPhase(week: WeekSummary) -> some View {
         let pastDeadline = ScoringEngine.isPastDeadline(deadline: week.pickDeadline)
 
@@ -193,7 +241,20 @@ struct PicksView: View {
             }
 
             if appState.pickService.userPick?.isLocked == true {
-                StatusBadge(text: "Submitted", color: PickemsColors.success).padding(.horizontal)
+                VStack(alignment: .leading, spacing: 8) {
+                    StatusBadge(text: "Submitted", color: PickemsColors.success)
+                    if !pastDeadline {
+                        Text("Changed your mind? You can still edit your picks until the first game kicks off.")
+                            .font(.caption)
+                            .foregroundStyle(PickemsColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        SecondaryButton("Edit Picks", icon: "pencil") {
+                            viewModel.unlockPicksForEditing(appState: appState)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
             }
 
             if appState.isCommissioner {

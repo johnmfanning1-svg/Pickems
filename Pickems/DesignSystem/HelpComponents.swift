@@ -82,6 +82,9 @@ struct HelpDetailView: View {
 struct HelpInfoButton: View {
     let topic: HelpTopic
     var size: Font = .body
+    /// Icon alignment inside the 44pt hit target. Toolbar buttons center it so it
+    /// reads as balanced inside the Liquid Glass capsule; Form headers keep it trailing.
+    var alignment: Alignment = .trailing
     /// When set, parent presents help (required inside `Form` section headers — nested sheets/taps fail there).
     var presentedTopic: Binding<HelpTopic?>? = nil
     @Environment(\.themePalette) private var theme
@@ -101,7 +104,7 @@ struct HelpInfoButton: View {
                 .font(size)
                 .foregroundStyle(PickemsColors.textSecondary)
                 .symbolRenderingMode(.hierarchical)
-                .frame(minWidth: 44, minHeight: 28, alignment: .trailing)
+                .frame(minWidth: 44, minHeight: 44, alignment: alignment)
                 .contentShape(Rectangle())
         }
         // `.borderless` is required for tappable buttons inside Form/List headers & rows.
@@ -184,7 +187,9 @@ struct HelpToolbarButton: View {
     let topic: HelpTopic
 
     var body: some View {
-        HelpInfoButton(topic: topic, size: .body)
+        // Centered inside its hit target so the glyph sits balanced in the
+        // top-right toolbar (previously hugged the trailing edge → looked off-center).
+        HelpInfoButton(topic: topic, size: .body, alignment: .center)
     }
 }
 

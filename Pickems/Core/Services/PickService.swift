@@ -14,7 +14,7 @@ final class PickService {
 
     /// Lazy so constructing `AppState` cannot touch Firestore before Firebase configure.
     @ObservationIgnored
-    private lazy var db = Firestore.firestore()
+    @ObservationIgnored private lazy var db = Firestore.firestore()
     @ObservationIgnored
     private var nominationsListener: ListenerRegistration?
     @ObservationIgnored

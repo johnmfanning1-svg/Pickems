@@ -35,9 +35,9 @@ final class AuthService {
     /// `@ObservationIgnored` keeps these as true `lazy` storage — `@Observable` would
     /// otherwise rewrite them into computed init-accessors and fail to compile.
     @ObservationIgnored
-    private lazy var auth = Auth.auth()
+    @ObservationIgnored private lazy var auth = Auth.auth()
     @ObservationIgnored
-    private lazy var db = Firestore.firestore()
+    @ObservationIgnored private lazy var db = Firestore.firestore()
     @ObservationIgnored
     private var authListener: AuthStateDidChangeListenerHandle?
     @ObservationIgnored
