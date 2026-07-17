@@ -4,6 +4,7 @@ struct GroupsView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
     @State private var showCommissionerSettings = false
+    @State private var showCreateLeague = false
 
     var body: some View {
         NavigationStack {
@@ -73,20 +74,36 @@ struct GroupsView: View {
                             .buttonStyle(.plain)
                             .padding(.horizontal)
 
-                            Button {
-                                appState.showJoinGroupSheet = true
-                            } label: {
-                                Label("Join Another League", systemImage: "person.badge.plus")
-                                    .font(.subheadline.weight(.semibold))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 10)
-                                    .background(PickemsColors.cardBackground)
-                                    .foregroundStyle(theme.accent)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            HStack(spacing: 12) {
+                                Button {
+                                    appState.showJoinGroupSheet = true
+                                } label: {
+                                    Label("Join League", systemImage: "person.badge.plus")
+                                        .font(.subheadline.weight(.semibold))
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(PickemsColors.cardBackground)
+                                        .foregroundStyle(theme.accent)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("Enter an invite code for a different league")
+
+                                Button {
+                                    showCreateLeague = true
+                                } label: {
+                                    Label("Create League", systemImage: "plus.circle")
+                                        .font(.subheadline.weight(.semibold))
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(PickemsColors.cardBackground)
+                                        .foregroundStyle(theme.accent)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("Start a brand new league you commission")
                             }
-                            .buttonStyle(.plain)
                             .padding(.horizontal)
-                            .accessibilityHint("Enter an invite code for a different league")
 
                             DynastySectionView()
                                 .padding(.horizontal)
@@ -133,6 +150,10 @@ struct GroupsView: View {
                     }
                 }
                 .pickemsEnvironment(appState)
+            }
+            .sheet(isPresented: $showCreateLeague) {
+                CreateGroupWizardView()
+                    .pickemsEnvironment(appState)
             }
         }
     }

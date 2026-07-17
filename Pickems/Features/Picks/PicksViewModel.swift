@@ -10,7 +10,10 @@ final class PicksViewModel {
     var isLoadingGames = false
     var livePickCards: [String: ESPNLiveGameCard] = [:]
     var showConfirmSubmit = false
+    var showConfirmNominations = false
     var spreadEditGame: SlateGame?
+    /// Local acknowledgement that the member finished nominating their games this week.
+    var didSubmitNominations = false
 
     private var liveRefreshTask: Task<Void, Never>?
 
@@ -20,6 +23,54 @@ final class PicksViewModel {
             draftPicks = picks
         }
         confidenceGameId = appState.pickService.userPick?.confidenceGameId
+        refreshNominationSubmissionState(appState: appState)
+    }
+
+    // MARK: - Nomination submission (local acknowledgement)
+
+    private func nominationsSubmittedKey(groupId: String, weekId: String, userId: String) -> String {
+        "pickems.nominationsSubmitted.\(groupId).\(weekId).\(userId)"
+    }
+
+    func refreshNominationSubmissionState(appState: AppState) {
+        guard let groupId = appState.groupService.selectedGroup?.id,
+              let weekId = appState.groupService.currentWeek?.id,
+              let userId = appState.currentUserId else {
+            didSubmitNominations = false
+            return
+        }
+        didSubmitNominations = UserDefaults.standard.bool(
+            forKey: nominationsSubmittedKey(groupId: groupId, weekId: weekId, userId: userId)
+        )
+    }
+
+    func submitNominations(appState: AppState) {
+        guard let groupId = appState.groupService.selectedGroup?.id,
+              let weekId = appState.groupService.currentWeek?.id,
+              let userId = appState.currentUserId else { return }
+        UserDefaults.standard.set(
+            true,
+            forKey: nominationsSubmittedKey(groupId: groupId, weekId: weekId, userId: userId)
+        )
+        didSubmitNominations = true
+        PickemsHaptics.success()
+    }
+
+    private func clearNominationSubmission(appState: AppState) {
+        guard let groupId = appState.groupService.selectedGroup?.id,
+              let weekId = appState.groupService.currentWeek?.id,
+              let userId = appState.currentUserId else { return }
+        UserDefaults.standard.set(
+            false,
+            forKey: nominationsSubmittedKey(groupId: groupId, weekId: weekId, userId: userId)
+        )
+        didSubmitNominations = false
+    }
+
+    /// Re-opens a submitted pick for editing before the deadline by saving it back as a draft.
+    func unlockPicksForEditing(appState: AppState) {
+        saveDraft(appState: appState)
+        PickemsHaptics.lightImpact()
     }
 
     func syncDraftFromServer(_ picks: [String: String]?, confidenceGameId: String? = nil) {
@@ -179,6 +230,11 @@ final class PicksViewModel {
                     isCommissioner: appState.isCommissioner,
                     userId: userId
                 )
+                // Editing selections clears the "submitted" acknowledgement so the
+                // member can review and re-submit their final games.
+                if nomination.submittedBy == userId {
+                    clearNominationSubmission(appState: appState)
+                }
             } catch {
                 appState.pickService.errorMessage = error.localizedDescription
             }

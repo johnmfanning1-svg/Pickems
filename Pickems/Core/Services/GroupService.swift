@@ -19,7 +19,7 @@ final class GroupService {
 
     /// Lazy so constructing `AppState` cannot touch Firestore before Firebase configure.
     @ObservationIgnored
-    private lazy var db = Firestore.firestore()
+    @ObservationIgnored private lazy var db = Firestore.firestore()
     @ObservationIgnored
     private var groupListener: ListenerRegistration?
     @ObservationIgnored
@@ -421,6 +421,118 @@ final class GroupService {
         try await weekRef.delete()
     }
 
+    /// Commissioner renames the league. Keeps local state and the public Discover index in sync.
+    func renameGroup(groupId: String, name: String) async throws {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2, trimmed.count <= 40 else { throw GroupError.invalidGroupName }
+        guard let group = groups.first(where: { $0.id == groupId }) ?? selectedGroup,
+              group.id == groupId else {
+            throw GroupError.groupNotFound
+        }
+        guard group.commissionerId == Auth.auth().currentUser?.uid else {
+            throw GroupError.notCommissioner
+        }
+
+        try await db.collection("groups").document(groupId).updateData(["name": trimmed])
+
+        if var g = selectedGroup, g.id == groupId {
+            g.name = trimmed
+            selectedGroup = g
+        }
+        if let idx = groups.firstIndex(where: { $0.id == groupId }) {
+            groups[idx].name = trimmed
+        }
+        if group.isPublic {
+            try? await db.collection("publicLeagues").document(groupId).updateData(["name": trimmed])
+        }
+    }
+
+    /// Commissioner sets a custom invite code (the league "password"). Reserves the new code,
+    /// points the group at it, and releases the old code so it can't be reused to join.
+    @discardableResult
+    func updateInviteCode(groupId: String, newCode rawCode: String) async throws -> String {
+        guard let group = groups.first(where: { $0.id == groupId }) ?? selectedGroup,
+              group.id == groupId else {
+            throw GroupError.groupNotFound
+        }
+        guard group.commissionerId == Auth.auth().currentUser?.uid else {
+            throw GroupError.notCommissioner
+        }
+
+        let code = rawCode.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        guard code.count >= 4, code.count <= 8,
+              code.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
+            throw GroupError.invalidInviteCodeFormat
+        }
+        if code == group.inviteCode { return code }
+
+        let existing = try await db.collection("inviteCodes").document(code).getDocument()
+        if existing.exists { throw GroupError.inviteCodeTaken }
+
+        let previousCode = group.inviteCode
+        try await db.collection("inviteCodes").document(code).setData(["groupId": groupId])
+        try await db.collection("groups").document(groupId).updateData(["inviteCode": code])
+        try? await db.collection("inviteCodes").document(previousCode).delete()
+
+        if var g = selectedGroup, g.id == groupId {
+            g.inviteCode = code
+            selectedGroup = g
+        }
+        if let idx = groups.firstIndex(where: { $0.id == groupId }) {
+            groups[idx].inviteCode = code
+        }
+        if group.isPublic {
+            try? await db.collection("publicLeagues").document(groupId).updateData(["inviteCode": code])
+        }
+        return code
+    }
+
+    /// Rolls a fresh random invite code for the league.
+    @discardableResult
+    func regenerateInviteCode(groupId: String) async throws -> String {
+        var code = generateInviteCode()
+        for _ in 0..<5 {
+            let existing = try await db.collection("inviteCodes").document(code).getDocument()
+            if !existing.exists { break }
+            code = generateInviteCode()
+        }
+        return try await updateInviteCode(groupId: groupId, newCode: code)
+    }
+
+    /// Commissioner removes another member from the league.
+    func removeMember(groupId: String, userId: String) async throws {
+        guard let group = groups.first(where: { $0.id == groupId }) ?? selectedGroup,
+              group.id == groupId else {
+            throw GroupError.groupNotFound
+        }
+        guard group.commissionerId == Auth.auth().currentUser?.uid else {
+            throw GroupError.notCommissioner
+        }
+        guard userId != group.commissionerId else {
+            throw GroupError.cannotRemoveCommissioner
+        }
+        guard group.memberIds.contains(userId) else { return }
+
+        let updatedIds = group.memberIds.filter { $0 != userId }
+        try await db.collection("groups").document(groupId).updateData(["memberIds": updatedIds])
+        try await db.collection("groups").document(groupId)
+            .collection("members").document(userId).delete()
+
+        if var g = selectedGroup, g.id == groupId {
+            g.memberIds = updatedIds
+            selectedGroup = g
+        }
+        if let idx = groups.firstIndex(where: { $0.id == groupId }) {
+            groups[idx].memberIds = updatedIds
+        }
+        members.removeAll { $0.id == userId }
+        if group.isPublic {
+            try? await db.collection("publicLeagues").document(groupId)
+                .updateData(["memberCount": updatedIds.count])
+        }
+    }
+
     func updateRules(groupId: String, rules: GroupRules) async throws {
         try await db.collection("groups").document(groupId).updateData([
             "rules": try Firestore.Encoder().encode(rules)
@@ -685,6 +797,10 @@ final class GroupService {
 
     enum GroupError: LocalizedError {
         case invalidInviteCode
+        case invalidInviteCodeFormat
+        case inviteCodeTaken
+        case invalidGroupName
+        case cannotRemoveCommissioner
         case groupNotFound
         case notCommissioner
         case cannotLeaveAsSoleCommissioner
@@ -695,6 +811,10 @@ final class GroupService {
         var errorDescription: String? {
             switch self {
             case .invalidInviteCode: return "Invalid invite code. Check with your commissioner."
+            case .invalidInviteCodeFormat: return "Invite codes are 4–8 letters or numbers."
+            case .inviteCodeTaken: return "That code is already in use. Try another."
+            case .invalidGroupName: return "League names must be 2–40 characters."
+            case .cannotRemoveCommissioner: return "You can't remove yourself as commissioner. Transfer the role or delete the league."
             case .groupNotFound: return "Group not found."
             case .notCommissioner: return "Only the commissioner can delete this group."
             case .cannotLeaveAsSoleCommissioner: return "Transfer commissioner role or delete the group before leaving."

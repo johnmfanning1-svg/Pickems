@@ -52,12 +52,18 @@ struct PickemsTheme {
         UITabBar.appearance().scrollEdgeAppearance = tabAppearance
         UITabBar.appearance().tintColor = UIKitColor(palette.accent)
 
+        // Transparent nav bar so each screen's atmospheric background shows through.
+        // The old opaque near-black bar read as an inconsistent "pinned black chrome"
+        // strip on top of the gradient screens (worse under Liquid Glass on iOS 26).
         let navAppearance = UINavigationBarAppearance()
-        navAppearance.configureWithOpaqueBackground()
-        navAppearance.backgroundColor = UIKitColor(PickemsColors.background)
+        navAppearance.configureWithTransparentBackground()
+        navAppearance.backgroundColor = .clear
+        navAppearance.shadowColor = .clear
         navAppearance.titleTextAttributes = [.foregroundColor: UIColor.white]
+        navAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
         UINavigationBar.appearance().standardAppearance = navAppearance
         UINavigationBar.appearance().scrollEdgeAppearance = navAppearance
+        UINavigationBar.appearance().compactAppearance = navAppearance
         UINavigationBar.appearance().tintColor = UIKitColor(palette.accent)
     }
 

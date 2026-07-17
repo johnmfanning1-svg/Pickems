@@ -6,17 +6,9 @@ struct ProfileView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
 
-    @State private var firstName = ""
-    @State private var lastName = ""
-    @State private var username = ""
-    @State private var isSavingProfile = false
-    @State private var profileError: String?
-    @State private var profileSavedMessage: String?
-    @State private var usernameAvailability: AuthService.UsernameAvailability?
-    @State private var usernameCheckTask: Task<Void, Never>?
-
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isUploadingAvatar = false
+    @State private var showEditProfile = false
     @State private var showJoinSheet = false
     @State private var showCreateWizard = false
     @State private var showLeaveConfirm = false
@@ -27,12 +19,6 @@ struct ProfileView: View {
     @State private var showTeamPicker = false
     @State private var managementError: String?
     @State private var presentedHelp: HelpTopic?
-
-    @FocusState private var focusedField: ProfileField?
-
-    private enum ProfileField: Hashable {
-        case firstName, lastName, username
-    }
 
     var body: some View {
         NavigationStack {
@@ -55,27 +41,18 @@ struct ProfileView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     HelpInfoButton(
                         topic: PickemsHelp.profileOverview,
+                        alignment: .center,
                         presentedTopic: $presentedHelp
                     )
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { focusedField = nil }
-                        .fontWeight(.semibold)
-                }
-                if isProfileDirty {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(isSavingProfile ? "Saving…" : "Save") {
-                            saveProfile()
-                        }
-                        .disabled(isSavingProfile || !canSaveProfile)
-                        .fontWeight(.semibold)
-                    }
                 }
             }
             .sheet(item: $presentedHelp) { topic in
                 HelpDetailView(topic: topic)
                     .environment(\.themePalette, theme)
+            }
+            .sheet(isPresented: $showEditProfile) {
+                EditProfileSheet()
+                    .pickemsEnvironment(appState)
             }
             .sheet(isPresented: $showJoinSheet) {
                 JoinGroupSheet(initialCode: "")
@@ -117,11 +94,7 @@ struct ProfileView: View {
                 uploadAvatar(from: item)
             }
             .onAppear {
-                loadProfileFields()
                 Task { await appState.notificationService.refreshAuthorizationStatus() }
-            }
-            .onChange(of: appState.authService.currentUser) { _, _ in
-                if !isProfileDirty { loadProfileFields() }
             }
         }
     }
@@ -171,98 +144,26 @@ struct ProfileView: View {
                 }
                 .listRowBackground(PickemsColors.cardBackground)
 
-                TextField("First name", text: $firstName)
-                    .textContentType(.givenName)
-                    .textInputAutocapitalization(.words)
-                    .focused($focusedField, equals: .firstName)
-                    .listRowBackground(PickemsColors.cardBackground)
-
-                TextField("Last name", text: $lastName)
-                    .textContentType(.familyName)
-                    .textInputAutocapitalization(.words)
-                    .focused($focusedField, equals: .lastName)
-                    .listRowBackground(PickemsColors.cardBackground)
-
-                VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    showEditProfile = true
+                } label: {
                     HStack {
-                        Text("@")
+                        Label("Edit Name & Username", systemImage: "pencil")
+                            .foregroundStyle(theme.accent)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(PickemsColors.textSecondary)
-                        TextField("username", text: $username)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .textContentType(.username)
-                            .focused($focusedField, equals: .username)
-                            .onChange(of: username) { _, newValue in
-                                profileError = nil
-                                profileSavedMessage = nil
-                                scheduleUsernameCheck(newValue)
-                            }
-                            .submitLabel(.done)
-                            .onSubmit { focusedField = nil }
-                    }
-
-                    usernameStatusRow
-
-                    if isProfileDirty {
-                        Button {
-                            focusedField = nil
-                            saveProfile()
-                        } label: {
-                            HStack {
-                                if isSavingProfile { ProgressView() }
-                                Text(isSavingProfile ? "Saving…" : "Save profile")
-                                    .font(.subheadline.weight(.semibold))
-                                Spacer()
-                            }
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(isSavingProfile || !canSaveProfile)
-                    }
-
-                    if let profileError {
-                        Text(profileError)
-                            .font(.caption)
-                            .foregroundStyle(PickemsColors.warning)
-                    } else if let profileSavedMessage {
-                        Text(profileSavedMessage)
-                            .font(.caption)
-                            .foregroundStyle(PickemsColors.success)
                     }
                 }
+                .buttonStyle(.borderless)
                 .listRowBackground(PickemsColors.cardBackground)
+                .accessibilityHint("Opens a sheet to edit your first name, last name, and username")
             }
         } header: {
             Text("Account")
         } footer: {
-            Text("First and last name are for your account. Username is unique and shown in leagues (letters, numbers, underscore).")
-        }
-    }
-
-    @ViewBuilder
-    private var usernameStatusRow: some View {
-        switch usernameAvailability {
-        case .available:
-            if isUsernameDirty {
-                Label("Username is available", systemImage: "checkmark.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(PickemsColors.success)
-            }
-        case .taken:
-            Label("Username is taken", systemImage: "xmark.circle.fill")
-                .font(.caption)
-                .foregroundStyle(PickemsColors.warning)
-        case .invalid(let error):
-            if isUsernameDirty {
-                Text(error.localizedDescription ?? "Invalid username")
-                    .font(.caption)
-                    .foregroundStyle(PickemsColors.warning)
-            }
-        case .none:
-            if isUsernameDirty {
-                Text("Checking availability…")
-                    .font(.caption)
-                    .foregroundStyle(PickemsColors.textSecondary)
-            }
+            Text("First and last name are for your account. Username is unique and shown in leagues.")
         }
     }
 
@@ -538,94 +439,7 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: - Profile save helpers
-
-    private var isUsernameDirty: Bool {
-        let current = appState.authService.currentUser?.displayName ?? ""
-        return DisplayNameRules.normalize(username) != DisplayNameRules.normalize(current)
-    }
-
-    private var isLegalNameDirty: Bool {
-        let user = appState.authService.currentUser
-        return PersonNameRules.normalize(firstName) != PersonNameRules.normalize(user?.firstName ?? "")
-            || PersonNameRules.normalize(lastName) != PersonNameRules.normalize(user?.lastName ?? "")
-    }
-
-    private var isProfileDirty: Bool {
-        isUsernameDirty || isLegalNameDirty
-    }
-
-    private var canSaveProfile: Bool {
-        guard case .success = PersonNameRules.validate(firstName, field: "first name"),
-              case .success = PersonNameRules.validate(lastName, field: "last name") else {
-            return false
-        }
-        if isUsernameDirty {
-            if case .available = usernameAvailability { return true }
-            return false
-        }
-        return isLegalNameDirty
-    }
-
-    private func loadProfileFields() {
-        guard let user = appState.authService.currentUser else { return }
-        firstName = user.firstName ?? ""
-        lastName = user.lastName ?? ""
-        username = user.displayName
-        profileError = nil
-        profileSavedMessage = nil
-        usernameAvailability = nil
-    }
-
-    private func scheduleUsernameCheck(_ raw: String) {
-        usernameCheckTask?.cancel()
-        usernameAvailability = nil
-        let trimmed = DisplayNameRules.normalize(raw)
-        guard !trimmed.isEmpty, isUsernameDirty else { return }
-        usernameCheckTask = Task {
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            guard !Task.isCancelled else { return }
-            let result = await appState.authService.checkUsernameAvailability(trimmed)
-            guard !Task.isCancelled else { return }
-            usernameAvailability = result
-        }
-    }
-
-    private func saveProfile() {
-        Task {
-            isSavingProfile = true
-            profileError = nil
-            profileSavedMessage = nil
-            defer { isSavingProfile = false }
-            do {
-                if isLegalNameDirty {
-                    try await appState.authService.updateLegalName(
-                        firstName: firstName,
-                        lastName: lastName
-                    )
-                }
-                if isUsernameDirty {
-                    try await appState.authService.updateDisplayName(username)
-                    if let userId = appState.authService.currentUserId {
-                        await appState.groupService.syncMemberDisplayName(
-                            userId: userId,
-                            displayName: DisplayNameRules.normalize(username)
-                        )
-                    }
-                    username = DisplayNameRules.normalize(username)
-                }
-                firstName = PersonNameRules.normalize(firstName)
-                lastName = PersonNameRules.normalize(lastName)
-                usernameAvailability = nil
-                profileSavedMessage = "Profile saved."
-                focusedField = nil
-                PickemsHaptics.success()
-            } catch {
-                profileError = error.localizedDescription
-                PickemsHaptics.warning()
-            }
-        }
-    }
+    // MARK: - Profile helpers
 
     private func uploadAvatar(from item: PhotosPickerItem?) {
         guard let item,

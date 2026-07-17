@@ -8,14 +8,37 @@ struct CommissionerSettingsView: View {
     let group: PickemGroup
     @State private var rules: GroupRules
     @State private var isPublic: Bool
+    @State private var groupName: String
     @State private var isSaving = false
     @State private var showCloseSeasonConfirm = false
     @State private var closeSeasonError: String?
+
+    @State private var isEditingCode = false
+    @State private var customCode = ""
+    @State private var isUpdatingCode = false
+    @State private var identityError: String?
+    @State private var memberToRemove: GroupMember?
+    @State private var memberActionError: String?
+
+    @FocusState private var codeFieldFocused: Bool
 
     init(group: PickemGroup) {
         self.group = group
         _rules = State(initialValue: group.rules)
         _isPublic = State(initialValue: group.isPublic)
+        _groupName = State(initialValue: group.name)
+    }
+
+    private var liveGroup: PickemGroup {
+        appState.groupService.selectedGroup?.id == group.id
+            ? (appState.groupService.selectedGroup ?? group)
+            : group
+    }
+
+    private var otherMembers: [GroupMember] {
+        appState.groupService.members
+            .filter { $0.id != liveGroup.commissionerId }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 
     private var seasonYearToClose: Int {
@@ -31,6 +54,9 @@ struct CommissionerSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                leagueIdentitySection
+                membersSection
+
                 Section {
                     Picker("Who selects games", selection: $rules.selectionMode) {
                         ForEach(SelectionMode.allCases) { mode in
@@ -177,6 +203,159 @@ struct CommissionerSettingsView: View {
             } message: {
                 Text("This archives \(seasonYearToClose) standings and resets everyone’s season record. This cannot be undone.")
             }
+            .confirmationDialog(
+                "Remove \(memberToRemove?.displayName ?? "member")?",
+                isPresented: Binding(
+                    get: { memberToRemove != nil },
+                    set: { if !$0 { memberToRemove = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Remove Member", role: .destructive) {
+                    if let member = memberToRemove { removeMember(member) }
+                    memberToRemove = nil
+                }
+                Button("Cancel", role: .cancel) { memberToRemove = nil }
+            } message: {
+                Text("They lose access to this league but can rejoin with the invite code.")
+            }
+        }
+    }
+
+    private var leagueIdentitySection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("League name")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                TextField("League name", text: $groupName)
+                    .textInputAutocapitalization(.words)
+                    .foregroundStyle(PickemsColors.textPrimary)
+            }
+            .listRowBackground(PickemsColors.cardBackground)
+
+            if isEditingCode {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Invite code")
+                        .font(.caption)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                    TextField("ABCD12", text: $customCode)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .focused($codeFieldFocused)
+                        .onChange(of: customCode) { _, newValue in
+                            customCode = String(newValue.uppercased().filter { $0.isLetter || $0.isNumber }.prefix(8))
+                        }
+                        .foregroundStyle(PickemsColors.textPrimary)
+                    HStack {
+                        Button("Save Code") { saveCustomCode() }
+                            .buttonStyle(.borderless)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(theme.accent)
+                            .disabled(isUpdatingCode || customCode.count < 4)
+                        Spacer()
+                        Button("Cancel") {
+                            isEditingCode = false
+                            codeFieldFocused = false
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                    }
+                    Text("4–8 letters or numbers. Members join with this code.")
+                        .font(.caption2)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
+                .listRowBackground(PickemsColors.cardBackground)
+            } else {
+                LabeledContent("Invite code", value: liveGroup.inviteCode)
+                    .listRowBackground(PickemsColors.cardBackground)
+
+                Button {
+                    customCode = liveGroup.inviteCode
+                    isEditingCode = true
+                    codeFieldFocused = true
+                } label: {
+                    Label("Set Custom Code", systemImage: "square.and.pencil")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(theme.accent)
+                .listRowBackground(PickemsColors.cardBackground)
+
+                Button {
+                    regenerateCode()
+                } label: {
+                    if isUpdatingCode {
+                        HStack { ProgressView(); Text("Rolling new code…") }
+                    } else {
+                        Label("Regenerate Code", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(theme.accent)
+                .disabled(isUpdatingCode)
+                .listRowBackground(PickemsColors.cardBackground)
+            }
+
+            if let identityError {
+                Text(identityError)
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.warning)
+                    .listRowBackground(PickemsColors.cardBackground)
+            }
+        } header: {
+            Text("League Identity")
+        } footer: {
+            Text("Rename the league or change the invite code any time. The old code stops working once you change it.")
+        }
+    }
+
+    @ViewBuilder
+    private var membersSection: some View {
+        Section {
+            if otherMembers.isEmpty {
+                Text("No other members yet. Share your invite code to grow the league.")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .listRowBackground(PickemsColors.cardBackground)
+            } else {
+                ForEach(otherMembers) { member in
+                    HStack(spacing: 12) {
+                        InitialsAvatar(
+                            initials: String(member.displayName.prefix(2)).uppercased(),
+                            colorHex: member.avatarColorHex,
+                            size: 36
+                        )
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(member.displayName)
+                                .foregroundStyle(PickemsColors.textPrimary)
+                            Text("\(member.seasonWins)-\(member.seasonLosses) this season")
+                                .font(.caption)
+                                .foregroundStyle(PickemsColors.textSecondary)
+                        }
+                        Spacer()
+                        Button(role: .destructive) {
+                            memberToRemove = member
+                        } label: {
+                            Image(systemName: "person.badge.minus")
+                                .foregroundStyle(PickemsColors.warning)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Remove \(member.displayName)")
+                    }
+                    .listRowBackground(PickemsColors.cardBackground)
+                }
+            }
+
+            if let memberActionError {
+                Text(memberActionError)
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.warning)
+                    .listRowBackground(PickemsColors.cardBackground)
+            }
+        } header: {
+            Text("Members")
+        } footer: {
+            Text("Removing a member deletes their spot in this league. They can rejoin with the invite code.")
         }
     }
 
@@ -195,14 +374,64 @@ struct CommissionerSettingsView: View {
         isSaving = true
         Task {
             do {
+                let trimmedName = groupName.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmedName != liveGroup.name {
+                    try await appState.groupService.renameGroup(groupId: group.id, name: trimmedName)
+                }
                 try await appState.groupService.updateRules(groupId: group.id, rules: rules)
                 try await appState.groupService.setPublic(groupId: group.id, isPublic: isPublic)
                 PickemsHaptics.success()
                 dismiss()
             } catch {
                 appState.groupService.errorMessage = error.localizedDescription
+                identityError = error.localizedDescription
             }
             isSaving = false
+        }
+    }
+
+    private func saveCustomCode() {
+        identityError = nil
+        isUpdatingCode = true
+        Task {
+            do {
+                try await appState.groupService.updateInviteCode(groupId: group.id, newCode: customCode)
+                PickemsHaptics.success()
+                isEditingCode = false
+                codeFieldFocused = false
+            } catch {
+                identityError = error.localizedDescription
+                PickemsHaptics.warning()
+            }
+            isUpdatingCode = false
+        }
+    }
+
+    private func regenerateCode() {
+        identityError = nil
+        isUpdatingCode = true
+        Task {
+            do {
+                try await appState.groupService.regenerateInviteCode(groupId: group.id)
+                PickemsHaptics.success()
+            } catch {
+                identityError = error.localizedDescription
+                PickemsHaptics.warning()
+            }
+            isUpdatingCode = false
+        }
+    }
+
+    private func removeMember(_ member: GroupMember) {
+        memberActionError = nil
+        Task {
+            do {
+                try await appState.groupService.removeMember(groupId: group.id, userId: member.id)
+                PickemsHaptics.success()
+            } catch {
+                memberActionError = error.localizedDescription
+                PickemsHaptics.warning()
+            }
         }
     }
 
