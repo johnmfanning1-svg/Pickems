@@ -5,6 +5,7 @@ struct GroupsView: View {
     @Environment(\.themePalette) private var theme
     @State private var showCommissionerSettings = false
     @State private var showCreateLeague = false
+    @State private var manageExpanded = false
 
     var body: some View {
         NavigationStack {
@@ -21,89 +22,13 @@ struct GroupsView: View {
                         groupPicker
 
                         if let group = appState.groupService.selectedGroup {
-                            groupHeader(group)
+                            totalsHero(group)
 
-                            if appState.isCommissioner {
-                                SecondaryButton("Commissioner Settings", icon: "gearshape.fill") {
-                                    showCommissionerSettings = true
-                                }
-                                .padding(.horizontal)
-                                .accessibilityHint("Configure slate rules, deadlines, and tie-breakers")
-                            }
+                            LeaderboardView()
 
-                            HStack(spacing: 12) {
-                                NavigationLink {
-                                    StatsView()
-                                } label: {
-                                    Label("Stats", systemImage: "chart.line.uptrend.xyaxis")
-                                        .font(.subheadline.weight(.semibold))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .background(PickemsColors.cardBackground)
-                                        .foregroundStyle(theme.accent)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                }
-                                .buttonStyle(.plain)
+                            primaryActions(group)
 
-                                NavigationLink {
-                                    RivalryView()
-                                } label: {
-                                    Label("Rivalry", systemImage: "person.line.dotted.person.fill")
-                                        .font(.subheadline.weight(.semibold))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .background(PickemsColors.cardBackground)
-                                        .foregroundStyle(theme.accent)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            .padding(.horizontal)
-
-                            NavigationLink {
-                                DiscoverLeaguesView()
-                            } label: {
-                                Label("Discover Public Leagues", systemImage: "globe")
-                                    .font(.subheadline.weight(.semibold))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 10)
-                                    .background(PickemsColors.cardBackground)
-                                    .foregroundStyle(theme.accent)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.horizontal)
-
-                            HStack(spacing: 12) {
-                                Button {
-                                    appState.showJoinGroupSheet = true
-                                } label: {
-                                    Label("Join League", systemImage: "person.badge.plus")
-                                        .font(.subheadline.weight(.semibold))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .background(PickemsColors.cardBackground)
-                                        .foregroundStyle(theme.accent)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityHint("Enter an invite code for a different league")
-
-                                Button {
-                                    showCreateLeague = true
-                                } label: {
-                                    Label("Create League", systemImage: "plus.circle")
-                                        .font(.subheadline.weight(.semibold))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .background(PickemsColors.cardBackground)
-                                        .foregroundStyle(theme.accent)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityHint("Start a brand new league you commission")
-                            }
-                            .padding(.horizontal)
+                            manageSection(group)
 
                             DynastySectionView()
                                 .padding(.horizontal)
@@ -113,16 +38,14 @@ struct GroupsView: View {
                                 standings: appState.groupService.standings
                             )
                             .padding(.horizontal)
-
-                            LeaderboardView()
                         }
                     }
                 }
-                .padding(.vertical)
+                .padding(.vertical, 8)
             }
             .pickemsScreenBackground()
             .navigationTitle("Groups")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     HelpToolbarButton(topic: PickemsHelp.groupsOverview)
@@ -158,6 +81,8 @@ struct GroupsView: View {
         }
     }
 
+    // MARK: - Context bar
+
     private var groupPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Your Leagues")
@@ -183,10 +108,17 @@ struct GroupsView: View {
         }
     }
 
-    private func groupHeader(_ group: PickemGroup) -> some View {
-        VStack(spacing: 12) {
-            PickemsCard {
-                VStack(alignment: .leading, spacing: 8) {
+    // MARK: - Totals hero
+
+    private var myStanding: StandingEntry? {
+        guard let userId = appState.authService.currentUser?.id else { return nil }
+        return appState.rankedStandings(weekly: true).first { $0.id == userId }
+    }
+
+    private func totalsHero(_ group: PickemGroup) -> some View {
+        PickemsCard {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(group.name)
                         .font(.title2.bold())
                         .foregroundStyle(PickemsColors.textPrimary)
@@ -194,21 +126,70 @@ struct GroupsView: View {
                         .font(.subheadline)
                         .foregroundStyle(PickemsColors.textSecondary)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
 
-            HStack(spacing: 12) {
-                InviteShareButton(group: group)
-                    .accessibilityHint("Share your invite code with friends")
-
-                ShareAppButton(leagueName: group.name, label: "Invite via X")
+                if let entry = myStanding {
+                    HStack(spacing: 0) {
+                        totalsStat(
+                            value: "\(entry.weeklyWins)–\(entry.weeklyLosses)",
+                            label: "This Week"
+                        )
+                        totalsDivider
+                        totalsStat(
+                            value: "\(entry.seasonWins)–\(entry.seasonLosses)",
+                            label: "Season"
+                        )
+                        totalsDivider
+                        totalsStat(
+                            value: "#\(entry.rank)",
+                            label: entry.isTied ? "Rank (T)" : "Rank",
+                            emphasize: true
+                        )
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(
+                        "Week \(entry.weeklyWins) to \(entry.weeklyLosses), season \(entry.seasonWins) to \(entry.seasonLosses), rank \(entry.rank)\(entry.isTied ? ", tied" : "")"
+                    )
+                } else {
+                    Text("Standings appear after games are scored.")
+                        .font(.subheadline)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
             }
-            .padding(.horizontal)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal)
+    }
+
+    private func totalsStat(value: String, label: String, emphasize: Bool = false) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(emphasize ? PickemsTypography.rank : .title3.bold())
+                .foregroundStyle(emphasize ? theme.accent : PickemsColors.textPrimary)
+                .monospacedDigit()
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(PickemsColors.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var totalsDivider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.08))
+            .frame(width: 1, height: 36)
+    }
+
+    // MARK: - Primary actions
+
+    private func primaryActions(_ group: PickemGroup) -> some View {
+        HStack(spacing: 12) {
+            InviteShareButton(group: group)
+                .accessibilityHint("Share your invite code with friends")
 
             NavigationLink {
                 MemberListView()
             } label: {
-                Label("View Members", systemImage: "person.3")
+                Label("Members", systemImage: "person.3")
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
@@ -221,8 +202,144 @@ struct GroupsView: View {
                     )
             }
             .buttonStyle(.plain)
-            .padding(.horizontal)
+            .accessibilityHint("View league members and season records")
         }
+        .padding(.horizontal)
+    }
+
+    // MARK: - Manage / secondary
+
+    private func manageSection(_ group: PickemGroup) -> some View {
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    manageExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    Label("Manage", systemImage: "ellipsis.circle")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(PickemsColors.textPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .rotationEffect(.degrees(manageExpanded ? 180 : 0))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(PickemsColors.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(manageExpanded ? "Hide league tools" : "Show league tools and settings")
+            .accessibilityAddTraits(.isButton)
+
+            if manageExpanded {
+                VStack(spacing: 8) {
+                    if appState.isCommissioner {
+                        manageRow(
+                            title: "Commissioner Settings",
+                            systemImage: "gearshape.fill",
+                            hint: "Configure slate rules, deadlines, and tie-breakers"
+                        ) {
+                            showCommissionerSettings = true
+                        }
+                    }
+
+                    manageNavRow(
+                        title: "Stats",
+                        systemImage: "chart.line.uptrend.xyaxis",
+                        hint: "View your pick performance stats"
+                    ) {
+                        StatsView()
+                    }
+
+                    manageNavRow(
+                        title: "Rivalry",
+                        systemImage: "person.line.dotted.person.fill",
+                        hint: "Compare records against another member"
+                    ) {
+                        RivalryView()
+                    }
+
+                    manageNavRow(
+                        title: "Discover Public Leagues",
+                        systemImage: "globe",
+                        hint: "Browse public leagues you can join"
+                    ) {
+                        DiscoverLeaguesView()
+                    }
+
+                    manageRow(
+                        title: "Join League",
+                        systemImage: "person.badge.plus",
+                        hint: "Enter an invite code for a different league"
+                    ) {
+                        appState.showJoinGroupSheet = true
+                    }
+
+                    manageRow(
+                        title: "Create League",
+                        systemImage: "plus.circle",
+                        hint: "Start a brand new league you commission"
+                    ) {
+                        showCreateLeague = true
+                    }
+
+                    ShareAppButton(leagueName: group.name, label: "Invite via X")
+                }
+                .padding(.top, 10)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    private func manageRow(
+        title: String,
+        systemImage: String,
+        hint: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .background(PickemsColors.cardBackground)
+                .foregroundStyle(theme.accent)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(hint)
+    }
+
+    private func manageNavRow<Destination: View>(
+        title: String,
+        systemImage: String,
+        hint: String,
+        @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .background(PickemsColors.cardBackground)
+                .foregroundStyle(theme.accent)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(hint)
     }
 }
 

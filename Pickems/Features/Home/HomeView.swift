@@ -7,6 +7,8 @@ struct HomeView: View {
     @State private var viewModel = HomeViewModel()
     @State private var coverMoment = CoverMomentPresenter()
     @State private var showFavoriteTeamPicker = false
+    @State private var showJoinSheet = false
+    @State private var showCreateWizard = false
 
     var body: some View {
         NavigationStack {
@@ -60,11 +62,12 @@ struct HomeView: View {
                     // Scores, CFB This Week, and news stay expanded by default.
                     moreSections
                 }
-                .padding(.vertical)
+                .padding(.top, 8)
+                .padding(.bottom)
             }
             .pickemsScreenBackground()
-            // Brand lives in `heroPulse` only — large nav title duplicated "Pickems" / left empty space.
-            .navigationTitle("")
+            // Inline nav shows group (or app name); brand mark stays in `heroPulse`.
+            .navigationTitle(appState.groupService.selectedGroup?.name ?? "Pickems")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -107,6 +110,14 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showFavoriteTeamPicker) {
                 FavoriteTeamPickerView()
+                    .pickemsEnvironment(appState)
+            }
+            .sheet(isPresented: $showJoinSheet) {
+                JoinGroupSheet(initialCode: "")
+                    .pickemsEnvironment(appState)
+            }
+            .sheet(isPresented: $showCreateWizard) {
+                CreateGroupWizardView()
                     .pickemsEnvironment(appState)
             }
         }
@@ -292,22 +303,37 @@ struct HomeView: View {
 
     private var groupSwitcher: some View {
         Menu {
-            ForEach(appState.groupService.groups) { group in
-                Button {
-                    appState.groupService.selectGroup(group)
-                } label: {
-                    if appState.groupService.selectedGroup?.id == group.id {
-                        Label(group.name, systemImage: "checkmark")
-                    } else {
-                        Text(group.name)
+            Section("Your leagues") {
+                ForEach(appState.groupService.groups) { group in
+                    Button {
+                        appState.groupService.selectGroup(group)
+                    } label: {
+                        if appState.groupService.selectedGroup?.id == group.id {
+                            Label(group.name, systemImage: "checkmark")
+                        } else {
+                            Text(group.name)
+                        }
                     }
+                }
+            }
+            Section {
+                Button {
+                    showJoinSheet = true
+                } label: {
+                    Label("Join / Search", systemImage: "magnifyingglass")
+                }
+                Button {
+                    showCreateWizard = true
+                } label: {
+                    Label("Create league", systemImage: "plus.circle")
                 }
             }
         } label: {
             Image(systemName: "arrow.left.arrow.right.circle")
                 .foregroundStyle(theme.accent)
         }
-        .accessibilityLabel("Switch league")
+        .accessibilityLabel("League options")
+        .accessibilityHint("Switch, join, or create a league")
     }
 
     private var myStanding: StandingEntry? {

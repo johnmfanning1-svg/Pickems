@@ -38,7 +38,7 @@ struct StatsView: View {
         }
         .pickemsScreenBackground()
         .navigationTitle("Stats")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
     }
 

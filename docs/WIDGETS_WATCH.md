@@ -26,6 +26,11 @@ Entitlements:
 3. Confirm App Groups capability shows `group.FannypackInc.Pickems` for all three targets
 4. Build the **Pickems** scheme (embeds widget; Watch is **not** embedded in 1.2.4 App Store builds — re-add Embed Watch Content when watchOS SDK is available)
 
+### Build / UAT note
+
+- Prefer the **Pickems** scheme (iPhone + **PickemsWidget**). Do **not** select **PickemsWatch** as the run destination or add it to the active scheme for iOS UAT — Watch embed objects in the project are orphaned / incomplete; building Watch can block an otherwise good iPhone + widget build.
+- Widget empty App Group: Home Screen shows “Open Pickems” (no demo “Saturday Crew” standings). Placeholder/demo data is only for WidgetKit `placeholder` / `context.isPreview`.
+
 ## Live Activities
 
 - `NSSupportsLiveActivities` is set in `Pickems/Info.plist`

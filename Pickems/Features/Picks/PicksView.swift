@@ -29,7 +29,7 @@ struct PicksView: View {
             }
             .pickemsScreenBackground()
             .navigationTitle("Picks")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     HelpToolbarButton(topic: PickemsHelp.picksOverview)

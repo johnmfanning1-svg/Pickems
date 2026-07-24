@@ -17,6 +17,7 @@ struct ProfileView: View {
     @State private var showDeleteAccountConfirm = false
     @State private var isDeletingAccount = false
     @State private var showTeamPicker = false
+    @State private var showScrimmage = false
     @State private var managementError: String?
     @State private var presentedHelp: HelpTopic?
 
@@ -24,26 +25,36 @@ struct ProfileView: View {
         NavigationStack {
             Form {
                 accountSection
-                favoriteTeamSection
                 notificationsSection
                 if AppConfig.isXSharingConfigured {
                     sharingSection
                 }
                 leaguesSection
+                howToPlaySection
                 legalSection
                 accountActionsSection
             }
             .scrollContentBackground(.hidden)
             .pickemsScreenBackground()
             .navigationTitle("Profile")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    HelpInfoButton(
-                        topic: PickemsHelp.profileOverview,
-                        alignment: .center,
-                        presentedTopic: $presentedHelp
-                    )
+                    HStack(spacing: 12) {
+                        Button {
+                            showTeamPicker = true
+                        } label: {
+                            teamThemeToolbarLabel
+                        }
+                        .accessibilityLabel("Team Theme")
+                        .accessibilityHint("Opens favorite team picker to theme the app")
+
+                        HelpInfoButton(
+                            topic: PickemsHelp.profileOverview,
+                            alignment: .center,
+                            presentedTopic: $presentedHelp
+                        )
+                    }
                 }
             }
             .sheet(item: $presentedHelp) { topic in
@@ -64,6 +75,10 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showTeamPicker) {
                 FavoriteTeamPickerView()
+                    .pickemsEnvironment(appState)
+            }
+            .fullScreenCover(isPresented: $showScrimmage) {
+                ScrimmageView(context: .replay)
                     .pickemsEnvironment(appState)
             }
             .confirmationDialog("Leave this league?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
@@ -167,52 +182,33 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: - Team / Notifications / etc.
+    // MARK: - Notifications / etc.
 
-    private var favoriteTeamSection: some View {
-        Section {
-            Button {
-                showTeamPicker = true
-            } label: {
-                HStack(spacing: 12) {
-                    if let team = appState.authService.currentUser?.favoriteTeam {
-                        ZStack {
-                            Circle()
-                                .fill(team.primaryColor)
-                                .frame(width: 36, height: 36)
-                            if let url = URL(string: team.resolvedLogoURL) {
-                                AsyncImage(url: url) { phase in
-                                    if case .success(let image) = phase {
-                                        image.resizable().scaledToFit()
-                                    }
-                                }
-                                .frame(width: 24, height: 24)
-                            }
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(team.name)
-                                .foregroundStyle(PickemsColors.textPrimary)
-                            Text("Themes accents across Pickems")
-                                .font(.caption)
-                                .foregroundStyle(PickemsColors.textSecondary)
-                        }
-                    } else {
-                        Label("Choose Favorite Team", systemImage: "shield.lefthalf.filled")
+    @ViewBuilder
+    private var teamThemeToolbarLabel: some View {
+        Group {
+            if let team = appState.authService.currentUser?.favoriteTeam,
+               let url = URL(string: team.resolvedLogoURL) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFit()
+                    default:
+                        Image(systemName: "shield.lefthalf.filled")
+                            .font(.callout)
                             .foregroundStyle(theme.accent)
                     }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(PickemsColors.textSecondary)
                 }
+            } else {
+                Image(systemName: "shield.lefthalf.filled")
+                    .font(.callout)
+                    .foregroundStyle(theme.accent)
             }
-            .buttonStyle(.borderless)
-            .listRowBackground(PickemsColors.cardBackground)
-        } header: {
-            Text("Team Theme")
-        } footer: {
-            Text("Your favorite team colors the app accents and atmosphere for you.")
         }
+        .frame(width: 22, height: 22)
+        .frame(width: 30, height: 30)
+        .contentShape(Rectangle().inset(by: -7))
+        .accessibilityHidden(true)
     }
 
     private var notificationsSection: some View {
@@ -236,7 +232,7 @@ struct ProfileView: View {
                 Spacer()
                 HelpInfoButton(
                     topic: PickemsHelp.notifications,
-                    size: .body,
+                    size: .callout,
                     presentedTopic: $presentedHelp
                 )
             }
@@ -342,9 +338,17 @@ struct ProfileView: View {
             .buttonStyle(.borderless)
             .listRowBackground(PickemsColors.cardBackground)
 
+            if !appState.groupService.groups.isEmpty {
+                Picker("Current Group", selection: currentGroupSelection) {
+                    ForEach(appState.groupService.groups) { option in
+                        Text(option.name).tag(option.id)
+                    }
+                }
+                .listRowBackground(PickemsColors.cardBackground)
+                .accessibilityHint("Switch which league is active")
+            }
+
             if let group = appState.groupService.selectedGroup {
-                LabeledContent("Current Group", value: group.name)
-                    .listRowBackground(PickemsColors.cardBackground)
                 LabeledContent("Invite Code", value: group.inviteCode)
                     .listRowBackground(PickemsColors.cardBackground)
 
@@ -382,10 +386,27 @@ struct ProfileView: View {
                 Spacer()
                 HelpInfoButton(
                     topic: PickemsHelp.inviteFriends,
-                    size: .body,
+                    size: .callout,
                     presentedTopic: $presentedHelp
                 )
             }
+        }
+    }
+
+    private var howToPlaySection: some View {
+        Section {
+            Button {
+                showScrimmage = true
+            } label: {
+                Label("Play a Scrimmage", systemImage: "flag.2.crossed.fill")
+            }
+            .buttonStyle(.borderless)
+            .listRowBackground(PickemsColors.cardBackground)
+            .accessibilityHint("Opens the Scrimmage tutorial")
+        } header: {
+            Text("How to Play")
+        } footer: {
+            Text("Replay the tutorial week anytime.")
         }
     }
 
@@ -440,6 +461,16 @@ struct ProfileView: View {
     }
 
     // MARK: - Profile helpers
+
+    private var currentGroupSelection: Binding<String> {
+        Binding(
+            get: { appState.groupService.selectedGroup?.id ?? "" },
+            set: { newId in
+                guard let match = appState.groupService.groups.first(where: { $0.id == newId }) else { return }
+                appState.groupService.selectGroup(match)
+            }
+        )
+    }
 
     private func uploadAvatar(from item: PhotosPickerItem?) {
         guard let item,
