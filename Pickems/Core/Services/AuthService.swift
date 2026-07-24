@@ -579,6 +579,12 @@ final class AuthService {
             if ns.domain == "Pickems.HandleClaim", ns.code == 409 {
                 throw AuthError.displayNameTaken
             }
+            if ns.domain == FirestoreErrorDomain,
+               ns.code == FirestoreErrorCode.permissionDenied.rawValue {
+                throw AuthError.firebaseError(
+                    detail: "Couldn't reserve that username. Try again in a moment."
+                )
+            }
             throw AuthError.firebaseError(detail: error.localizedDescription)
         }
     }
