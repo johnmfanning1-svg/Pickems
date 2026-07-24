@@ -28,7 +28,7 @@ final class DiscoverService {
                 .getDocuments()
             leagues = snap.documents.compactMap { try? $0.data(as: PublicLeagueListing.self) }
         } catch {
-            errorMessage = error.localizedDescription
+            UserFacingError.apply(error, to: &errorMessage)
         }
     }
 }
@@ -108,7 +108,8 @@ struct DiscoverLeaguesView: View {
                 PickemsHaptics.success()
                 appState.selectedTab = .groups
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error, context: .joinGroup)
+                    ?? "Couldn't join that league. Try again."
             }
         }
     }

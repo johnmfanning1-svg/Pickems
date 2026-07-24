@@ -16,6 +16,8 @@ struct StandingsSnapshot: Codable, Equatable {
     var totalPlayers: Int
     var topEntries: [SnapshotEntry]
     var updatedAt: Date
+    /// When set and still in the future, the widget shows a Week 0 countdown instead of standings.
+    var seasonKickoffAt: Date? = nil
 
     struct SnapshotEntry: Codable, Equatable, Identifiable {
         var id: String
@@ -29,6 +31,11 @@ struct StandingsSnapshot: Codable, Equatable {
 
     var weeklyRecord: String { "\(weeklyWins)-\(weeklyLosses)" }
     var seasonRecord: String { "\(seasonWins)-\(seasonLosses)" }
+
+    var showsPreseasonCountdown: Bool {
+        guard let seasonKickoffAt else { return false }
+        return Date() < seasonKickoffAt
+    }
 }
 
 enum PickemsAppGroup {

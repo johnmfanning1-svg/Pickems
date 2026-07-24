@@ -66,12 +66,11 @@ struct HomeView: View {
                 .padding(.bottom)
             }
             .pickemsScreenBackground()
-            // Inline nav shows group (or app name); brand mark stays in `heroPulse`.
-            .navigationTitle(appState.groupService.selectedGroup?.name ?? "Pickems")
+            // Title is the league switcher when the user has leagues; brand stays in `heroPulse`.
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    groupSwitcher
+                ToolbarItem(placement: .principal) {
+                    groupTitleMenu
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     HelpToolbarButton(topic: PickemsHelp.homeOverview)
@@ -301,17 +300,23 @@ struct HomeView: View {
         }
     }
 
-    private var groupSwitcher: some View {
+    private var navTitleText: String {
+        appState.groupService.selectedGroup?.name ?? "Pickems"
+    }
+
+    private var groupTitleMenu: some View {
         Menu {
-            Section("Your leagues") {
-                ForEach(appState.groupService.groups) { group in
-                    Button {
-                        appState.groupService.selectGroup(group)
-                    } label: {
-                        if appState.groupService.selectedGroup?.id == group.id {
-                            Label(group.name, systemImage: "checkmark")
-                        } else {
-                            Text(group.name)
+            if !appState.groupService.groups.isEmpty {
+                Section("Your leagues") {
+                    ForEach(appState.groupService.groups) { group in
+                        Button {
+                            appState.groupService.selectGroup(group)
+                        } label: {
+                            if appState.groupService.selectedGroup?.id == group.id {
+                                Label(group.name, systemImage: "checkmark")
+                            } else {
+                                Text(group.name)
+                            }
                         }
                     }
                 }
@@ -329,10 +334,18 @@ struct HomeView: View {
                 }
             }
         } label: {
-            Image(systemName: "arrow.left.arrow.right.circle")
-                .foregroundStyle(theme.accent)
+            HStack(spacing: 4) {
+                Text(navTitleText)
+                    .font(.headline)
+                    .foregroundStyle(PickemsColors.textPrimary)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+            }
+            .accessibilityElement(children: .combine)
         }
-        .accessibilityLabel("League options")
+        .accessibilityLabel(navTitleText)
         .accessibilityHint("Switch, join, or create a league")
     }
 

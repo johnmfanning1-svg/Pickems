@@ -103,7 +103,10 @@ service cloud.firestore {
     }
 
     match /groups/{groupId} {
-      allow read: if isGroupMember(groupId);
+      // `get` allows invite join (user has groupId from inviteCodes but is not a member yet).
+      // `list` stays membership-scoped so the arrayContains query remains secure.
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && request.auth.uid in resource.data.memberIds;
       allow create: if isSignedIn();
       allow update: if isCommissioner(groupId) || isJoiningGroup() || isLeavingGroup();
       allow delete: if isCommissioner(groupId);

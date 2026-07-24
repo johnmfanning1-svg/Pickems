@@ -16,6 +16,8 @@ struct StandingsSnapshot: Codable, Equatable {
     var totalPlayers: Int
     var topEntries: [SnapshotEntry]
     var updatedAt: Date
+    /// When set and still in the future, Home Screen / Watch can show a Week 0 countdown.
+    var seasonKickoffAt: Date? = nil
 
     struct SnapshotEntry: Codable, Equatable, Identifiable {
         var id: String

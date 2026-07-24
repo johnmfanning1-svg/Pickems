@@ -11,12 +11,53 @@ struct PickemsWidgetProvider: TimelineProvider {
             completion(StandingsEntry(date: Date(), snapshot: .placeholder))
             return
         }
-        completion(StandingsEntry(date: Date(), snapshot: PickemsAppGroup.load()))
+        completion(StandingsEntry(date: Date(), snapshot: resolveSnapshot()))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<StandingsEntry>) -> Void) {
-        let entry = StandingsEntry(date: Date(), snapshot: PickemsAppGroup.load())
-        completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(15 * 60))))
+        let snapshot = resolveSnapshot()
+        let now = Date()
+
+        if let snapshot, snapshot.showsPreseasonCountdown, let kickoff = snapshot.seasonKickoffAt {
+            // Refresh the countdown about once an hour until Week 0.
+            var entries: [StandingsEntry] = []
+            for hour in 0..<24 {
+                guard let date = Calendar.current.date(byAdding: .hour, value: hour, to: now),
+                      date < kickoff else { break }
+                entries.append(StandingsEntry(date: date, snapshot: snapshot))
+            }
+            if entries.isEmpty {
+                entries = [StandingsEntry(date: now, snapshot: snapshot)]
+            }
+            let refresh = min(kickoff, entries.last?.date.addingTimeInterval(60 * 60) ?? now.addingTimeInterval(60 * 60))
+            completion(Timeline(entries: entries, policy: .after(refresh)))
+            return
+        }
+
+        let entry = StandingsEntry(date: now, snapshot: snapshot)
+        completion(Timeline(entries: [entry], policy: .after(now.addingTimeInterval(15 * 60))))
+    }
+
+    /// Prefer App Group data; synthesize a Week 0 countdown in preseason even before the app publishes.
+    private func resolveSnapshot() -> StandingsSnapshot? {
+        if CFBSeasonCalendar.isPreseason() {
+            let kickoff = CFBSeasonCalendar.nextWeekZeroStart()
+            if let loaded = PickemsAppGroup.load() {
+                var copy = loaded
+                copy.seasonKickoffAt = kickoff
+                copy.weekNumber = 0
+                copy.seasonYear = CFBSeasonCalendar.seasonYear(containing: kickoff)
+                return copy
+            }
+            return .preseasonCountdown(until: kickoff)
+        }
+
+        guard var loaded = PickemsAppGroup.load() else { return nil }
+        // Stale preseason payload after Week 0 — don't keep showing the countdown.
+        if loaded.seasonKickoffAt != nil {
+            loaded.seasonKickoffAt = nil
+        }
+        return loaded
     }
 }
 
@@ -45,8 +86,29 @@ extension StandingsSnapshot {
             .init(id: "u1", displayName: "You", weeklyWins: 4, weeklyLosses: 2, seasonWins: 28, seasonLosses: 14, rank: 2),
             .init(id: "3", displayName: "Sam", weeklyWins: 3, weeklyLosses: 3, seasonWins: 25, seasonLosses: 17, rank: 3),
         ],
-        updatedAt: Date()
+        updatedAt: Date(),
+        seasonKickoffAt: nil
     )
+
+    static func preseasonCountdown(until kickoff: Date) -> StandingsSnapshot {
+        StandingsSnapshot(
+            groupId: "",
+            groupName: "Pickems",
+            weekNumber: 0,
+            seasonYear: CFBSeasonCalendar.seasonYear(containing: kickoff),
+            userId: "",
+            userDisplayName: "You",
+            weeklyWins: 0,
+            weeklyLosses: 0,
+            seasonWins: 0,
+            seasonLosses: 0,
+            rank: 0,
+            totalPlayers: 0,
+            topEntries: [],
+            updatedAt: Date(),
+            seasonKickoffAt: kickoff
+        )
+    }
 }
 
 struct PickemsWidgetEntryView: View {
@@ -57,7 +119,11 @@ struct PickemsWidgetEntryView: View {
     var body: some View {
         Group {
             if let snapshot = entry.snapshot {
-                content(for: snapshot)
+                if snapshot.showsPreseasonCountdown, let kickoff = snapshot.seasonKickoffAt {
+                    preseasonContent(snapshot: snapshot, kickoff: kickoff, asOf: entry.date)
+                } else {
+                    content(for: snapshot)
+                }
             } else {
                 emptyState
             }
@@ -82,6 +148,20 @@ struct PickemsWidgetEntryView: View {
         }
     }
 
+    @ViewBuilder
+    private func preseasonContent(snapshot: StandingsSnapshot, kickoff: Date, asOf date: Date) -> some View {
+        switch family {
+        case .systemSmall:
+            preseasonSmall(snapshot: snapshot, kickoff: kickoff, asOf: date)
+        case .accessoryCircular:
+            preseasonCircular(kickoff: kickoff, asOf: date)
+        case .accessoryRectangular:
+            preseasonRectangular(snapshot: snapshot, kickoff: kickoff, asOf: date)
+        default:
+            preseasonMedium(snapshot: snapshot, kickoff: kickoff, asOf: date)
+        }
+    }
+
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Pickems")
@@ -101,6 +181,121 @@ struct PickemsWidgetEntryView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Pickems. Open Pickems to see standings.")
     }
+
+    // MARK: - Preseason countdown
+
+    private func preseasonSmall(snapshot: StandingsSnapshot, kickoff: Date, asOf date: Date) -> some View {
+        let summary = CFBSeasonCalendar.countdownSummary(to: kickoff, from: date)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(snapshot.groupName)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(summary)
+                .font(.system(size: rankPointSize, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+            Text("Until Week 0")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text(kickoff.formatted(.dateTime.month(.abbreviated).day()))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .containerBackground(for: .widget) {
+            widgetBackground
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(preseasonAccessibilityLabel(snapshot: snapshot, kickoff: kickoff, asOf: date))
+    }
+
+    private func preseasonMedium(snapshot: StandingsSnapshot, kickoff: Date, asOf date: Date) -> some View {
+        let parts = CFBSeasonCalendar.countdown(to: kickoff, from: date)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(snapshot.groupName)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.primary)
+                Spacer()
+                Text("Week 0")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Text("College football is almost here")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+            HStack(spacing: 14) {
+                countdownBlock(value: parts.days, label: "Days")
+                countdownBlock(value: parts.hours, label: "Hours")
+                countdownBlock(value: parts.minutes, label: "Min")
+            }
+            Text("Starts \(kickoff.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .containerBackground(for: .widget) {
+            widgetBackground
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(preseasonAccessibilityLabel(snapshot: snapshot, kickoff: kickoff, asOf: date))
+    }
+
+    private func countdownBlock(value: Int, label: String) -> some View {
+        VStack(spacing: 2) {
+            Text("\(value)")
+                .font(.title2.bold().monospacedDigit())
+                .foregroundStyle(.primary)
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func preseasonRectangular(snapshot: StandingsSnapshot, kickoff: Date, asOf date: Date) -> some View {
+        let summary = CFBSeasonCalendar.countdownSummary(to: kickoff, from: date)
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(snapshot.groupName)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+            Text(summary)
+                .font(.headline.weight(.bold))
+                .lineLimit(1)
+            Text("Until Week 0")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .containerBackground(for: .widget) {
+            AccessoryWidgetBackground()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(preseasonAccessibilityLabel(snapshot: snapshot, kickoff: kickoff, asOf: date))
+    }
+
+    private func preseasonCircular(kickoff: Date, asOf date: Date) -> some View {
+        let summary = CFBSeasonCalendar.countdownSummary(to: kickoff, from: date)
+        return VStack(spacing: 0) {
+            Text(summary)
+                .font(.caption.weight(.bold).monospacedDigit())
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+            Text("W0")
+                .font(.caption2)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+        }
+        .containerBackground(for: .widget) {
+            AccessoryWidgetBackground()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(summary) until college football Week 0")
+    }
+
+    // MARK: - In-season standings
 
     private func small(_ snapshot: StandingsSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -163,7 +358,7 @@ struct PickemsWidgetEntryView: View {
 
     private func large(_ snapshot: StandingsSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("\(snapshot.groupName) · Season")
+            Text("\(snapshot.groupName) · Week \(snapshot.weekNumber)")
                 .font(.headline)
                 .foregroundStyle(.primary)
             ForEach(snapshot.topEntries) { row in
@@ -175,16 +370,21 @@ struct PickemsWidgetEntryView: View {
                     Text(row.displayName)
                         .font(.subheadline.weight(isYou ? .bold : .regular))
                     Spacer()
-                    Text("\(row.seasonWins)-\(row.seasonLosses)")
+                    Text("\(row.weeklyWins)-\(row.weeklyLosses)")
                         .font(.subheadline.monospacedDigit().weight(isYou ? .bold : .regular))
+                    Text("·")
+                        .foregroundStyle(.secondary)
+                    Text("\(row.seasonWins)-\(row.seasonLosses)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
                 }
                 .foregroundStyle(isYou ? Color.red : Color.primary)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel(rowAccessibilityLabel(row, isYou: isYou, weekly: false))
+                .accessibilityLabel(rowAccessibilityLabel(row, isYou: isYou, weekly: true))
                 .accessibilityAddTraits(isYou ? [.isSelected] : [])
             }
             Spacer()
-            Text("You: #\(snapshot.rank) · \(snapshot.seasonRecord)")
+            Text("You: #\(snapshot.rank) · \(snapshot.weeklyRecord) this week")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
         }
@@ -195,7 +395,6 @@ struct PickemsWidgetEntryView: View {
         .accessibilityLabel(standingsAccessibilityLabel(snapshot))
     }
 
-    /// Compact Lock Screen / Dynamic Island rectangular glance.
     private func accessoryRectangular(_ snapshot: StandingsSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(snapshot.groupName)
@@ -216,7 +415,6 @@ struct PickemsWidgetEntryView: View {
         .accessibilityLabel(standingsAccessibilityLabel(snapshot))
     }
 
-    /// Compact Lock Screen circular glance — rank + weekly record.
     private func accessoryCircular(_ snapshot: StandingsSnapshot) -> some View {
         VStack(spacing: 0) {
             Text("#\(snapshot.rank)")
@@ -244,7 +442,13 @@ struct PickemsWidgetEntryView: View {
         let losses = snapshot.weeklyLosses
         let winWord = wins == 1 ? "win" : "wins"
         let lossWord = losses == 1 ? "loss" : "losses"
-        return "Rank \(snapshot.rank), \(wins) \(winWord), \(losses) \(lossWord), \(snapshot.groupName)"
+        return "Week \(snapshot.weekNumber) standings. Rank \(snapshot.rank), \(wins) \(winWord), \(losses) \(lossWord), \(snapshot.groupName)"
+    }
+
+    private func preseasonAccessibilityLabel(snapshot: StandingsSnapshot, kickoff: Date, asOf date: Date) -> String {
+        let summary = CFBSeasonCalendar.countdownSummary(to: kickoff, from: date)
+        let day = kickoff.formatted(.dateTime.month(.wide).day())
+        return "\(snapshot.groupName). \(summary) until college football Week 0 on \(day)."
     }
 
     private func rowAccessibilityLabel(
@@ -277,7 +481,7 @@ struct PickemsStandingsWidget: Widget {
             PickemsWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Pickems Standings")
-        .description("Weekly and season group scores at a glance.")
+        .description("Week 0 countdown now; live group standings once the season starts.")
         .supportedFamilies([
             .systemSmall,
             .systemMedium,

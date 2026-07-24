@@ -383,8 +383,9 @@ struct CommissionerSettingsView: View {
                 PickemsHaptics.success()
                 dismiss()
             } catch {
-                appState.groupService.errorMessage = error.localizedDescription
-                identityError = error.localizedDescription
+                UserFacingError.apply(error, to: &appState.groupService.errorMessage, context: .write)
+                identityError = UserFacingError.message(for: error, context: .write)
+                    ?? "Couldn't save those settings."
             }
             isSaving = false
         }

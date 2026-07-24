@@ -44,15 +44,16 @@ final class GroupService {
             .whereField("memberIds", arrayContains: userId)
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
+                    guard let self else { return }
                     if let error {
-                        self?.errorMessage = error.localizedDescription
+                        UserFacingError.apply(error, to: &self.errorMessage, context: .listener)
                         AppEvents.failure(.groupsListenerError, error: error, metadata: [
                             "uid": AppEvents.shortUID(userId),
                         ])
                         return
                     }
                     var dropped = 0
-                    self?.groups = snapshot?.documents.compactMap { doc in
+                    self.groups = snapshot?.documents.compactMap { doc in
                         do {
                             return try doc.data(as: PickemGroup.self)
                         } catch {
@@ -67,19 +68,19 @@ final class GroupService {
                     if dropped > 0 {
                         AppLog.notice(AppLog.firestore, "dropped undecodable group docs", metadata: [
                             "count": "\(dropped)",
-                            "kept": "\(self?.groups.count ?? 0)",
+                            "kept": "\(self.groups.count)",
                         ])
                     }
                     Task { @MainActor in
-                        await self?.backfillInviteCodeIndexes(for: userId)
+                        await self.backfillInviteCodeIndexes(for: userId)
                     }
-                    if self?.selectedGroup == nil {
-                        self?.selectedGroup = self?.groups.first
+                    if self.selectedGroup == nil {
+                        self.selectedGroup = self.groups.first
                     }
-                    if let groupId = self?.selectedGroup?.id {
-                        await self?.syncCurrentWeekFromESPN(groupId: groupId)
+                    if let groupId = self.selectedGroup?.id {
+                        await self.syncCurrentWeekFromESPN(groupId: groupId)
                     }
-                    CrashReport.setValue("\(self?.groups.count ?? 0)", forKey: "group_count")
+                    CrashReport.setValue("\(self.groups.count)", forKey: "group_count")
                 }
             }
     }
@@ -97,7 +98,7 @@ final class GroupService {
         do {
             weekInfo = try await ESPNService.shared.currentWeek()
         } catch {
-            errorMessage = error.localizedDescription
+            UserFacingError.apply(error, to: &errorMessage)
             if observedWeekId == nil {
                 observeGroupDetails(groupId: groupId, weekId: CFBWeekSync.fallbackWeekId())
             }
@@ -126,7 +127,7 @@ final class GroupService {
                 try await weekRef.setData(from: week)
             }
         } catch {
-            errorMessage = error.localizedDescription
+            UserFacingError.apply(error, to: &errorMessage)
         }
 
         observeGroupDetails(groupId: groupId, weekId: weekId)

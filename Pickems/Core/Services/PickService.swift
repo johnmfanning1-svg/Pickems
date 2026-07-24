@@ -34,8 +34,9 @@ final class PickService {
             .nominations
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
+                    guard let self else { return }
                     if let error {
-                        self?.errorMessage = error.localizedDescription
+                        UserFacingError.apply(error, to: &self.errorMessage, context: .listener)
                         AppEvents.failure(.picksListenerError, error: error, metadata: [
                             "listener": "nominations",
                             "group_id": groupId,
@@ -43,7 +44,7 @@ final class PickService {
                         ], recordNonFatal: false)
                         return
                     }
-                    self?.nominations = snapshot?.documents.compactMap { try? $0.data(as: Nomination.self) } ?? []
+                    self.nominations = snapshot?.documents.compactMap { try? $0.data(as: Nomination.self) } ?? []
                 }
             }
 
@@ -51,8 +52,9 @@ final class PickService {
             .games
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
+                    guard let self else { return }
                     if let error {
-                        self?.errorMessage = error.localizedDescription
+                        UserFacingError.apply(error, to: &self.errorMessage, context: .listener)
                         AppEvents.failure(.picksListenerError, error: error, metadata: [
                             "listener": "games",
                             "group_id": groupId,
@@ -60,7 +62,7 @@ final class PickService {
                         ], recordNonFatal: false)
                         return
                     }
-                    self?.slateGames = snapshot?.documents.compactMap { try? $0.data(as: SlateGame.self) } ?? []
+                    self.slateGames = snapshot?.documents.compactMap { try? $0.data(as: SlateGame.self) } ?? []
                 }
             }
 
@@ -68,8 +70,9 @@ final class PickService {
             .picks.document(userId)
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
+                    guard let self else { return }
                     if let error {
-                        self?.errorMessage = error.localizedDescription
+                        UserFacingError.apply(error, to: &self.errorMessage, context: .listener)
                         AppEvents.failure(.picksListenerError, error: error, metadata: [
                             "listener": "user_pick",
                             "group_id": groupId,
@@ -77,7 +80,7 @@ final class PickService {
                         ], recordNonFatal: false)
                         return
                     }
-                    self?.userPick = try? snapshot?.data(as: UserPick.self)
+                    self.userPick = try? snapshot?.data(as: UserPick.self)
                 }
             }
 
@@ -85,8 +88,9 @@ final class PickService {
             .collection(FirestoreCollection.submissions)
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
+                    guard let self else { return }
                     if let error {
-                        self?.errorMessage = error.localizedDescription
+                        UserFacingError.apply(error, to: &self.errorMessage, context: .listener)
                         AppEvents.failure(.picksListenerError, error: error, metadata: [
                             "listener": "submissions",
                             "group_id": groupId,
@@ -94,7 +98,7 @@ final class PickService {
                         ], recordNonFatal: false)
                         return
                     }
-                    self?.submissions = snapshot?.documents.compactMap {
+                    self.submissions = snapshot?.documents.compactMap {
                         try? $0.data(as: PickSubmission.self)
                     } ?? []
                 }
@@ -107,8 +111,23 @@ final class PickService {
                 .collection("weeks").document(weekId)
                 .collection("picks").getDocuments()
             allPicks = snapshot.documents.compactMap { try? $0.data(as: UserPick.self) }
+            if let current = errorMessage, UserFacingError.looksLikePermissionMessage(current) {
+                errorMessage = nil
+            }
         } catch {
-            errorMessage = error.localizedDescription
+            // Before lock/deadline, rules hide other members' picks — expected, not a user error.
+            if UserFacingError.isPermissionDenied(error) {
+                allPicks = userPick.map { [$0] } ?? []
+                AppLog.notice(AppLog.firestore, "loadAllPicks deferred until picks are public", metadata: [
+                    "group_id": groupId,
+                    "week_id": weekId,
+                ])
+                if let current = errorMessage, UserFacingError.looksLikePermissionMessage(current) {
+                    errorMessage = nil
+                }
+                return
+            }
+            UserFacingError.apply(error, to: &errorMessage)
         }
     }
 

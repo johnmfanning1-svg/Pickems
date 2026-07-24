@@ -485,7 +485,7 @@ struct ProfileView: View {
                 try await appState.authService.updateAvatarURL(url)
                 PickemsHaptics.success()
             } catch {
-                managementError = error.localizedDescription
+                managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
             }
         }
     }
@@ -498,7 +498,7 @@ struct ProfileView: View {
                 try await appState.groupService.leaveGroup(groupId: group.id, userId: userId)
                 PickemsHaptics.success()
             } catch {
-                managementError = error.localizedDescription
+                managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
             }
         }
     }
@@ -510,7 +510,7 @@ struct ProfileView: View {
                 try await appState.groupService.deleteGroup(groupId: group.id)
                 PickemsHaptics.success()
             } catch {
-                managementError = error.localizedDescription
+                managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
             }
         }
     }
@@ -519,7 +519,7 @@ struct ProfileView: View {
         do {
             try appState.authService.signOut()
         } catch {
-            managementError = error.localizedDescription
+            managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
         }
     }
 
@@ -537,7 +537,7 @@ struct ProfileView: View {
                 try await appState.authService.deleteAccount()
                 PickemsHaptics.success()
             } catch {
-                managementError = error.localizedDescription
+                managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
                 PickemsHaptics.warning()
             }
         }

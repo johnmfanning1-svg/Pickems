@@ -99,7 +99,7 @@ final class PicksViewModel {
             let weekInfo = try await ESPNService.shared.currentWeek()
             espnGames = try await ESPNService.shared.fetchScoreboard(week: weekInfo.weekNumber)
         } catch {
-            appState.pickService.errorMessage = error.localizedDescription
+            UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
         }
     }
 
@@ -146,7 +146,7 @@ final class PicksViewModel {
                 PickemsHaptics.success()
                 showGameBrowse = false
             } catch {
-                appState.pickService.errorMessage = error.localizedDescription
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
         }
     }
@@ -166,7 +166,7 @@ final class PicksViewModel {
                     confidenceGameId: group.rules.allowConfidencePick ? confidenceGameId : nil
                 )
             } catch {
-                appState.pickService.errorMessage = error.localizedDescription
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
         }
     }
@@ -188,7 +188,7 @@ final class PicksViewModel {
                 )
                 PickemsHaptics.success()
             } catch {
-                appState.pickService.errorMessage = error.localizedDescription
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
         }
     }
@@ -211,7 +211,7 @@ final class PicksViewModel {
                     kickoffs: kickoffs
                 )
             } catch {
-                appState.groupService.errorMessage = error.localizedDescription
+                UserFacingError.apply(error, to: &appState.groupService.errorMessage, context: .write)
             }
         }
     }
@@ -236,7 +236,7 @@ final class PicksViewModel {
                     clearNominationSubmission(appState: appState)
                 }
             } catch {
-                appState.pickService.errorMessage = error.localizedDescription
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
         }
     }
@@ -252,7 +252,7 @@ final class PicksViewModel {
                     weekStatus: week.status
                 )
             } catch {
-                appState.pickService.errorMessage = error.localizedDescription
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
         }
     }
@@ -270,7 +270,7 @@ final class PicksViewModel {
                     spreadTeamId: spreadTeamId
                 )
             } catch {
-                appState.pickService.errorMessage = error.localizedDescription
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
         }
     }
@@ -288,7 +288,7 @@ final class PicksViewModel {
             )
             PickemsHaptics.success()
         } catch {
-            appState.pickService.errorMessage = error.localizedDescription
+            UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
         }
     }
 

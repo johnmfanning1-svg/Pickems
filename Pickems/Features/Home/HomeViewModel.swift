@@ -50,7 +50,8 @@ final class HomeViewModel {
 
             newsItems = (try? await ESPNService.shared.fetchNews(limit: 6)) ?? []
         } catch {
-            errorMessage = error.localizedDescription
+        } catch {
+            errorMessage = UserFacingError.message(for: error)
             AppLog.error(AppLog.network, "home refresh failed", error: error)
         }
 

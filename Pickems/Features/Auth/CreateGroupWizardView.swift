@@ -225,7 +225,8 @@ struct CreateGroupWizardView: View {
                 // Show invite before dismissing so all entry points (incl. onboarding sheet) get the step.
                 createdGroup = group
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error, context: .write)
+                    ?? error.localizedDescription
                 AppLog.error(AppLog.onboarding, "create league wizard failed", error: error)
             }
         }

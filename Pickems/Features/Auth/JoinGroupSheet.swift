@@ -69,7 +69,8 @@ struct JoinGroupSheet: View {
                 PickemsHaptics.success()
                 dismiss()
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = UserFacingError.message(for: error, context: .joinGroup)
+                    ?? "Couldn't join that league. Check the invite code and try again."
             }
         }
     }
