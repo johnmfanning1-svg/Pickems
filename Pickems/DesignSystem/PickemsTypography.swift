@@ -58,6 +58,9 @@ private struct AppearSlideModifier: ViewModifier {
             .opacity(shown ? 1 : 0)
             .offset(y: shown ? 0 : 12)
             .onAppear {
+                // Only animate the first time this view identity appears.
+                // Re-running on every parent refresh caused Home to "twitch".
+                guard !shown else { return }
                 withAnimation(.easeOut(duration: 0.35)) { shown = true }
             }
     }

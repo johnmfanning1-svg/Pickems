@@ -16,6 +16,8 @@ final class GroupService {
     var isLoading = false
     var isClosingSeason = false
     var errorMessage: String?
+    /// First `loadGroups` snapshot has arrived (even if empty). Gates onboarding vs main.
+    var hasCompletedInitialGroupLoad = false
 
     /// Lazy so constructing `AppState` cannot touch Firestore before Firebase configure.
     @ObservationIgnored
@@ -37,6 +39,7 @@ final class GroupService {
 
     func loadGroups(for userId: String) {
         groupListener?.remove()
+        hasCompletedInitialGroupLoad = false
         AppLog.info(AppLog.firestore, "loadGroups listener attached", metadata: [
             "uid": AppEvents.shortUID(userId),
         ])
@@ -46,6 +49,7 @@ final class GroupService {
                 Task { @MainActor in
                     guard let self else { return }
                     if let error {
+                        self.hasCompletedInitialGroupLoad = true
                         UserFacingError.apply(error, to: &self.errorMessage, context: .listener)
                         AppEvents.failure(.groupsListenerError, error: error, metadata: [
                             "uid": AppEvents.shortUID(userId),
@@ -71,14 +75,26 @@ final class GroupService {
                             "kept": "\(self.groups.count)",
                         ])
                     }
+                    self.hasCompletedInitialGroupLoad = true
                     Task { @MainActor in
                         await self.backfillInviteCodeIndexes(for: userId)
                     }
-                    if self.selectedGroup == nil {
+                    let previousSelectedId = self.selectedGroup?.id
+                    if let selected = self.selectedGroup,
+                       !self.groups.contains(where: { $0.id == selected.id }) {
+                        self.selectedGroup = self.groups.first
+                        self.clearWeekObservationIfNeeded()
+                    } else if self.selectedGroup == nil {
                         self.selectedGroup = self.groups.first
                     }
                     if let groupId = self.selectedGroup?.id {
-                        await self.syncCurrentWeekFromESPN(groupId: groupId)
+                        // Avoid re-entrant ESPN/week observe on every membership metadata tick.
+                        let selectionChanged = previousSelectedId != groupId
+                        if selectionChanged || self.observedGroupId != groupId || self.currentWeek == nil {
+                            await self.syncCurrentWeekFromESPN(groupId: groupId)
+                        }
+                    } else {
+                        self.clearWeekObservationIfNeeded()
                     }
                     CrashReport.setValue("\(self.groups.count)", forKey: "group_count")
                 }
@@ -106,31 +122,42 @@ final class GroupService {
         }
 
         let weekId = CFBWeekSync.weekId(for: weekInfo)
-        let weekChanged = cfbWeek?.weekNumber != weekInfo.weekNumber
-            || cfbWeek?.seasonYear != weekInfo.seasonYear
-            || observedWeekId != weekId
-
         cfbWeek = weekInfo
 
-        guard weekChanged || currentWeek == nil else { return }
+        // Already listening to this week — never remount (remounts clear/jitter Home).
+        if observedGroupId == groupId, observedWeekId == weekId {
+            await ensureWeekDocumentExists(groupId: groupId, weekId: weekId, info: weekInfo, rules: rules)
+            return
+        }
 
         isLoading = currentWeek == nil
         defer { isLoading = false }
 
+        await ensureWeekDocumentExists(groupId: groupId, weekId: weekId, info: weekInfo, rules: rules)
+        observeGroupDetails(groupId: groupId, weekId: weekId)
+    }
+
+    private func ensureWeekDocumentExists(
+        groupId: String,
+        weekId: String,
+        info: CFBWeekInfo,
+        rules: GroupRules
+    ) async {
         let weekRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
-
         do {
             let snapshot = try await weekRef.getDocument()
             if !snapshot.exists {
-                let week = CFBWeekSync.makeWeekSummary(id: weekId, info: weekInfo, rules: rules)
+                let week = CFBWeekSync.makeWeekSummary(id: weekId, info: info, rules: rules)
                 try await weekRef.setData(from: week)
+                // Seed local state immediately so Home doesn't flash an empty week card.
+                if currentWeek?.id != week.id {
+                    currentWeek = week
+                }
             }
         } catch {
             UserFacingError.apply(error, to: &errorMessage)
         }
-
-        observeGroupDetails(groupId: groupId, weekId: weekId)
     }
 
     func createGroup(name: String, commissionerId: String, displayName: String) async throws -> PickemGroup {
@@ -251,6 +278,40 @@ final class GroupService {
             throw GroupError.cannotLeaveAsSoleCommissioner
         }
 
+        try await removeMemberFromGroup(group: group, userId: userId)
+    }
+
+    /// Leaves or dissolves every league so account deletion can finish.
+    /// Sole-member leagues are deleted; multi-member commissioner leagues auto-transfer first.
+    func leaveAllGroupsForAccountDeletion(userId: String) async throws {
+        let owned = groups.filter { $0.memberIds.contains(userId) }
+        for group in owned {
+            try await leaveGroupForAccountDeletion(groupId: group.id, userId: userId)
+        }
+    }
+
+    private func leaveGroupForAccountDeletion(groupId: String, userId: String) async throws {
+        guard let group = groups.first(where: { $0.id == groupId }) else { return }
+        guard group.memberIds.contains(userId) else { return }
+
+        if group.commissionerId == userId {
+            if group.memberIds.count == 1 {
+                try await deleteGroup(groupId: groupId)
+                return
+            }
+            guard let successor = group.memberIds.first(where: { $0 != userId }) else {
+                try await deleteGroup(groupId: groupId)
+                return
+            }
+            try await transferCommissioner(groupId: groupId, toUserId: successor)
+        }
+
+        guard let updated = groups.first(where: { $0.id == groupId }) else { return }
+        try await removeMemberFromGroup(group: updated, userId: userId)
+    }
+
+    private func removeMemberFromGroup(group: PickemGroup, userId: String) async throws {
+        let groupId = group.id
         let updatedIds = group.memberIds.filter { $0 != userId }
         try await db.collection("groups").document(groupId).updateData(["memberIds": updatedIds])
         try await db.collection("groups").document(groupId)
@@ -262,9 +323,7 @@ final class GroupService {
             if let next = selectedGroup {
                 await syncCurrentWeekFromESPN(groupId: next.id)
             } else {
-                currentWeek = nil
-                standings = nil
-                members = []
+                clearWeekObservationIfNeeded()
                 seasonArchives = []
                 careerRecords = []
             }
@@ -308,12 +367,31 @@ final class GroupService {
         groups.removeAll { $0.id == groupId }
         if selectedGroup?.id == groupId {
             selectedGroup = groups.first
-            currentWeek = nil
-            standings = nil
-            self.members = []
-            seasonArchives = []
-            careerRecords = []
+            if selectedGroup == nil {
+                clearWeekObservationIfNeeded()
+                seasonArchives = []
+                careerRecords = []
+            } else if let next = selectedGroup {
+                await syncCurrentWeekFromESPN(groupId: next.id)
+            }
         }
+    }
+
+    /// Clears listeners and membership state on sign-out.
+    func resetSession() {
+        groupListener?.remove()
+        groupListener = nil
+        seasonsListener?.remove()
+        careerListener?.remove()
+        seasonsListener = nil
+        careerListener = nil
+        clearWeekObservationIfNeeded()
+        groups = []
+        selectedGroup = nil
+        seasonArchives = []
+        careerRecords = []
+        hasCompletedInitialGroupLoad = false
+        errorMessage = nil
     }
 
     /// Transfers commissioner role to another member. Only one commissioner at a time.
@@ -720,6 +798,10 @@ final class GroupService {
     }
 
     private func observeGroupDetails(groupId: String, weekId: String) {
+        if observedGroupId == groupId, observedWeekId == weekId, weekListener != nil {
+            return
+        }
+
         weekListener?.remove()
         standingsListener?.remove()
         if observedGroupId != groupId {
@@ -740,8 +822,18 @@ final class GroupService {
                             "group_id": groupId,
                             "week_id": weekId,
                         ], recordNonFatal: false)
+                        // Keep the last good week — clearing nil here is what made Home twitch.
+                        return
                     }
-                    self?.currentWeek = try? snapshot?.data(as: WeekSummary.self)
+                    guard let snapshot, snapshot.exists else { return }
+                    do {
+                        self?.currentWeek = try snapshot.data(as: WeekSummary.self)
+                    } catch {
+                        AppLog.error(AppLog.firestore, "week decode failed", error: error, metadata: [
+                            "group_id": groupId,
+                            "week_id": weekId,
+                        ])
+                    }
                 }
             }
 
@@ -754,8 +846,10 @@ final class GroupService {
                             "listener": "standings",
                             "group_id": groupId,
                         ], recordNonFatal: false)
+                        return
                     }
-                    self?.standings = try? snapshot?.data(as: GroupStandings.self)
+                    guard let snapshot, snapshot.exists else { return }
+                    self?.standings = try? snapshot.data(as: GroupStandings.self)
                 }
             }
 
@@ -770,6 +864,19 @@ final class GroupService {
                 ])
             }
         }
+    }
+
+    private func clearWeekObservationIfNeeded() {
+        weekListener?.remove()
+        standingsListener?.remove()
+        weekListener = nil
+        standingsListener = nil
+        observedWeekId = nil
+        observedGroupId = nil
+        currentWeek = nil
+        cfbWeek = nil
+        standings = nil
+        members = []
     }
 
     private func observeDynasty(groupId: String) {

@@ -30,9 +30,12 @@ enum AuthRouting {
     static func needsOnboarding(
         userId: String?,
         hasGroup: Bool,
-        hasCompletedOnboarding: Bool
+        hasCompletedOnboarding: Bool = false
     ) -> Bool {
+        // Join/create is optional: once the user skips (or finishes) onboarding,
+        // send them to main even without a league. Home still offers Join/Create.
         guard userId != nil else { return true }
-        return !hasGroup && !hasCompletedOnboarding
+        if hasGroup || hasCompletedOnboarding { return false }
+        return true
     }
 }

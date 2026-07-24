@@ -578,11 +578,8 @@ struct ProfileView: View {
             isDeletingAccount = true
             defer { isDeletingAccount = false }
             do {
-                let groups = appState.groupService.groups
                 if let userId = appState.authService.currentUserId {
-                    for group in groups {
-                        try await appState.groupService.leaveGroup(groupId: group.id, userId: userId)
-                    }
+                    try await appState.groupService.leaveAllGroupsForAccountDeletion(userId: userId)
                 }
                 try await appState.authService.deleteAccount()
                 PickemsHaptics.success()

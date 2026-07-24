@@ -54,6 +54,11 @@ struct OnboardingView: View {
                         createSection
                     }
 
+                    SecondaryButton("Skip for now") {
+                        skipOnboarding()
+                    }
+                    .accessibilityHint("Continue to the app without joining a league")
+
                     if isWorking {
                         ProgressView()
                             .tint(theme.accent)
@@ -192,6 +197,16 @@ struct OnboardingView: View {
             } catch {
                 localError = error.localizedDescription
             }
+        }
+    }
+
+    private func skipOnboarding() {
+        Task {
+            guard let user = await resolvedUser() else {
+                localError = "No signed-in user. Sign in to continue."
+                return
+            }
+            appState.finishOnboarding(for: user.id)
         }
     }
 

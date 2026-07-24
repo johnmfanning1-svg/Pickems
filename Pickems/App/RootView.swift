@@ -74,6 +74,9 @@ struct RootView: View {
             if !appState.authService.authStateDetermined {
                 return .loading
             }
+            if !appState.groupService.hasCompletedInitialGroupLoad {
+                return .loading
+            }
             return AuthRouting.destination(
                 authStateDetermined: true,
                 isAuthenticated: true,
@@ -87,10 +90,17 @@ struct RootView: View {
         _ = appState.authService.currentUser?.id
         _ = appState.groupService.groups.count
         _ = appState.groupService.selectedGroup?.id
+        _ = appState.groupService.hasCompletedInitialGroupLoad
+
+        let authenticated = appState.authService.isAuthenticated
+        let determined = appState.authService.authStateDetermined
+        if determined, authenticated, !appState.groupService.hasCompletedInitialGroupLoad {
+            return .loading
+        }
 
         return AuthRouting.destination(
-            authStateDetermined: appState.authService.authStateDetermined,
-            isAuthenticated: appState.authService.isAuthenticated,
+            authStateDetermined: determined,
+            isAuthenticated: authenticated,
             needsOnboarding: appState.needsOnboarding
         )
     }

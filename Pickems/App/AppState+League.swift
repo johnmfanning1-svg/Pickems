@@ -15,6 +15,9 @@ extension AppState {
         _ = authService.onboardingRevision
         _ = groupService.groups
         _ = groupService.selectedGroup
+        _ = groupService.hasCompletedInitialGroupLoad
+        // Wait for the first groups snapshot so we don't flash Onboarding for returning members.
+        guard groupService.hasCompletedInitialGroupLoad else { return false }
         return AuthRouting.needsOnboarding(
             userId: currentUserId,
             hasGroup: !groupService.groups.isEmpty || groupService.selectedGroup != nil,
@@ -78,6 +81,7 @@ extension AppState {
     func presentFavoriteTeamPromptIfNeeded() {
         guard let userId = currentUserId else { return }
         guard !needsOnboarding else { return }
+        guard !showJoinGroupSheet else { return }
         guard authService.currentUser?.favoriteTeamId == nil else { return }
         guard !authService.hasDismissedFavoriteTeamPrompt(for: userId) else { return }
         showFavoriteTeamPicker = true

@@ -49,7 +49,10 @@ struct PickemsApp: App {
                         #if DEBUG
                         guard !DevAuthBypass.isEnabled else { return }
                         #endif
-                        guard signedIn else { return }
+                        guard signedIn else {
+                            appState.groupService.resetSession()
+                            return
+                        }
                         Task { await appState.onAuthStateReady() }
                     }
                     .onChange(of: appState.needsOnboarding) { wasOnboarding, needsOnboarding in

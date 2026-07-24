@@ -79,7 +79,7 @@ struct HomeView: View {
             .refreshable {
                 await viewModel.refresh(appState: appState)
             }
-            .task(id: refreshKey) {
+            .task(id: appState.groupService.selectedGroup?.id) {
                 await appState.syncSelectedWeek()
                 viewModel.startLiveUpdates(appState: appState)
                 WidgetSnapshotService.publish(from: appState)
@@ -120,12 +120,6 @@ struct HomeView: View {
                     .pickemsEnvironment(appState)
             }
         }
-    }
-
-    private var refreshKey: String {
-        let groupId = appState.groupService.selectedGroup?.id ?? ""
-        let weekId = appState.groupService.currentWeek?.id ?? ""
-        return "\(groupId)-\(weekId)"
     }
 
     private var heroPulse: some View {
@@ -223,11 +217,31 @@ struct HomeView: View {
                 }
                 .padding(.horizontal)
             } else {
-                EmptyStateView(
-                    icon: "person.3.fill",
-                    title: "Join a league",
-                    message: "Create or join a group to start this week's pulse."
-                )
+                VStack(spacing: 16) {
+                    EmptyStateView(
+                        icon: "person.3.fill",
+                        title: "Join a league",
+                        message: "Create or join a group to start this week's pulse."
+                    )
+                    HStack(spacing: 12) {
+                        Button {
+                            showJoinSheet = true
+                        } label: {
+                            Label("Join / Search", systemImage: "magnifyingglass")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        Button {
+                            showCreateWizard = true
+                        } label: {
+                            Label("Create", systemImage: "plus.circle")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(theme.accent)
+                    }
+                    .padding(.horizontal)
+                }
             }
         }
     }

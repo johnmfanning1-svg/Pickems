@@ -53,7 +53,7 @@ struct AuthRoutingTests {
         )
     }
 
-    @Test func needsOnboardingUntilLeagueOrFlag() {
+    @Test func needsOnboardingUntilLeagueJoinedOrSkipped() {
         #expect(
             AuthRouting.needsOnboarding(
                 userId: "u1",
@@ -68,6 +68,7 @@ struct AuthRoutingTests {
                 hasCompletedOnboarding: false
             )
         )
+        // Skipping onboarding without a league lands on main; Home offers Join/Create.
         #expect(
             !AuthRouting.needsOnboarding(
                 userId: "u1",
