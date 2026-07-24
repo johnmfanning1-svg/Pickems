@@ -6,6 +6,9 @@ struct GroupsView: View {
     @State private var showCommissionerSettings = false
     @State private var showCreateLeague = false
     @State private var manageExpanded = false
+    @State private var showLeaveConfirm = false
+    @State private var showDeleteConfirm = false
+    @State private var leagueActionError: String?
 
     var body: some View {
         NavigationStack {
@@ -77,6 +80,49 @@ struct GroupsView: View {
             .sheet(isPresented: $showCreateLeague) {
                 CreateGroupWizardView()
                     .pickemsEnvironment(appState)
+            }
+            .confirmationDialog("Leave this league?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
+                Button("Leave League", role: .destructive) { leaveSelectedLeague() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You’ll lose access until you rejoin with the invite code.")
+            }
+            .confirmationDialog("Delete this league permanently?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("Delete League", role: .destructive) { deleteSelectedLeague() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently deletes the league, invite code, members, picks, standings, and season history. This cannot be undone.")
+            }
+        }
+    }
+
+    private func leaveSelectedLeague() {
+        guard let group = appState.groupService.selectedGroup,
+              let userId = appState.authService.currentUser?.id else { return }
+        leagueActionError = nil
+        Task {
+            do {
+                try await appState.groupService.leaveGroup(groupId: group.id, userId: userId)
+                PickemsHaptics.success()
+            } catch {
+                leagueActionError = UserFacingError.message(for: error, context: .write)
+                    ?? error.localizedDescription
+                PickemsHaptics.warning()
+            }
+        }
+    }
+
+    private func deleteSelectedLeague() {
+        guard let group = appState.groupService.selectedGroup else { return }
+        leagueActionError = nil
+        Task {
+            do {
+                try await appState.groupService.deleteGroup(groupId: group.id)
+                PickemsHaptics.success()
+            } catch {
+                leagueActionError = UserFacingError.message(for: error, context: .write)
+                    ?? error.localizedDescription
+                PickemsHaptics.warning()
             }
         }
     }
@@ -292,6 +338,32 @@ struct GroupsView: View {
                     }
 
                     ShareAppButton(leagueName: group.name, label: "Invite via X")
+
+                    if appState.isCommissioner {
+                        manageRow(
+                            title: "Delete League",
+                            systemImage: "trash",
+                            hint: "Permanently delete this league and all of its data"
+                        ) {
+                            showDeleteConfirm = true
+                        }
+                    } else {
+                        manageRow(
+                            title: "Leave League",
+                            systemImage: "rectangle.portrait.and.arrow.right",
+                            hint: "Leave this league; you can rejoin with the invite code"
+                        ) {
+                            showLeaveConfirm = true
+                        }
+                    }
+
+                    if let leagueActionError {
+                        Text(leagueActionError)
+                            .font(.caption)
+                            .foregroundStyle(PickemsColors.warning)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 4)
+                    }
                 }
                 .padding(.top, 10)
                 .transition(.opacity.combined(with: .move(edge: .top)))

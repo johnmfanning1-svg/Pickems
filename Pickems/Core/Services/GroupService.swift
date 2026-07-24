@@ -242,18 +242,16 @@ final class GroupService {
         }
         guard group.memberIds.contains(userId) else { return }
 
+        // Commissioners must transfer the role first (or delete if they are alone).
         if group.commissionerId == userId {
             if group.memberIds.count == 1 {
                 try await deleteGroup(groupId: groupId)
                 return
             }
-            guard let successor = group.memberIds.first(where: { $0 != userId }) else {
-                throw GroupError.cannotLeaveAsSoleCommissioner
-            }
-            try await transferCommissioner(groupId: groupId, toUserId: successor)
+            throw GroupError.cannotLeaveAsSoleCommissioner
         }
 
-        var updatedIds = group.memberIds.filter { $0 != userId }
+        let updatedIds = group.memberIds.filter { $0 != userId }
         try await db.collection("groups").document(groupId).updateData(["memberIds": updatedIds])
         try await db.collection("groups").document(groupId)
             .collection("members").document(userId).delete()
@@ -270,6 +268,10 @@ final class GroupService {
                 seasonArchives = []
                 careerRecords = []
             }
+        }
+        if group.isPublic {
+            try? await db.collection("publicLeagues").document(groupId)
+                .updateData(["memberCount": updatedIds.count])
         }
     }
 
@@ -300,6 +302,7 @@ final class GroupService {
         }
         try await groupRef.collection("standings").document("current").delete()
         try await db.collection("inviteCodes").document(group.inviteCode).delete()
+        try? await db.collection("publicLeagues").document(groupId).delete()
         try await groupRef.delete()
 
         groups.removeAll { $0.id == groupId }
@@ -313,21 +316,30 @@ final class GroupService {
         }
     }
 
+    /// Transfers commissioner role to another member. Only one commissioner at a time.
     func transferCommissioner(groupId: String, toUserId: String) async throws {
         guard let group = groups.first(where: { $0.id == groupId }) else {
             throw GroupError.groupNotFound
         }
+        guard let currentUid = Auth.auth().currentUser?.uid,
+              group.commissionerId == currentUid else {
+            throw GroupError.notCommissioner
+        }
+        guard toUserId != group.commissionerId else { return }
+        guard group.memberIds.contains(toUserId) else {
+            throw GroupError.groupNotFound
+        }
+
         let previousCommissionerId = group.commissionerId
 
         try await db.collection("groups").document(groupId).updateData(["commissionerId": toUserId])
         try await db.collection("groups").document(groupId)
             .collection("members").document(toUserId)
             .updateData(["role": GroupMember.MemberRole.commissioner.rawValue])
-        if previousCommissionerId != toUserId {
-            try await db.collection("groups").document(groupId)
-                .collection("members").document(previousCommissionerId)
-                .updateData(["role": GroupMember.MemberRole.member.rawValue])
-        }
+        try await db.collection("groups").document(groupId)
+            .collection("members").document(previousCommissionerId)
+            .updateData(["role": GroupMember.MemberRole.member.rawValue])
+
         if var group = groups.first(where: { $0.id == groupId }) {
             group.commissionerId = toUserId
             if let idx = groups.firstIndex(where: { $0.id == groupId }) {
@@ -336,6 +348,12 @@ final class GroupService {
             if selectedGroup?.id == groupId {
                 selectedGroup = group
             }
+        }
+        if let idx = members.firstIndex(where: { $0.id == toUserId }) {
+            members[idx].role = .commissioner
+        }
+        if let idx = members.firstIndex(where: { $0.id == previousCommissionerId }) {
+            members[idx].role = .member
         }
     }
 
@@ -817,8 +835,8 @@ final class GroupService {
             case .invalidGroupName: return "League names must be 2–40 characters."
             case .cannotRemoveCommissioner: return "You can't remove yourself as commissioner. Transfer the role or delete the league."
             case .groupNotFound: return "Group not found."
-            case .notCommissioner: return "Only the commissioner can delete this group."
-            case .cannotLeaveAsSoleCommissioner: return "Transfer commissioner role or delete the group before leaving."
+            case .notCommissioner: return "Only the commissioner can do that."
+            case .cannotLeaveAsSoleCommissioner: return "Transfer commissioner to someone else before leaving, or delete the league if you're the only member."
             case .seasonAlreadyClosed: return "That season is already archived."
             case .noMembersToArchive: return "No members to archive for this season."
             case .signInRequired: return "Sign in to continue."

@@ -35,7 +35,7 @@ actor ESPNService {
             seasonYear: season,
             weekNumber: week,
             seasonType: decoded.season?.type ?? 2,
-            label: "Season \(season) | Week \(week)"
+            label: "Season \(String(season)) | Week \(week)"
         )
         weekCache = info
         weekCacheTime = Date()

@@ -49,7 +49,7 @@ enum ShareTextBuilder {
     }
 
     static func seasonHeadline(for standing: SeasonStanding) -> String {
-        "\(standing.season) \(standing.leagueName) — Final Standings"
+        "\(standing.season.pickemsYearString) \(standing.leagueName) — Final Standings"
     }
 
     static func seasonStatsLine(for standing: SeasonStanding) -> String {

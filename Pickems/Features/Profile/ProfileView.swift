@@ -18,6 +18,8 @@ struct ProfileView: View {
     @State private var isDeletingAccount = false
     @State private var showTeamPicker = false
     @State private var showScrimmage = false
+    @State private var showTransferConfirm = false
+    @State private var memberToPromote: GroupMember?
     @State private var managementError: String?
     @State private var presentedHelp: HelpTopic?
 
@@ -84,12 +86,27 @@ struct ProfileView: View {
             .confirmationDialog("Leave this league?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
                 Button("Leave League", role: .destructive) { leaveGroup() }
                 Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You’ll lose access until you rejoin with the invite code.")
             }
             .confirmationDialog("Delete this league permanently?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
                 Button("Delete League", role: .destructive) { deleteGroup() }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("All members will lose access. This cannot be undone.")
+                Text("This permanently deletes the league, invite code, all members’ access, picks, standings, and season history. This cannot be undone.")
+            }
+            .confirmationDialog(
+                "Make \(memberToPromote?.displayName ?? "member") the commissioner?",
+                isPresented: $showTransferConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Transfer Commissioner", role: .destructive) {
+                    if let member = memberToPromote { transferCommissioner(to: member) }
+                    memberToPromote = nil
+                }
+                Button("Cancel", role: .cancel) { memberToPromote = nil }
+            } message: {
+                Text("You become a regular member. Only one commissioner is allowed at a time.")
             }
             .confirmationDialog("Sign out of Pickems?", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
                 Button("Sign Out", role: .destructive) { signOut() }
@@ -356,6 +373,25 @@ struct ProfileView: View {
                     .listRowBackground(PickemsColors.cardBackground)
 
                 if appState.isCommissioner {
+                    let transferCandidates = appState.groupService.members
+                        .filter { $0.id != group.commissionerId }
+                        .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+
+                    if !transferCandidates.isEmpty {
+                        Menu {
+                            ForEach(transferCandidates) { member in
+                                Button(member.displayName) {
+                                    memberToPromote = member
+                                    showTransferConfirm = true
+                                }
+                            }
+                        } label: {
+                            Label("Transfer Commissioner…", systemImage: "crown")
+                                .foregroundStyle(theme.accent)
+                        }
+                        .listRowBackground(PickemsColors.cardBackground)
+                    }
+
                     Button(role: .destructive) {
                         showDeleteConfirm = true
                     } label: {
@@ -363,6 +399,7 @@ struct ProfileView: View {
                     }
                     .buttonStyle(.borderless)
                     .listRowBackground(PickemsColors.cardBackground)
+                    .accessibilityHint("Permanently delete this league and all of its data")
                 } else {
                     Button(role: .destructive) {
                         showLeaveConfirm = true
@@ -511,6 +548,19 @@ struct ProfileView: View {
                 PickemsHaptics.success()
             } catch {
                 managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
+            }
+        }
+    }
+
+    private func transferCommissioner(to member: GroupMember) {
+        guard let group = appState.groupService.selectedGroup else { return }
+        Task {
+            do {
+                try await appState.groupService.transferCommissioner(groupId: group.id, toUserId: member.id)
+                PickemsHaptics.success()
+            } catch {
+                managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
+                PickemsHaptics.warning()
             }
         }
     }

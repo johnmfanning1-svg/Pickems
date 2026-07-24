@@ -70,7 +70,7 @@ struct DynastySectionView: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("\(archive.seasonYear) Champion")
+                    Text("\(archive.seasonYear.pickemsYearString) Champion")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(PickemsColors.textSecondary)
                     Text(archive.championDisplayName ?? "TBD")
@@ -140,7 +140,7 @@ struct DynastyDetailView: View {
                     ForEach(archives) { archive in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                Text(String(archive.seasonYear))
+                                Text(archive.seasonYear.pickemsYearString)
                                     .font(.headline)
                                     .foregroundStyle(PickemsColors.textPrimary)
                                 Spacer()

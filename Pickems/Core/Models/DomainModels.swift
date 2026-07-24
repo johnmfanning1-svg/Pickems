@@ -86,7 +86,7 @@ struct WeekSummary: Codable, Identifiable, Equatable {
     var awards: WeekAwards? = nil
 
     var displayLabel: String {
-        "Season \(seasonYear) | Week \(weekNumber)"
+        "Season \(seasonYear.pickemsYearString) | Week \(weekNumber)"
     }
 }
 

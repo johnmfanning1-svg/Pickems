@@ -19,6 +19,9 @@ struct CommissionerSettingsView: View {
     @State private var identityError: String?
     @State private var memberToRemove: GroupMember?
     @State private var memberActionError: String?
+    @State private var memberToPromote: GroupMember?
+    @State private var showDeleteLeagueConfirm = false
+    @State private var isWorkingMembers = false
 
     @FocusState private var codeFieldFocused: Bool
 
@@ -148,7 +151,7 @@ struct CommissionerSettingsView: View {
 
                 Section {
                     if seasonAlreadyClosed {
-                        LabeledContent("Season \(seasonYearToClose)", value: "Archived")
+                        LabeledContent("Season \(seasonYearToClose.pickemsYearString)", value: "Archived")
                             .listRowBackground(PickemsColors.cardBackground)
                     } else {
                         Button(role: .destructive) {
@@ -157,10 +160,10 @@ struct CommissionerSettingsView: View {
                             if appState.groupService.isClosingSeason {
                                 HStack {
                                     ProgressView()
-                                    Text("Closing Season \(seasonYearToClose)…")
+                                    Text("Closing Season \(seasonYearToClose.pickemsYearString)…")
                                 }
                             } else {
-                                Label("Close Season \(seasonYearToClose)", systemImage: "trophy.fill")
+                                Label("Close Season \(seasonYearToClose.pickemsYearString)", systemImage: "trophy.fill")
                             }
                         }
                         .disabled(appState.groupService.isClosingSeason)
@@ -194,14 +197,14 @@ struct CommissionerSettingsView: View {
                 }
             }
             .confirmationDialog(
-                "Close Season \(seasonYearToClose)?",
+                "Close Season \(seasonYearToClose.pickemsYearString)?",
                 isPresented: $showCloseSeasonConfirm,
                 titleVisibility: .visible
             ) {
                 Button("Close Season", role: .destructive) { closeSeason() }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This archives \(seasonYearToClose) standings and resets everyone’s season record. This cannot be undone.")
+                Text("This archives \(seasonYearToClose.pickemsYearString) standings and resets everyone’s season record. This cannot be undone.")
             }
             .confirmationDialog(
                 "Remove \(memberToRemove?.displayName ?? "member")?",
@@ -217,7 +220,33 @@ struct CommissionerSettingsView: View {
                 }
                 Button("Cancel", role: .cancel) { memberToRemove = nil }
             } message: {
-                Text("They lose access to this league but can rejoin with the invite code.")
+                Text("They lose access to this league’s picks and standings. They can rejoin with the invite code.")
+            }
+            .confirmationDialog(
+                "Make \(memberToPromote?.displayName ?? "member") the commissioner?",
+                isPresented: Binding(
+                    get: { memberToPromote != nil },
+                    set: { if !$0 { memberToPromote = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Transfer Commissioner", role: .destructive) {
+                    if let member = memberToPromote { transferCommissioner(to: member) }
+                    memberToPromote = nil
+                }
+                Button("Cancel", role: .cancel) { memberToPromote = nil }
+            } message: {
+                Text("You become a regular member. Only one commissioner is allowed at a time.")
+            }
+            .confirmationDialog(
+                "Delete this league permanently?",
+                isPresented: $showDeleteLeagueConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Delete League", role: .destructive) { deleteLeague() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently deletes the league, invite code, members, picks, standings, and season history for everyone. This cannot be undone.")
             }
         }
     }
@@ -333,6 +362,16 @@ struct CommissionerSettingsView: View {
                                 .foregroundStyle(PickemsColors.textSecondary)
                         }
                         Spacer()
+                        Button {
+                            memberToPromote = member
+                        } label: {
+                            Image(systemName: "crown")
+                                .foregroundStyle(theme.accent)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Make \(member.displayName) commissioner")
+                        .disabled(isWorkingMembers)
+
                         Button(role: .destructive) {
                             memberToRemove = member
                         } label: {
@@ -341,10 +380,32 @@ struct CommissionerSettingsView: View {
                         }
                         .buttonStyle(.borderless)
                         .accessibilityLabel("Remove \(member.displayName)")
+                        .disabled(isWorkingMembers)
                     }
                     .listRowBackground(PickemsColors.cardBackground)
                 }
+
+                Menu {
+                    ForEach(otherMembers) { member in
+                        Button(member.displayName) {
+                            memberToPromote = member
+                        }
+                    }
+                } label: {
+                    Label("Transfer Commissioner…", systemImage: "crown")
+                        .foregroundStyle(theme.accent)
+                }
+                .listRowBackground(PickemsColors.cardBackground)
+                .disabled(isWorkingMembers)
             }
+
+            Button(role: .destructive) {
+                showDeleteLeagueConfirm = true
+            } label: {
+                Label("Delete League", systemImage: "trash")
+            }
+            .listRowBackground(PickemsColors.cardBackground)
+            .disabled(isWorkingMembers)
 
             if let memberActionError {
                 Text(memberActionError)
@@ -353,9 +414,9 @@ struct CommissionerSettingsView: View {
                     .listRowBackground(PickemsColors.cardBackground)
             }
         } header: {
-            Text("Members")
+            Text("Members & Ownership")
         } footer: {
-            Text("Removing a member deletes their spot in this league. They can rejoin with the invite code.")
+            Text("Remove members, transfer commissioner (one at a time), or delete the entire league. Deleting erases all picks and standings.")
         }
     }
 
@@ -425,12 +486,49 @@ struct CommissionerSettingsView: View {
 
     private func removeMember(_ member: GroupMember) {
         memberActionError = nil
+        isWorkingMembers = true
         Task {
+            defer { isWorkingMembers = false }
             do {
                 try await appState.groupService.removeMember(groupId: group.id, userId: member.id)
                 PickemsHaptics.success()
             } catch {
-                memberActionError = error.localizedDescription
+                memberActionError = UserFacingError.message(for: error, context: .write)
+                    ?? error.localizedDescription
+                PickemsHaptics.warning()
+            }
+        }
+    }
+
+    private func transferCommissioner(to member: GroupMember) {
+        memberActionError = nil
+        isWorkingMembers = true
+        Task {
+            defer { isWorkingMembers = false }
+            do {
+                try await appState.groupService.transferCommissioner(groupId: group.id, toUserId: member.id)
+                PickemsHaptics.success()
+                dismiss()
+            } catch {
+                memberActionError = UserFacingError.message(for: error, context: .write)
+                    ?? error.localizedDescription
+                PickemsHaptics.warning()
+            }
+        }
+    }
+
+    private func deleteLeague() {
+        memberActionError = nil
+        isWorkingMembers = true
+        Task {
+            defer { isWorkingMembers = false }
+            do {
+                try await appState.groupService.deleteGroup(groupId: group.id)
+                PickemsHaptics.success()
+                dismiss()
+            } catch {
+                memberActionError = UserFacingError.message(for: error, context: .write)
+                    ?? error.localizedDescription
                 PickemsHaptics.warning()
             }
         }

@@ -8,7 +8,7 @@ struct SeasonStandingsView: View {
             List {
                 Section("Final Standing") {
                     LabeledContent("League", value: standing.leagueName)
-                    LabeledContent("Season", value: "\(standing.season)")
+                    LabeledContent("Season", value: standing.season.pickemsYearString)
                     LabeledContent("Rank", value: standing.placementText)
                     LabeledContent("Points", value: "\(standing.totalPoints)")
                     LabeledContent("Weekly Wins", value: "\(standing.weeklyWins)")
@@ -25,7 +25,7 @@ struct SeasonStandingsView: View {
                     Text("Post your end-of-year results by text or X and let the league know who really won.")
                 }
             }
-            .navigationTitle("Season \(standing.season)")
+            .navigationTitle("Season \(standing.season.pickemsYearString)")
         }
     }
 }
