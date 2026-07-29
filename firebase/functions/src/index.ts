@@ -13,49 +13,25 @@ import {
   rankEntries,
   computeWeekAwards,
 } from "./scoring";
+import { materializeNominations } from "./materialize";
 
 admin.initializeApp();
 const db = admin.firestore();
 
-async function materializeNominations(
-  groupId: string,
-  weekId: string
-): Promise<number> {
-  const weekRef = db.collection("groups").doc(groupId).collection("weeks").doc(weekId);
-  const noms = await weekRef.collection("nominations").get();
-  const games = await weekRef.collection("games").get();
-  if (!games.empty) return games.size;
+// Callable admin surface for the web portal — claim-gated, audit-logged.
+export {
+  setAdminRole,
+  adminSetWeekStatus,
+  adminRematerializeNominations,
+  adminUpsertPick,
+  adminRemoveMember,
+  adminTransferCommissioner,
+  adminAuditWeekIds,
+  adminRescoreWeek,
+} from "./admin";
 
-  let written = 0;
-  const batch = db.batch();
-  for (const doc of noms.docs) {
-    const n = doc.data();
-    const espnEventId = n.espnEventId as string;
-    const gameRef = weekRef.collection("games").doc(espnEventId);
-    batch.set(gameRef, {
-      id: espnEventId,
-      espnEventId,
-      homeTeamId: n.homeTeamId ?? "home",
-      homeTeamName: n.homeTeamName ?? "Home",
-      homeTeamAbbreviation: n.homeTeamAbbreviation ?? "HOME",
-      homeTeamLogoURL: n.homeTeamLogoURL ?? null,
-      awayTeamId: n.awayTeamId ?? "away",
-      awayTeamName: n.awayTeamName ?? "Away",
-      awayTeamAbbreviation: n.awayTeamAbbreviation ?? "AWAY",
-      awayTeamLogoURL: n.awayTeamLogoURL ?? null,
-      spread: Math.abs(Number(n.spread ?? 0)),
-      spreadTeamId: n.spreadTeamId ?? n.homeTeamId ?? "home",
-      kickoff: n.kickoff,
-      status: "scheduled",
-      homeScore: null,
-      awayScore: null,
-      winnerTeamId: null,
-    });
-    written += 1;
-  }
-  if (written > 0) await batch.commit();
-  return written;
-}
+// Group chat — push fan-out plus the report counter clients cannot write.
+export { onMessageCreated, onReportCreated } from "./chat";
 
 /** When a week flips to picking, materialize nominations into games if needed. */
 export const onWeekStatusChange = onDocumentUpdated(

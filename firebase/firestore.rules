@@ -6,14 +6,25 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Super-user privilege lives in the Auth ID token, not in a Firestore doc:
+    // it costs zero reads and no client write can ever grant it.
+    // Granted with firebase/admin-tools/set-admin.mjs or the setAdminRole callable.
+    function isSuperAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
     function isGroupMember(groupId) {
       return isSignedIn()
         && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
     }
 
+    // Super admins are commissioner-equivalent everywhere. The claim check is
+    // first so it short-circuits before the group get() — that keeps admin
+    // access working even when the group doc is missing or already deleted.
     function isCommissioner(groupId) {
       return isSignedIn()
-        && get(/databases/$(database)/documents/groups/$(groupId)).data.commissionerId == request.auth.uid;
+        && (isSuperAdmin()
+            || get(/databases/$(database)/documents/groups/$(groupId)).data.commissionerId == request.auth.uid);
     }
 
     function isJoiningGroup() {
@@ -104,93 +115,162 @@ service cloud.firestore {
 
     match /groups/{groupId} {
       // `get` allows invite join (user has groupId from inviteCodes but is not a member yet).
-      // `list` stays membership-scoped so the arrayContains query remains secure.
+      // `list` stays membership-scoped so the arrayContains query remains secure;
+      // the admin portal needs an unscoped list, which only the claim grants.
       allow get: if isSignedIn();
-      allow list: if isSignedIn() && request.auth.uid in resource.data.memberIds;
+      allow list: if isSuperAdmin() || (isSignedIn() && request.auth.uid in resource.data.memberIds);
       allow create: if isSignedIn();
       allow update: if isCommissioner(groupId) || isJoiningGroup() || isLeavingGroup();
       allow delete: if isCommissioner(groupId);
 
       match /members/{memberId} {
-        allow read: if isGroupMember(groupId);
-        allow create: if isSignedIn() && request.auth.uid == memberId;
+        allow read: if isGroupMember(groupId) || isSuperAdmin();
+        allow create: if isSuperAdmin() || (isSignedIn() && request.auth.uid == memberId);
         allow update, delete: if isCommissioner(groupId) || (isSignedIn() && request.auth.uid == memberId);
       }
 
       match /weeks/{weekId} {
-        allow read: if isGroupMember(groupId);
+        allow read: if isGroupMember(groupId) || isSuperAdmin();
         allow create: if isCommissioner(groupId) || isGroupMember(groupId);
-        allow update: if isCommissioner(groupId) && commissionerWeekFieldUpdate()
+        // Admins bypass the field-level allow-lists so the portal can repair
+        // arbitrary week fields — that is the point of the portal.
+        allow update: if isSuperAdmin()
+          || (isCommissioner(groupId) && commissionerWeekFieldUpdate())
           || (isGroupMember(groupId) && memberWeekFieldUpdate());
         // Commissioner tears down week docs when dissolving a league (deleteGroup).
         allow delete: if isCommissioner(groupId);
 
         match /nominations/{nominationId} {
-          allow read: if isGroupMember(groupId);
-          allow create: if isGroupMember(groupId)
-            && weekData(groupId, weekId).status == 'selection'
-            && request.resource.data.submittedBy == request.auth.uid;
+          allow read: if isGroupMember(groupId) || isSuperAdmin();
+          allow create: if isSuperAdmin()
+            || (isGroupMember(groupId)
+                && weekData(groupId, weekId).status == 'selection'
+                && request.resource.data.submittedBy == request.auth.uid);
           allow update, delete: if isCommissioner(groupId)
             || (isSignedIn() && resource.data.submittedBy == request.auth.uid);
         }
 
         match /games/{gameId} {
-          allow read: if isGroupMember(groupId);
+          allow read: if isGroupMember(groupId) || isSuperAdmin();
           allow create, delete: if isCommissioner(groupId);
-          allow update: if isCommissioner(groupId) && commissionerGameUpdate();
+          allow update: if isSuperAdmin()
+            || (isCommissioner(groupId) && commissionerGameUpdate());
         }
 
         match /picks/{pickId} {
-          allow read: if isGroupMember(groupId)
-            && (pickId == request.auth.uid || picksVisibleToAll(groupId, weekId));
-          allow create, update: if isSignedIn()
-            && request.auth.uid == pickId
-            && isGroupMember(groupId)
-            && pickDeadlineOpen(groupId, weekId)
-            && (request.resource.data.isLocked == false
-                || (request.resource.data.isLocked == true
-                    && request.resource.data.submittedAt != null
-                    && (!resource.exists || resource.data.isLocked == false)));
+          allow read: if isSuperAdmin()
+            || (isGroupMember(groupId)
+                && (pickId == request.auth.uid || picksVisibleToAll(groupId, weekId)));
+          allow create, update: if isSuperAdmin()
+            || (isSignedIn()
+                && request.auth.uid == pickId
+                && isGroupMember(groupId)
+                && pickDeadlineOpen(groupId, weekId)
+                && (request.resource.data.isLocked == false
+                    || (request.resource.data.isLocked == true
+                        && request.resource.data.submittedAt != null
+                        && (!resource.exists || resource.data.isLocked == false))));
           // Members can remove their own pick; commissioner clears picks on league teardown.
           allow delete: if isCommissioner(groupId)
             || (isSignedIn() && request.auth.uid == pickId);
         }
 
         match /submissions/{userId} {
-          allow read: if isGroupMember(groupId);
-          allow create, update: if isSignedIn()
-            && request.auth.uid == userId
-            && isGroupMember(groupId)
-            && request.resource.data.userId == userId
-            && !('picks' in request.resource.data);
+          allow read: if isGroupMember(groupId) || isSuperAdmin();
+          allow create, update: if isSuperAdmin()
+            || (isSignedIn()
+                && request.auth.uid == userId
+                && isGroupMember(groupId)
+                && request.resource.data.userId == userId
+                && !('picks' in request.resource.data));
           allow delete: if isCommissioner(groupId)
             || (isSignedIn() && request.auth.uid == userId);
         }
       }
 
       match /standings/{standingId} {
-        allow read: if isGroupMember(groupId);
+        allow read: if isGroupMember(groupId) || isSuperAdmin();
         allow create, update: if isCommissioner(groupId);
         // Commissioner removes standings when dissolving a league (deleteGroup).
         allow delete: if isCommissioner(groupId);
       }
 
       match /seasons/{seasonId} {
-        allow read: if isGroupMember(groupId);
+        allow read: if isGroupMember(groupId) || isSuperAdmin();
         allow create, update: if isCommissioner(groupId);
         allow delete: if isCommissioner(groupId);
       }
 
       match /career/{userId} {
-        allow read: if isGroupMember(groupId);
+        allow read: if isGroupMember(groupId) || isSuperAdmin();
         allow create, update: if isCommissioner(groupId);
         allow delete: if isCommissioner(groupId);
+      }
+
+      // Group chat — one flat collection per group, optional weekId filter.
+      // Needs the (weekId ASC, createdAt DESC) composite index.
+      match /messages/{messageId} {
+        allow read: if isGroupMember(groupId) || isSuperAdmin();
+
+        // `createdAt == request.time` forces a serverTimestamp write, which is
+        // what makes thread ordering untamperable. `reportCount == 0` pinned at
+        // create plus its absence from every update allow-list means the
+        // moderation counter can only ever move via a Cloud Function.
+        allow create: if isGroupMember(groupId)
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.groupId == groupId
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 500
+          && request.resource.data.isDeleted == false
+          && request.resource.data.reportCount == 0
+          && request.resource.data.createdAt == request.time;
+
+        // Author edits own text / soft-deletes; any member may toggle reactions only.
+        allow update: if isSuperAdmin()
+          || (isGroupMember(groupId) && resource.data.userId == request.auth.uid
+              && request.resource.data.diff(resource.data).affectedKeys()
+                   .hasOnly(['text', 'editedAt', 'isDeleted']))
+          || (isGroupMember(groupId)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']))
+          || (isCommissioner(groupId)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isDeleted']));
+
+        allow delete: if isCommissioner(groupId) || isSuperAdmin();
+
+        match /reports/{reporterUid} {
+          allow read: if isCommissioner(groupId) || isSuperAdmin();
+          allow create: if isGroupMember(groupId) && request.auth.uid == reporterUid;
+          allow update, delete: if isSuperAdmin();
+        }
       }
     }
 
     match /publicLeagues/{groupId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isSignedIn() && isCommissioner(groupId);
+    }
+
+    // Remote kill switches and feature flags (appConfig/live). Every signed-in
+    // client reads it at launch; only the portal writes it.
+    match /appConfig/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    // Append-only trail of every privileged action. Callables write these with
+    // the Admin SDK (which bypasses rules); the client path stays create-only.
+    match /adminAudit/{entryId} {
+      allow read: if isSuperAdmin();
+      allow create: if isSuperAdmin();
+      allow update, delete: if false;
+    }
+
+    // Collection-group reads for the admin moderation queue. Nested
+    // `match /groups/{groupId}/messages/{messageId}` does not apply to
+    // collectionGroup("messages") queries — this recursive wildcard does.
+    match /{path=**}/messages/{messageId} {
+      allow read: if isSuperAdmin();
     }
   }
 }

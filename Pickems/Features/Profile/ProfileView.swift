@@ -17,7 +17,6 @@ struct ProfileView: View {
     @State private var showDeleteAccountConfirm = false
     @State private var isDeletingAccount = false
     @State private var showTeamPicker = false
-    @State private var showScrimmage = false
     @State private var showTransferConfirm = false
     @State private var memberToPromote: GroupMember?
     @State private var managementError: String?
@@ -32,7 +31,6 @@ struct ProfileView: View {
                     sharingSection
                 }
                 leaguesSection
-                howToPlaySection
                 legalSection
                 accountActionsSection
             }
@@ -77,10 +75,6 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showTeamPicker) {
                 FavoriteTeamPickerView()
-                    .pickemsEnvironment(appState)
-            }
-            .fullScreenCover(isPresented: $showScrimmage) {
-                ScrimmageView(context: .replay)
                     .pickemsEnvironment(appState)
             }
             .confirmationDialog("Leave this league?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
@@ -427,23 +421,6 @@ struct ProfileView: View {
                     presentedTopic: $presentedHelp
                 )
             }
-        }
-    }
-
-    private var howToPlaySection: some View {
-        Section {
-            Button {
-                showScrimmage = true
-            } label: {
-                Label("Play a Scrimmage", systemImage: "flag.2.crossed.fill")
-            }
-            .buttonStyle(.borderless)
-            .listRowBackground(PickemsColors.cardBackground)
-            .accessibilityHint("Opens the Scrimmage tutorial")
-        } header: {
-            Text("How to Play")
-        } footer: {
-            Text("Replay the tutorial week anytime.")
         }
     }
 

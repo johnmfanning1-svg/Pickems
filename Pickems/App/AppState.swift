@@ -15,6 +15,7 @@ final class AppState {
     let authService = AuthService()
     let groupService = GroupService()
     let pickService = PickService()
+    let chatService = ChatService()
     let notificationService = NotificationService()
     let appTheme = AppTheme()
 

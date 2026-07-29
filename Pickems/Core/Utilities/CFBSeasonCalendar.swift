@@ -2,12 +2,12 @@ import Foundation
 
 /// College football calendar anchors for widgets and in-app season gates.
 enum CFBSeasonCalendar {
-    /// First day of Week 0 for a season year (US Eastern, start of day).
-    static func weekZeroStart(forSeasonYear year: Int) -> Date {
+    /// First day of season kickoff for a season year (US Eastern, start of day).
+    static func seasonKickoff(forSeasonYear year: Int) -> Date {
         var eastern = Calendar(identifier: .gregorian)
         eastern.timeZone = TimeZone(identifier: "America/New_York") ?? .current
 
-        // Published Week 0 openers when known; otherwise last Thursday of August.
+        // Published kickoff openers when known; otherwise last Thursday of August.
         let components: DateComponents
         switch year {
         case 2026:
@@ -20,24 +20,24 @@ enum CFBSeasonCalendar {
         return eastern.date(from: components) ?? Date()
     }
 
-    /// `true` before that season year's Week 0 day (offseason / preseason countdown window).
+    /// `true` before that season year's kickoff day (offseason / preseason countdown window).
     static func isPreseason(on date: Date = Date()) -> Bool {
         let year = seasonYear(containing: date)
-        return date < weekZeroStart(forSeasonYear: year)
+        return date < seasonKickoff(forSeasonYear: year)
     }
 
-    /// Season year whose Week 0 we are counting down to, or currently playing.
+    /// Season year whose kickoff we are counting down to, or currently playing.
     static func seasonYear(containing date: Date = Date()) -> Int {
         var eastern = Calendar(identifier: .gregorian)
         eastern.timeZone = TimeZone(identifier: "America/New_York") ?? .current
         return eastern.component(.year, from: date)
     }
 
-    static func nextWeekZeroStart(on date: Date = Date()) -> Date {
+    static func nextSeasonKickoff(on date: Date = Date()) -> Date {
         let year = seasonYear(containing: date)
-        let thisYear = weekZeroStart(forSeasonYear: year)
+        let thisYear = seasonKickoff(forSeasonYear: year)
         if date < thisYear { return thisYear }
-        return weekZeroStart(forSeasonYear: year + 1)
+        return seasonKickoff(forSeasonYear: year + 1)
     }
 
     /// Days / hours / minutes remaining (floored). Never negative.

@@ -7,7 +7,8 @@ export type PushType =
   | "deadline_passed"
   | "game_final"
   | "took_the_lead"
-  | "season_closed";
+  | "season_closed"
+  | "chat_message";
 
 export async function sendToUser(
   userId: string,

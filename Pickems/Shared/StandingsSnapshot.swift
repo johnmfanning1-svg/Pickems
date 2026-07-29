@@ -16,7 +16,7 @@ struct StandingsSnapshot: Codable, Equatable {
     var totalPlayers: Int
     var topEntries: [SnapshotEntry]
     var updatedAt: Date
-    /// When set and still in the future, the widget shows a Week 0 countdown instead of standings.
+    /// When set and still in the future, the widget shows a kickoff countdown instead of standings.
     var seasonKickoffAt: Date? = nil
 
     struct SnapshotEntry: Codable, Equatable, Identifiable {

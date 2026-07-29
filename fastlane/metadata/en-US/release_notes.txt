@@ -1,0 +1,13 @@
+What's new in 2.3.0
+
+• Sign in with Apple is front and center — email and password when you want it
+• Groups hub: open Group Picks, build the slate, follow live picks, and jump into chat
+• Already-nominated games are greyed out with who took them; Top 25 and conference filters
+• Spreads show across browse, nominations, picks, and group results
+• Commissioners can't add duplicate games
+• Group Picks: collapsible members with picks remaining
+• Group chat with report, block, and delete-own
+• Kickoff countdown (no more "Week 0"); first slate is Week 1
+• FBS slate and sharper ESPN lines
+
+Thanks for the TestFlight feedback — keep the nominations coming.

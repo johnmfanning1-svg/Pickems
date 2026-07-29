@@ -14,10 +14,14 @@ enum FirestoreCollection {
     static let standings = "standings"
     static let seasons = "seasons"
     static let career = "career"
+    static let messages = "messages"
+    static let reports = "reports"
+    static let appConfig = "appConfig"
 }
 
 enum FirestoreDocument {
     static let currentStandings = "current"
+    static let liveConfig = "live"
 }
 
 enum FirestoreField {
@@ -27,6 +31,11 @@ enum FirestoreField {
     static let nominationCount = "nominationCount"
     static let spread = "spread"
     static let spreadTeamId = "spreadTeamId"
+    static let createdAt = "createdAt"
+    static let isDeleted = "isDeleted"
+    static let lastReadChatAt = "lastReadChatAt"
+    static let chatMuted = "chatMuted"
+    static let chatEnabled = "chatEnabled"
 }
 
 extension Firestore {
@@ -49,6 +58,11 @@ extension Firestore {
     func handle(_ key: String) -> DocumentReference {
         collection(FirestoreCollection.handles).document(key)
     }
+
+    /// Remote feature flags and kill switches, written only by the admin portal.
+    var liveAppConfig: DocumentReference {
+        collection(FirestoreCollection.appConfig).document(FirestoreDocument.liveConfig)
+    }
 }
 
 extension DocumentReference {
@@ -63,4 +77,11 @@ extension DocumentReference {
     var nominations: CollectionReference { collection(FirestoreCollection.nominations) }
     var games: CollectionReference { collection(FirestoreCollection.games) }
     var picks: CollectionReference { collection(FirestoreCollection.picks) }
+}
+
+/// Chat lives flat under the group doc — `weekId` is a field, not a path segment,
+/// so one listener powers both the league feed and a week filter.
+extension DocumentReference {
+    var messages: CollectionReference { collection(FirestoreCollection.messages) }
+    var reports: CollectionReference { collection(FirestoreCollection.reports) }
 }

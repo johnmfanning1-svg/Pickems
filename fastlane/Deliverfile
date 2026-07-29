@@ -1,0 +1,14 @@
+# deliver defaults — metadata from git, no binary unless a lane opts in
+
+app_identifier("FannypackInc.Pickems")
+platform("ios")
+
+metadata_path("./fastlane/metadata")
+# screenshots_path("./fastlane/screenshots")  # uncomment when assets exist
+
+skip_binary_upload(true)
+skip_screenshots(true)
+force(true)
+submit_for_review(false)
+automatic_release(false)
+precheck_include_in_app_purchases(false)

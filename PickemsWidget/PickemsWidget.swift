@@ -19,7 +19,7 @@ struct PickemsWidgetProvider: TimelineProvider {
         let now = Date()
 
         if let snapshot, snapshot.showsPreseasonCountdown, let kickoff = snapshot.seasonKickoffAt {
-            // Refresh the countdown about once an hour until Week 0.
+            // Refresh the countdown about once an hour until kickoff.
             var entries: [StandingsEntry] = []
             for hour in 0..<24 {
                 guard let date = Calendar.current.date(byAdding: .hour, value: hour, to: now),
@@ -38,10 +38,10 @@ struct PickemsWidgetProvider: TimelineProvider {
         completion(Timeline(entries: [entry], policy: .after(now.addingTimeInterval(15 * 60))))
     }
 
-    /// Prefer App Group data; synthesize a Week 0 countdown in preseason even before the app publishes.
+    /// Prefer App Group data; synthesize a kickoff countdown in preseason even before the app publishes.
     private func resolveSnapshot() -> StandingsSnapshot? {
         if CFBSeasonCalendar.isPreseason() {
-            let kickoff = CFBSeasonCalendar.nextWeekZeroStart()
+            let kickoff = CFBSeasonCalendar.nextSeasonKickoff()
             if let loaded = PickemsAppGroup.load() {
                 var copy = loaded
                 copy.seasonKickoffAt = kickoff
@@ -53,7 +53,7 @@ struct PickemsWidgetProvider: TimelineProvider {
         }
 
         guard var loaded = PickemsAppGroup.load() else { return nil }
-        // Stale preseason payload after Week 0 — don't keep showing the countdown.
+        // Stale preseason payload after kickoff — don't keep showing the countdown.
         if loaded.seasonKickoffAt != nil {
             loaded.seasonKickoffAt = nil
         }
@@ -196,7 +196,7 @@ struct PickemsWidgetEntryView: View {
                 .foregroundStyle(.primary)
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
-            Text("Until Week 0")
+            Text("Until Kickoff")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.primary)
             Text(kickoff.formatted(.dateTime.month(.abbreviated).day()))
@@ -219,7 +219,7 @@ struct PickemsWidgetEntryView: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.primary)
                 Spacer()
-                Text("Week 0")
+                Text("Kickoff")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -264,7 +264,7 @@ struct PickemsWidgetEntryView: View {
             Text(summary)
                 .font(.headline.weight(.bold))
                 .lineLimit(1)
-            Text("Until Week 0")
+            Text("Until Kickoff")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -283,7 +283,7 @@ struct PickemsWidgetEntryView: View {
                 .font(.caption.weight(.bold).monospacedDigit())
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
-            Text("W0")
+            Text("KO")
                 .font(.caption2)
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
@@ -292,7 +292,7 @@ struct PickemsWidgetEntryView: View {
             AccessoryWidgetBackground()
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(summary) until college football Week 0")
+        .accessibilityLabel("\(summary) until college football kickoff")
     }
 
     // MARK: - In-season standings
@@ -448,7 +448,7 @@ struct PickemsWidgetEntryView: View {
     private func preseasonAccessibilityLabel(snapshot: StandingsSnapshot, kickoff: Date, asOf date: Date) -> String {
         let summary = CFBSeasonCalendar.countdownSummary(to: kickoff, from: date)
         let day = kickoff.formatted(.dateTime.month(.wide).day())
-        return "\(snapshot.groupName). \(summary) until college football Week 0 on \(day)."
+        return "\(snapshot.groupName). \(summary) until college football kickoff on \(day)."
     }
 
     private func rowAccessibilityLabel(
@@ -481,7 +481,7 @@ struct PickemsStandingsWidget: Widget {
             PickemsWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Pickems Standings")
-        .description("Week 0 countdown now; live group standings once the season starts.")
+        .description("Kickoff countdown now; live group standings once the season starts.")
         .supportedFamilies([
             .systemSmall,
             .systemMedium,

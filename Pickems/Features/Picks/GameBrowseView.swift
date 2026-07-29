@@ -14,10 +14,13 @@ struct GameBrowseView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themePalette) private var theme
     let games: [ESPNGame]
+    var nominatedEventIds: Set<String> = []
+    var nominatorNamesByEventId: [String: String] = [:]
     let onSelect: (ESPNGame) -> Void
 
     @State private var searchText = ""
     @State private var filter: GameBrowseFilter = .all
+    @State private var slateFilter: GameSlateFilter = .all
 
     private var favoriteTeamId: String? {
         appState.authService.currentUser?.favoriteTeamId
@@ -27,10 +30,12 @@ struct GameBrowseView: View {
         let base = games
             .filter { matchesSearch($0) }
             .filter { matchesFilter($0) }
+            .filter { matchesSlateFilter($0) }
         return base.sorted { lhs, rhs in
             let lFav = isFavoriteGame(lhs)
             let rFav = isFavoriteGame(rhs)
             if lFav != rFav { return lFav && !rFav }
+            if lhs.isTop25 != rhs.isTop25 { return lhs.isTop25 && !rhs.isTop25 }
             return lhs.kickoff < rhs.kickoff
         }
     }
@@ -38,9 +43,12 @@ struct GameBrowseView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                filterBar
-                    .padding(.horizontal)
-                    .padding(.top, 8)
+                VStack(spacing: 8) {
+                    filterBar
+                    slateFilterBar
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
 
                 if let fav = filteredGames.first(where: isFavoriteGame) {
                     HStack {
@@ -56,11 +64,22 @@ struct GameBrowseView: View {
                 }
 
                 List(filteredGames) { game in
+                    let isNominated = nominatedEventIds.contains(game.espnEventId)
+                    let nominatorName = nominatorNamesByEventId[game.espnEventId]
                     Button {
                         onSelect(game)
                     } label: {
-                        GameBrowseRow(game: game, isFavoriteHighlight: isFavoriteGame(game))
+                        GameBrowseRow(
+                            game: game,
+                            isFavoriteHighlight: isFavoriteGame(game),
+                            isNominated: isNominated,
+                            nominatorName: nominatorName
+                        )
                     }
+                    .opacity(isNominated ? 0.45 : 1)
+                    .disabled(isNominated)
+                    .allowsHitTesting(!isNominated)
+                    .accessibilityRemoveTraits(isNominated ? .isButton : [])
                     .listRowBackground(PickemsColors.cardBackground)
                 }
                 .scrollContentBackground(.hidden)
@@ -83,7 +102,7 @@ struct GameBrowseView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Text("\(filteredGames.count)")
+                    Text("\(filteredGames.count) of \(games.count)")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(PickemsColors.textSecondary)
                 }
@@ -116,9 +135,55 @@ struct GameBrowseView: View {
         }
     }
 
+    private var slateFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                slateChip("All", selected: slateFilter == .all) {
+                    slateFilter = .all
+                }
+                slateChip("Top 25", selected: slateFilter == .top25) {
+                    slateFilter = .top25
+                }
+                ForEach(ESPNConferenceCatalog.fbs) { conference in
+                    slateChip(
+                        conference.shortName,
+                        selected: slateFilter == .conference(id: conference.id)
+                    ) {
+                        slateFilter = .conference(id: conference.id)
+                    }
+                }
+            }
+        }
+    }
+
+    private func slateChip(
+        _ title: String,
+        selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(selected ? theme.accent : PickemsColors.cardBackground)
+                .foregroundStyle(selected ? theme.onAccent : PickemsColors.textPrimary)
+                .clipShape(Capsule())
+        }
+    }
+
     private var emptyMessage: String {
         if !searchText.isEmpty {
             return "No games match \"\(searchText)\"."
+        }
+        switch slateFilter {
+        case .top25:
+            return "No Top 25 games this week."
+        case .conference(let id):
+            let name = ESPNConferenceCatalog.conference(id: id)?.shortName ?? "conference"
+            return "No \(name) games this week."
+        case .all:
+            break
         }
         switch filter {
         case .all: return "No games available this week."
@@ -145,45 +210,94 @@ struct GameBrowseView: View {
         case .final: return game.status == .final
         }
     }
+
+    private func matchesSlateFilter(_ game: ESPNGame) -> Bool {
+        switch slateFilter {
+        case .all: return true
+        case .top25: return game.isTop25
+        case .conference(let id):
+            return game.homeConferenceId == id || game.awayConferenceId == id
+        }
+    }
 }
 
 struct GameBrowseRow: View {
     let game: ESPNGame
     var isFavoriteHighlight: Bool = false
+    var isNominated: Bool = false
+    var nominatorName: String? = nil
     @Environment(\.themePalette) private var theme
 
     var body: some View {
+        Group {
+            if isNominated {
+                rowContent
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(
+                        "\(game.awayTeamAbbreviation) at \(game.homeTeamAbbreviation), already nominated by \(nominatorName ?? "another member")"
+                    )
+                    .accessibilityRemoveTraits(.isButton)
+            } else {
+                rowContent
+            }
+        }
+    }
+
+    private var rowContent: some View {
         HStack(spacing: 12) {
             if isFavoriteHighlight {
                 Image(systemName: "star.fill")
                     .font(.caption)
                     .foregroundStyle(theme.accent)
             }
-            teamBadge(
-                abbr: game.awayTeamAbbreviation,
-                logo: game.awayTeamLogoURL
-            )
 
-            VStack(spacing: 2) {
-                Text("@")
-                    .font(.caption)
-                    .foregroundStyle(PickemsColors.textSecondary)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 12) {
+                    teamBadge(
+                        abbr: game.awayTeamAbbreviation,
+                        logo: game.awayTeamLogoURL
+                    )
+
+                    VStack(spacing: 2) {
+                        Text("@")
+                            .font(.caption)
+                            .foregroundStyle(PickemsColors.textSecondary)
+                    }
+
+                    teamBadge(
+                        abbr: game.homeTeamAbbreviation,
+                        logo: game.homeTeamLogoURL
+                    )
+                }
+
+                if isNominated, let nominatorName {
+                    Text(nominatorName == "the slate"
+                          ? "Already on the slate"
+                          : "Nominated by \(nominatorName)")
+                        .font(.caption2)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
             }
-
-            teamBadge(
-                abbr: game.homeTeamAbbreviation,
-                logo: game.homeTeamLogoURL
-            )
 
             Spacer()
 
             VStack(alignment: .trailing, spacing: 4) {
-                statusLabel
                 if let spread = game.spreadDisplayLabel {
                     Text(spread)
-                        .font(.caption.weight(.semibold))
+                        .font(.subheadline.weight(.bold))
                         .foregroundStyle(theme.accent)
+                } else {
+                    Text("No line")
+                        .font(.caption2)
+                        .foregroundStyle(PickemsColors.textSecondary)
                 }
+
+                if isNominated {
+                    StatusBadge(text: "Taken", color: PickemsColors.textSecondary)
+                } else {
+                    statusLabel
+                }
+
                 Text(game.kickoff.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption2)
                     .foregroundStyle(PickemsColors.textSecondary)

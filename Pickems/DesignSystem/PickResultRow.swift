@@ -3,13 +3,21 @@ import SwiftUI
 struct PickResultRow: View {
     let game: SlateGame
     let pickedTeamId: String?
+    var showSpread: Bool = true
     @Environment(\.themePalette) private var theme
 
     var body: some View {
         HStack {
-            Text("\(game.awayTeamAbbreviation) @ \(game.homeTeamAbbreviation)")
-                .font(.subheadline)
-                .foregroundStyle(PickemsColors.textPrimary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(game.awayTeamAbbreviation) @ \(game.homeTeamAbbreviation)")
+                    .font(.subheadline)
+                    .foregroundStyle(PickemsColors.textPrimary)
+                if showSpread {
+                    Text(game.spreadLabel(for: game.spreadTeamId))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(theme.accent)
+                }
+            }
             Spacer()
             if let pickedTeamId {
                 Text(pickedTeamId == game.homeTeamId ? game.homeTeamAbbreviation : game.awayTeamAbbreviation)

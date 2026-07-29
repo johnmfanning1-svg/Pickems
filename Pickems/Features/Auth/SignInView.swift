@@ -12,6 +12,7 @@ struct SignInView: View {
     @State private var displayName = ""
     @State private var confirmPassword = ""
     @State private var showForgotPassword = false
+    @State private var showEmailAuth = false
     #if DEBUG
     @State private var showAdminLogin = false
     #endif
@@ -25,40 +26,6 @@ struct SignInView: View {
         ScrollView {
             VStack(spacing: 24) {
                 brandHeader
-
-                Picker("Mode", selection: $mode) {
-                    ForEach(AuthMode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .accessibilityLabel("Sign in or create account")
-
-                emailPasswordForm
-
-                PrimaryButton(
-                    title: mode == .signIn ? "Sign In" : "Create Account",
-                    isLoading: appState.authService.isLoading
-                ) {
-                    Task { await submitEmailPassword() }
-                }
-                .padding(.horizontal)
-                .disabled(!canSubmit)
-
-                if mode == .signIn {
-                    Button("Forgot password?") {
-                        showForgotPassword = true
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(PickemsColors.textSecondary)
-                }
-
-                divider
-
-                Text("Or continue with Apple")
-                    .font(.caption)
-                    .foregroundStyle(PickemsColors.textSecondary)
 
                 SignInWithAppleButton(.signIn) { request in
                     request.requestedScopes = [.fullName, .email]
@@ -82,10 +49,51 @@ struct SignInView: View {
                     }
                 }
                 .signInWithAppleButtonStyle(.white)
+                .frame(maxWidth: .infinity)
                 .frame(height: 50)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal)
                 .disabled(appState.authService.isLoading)
+                .accessibilitySortPriority(2)
+
+                Button("Use email and password instead") {
+                    showEmailAuth.toggle()
+                }
+                .font(.footnote)
+                .foregroundStyle(PickemsColors.textSecondary)
+                .accessibilityHint("Switch to email and password sign in")
+
+                if showEmailAuth {
+                    divider
+
+                    Picker("Mode", selection: $mode) {
+                        ForEach(AuthMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    .accessibilityLabel("Sign in or create account")
+
+                    emailPasswordForm
+
+                    PrimaryButton(
+                        title: mode == .signIn ? "Sign In" : "Create Account",
+                        isLoading: appState.authService.isLoading
+                    ) {
+                        Task { await submitEmailPassword() }
+                    }
+                    .padding(.horizontal)
+                    .disabled(!canSubmit)
+
+                    if mode == .signIn {
+                        Button("Forgot password?") {
+                            showForgotPassword = true
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                    }
+                }
 
                 if let error = appState.authService.errorMessage {
                     Text(error)
@@ -118,12 +126,20 @@ struct SignInView: View {
             }
             .padding()
             .padding(.bottom, 24)
+            .animation(.easeInOut(duration: 0.2), value: showEmailAuth)
         }
         .background(PickemsColors.background)
         .onChange(of: mode) { _, _ in
             appState.authService.errorMessage = nil
             password = ""
             confirmPassword = ""
+        }
+        .onChange(of: showEmailAuth) { _, isShowing in
+            if !isShowing {
+                appState.authService.errorMessage = nil
+                password = ""
+                confirmPassword = ""
+            }
         }
         .sheet(isPresented: $showForgotPassword) {
             ForgotPasswordSheet(prefilledEmail: email)

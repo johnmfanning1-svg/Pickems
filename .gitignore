@@ -7,6 +7,18 @@ xcuserdata/
 firebase/functions/node_modules/
 firebase/functions/lib/
 .firebase/
+firebase/tests/node_modules/
+
+# Web admin portal (Lane J) — build output is generated, but the directory must
+# exist for hosting.public to resolve, hence the tracked .gitkeep.
+firebase/admin/node_modules/
+firebase/admin/dist/*
+!firebase/admin/dist/.gitkeep
+firebase/admin/.env.local
+firebase/admin/.env.*.local
+
+# Service-account keys for admin-tools must never enter the repo (Risk R2).
+firebase/admin-tools/*.json
 
 # macOS
 .DS_Store

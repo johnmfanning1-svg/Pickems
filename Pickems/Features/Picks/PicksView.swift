@@ -37,7 +37,23 @@ struct PicksView: View {
             }
             .refreshable { await viewModel.loadWeek(appState: appState) }
             .sheet(isPresented: $viewModel.showGameBrowse) {
-                GameBrowseView(games: viewModel.espnGames) { game in
+                GameBrowseView(
+                    games: viewModel.espnGames,
+                    nominatedEventIds: Set(
+                        appState.pickService.nominations.map(\.espnEventId)
+                            + appState.pickService.slateGames.map(\.espnEventId)
+                    ),
+                    nominatorNamesByEventId: {
+                        var names = Dictionary(
+                            appState.pickService.nominations.map { ($0.espnEventId, $0.submitterName) },
+                            uniquingKeysWith: { first, _ in first }
+                        )
+                        for game in appState.pickService.slateGames where names[game.espnEventId] == nil {
+                            names[game.espnEventId] = "the slate"
+                        }
+                        return names
+                    }()
+                ) { game in
                     viewModel.handleGameSelection(game, appState: appState)
                 }
                 .pickemsEnvironment(appState)
@@ -179,8 +195,11 @@ struct PicksView: View {
             ForEach(appState.pickService.nominations) { nom in
                 PickemsCard {
                     HStack {
-                        VStack(alignment: .leading) {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text("\(nom.awayTeamName) @ \(nom.homeTeamName)")
+                            Text(nominationSpreadLabel(nom))
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(theme.accent)
                             Text("by \(nom.submitterName)").font(.caption).foregroundStyle(PickemsColors.textSecondary)
                         }
                         Spacer()
@@ -196,6 +215,22 @@ struct PicksView: View {
                 .padding(.horizontal)
             }
         }
+    }
+
+    private func nominationSpreadLabel(_ nom: Nomination) -> String {
+        let abbr: String
+        if nom.spreadTeamId == nom.homeTeamId {
+            abbr = nom.homeTeamAbbreviation ?? String(nom.homeTeamName.prefix(4)).uppercased()
+        } else if nom.spreadTeamId == nom.awayTeamId {
+            abbr = nom.awayTeamAbbreviation ?? String(nom.awayTeamName.prefix(4)).uppercased()
+        } else {
+            abbr = nom.homeTeamAbbreviation
+                ?? nom.awayTeamAbbreviation
+                ?? String(nom.homeTeamName.prefix(4)).uppercased()
+        }
+        let magnitude = abs(nom.spread).formatted(.number.precision(.fractionLength(1)))
+        // Favorite (spreadTeamId) always shows as -line, matching SlateGame.spreadLabel.
+        return "\(abbr) -\(magnitude)"
     }
 
     @ViewBuilder

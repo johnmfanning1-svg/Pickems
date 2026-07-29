@@ -12,7 +12,7 @@ enum WidgetSnapshotService {
     }
 
     private static func publishPreseason(from appState: AppState) {
-        let kickoff = CFBSeasonCalendar.nextWeekZeroStart()
+        let kickoff = CFBSeasonCalendar.nextSeasonKickoff()
         let seasonYear = CFBSeasonCalendar.seasonYear(containing: kickoff)
         let group = appState.groupService.selectedGroup
         let user = appState.authService.currentUser

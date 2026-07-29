@@ -28,7 +28,8 @@ enum DeepLinkRouter {
         switch type {
         case "week_scored", "deadline_reminder", "deadline_locked":
             return .openPicks
-        case "deadline_passed", "season_closed":
+        case "deadline_passed", "season_closed", "chat_message":
+            // Chat is reached from Groups, so that tab is the closest landing spot.
             return .openGroups
         case "game_final", "took_the_lead":
             return .openLiveSlate
