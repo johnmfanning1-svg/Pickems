@@ -27,14 +27,23 @@ enum PickDeadlineCalculator {
         }
     }
 
+    /// Nil deadline means picks remain open (not locked).
     static func isPast(_ deadline: Date?) -> Bool {
-        guard let deadline else { return true }
+        guard let deadline else { return false }
         return Date() >= deadline
+    }
+
+    /// Absolute lock time for UI, e.g. "Sat 12:00 PM".
+    static func lockTimeLabel(for deadline: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.dateFormat = "EEE h:mm a"
+        return formatter.string(from: deadline)
     }
 
     static func countdownLabel(to deadline: Date) -> String {
         let remaining = deadline.timeIntervalSinceNow
-        if remaining <= 0 { return "Deadline passed" }
+        if remaining <= 0 { return "Picks locked" }
 
         let hours = Int(remaining) / 3600
         let minutes = (Int(remaining) % 3600) / 60

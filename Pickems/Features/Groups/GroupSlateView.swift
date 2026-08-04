@@ -71,7 +71,7 @@ struct GroupSlateView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("You can still edit your picks until the first game kicks off.")
+            Text("You can still edit your picks until lock.")
         }
         .confirmationDialog("Submit your nominations?", isPresented: $viewModel.showConfirmNominations, titleVisibility: .visible) {
             Button("Submit Nominations") {
@@ -303,14 +303,14 @@ struct GroupSlateView: View {
             )
 
             if let deadline = week.pickDeadline {
-                PickDeadlineBanner(deadline: deadline, isPast: pastDeadline)
+                PickDeadlineBanner(deadline: deadline)
             }
 
             if appState.pickService.userPick?.isLocked == true {
                 VStack(alignment: .leading, spacing: 8) {
                     StatusBadge(text: "Submitted", color: PickemsColors.success)
                     if !pastDeadline {
-                        Text("Changed your mind? You can still edit your picks until the first game kicks off.")
+                        Text("Submitted — you can edit until lock")
                             .font(.caption)
                             .foregroundStyle(PickemsColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
