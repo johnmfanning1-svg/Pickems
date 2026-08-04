@@ -100,6 +100,58 @@ struct ESPNServiceTests {
         #expect(ESPNConferenceCatalog.fbs.count == 11)
     }
 
+    @Test func spreadDisplayLabelAlwaysLeadsFavoriteWithMinus() {
+        let positiveSpread = ESPNGame(
+            id: "1",
+            espnEventId: "1",
+            competitionId: "c1",
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            kickoff: Date(),
+            spread: 7.5,
+            spreadTeamId: "home",
+            status: .scheduled,
+            homeScore: nil,
+            awayScore: nil,
+            homeCuratedRank: nil,
+            awayCuratedRank: nil,
+            homeConferenceId: nil,
+            awayConferenceId: nil
+        )
+        #expect(positiveSpread.spreadDisplayLabel == "HOM -7.5")
+
+        let negativeSpread = ESPNGame(
+            id: "2",
+            espnEventId: "2",
+            competitionId: "c2",
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            kickoff: Date(),
+            spread: -3,
+            spreadTeamId: "away",
+            status: .scheduled,
+            homeScore: nil,
+            awayScore: nil,
+            homeCuratedRank: nil,
+            awayCuratedRank: nil,
+            homeConferenceId: nil,
+            awayConferenceId: nil
+        )
+        #expect(negativeSpread.spreadDisplayLabel == "AWY -3.0")
+    }
+
     private func makeGame(homeRank: Int?, awayRank: Int?) -> ESPNGame {
         ESPNGame(
             id: "1",

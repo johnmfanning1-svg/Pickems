@@ -585,11 +585,14 @@ struct LeaderboardView: View {
             .accessibilityLabel("Standings period")
 
             if !displayEntries.isEmpty {
+                let hasWins = displayEntries.contains {
+                    (showWeekly ? $0.weeklyWins : $0.seasonWins) > 0
+                }
                 ForEach(displayEntries) { entry in
                     VStack(spacing: 4) {
                         LeaderboardRow(entry: entry, showWeekly: showWeekly)
-                        if entry.isTied && appState.isCommissioner
-                            && appState.groupService.selectedGroup?.rules.tieBreaker == .commissionerOverride {
+                        if hasWins, entry.isTied, appState.isCommissioner,
+                           appState.groupService.selectedGroup?.rules.tieBreaker == .commissionerOverride {
                             Button("Resolve Tie (Commissioner)") {
                                 PickemsHaptics.lightImpact()
                                 Task {
@@ -615,7 +618,7 @@ struct LeaderboardView: View {
                 EmptyStateView(
                     icon: "chart.bar.fill",
                     title: "No Standings Yet",
-                    message: "Standings appear after games are scored.",
+                    message: "Invite members to see an interim ranking by join order.",
                     help: PickemsHelp.leaderboard
                 )
             }

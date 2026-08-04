@@ -186,6 +186,8 @@ struct StandingEntry: Codable, Identifiable, Equatable {
     var seasonLosses: Int
     var rank: Int
     var isTied: Bool
+    /// Used for interim ranking (no wins yet) and as a tiebreaker before display name.
+    var joinedAt: Date? = nil
 
     var weeklyBattingAverage: Double {
         BattingAverage.rate(wins: weeklyWins, losses: weeklyLosses)

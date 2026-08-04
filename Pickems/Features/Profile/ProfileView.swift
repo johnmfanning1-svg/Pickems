@@ -377,7 +377,7 @@ struct ProfileView: View {
                                 }
                             }
                         } label: {
-                            Label("Transfer Commissioner…", systemImage: "crown")
+                            Label("Transfer Commissioner…", systemImage: "gavel")
                                 .foregroundStyle(theme.accent)
                         }
                         .listRowBackground(PickemsColors.cardBackground)

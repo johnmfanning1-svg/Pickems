@@ -79,6 +79,52 @@ struct ScoringEngineTests {
         #expect(ranked[1].id == "a")
     }
 
+    @Test func rankedStandingsInterimOrdersByJoinedAtWhenNoWins() {
+        let early = Date(timeIntervalSince1970: 1_000)
+        let mid = Date(timeIntervalSince1970: 2_000)
+        let late = Date(timeIntervalSince1970: 3_000)
+        let entries = [
+            StandingEntry(id: "c", displayName: "Zoe", avatarColorHex: "#111111", weeklyWins: 0, weeklyLosses: 0, seasonWins: 0, seasonLosses: 0, rank: 0, isTied: false, joinedAt: late),
+            StandingEntry(id: "a", displayName: "Amy", avatarColorHex: "#222222", weeklyWins: 0, weeklyLosses: 0, seasonWins: 0, seasonLosses: 0, rank: 0, isTied: false, joinedAt: early),
+            StandingEntry(id: "b", displayName: "Bob", avatarColorHex: "#333333", weeklyWins: 0, weeklyLosses: 0, seasonWins: 0, seasonLosses: 0, rank: 0, isTied: false, joinedAt: mid),
+        ]
+        let ranked = ScoringEngine.rankedStandings(entries: entries, weekly: true, tieBreaker: .commissionerOverride)
+        #expect(ranked.map(\.id) == ["a", "b", "c"])
+        #expect(ranked.map(\.rank) == [1, 2, 3])
+    }
+
+    @Test func rankedStandingsUsesJoinedAtBeforeDisplayNameAsTiebreaker() {
+        let early = Date(timeIntervalSince1970: 1_000)
+        let late = Date(timeIntervalSince1970: 2_000)
+        let entries = [
+            StandingEntry(id: "z", displayName: "Zoe", avatarColorHex: "#111111", weeklyWins: 5, weeklyLosses: 2, seasonWins: 5, seasonLosses: 2, rank: 0, isTied: false, joinedAt: early),
+            StandingEntry(id: "a", displayName: "Amy", avatarColorHex: "#222222", weeklyWins: 5, weeklyLosses: 2, seasonWins: 5, seasonLosses: 2, rank: 0, isTied: false, joinedAt: late),
+        ]
+        let ranked = ScoringEngine.rankedStandings(entries: entries, weekly: true, tieBreaker: .commissionerOverride)
+        #expect(ranked[0].id == "z")
+        #expect(ranked[1].id == "a")
+    }
+
+    @Test func rankedStandingsSeasonModeUsesSeasonWinsForInterimGate() {
+        let early = Date(timeIntervalSince1970: 1_000)
+        let late = Date(timeIntervalSince1970: 2_000)
+        let entries = [
+            StandingEntry(id: "late", displayName: "Late", avatarColorHex: "#111111", weeklyWins: 0, weeklyLosses: 0, seasonWins: 0, seasonLosses: 0, rank: 0, isTied: false, joinedAt: late),
+            StandingEntry(id: "early", displayName: "Early", avatarColorHex: "#222222", weeklyWins: 0, weeklyLosses: 0, seasonWins: 0, seasonLosses: 0, rank: 0, isTied: false, joinedAt: early),
+        ]
+        let interim = ScoringEngine.rankedStandings(entries: entries, weekly: false, tieBreaker: .commissionerOverride)
+        #expect(interim.map(\.id) == ["early", "late"])
+
+        var withWins = entries
+        withWins[0].seasonWins = 3
+        withWins[0].seasonLosses = 1
+        withWins[1].seasonWins = 1
+        withWins[1].seasonLosses = 3
+        let ranked = ScoringEngine.rankedStandings(entries: withWins, weekly: false, tieBreaker: .commissionerOverride)
+        #expect(ranked[0].id == "late")
+        #expect(ranked[1].id == "early")
+    }
+
     @Test func commissionerOverrideMarksEqualRecordsAsTied() {
         let entries = [
             StandingEntry(id: "a", displayName: "A", avatarColorHex: "#DC2626", weeklyWins: 4, weeklyLosses: 2, seasonWins: 10, seasonLosses: 5, rank: 0, isTied: false),

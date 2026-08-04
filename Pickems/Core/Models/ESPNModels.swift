@@ -163,7 +163,8 @@ extension ESPNGame {
     var spreadDisplayLabel: String? {
         guard let spread, let spreadTeamId else { return nil }
         let teamAbbr = spreadTeamId == homeTeamId ? homeTeamAbbreviation : awayTeamAbbreviation
-        let sign = spread < 0 ? "" : "+"
-        return "\(teamAbbr) \(sign)\(abs(spread).formatted(.number.precision(.fractionLength(1))))"
+        let magnitude = abs(spread).formatted(.number.precision(.fractionLength(1)))
+        // Favorite (spreadTeamId) always shows as -line, matching SlateGame.spreadLabel.
+        return "\(teamAbbr) -\(magnitude)"
     }
 }

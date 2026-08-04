@@ -67,7 +67,7 @@ struct MemberListView: View {
                                 Button {
                                     memberToPromote = member
                                 } label: {
-                                    Label("Make Commissioner", systemImage: "crown")
+                                    Label("Make Commissioner", systemImage: "gavel")
                                 }
                                 Button(role: .destructive) {
                                     memberToRemove = member
@@ -162,7 +162,7 @@ struct MemberListView: View {
                             }
                         }
                     } label: {
-                        Label("Transfer Commissioner…", systemImage: "crown")
+                        Label("Transfer Commissioner…", systemImage: "gavel")
                             .foregroundStyle(theme.accent)
                     }
                     .listRowBackground(PickemsColors.cardBackground)
