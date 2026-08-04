@@ -170,7 +170,7 @@ struct GroupsView: View {
                     Text(group.name)
                         .font(.title2.bold())
                         .foregroundStyle(PickemsColors.textPrimary)
-                    Text("\(group.memberCount) members · Code: \(group.inviteCode)")
+                    Text(heroSubtitle(for: group))
                         .font(.subheadline)
                         .foregroundStyle(PickemsColors.textSecondary)
                 }
@@ -206,6 +206,25 @@ struct GroupsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
+    }
+
+    /// Members + week/slate context only — invite code lives on Invite/Share.
+    private func heroSubtitle(for group: PickemGroup) -> String {
+        var parts = ["\(group.memberCount) members"]
+        if let week = appState.groupService.currentWeek {
+            parts.append("Week \(week.weekNumber)")
+            switch week.status {
+            case .selection:
+                parts.append(week.selectionMode.displayName)
+            case .picking:
+                parts.append("Picking open")
+            case .locked:
+                parts.append("Games locked")
+            case .scored:
+                parts.append("Scored")
+            }
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func totalsStat(value: String, label: String, emphasize: Bool = false) -> some View {

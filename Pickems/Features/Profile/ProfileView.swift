@@ -360,9 +360,6 @@ struct ProfileView: View {
             }
 
             if let group = appState.groupService.selectedGroup {
-                LabeledContent("Invite Code", value: group.inviteCode)
-                    .listRowBackground(PickemsColors.cardBackground)
-
                 InviteShareButton(group: group)
                     .listRowBackground(PickemsColors.cardBackground)
 
