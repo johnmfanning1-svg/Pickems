@@ -283,14 +283,17 @@ struct MemberRow: View {
                         .font(.headline)
                         .foregroundStyle(PickemsColors.textPrimary)
                     if isCommissioner {
-                        Label("Commissioner", systemImage: "gavel")
+                        Image(systemName: "gavel")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(theme.accent)
+                            .accessibilityLabel("Commissioner")
+                        Text("Commissioner")
                             .font(.caption2.weight(.semibold))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(theme.accent.opacity(0.25))
                             .foregroundStyle(theme.accent)
                             .clipShape(Capsule())
-                            .labelStyle(.titleAndIcon)
                     }
                     if let titles = career?.titles, titles > 0 {
                         Label("\(titles)", systemImage: "crown.fill")

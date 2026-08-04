@@ -79,7 +79,7 @@ struct GroupSlateView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("You can still swap your games until the slate locks.")
+            Text("You can still swap your games until picks lock at the first kickoff.")
         }
         .task(id: "\(group.id)-\(activeWeek.id)") {
             await viewModel.loadWeek(appState: appState)
@@ -265,7 +265,7 @@ struct GroupSlateView: View {
                     Label("Nominations submitted", systemImage: "checkmark.seal.fill")
                         .font(.headline)
                         .foregroundStyle(PickemsColors.success)
-                    Text("Your \(userNoms) game\(userNoms == 1 ? "" : "s") \(userNoms == 1 ? "is" : "are") in. You can still edit them until the slate locks.")
+                    Text("Your \(userNoms) game\(userNoms == 1 ? "" : "s") \(userNoms == 1 ? "is" : "are") in. You can still edit them until picks lock at the first kickoff.")
                         .font(.caption)
                         .foregroundStyle(PickemsColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -334,10 +334,11 @@ struct GroupSlateView: View {
                 ContentUnavailableView(
                     "Slate Not Ready",
                     systemImage: "sportscourt",
-                    description: Text("Games will appear here once the slate is locked.")
+                    description: Text("Games will appear here once they're added to the slate.")
                 )
                 .padding(.top, 16)
             } else {
+                let slateEditable = WeekTransition.isSlateEditable(week)
                 ForEach(slateGames) { game in
                     VStack(spacing: 4) {
                         GamePickRow(
@@ -356,11 +357,18 @@ struct GroupSlateView: View {
                             viewModel.draftPicks[game.id] = teamId
                             viewModel.saveDraft(appState: appState)
                         }
-                        if appState.isCommissioner && !pastDeadline {
-                            Button("Edit Spread") { viewModel.spreadEditGame = game }
-                                .font(.caption).foregroundStyle(theme.accent)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 24)
+                        if appState.isCommissioner && slateEditable {
+                            HStack {
+                                Button("Edit Spread") { viewModel.spreadEditGame = game }
+                                    .font(.caption).foregroundStyle(theme.accent)
+                                Spacer()
+                                Button(role: .destructive) {
+                                    viewModel.removeCommissionerGame(game, week: week, appState: appState)
+                                } label: {
+                                    Label("Remove", systemImage: "trash").font(.caption)
+                                }
+                            }
+                            .padding(.horizontal, 24)
                         }
                     }
                     .padding(.horizontal)

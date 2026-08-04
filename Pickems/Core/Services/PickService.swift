@@ -216,13 +216,14 @@ final class PickService {
 
         if ScoringEngine.isSlateComplete(nominationCount: newCount, slateSize: rules.slateSize) {
             try await materializeNominationsIfNeeded(groupId: groupId, weekId: weekId)
+            // Open picking + set deadline from kickoffs; do not lock the slate yet.
             try await transitionToPicking(
                 groupId: groupId,
                 weekId: weekId,
                 rules: rules,
                 kickoffs: allKickoffs,
                 nominationCount: newCount,
-                lockSlate: true
+                lockSlate: false
             )
         } else {
             try await weekRef.updateData(["nominationCount": newCount])
@@ -315,13 +316,14 @@ final class PickService {
 
         let allKickoffs = (slateGames + [game]).map(\.kickoff)
         if slateGames.count + 1 >= rules.slateSize {
+            // Open picking + set deadline from kickoffs; do not lock the slate yet.
             try await transitionToPicking(
                 groupId: groupId,
                 weekId: weekId,
                 rules: rules,
                 kickoffs: allKickoffs,
                 nominationCount: nil,
-                lockSlate: true
+                lockSlate: false
             )
         }
     }
@@ -338,6 +340,7 @@ final class PickService {
             rules: rules,
             kickoffs: kickoffs,
             nominationCount: nominationCount,
+            setDeadline: true,
             lockSlate: lockSlate
         )
         try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
@@ -442,14 +445,78 @@ final class PickService {
             .setData(from: submission)
     }
 
-    func removeCommissionerGame(groupId: String, weekId: String, gameId: String, weekStatus: WeekStatus) async throws {
-        guard weekStatus == .selection else {
+    func removeCommissionerGame(
+        groupId: String,
+        weekId: String,
+        gameId: String,
+        week: WeekSummary
+    ) async throws {
+        guard WeekTransition.isSlateEditable(week) else {
             throw PickError.cannotModifyLockedSlate
         }
         try await db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
             .collection("games").document(gameId)
             .delete()
+    }
+
+    /// Commissioner wipe or force-write of another member's picks for the week.
+    func commissionerSetPicks(
+        groupId: String,
+        weekId: String,
+        userId: String,
+        displayName: String,
+        picks: [String: String],
+        isLocked: Bool
+    ) async throws {
+        let pick = UserPick(
+            id: userId,
+            userId: userId,
+            displayName: displayName,
+            picks: picks,
+            submittedAt: isLocked ? Date() : nil,
+            isLocked: isLocked,
+            confidenceGameId: nil
+        )
+        let pickRef = db.collection("groups").document(groupId)
+            .collection("weeks").document(weekId)
+            .collection("picks").document(userId)
+        // Full replace so wiped keys actually disappear (merge cannot clear map entries).
+        try await pickRef.setData(from: pick)
+        try await syncSubmission(
+            groupId: groupId,
+            weekId: weekId,
+            userId: userId,
+            displayName: displayName,
+            isLocked: isLocked,
+            submittedAt: pick.submittedAt
+        )
+        if picks.isEmpty && !isLocked {
+            allPicks.removeAll { $0.userId == userId }
+        } else if allPicks.contains(where: { $0.userId == userId }) {
+            allPicks = allPicks.map { $0.userId == userId ? pick : $0 }
+        } else {
+            allPicks.append(pick)
+        }
+        if userPick?.userId == userId {
+            userPick = picks.isEmpty && !isLocked ? nil : pick
+        }
+    }
+
+    func commissionerClearPicks(
+        groupId: String,
+        weekId: String,
+        userId: String,
+        displayName: String
+    ) async throws {
+        try await commissionerSetPicks(
+            groupId: groupId,
+            weekId: weekId,
+            userId: userId,
+            displayName: displayName,
+            picks: [:],
+            isLocked: false
+        )
     }
 
     func updateGameSpread(
@@ -501,7 +568,7 @@ final class PickService {
                 rules: rules,
                 kickoffs: allKickoffs,
                 nominationCount: nil,
-                lockSlate: true
+                lockSlate: false
             )
         }
     }

@@ -101,7 +101,7 @@ struct PicksView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("You can still swap your games until the slate locks.")
+                Text("You can still swap your games until picks lock at the first kickoff.")
             }
             .task(id: appState.groupService.selectedGroup?.id) {
                 await reloadPicks()
@@ -336,7 +336,7 @@ struct PicksView: View {
                     Label("Nominations submitted", systemImage: "checkmark.seal.fill")
                         .font(.headline)
                         .foregroundStyle(PickemsColors.success)
-                    Text("Your \(userNoms) game\(userNoms == 1 ? "" : "s") \(userNoms == 1 ? "is" : "are") in. You can still edit them until the slate locks at the first kickoff.")
+                    Text("Your \(userNoms) game\(userNoms == 1 ? "" : "s") \(userNoms == 1 ? "is" : "are") in. You can still edit them until picks lock at the first kickoff.")
                         .font(.caption)
                         .foregroundStyle(PickemsColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -394,6 +394,7 @@ struct PicksView: View {
                 )
             }
 
+            let slateEditable = WeekTransition.isSlateEditable(week)
             ForEach(appState.pickService.slateGames) { game in
                 VStack(spacing: 4) {
                     GamePickRow(
@@ -412,11 +413,18 @@ struct PicksView: View {
                         viewModel.draftPicks[game.id] = teamId
                         viewModel.saveDraft(appState: appState)
                     }
-                    if appState.isCommissioner && !pastDeadline {
-                        Button("Edit Spread") { viewModel.spreadEditGame = game }
-                            .font(.caption).foregroundStyle(theme.accent)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 24)
+                    if appState.isCommissioner && slateEditable {
+                        HStack {
+                            Button("Edit Spread") { viewModel.spreadEditGame = game }
+                                .font(.caption).foregroundStyle(theme.accent)
+                            Spacer()
+                            Button(role: .destructive) {
+                                viewModel.removeCommissionerGame(game, week: week, appState: appState)
+                            } label: {
+                                Label("Remove", systemImage: "trash").font(.caption)
+                            }
+                        }
+                        .padding(.horizontal, 24)
                     }
                 }
                 .padding(.horizontal)

@@ -5,6 +5,7 @@ struct LeaderboardRow: View {
     var showWeekly: Bool = false
     var streak: Int = 0
     var isPerfectSaturday: Bool = false
+    var isCommissioner: Bool = false
     @Environment(\.themePalette) private var theme
 
     var body: some View {
@@ -24,9 +25,17 @@ struct LeaderboardRow: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(entry.displayName)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(PickemsColors.textPrimary)
+                HStack(spacing: 6) {
+                    Text(entry.displayName)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(PickemsColors.textPrimary)
+                    if isCommissioner {
+                        Image(systemName: "gavel")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(theme.accent)
+                            .accessibilityLabel("Commissioner")
+                    }
+                }
                 HStack(spacing: 6) {
                     if entry.isTied {
                         Text("Tied")
@@ -67,6 +76,7 @@ struct LeaderboardRow: View {
             ? "\(entry.weeklyWins) wins, \(entry.weeklyLosses) losses this week"
             : "\(entry.seasonWins) wins, \(entry.seasonLosses) losses this season"
         let tied = entry.isTied ? ", tied for rank" : ""
-        return "Rank \(entry.rank), \(entry.displayName), \(record)\(tied)"
+        let role = isCommissioner ? ", commissioner" : ""
+        return "Rank \(entry.rank), \(entry.displayName)\(role), \(record)\(tied)"
     }
 }
