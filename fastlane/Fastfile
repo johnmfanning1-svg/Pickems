@@ -1,0 +1,33 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Upload App Store metadata only (no binary, no screenshots)"
+  lane :metadata do
+    deliver(
+      app_identifier: "FannypackInc.Pickems",
+      metadata_path: "./fastlane/metadata",
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      force: true,
+      submit_for_review: false,
+      run_precheck_before_submit: false
+    )
+  end
+
+  desc "Upload a build to TestFlight (Pilot). Archive/signing must already be configured."
+  lane :beta do
+    # Prefer an already-exported IPA via PILOT_IPA, or build with gym when ready.
+    if ENV["PILOT_IPA"]
+      pilot(
+        app_identifier: "FannypackInc.Pickems",
+        apple_id: "6785697079",
+        ipa: ENV["PILOT_IPA"],
+        skip_waiting_for_build_processing: true,
+        distribute_external: false,
+        notify_external_testers: false
+      )
+    else
+      UI.user_error!("Set PILOT_IPA to a signed .ipa path, or archive in Xcode for this release (see docs/APP_STORE.md).")
+    end
+  end
+end

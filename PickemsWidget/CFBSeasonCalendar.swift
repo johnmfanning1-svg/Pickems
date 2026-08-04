@@ -2,7 +2,7 @@ import Foundation
 
 /// College football calendar anchors for the widget extension (kept in sync with app `CFBSeasonCalendar`).
 enum CFBSeasonCalendar {
-    static func weekZeroStart(forSeasonYear year: Int) -> Date {
+    static func seasonKickoff(forSeasonYear year: Int) -> Date {
         var eastern = Calendar(identifier: .gregorian)
         eastern.timeZone = TimeZone(identifier: "America/New_York") ?? .current
 
@@ -20,7 +20,7 @@ enum CFBSeasonCalendar {
 
     static func isPreseason(on date: Date = Date()) -> Bool {
         let year = seasonYear(containing: date)
-        return date < weekZeroStart(forSeasonYear: year)
+        return date < seasonKickoff(forSeasonYear: year)
     }
 
     static func seasonYear(containing date: Date = Date()) -> Int {
@@ -29,11 +29,11 @@ enum CFBSeasonCalendar {
         return eastern.component(.year, from: date)
     }
 
-    static func nextWeekZeroStart(on date: Date = Date()) -> Date {
+    static func nextSeasonKickoff(on date: Date = Date()) -> Date {
         let year = seasonYear(containing: date)
-        let thisYear = weekZeroStart(forSeasonYear: year)
+        let thisYear = seasonKickoff(forSeasonYear: year)
         if date < thisYear { return thisYear }
-        return weekZeroStart(forSeasonYear: year + 1)
+        return seasonKickoff(forSeasonYear: year + 1)
     }
 
     static func countdown(to target: Date, from date: Date = Date()) -> (days: Int, hours: Int, minutes: Int) {

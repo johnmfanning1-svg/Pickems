@@ -22,7 +22,9 @@ actor ESPNService {
             return weekCache
         }
 
-        let url = URL(string: "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?seasontype=2")!
+        guard let url = Self.currentWeekURL(seasonType: 2) else {
+            throw ESPNError.invalidURL
+        }
         let (data, response) = try await URLSession.shared.data(from: url)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw ESPNError.requestFailed
@@ -39,24 +41,21 @@ actor ESPNService {
         )
         weekCache = info
         weekCacheTime = Date()
+        CFBWeekSync.persistLastKnownWeek(info)
         return info
     }
 
     func fetchScoreboard(week: Int, seasonType: Int = 2, live: Bool = false) async throws -> [ESPNGame] {
-        let cacheKey = "\(seasonType)-\(week)-\(live ? "live" : "browse")"
+        let cacheKey = "\(seasonType)-\(week)-fbs-\(live ? "live" : "browse")"
         let ttl = live ? liveCacheTTL : browseCacheTTL
 
         if let cached = scoreboardCache[cacheKey], Date().timeIntervalSince(cached.fetchedAt) < ttl {
             return cached.games
         }
 
-        var components = URLComponents(string: "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard")!
-        components.queryItems = [
-            URLQueryItem(name: "week", value: String(week)),
-            URLQueryItem(name: "seasontype", value: String(seasonType))
-        ]
-
-        guard let url = components.url else { throw ESPNError.invalidURL }
+        guard let url = Self.scoreboardURL(week: week, seasonType: seasonType) else {
+            throw ESPNError.invalidURL
+        }
         let (data, response) = try await URLSession.shared.data(from: url)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw ESPNError.requestFailed
@@ -74,7 +73,7 @@ actor ESPNService {
             return match
         }
 
-        var components = URLComponents(string: "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard")!
+        var components = URLComponents(string: Self.scoreboardBaseURL)!
         components.queryItems = [URLQueryItem(name: "event", value: eventId)]
         guard let url = components.url else { throw ESPNError.invalidURL }
         let (data, _) = try await URLSession.shared.data(from: url)
@@ -163,7 +162,13 @@ actor ESPNService {
 
         let odds = competition.odds?.first
         let spread = parseSpread(from: odds, homeId: home.team.id, awayId: away.team.id)
-        let spreadTeamId = parseSpreadTeamId(from: odds, homeId: home.team.id, awayId: away.team.id)
+        let spreadTeamId = Self.parseSpreadTeamId(
+            from: odds,
+            homeId: home.team.id,
+            awayId: away.team.id,
+            homeAbbreviation: home.team.abbreviation,
+            awayAbbreviation: away.team.abbreviation
+        )
 
         let kickoff = ISO8601DateFormatter().date(from: event.date) ?? Date()
         let status: SlateGame.GameStatus = {
@@ -190,7 +195,11 @@ actor ESPNService {
             spreadTeamId: spreadTeamId,
             status: status,
             homeScore: Int(home.score ?? ""),
-            awayScore: Int(away.score ?? "")
+            awayScore: Int(away.score ?? ""),
+            homeCuratedRank: Self.normalizedCuratedRank(home.curatedRank),
+            awayCuratedRank: Self.normalizedCuratedRank(away.curatedRank),
+            homeConferenceId: home.team.conferenceId,
+            awayConferenceId: away.team.conferenceId
         )
     }
 
@@ -202,10 +211,56 @@ actor ESPNService {
         return Double(match.2)
     }
 
-    private func parseSpreadTeamId(from odds: ESPNScoreboardResponse.ESPNOdds?, homeId: String, awayId: String) -> String? {
+    /// Maps ESPN's unranked sentinel (99) to nil; otherwise returns the rank.
+    static func normalizedCuratedRank(_ curatedRank: ESPNScoreboardResponse.ESPNCuratedRank?) -> Int? {
+        guard let current = curatedRank?.current, current != 99 else { return nil }
+        return current
+    }
+
+    /// Favorite from odds flags when present; otherwise derive from details (e.g. "BAMA -7.5"), then home.
+    static func parseSpreadTeamId(
+        from odds: ESPNScoreboardResponse.ESPNOdds?,
+        homeId: String,
+        awayId: String,
+        homeAbbreviation: String,
+        awayAbbreviation: String
+    ) -> String? {
         if odds?.homeTeamOdds?.favorite == true { return homeId }
         if odds?.awayTeamOdds?.favorite == true { return awayId }
+
+        if let details = odds?.details {
+            let pattern = /([A-Z]{2,4})\s*([-+]\d+\.?\d*)/
+            if let match = details.firstMatch(of: pattern) {
+                let abbr = String(match.1)
+                if abbr.caseInsensitiveCompare(homeAbbreviation) == .orderedSame { return homeId }
+                if abbr.caseInsensitiveCompare(awayAbbreviation) == .orderedSame { return awayId }
+            }
+        }
+
         return homeId
+    }
+
+    static let scoreboardBaseURL = "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard"
+
+    static func currentWeekURL(seasonType: Int = 2) -> URL? {
+        var components = URLComponents(string: scoreboardBaseURL)!
+        components.queryItems = [
+            URLQueryItem(name: "seasontype", value: String(seasonType)),
+            URLQueryItem(name: "groups", value: "80"),
+            URLQueryItem(name: "limit", value: "300")
+        ]
+        return components.url
+    }
+
+    static func scoreboardURL(week: Int, seasonType: Int) -> URL? {
+        var components = URLComponents(string: scoreboardBaseURL)!
+        components.queryItems = [
+            URLQueryItem(name: "week", value: String(week)),
+            URLQueryItem(name: "seasontype", value: String(seasonType)),
+            URLQueryItem(name: "groups", value: "80"),
+            URLQueryItem(name: "limit", value: "300")
+        ]
+        return components.url
     }
 
     enum ESPNError: LocalizedError {

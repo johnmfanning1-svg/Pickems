@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  /* Native date and number pickers render unusably dark otherwise. */
+  input[type="datetime-local"],
+  input[type="number"] {
+    color-scheme: dark;
+  }
+
+  code,
+  pre {
+    font-variant-ligatures: none;
+  }
+}

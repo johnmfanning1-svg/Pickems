@@ -1,0 +1,16 @@
+{
+  "name": "pickems-rules-tests",
+  "private": true,
+  "type": "module",
+  "description": "Firestore security rules unit tests (release gate G0)",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "emulate": "cd .. && firebase emulators:exec --only firestore \"npm --prefix tests test\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "firebase": "^10.14.1",
+    "vitest": "^2.1.8"
+  }
+}

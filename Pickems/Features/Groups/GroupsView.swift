@@ -29,6 +29,8 @@ struct GroupsView: View {
 
                             LeaderboardView()
 
+                            thisWeekCard(group)
+
                             primaryActions(group)
 
                             manageSection(group)
@@ -225,32 +227,125 @@ struct GroupsView: View {
             .frame(width: 1, height: 36)
     }
 
+    // MARK: - This Week (pre-kickoff)
+
+    @ViewBuilder
+    private func thisWeekCard(_ group: PickemGroup) -> some View {
+        if let week = appState.groupService.currentWeek,
+           week.status == .selection || week.status == .picking {
+            let submittedCount = Set(
+                appState.pickService.submissions.filter(\.isLocked).map(\.userId)
+            ).count
+
+            PickemsCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("This Week")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .accessibilityAddTraits(.isHeader)
+
+                    Text(week.displayLabel)
+                        .font(.headline)
+                        .foregroundStyle(PickemsColors.textPrimary)
+
+                    HStack(spacing: 16) {
+                        Label(
+                            "\(week.nominationCount)/\(week.slateSize) slate",
+                            systemImage: "sportscourt"
+                        )
+                        Label(
+                            "\(submittedCount) of \(group.memberCount) submitted",
+                            systemImage: "checkmark.circle"
+                        )
+                    }
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(PickemsColors.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
     // MARK: - Primary actions
 
     private func primaryActions(_ group: PickemGroup) -> some View {
-        HStack(spacing: 12) {
+        let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+
+        return VStack(spacing: 12) {
+            LazyVGrid(columns: columns, spacing: 12) {
+                GroupChatEntryButton(group: group)
+
+                NavigationLink {
+                    GroupPicksView()
+                } label: {
+                    gridActionLabel("Group Picks", systemImage: "list.bullet.clipboard")
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("See who has submitted and view group picks")
+
+                if let week = appState.groupService.currentWeek {
+                    NavigationLink {
+                        GroupSlateView(group: group, week: week)
+                    } label: {
+                        gridActionLabel(slateActionTitle(for: week.status), systemImage: slateActionIcon(for: week.status))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint(slateActionHint(for: week.status))
+                }
+
+                NavigationLink {
+                    MemberListView()
+                } label: {
+                    gridActionLabel("Members", systemImage: "person.3")
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("View league members and season records")
+            }
+
             InviteShareButton(group: group)
                 .accessibilityHint("Share your invite code with friends")
-
-            NavigationLink {
-                MemberListView()
-            } label: {
-                Label("Members", systemImage: "person.3")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(PickemsColors.cardBackground)
-                    .foregroundStyle(theme.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
-                    )
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("View league members and season records")
         }
         .padding(.horizontal)
+    }
+
+    private func gridActionLabel(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.subheadline.weight(.semibold))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(PickemsColors.cardBackground)
+            .foregroundStyle(theme.accent)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+            )
+    }
+
+    private func slateActionTitle(for status: WeekStatus) -> String {
+        switch status {
+        case .selection: return "Build Slate"
+        case .picking: return "Make Picks"
+        case .locked, .scored: return "Live Picks"
+        }
+    }
+
+    private func slateActionIcon(for status: WeekStatus) -> String {
+        switch status {
+        case .selection: return "plus.rectangle.on.rectangle"
+        case .picking: return "hand.tap"
+        case .locked, .scored: return "sportscourt.fill"
+        }
+    }
+
+    private func slateActionHint(for status: WeekStatus) -> String {
+        switch status {
+        case .selection: return "Nominate or build this week's slate"
+        case .picking: return "Make your spread picks for this week"
+        case .locked, .scored: return "Monitor live slate scores and results"
+        }
     }
 
     // MARK: - Manage / secondary

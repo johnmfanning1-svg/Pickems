@@ -18,6 +18,14 @@ struct ESPNGame: Identifiable, Equatable {
     let status: SlateGame.GameStatus
     let homeScore: Int?
     let awayScore: Int?
+    /// nil when unranked; ESPN sends 99 for unranked → map to nil
+    let homeCuratedRank: Int?
+    let awayCuratedRank: Int?
+    /// ESPN competitor.team.conferenceId
+    let homeConferenceId: String?
+    let awayConferenceId: String?
+
+    var isTop25: Bool { homeCuratedRank != nil || awayCuratedRank != nil }
 }
 
 struct ESPNScoreboardResponse: Decodable {
@@ -52,6 +60,11 @@ struct ESPNScoreboardResponse: Decodable {
         let homeAway: String
         let team: ESPNTeam
         let score: String?
+        let curatedRank: ESPNCuratedRank?
+    }
+
+    struct ESPNCuratedRank: Decodable {
+        let current: Int
     }
 
     struct ESPNTeam: Decodable {
@@ -60,6 +73,7 @@ struct ESPNScoreboardResponse: Decodable {
         let abbreviation: String
         let logo: String?
         let logos: [ESPNLogo]?
+        let conferenceId: String?
     }
 
     struct ESPNLogo: Decodable {

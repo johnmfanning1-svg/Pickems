@@ -1,0 +1,37 @@
+{
+  "name": "pickems-admin",
+  "private": true,
+  "version": "2.3.0",
+  "type": "module",
+  "description": "Pickems web admin portal — Firebase Hosting, super-admin gated.",
+  "scripts": {
+    "dev": "vite",
+    "dev:emulators": "VITE_USE_EMULATORS=true vite",
+    "build": "tsc --noEmit && vite build",
+    "postbuild": "node -e \"require('fs').writeFileSync('dist/.gitkeep','')\"",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx --max-warnings 0"
+  },
+  "dependencies": {
+    "firebase": "^10.14.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@typescript-eslint/eslint-plugin": "^8.13.0",
+    "@typescript-eslint/parser": "^8.13.0",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "eslint-plugin-react-refresh": "^0.4.14",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

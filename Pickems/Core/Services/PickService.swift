@@ -191,7 +191,17 @@ final class PickService {
 
         let nomsSnap = try await weekRef.collection("nominations").getDocuments()
         let nominations = nomsSnap.documents.compactMap { try? $0.data(as: Nomination.self) }
+        var seenEventIds = Set<String>()
         for nom in nominations {
+            if seenEventIds.contains(nom.espnEventId) {
+                AppLog.notice(AppLog.picks, "materializeNominations skipped duplicate espnEventId", metadata: [
+                    "espnEventId": nom.espnEventId,
+                    "groupId": groupId,
+                    "weekId": weekId
+                ])
+                continue
+            }
+            seenEventIds.insert(nom.espnEventId)
             let game = SlateGame(
                 id: nom.espnEventId,
                 espnEventId: nom.espnEventId,
@@ -245,6 +255,12 @@ final class PickService {
     ) async throws {
         guard slateGames.count < rules.slateSize else {
             throw PickError.slateFull
+        }
+        guard !slateGames.contains(where: { $0.espnEventId == game.espnEventId }) else {
+            throw PickError.duplicateGame
+        }
+        guard !nominations.contains(where: { $0.espnEventId == game.espnEventId }) else {
+            throw PickError.duplicateGame
         }
         let ref = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
