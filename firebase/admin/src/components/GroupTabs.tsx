@@ -5,6 +5,7 @@ export function GroupTabs({ groupId }: { groupId: string }) {
     { to: `/groups/${groupId}`, label: "Overview", end: true },
     { to: `/groups/${groupId}/members`, label: "Members" },
     { to: `/groups/${groupId}/weeks`, label: "Weeks" },
+    { to: `/groups/${groupId}/seasons`, label: "Seasons" },
   ];
   return (
     <nav className="flex gap-1 border-b border-ink-600 pb-2">

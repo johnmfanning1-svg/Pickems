@@ -1,7 +1,7 @@
 import { FirebaseError } from "firebase/app";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "./firebase";
-import type { WeekAuditRow, WeekStatus } from "./types";
+import type { GameStatus, WeekAuditRow, WeekStatus } from "./types";
 
 /**
  * Typed wrappers over the v2 `onCall` functions in
@@ -63,6 +63,56 @@ export const adminRescoreWeek = callable<
   { groupId: string; weekId: string },
   { groupId: string; weekId: string; weeksSummed: number; entries: unknown[] }
 >("adminRescoreWeek");
+
+export const adminScoreWeek = callable<
+  { groupId: string; weekId: string },
+  { groupId: string; weekId: string; status: string; weeksSummed: number; entries: unknown[] }
+>("adminScoreWeek");
+
+export const adminUpdateGameResult = callable<
+  {
+    groupId: string;
+    weekId: string;
+    gameId: string;
+    status: GameStatus;
+    homeScore?: number | null;
+    awayScore?: number | null;
+    winnerTeamId?: string | null;
+  },
+  {
+    groupId: string;
+    weekId: string;
+    gameId: string;
+    status: GameStatus;
+    homeScore?: number | null;
+    awayScore?: number | null;
+    winnerTeamId?: string | null;
+  }
+>("adminUpdateGameResult");
+
+export const adminCloseSeason = callable<
+  { groupId: string; seasonYear: number; championUserId?: string | null },
+  {
+    groupId: string;
+    seasonYear: number;
+    championUserId: string | null;
+    championDisplayName: string | null;
+    standings: number;
+  }
+>("adminCloseSeason");
+
+export const adminSetCareerRecord = callable<
+  {
+    groupId: string;
+    userId: string;
+    titles?: number;
+    seasonWins?: number;
+    seasonLosses?: number;
+    seasonsPlayed?: number;
+    bestFinish?: number | null;
+  },
+  { groupId: string; userId: string }
+>("adminSetCareerRecord");
 
 /**
  * Turns Firebase's error surface into something an operator can act on.

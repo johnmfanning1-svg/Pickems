@@ -28,6 +28,10 @@ export {
   adminTransferCommissioner,
   adminAuditWeekIds,
   adminRescoreWeek,
+  adminScoreWeek,
+  adminUpdateGameResult,
+  adminCloseSeason,
+  adminSetCareerRecord,
 } from "./admin";
 
 // Group chat — push fan-out plus the report counter clients cannot write.

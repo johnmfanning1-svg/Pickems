@@ -9,7 +9,7 @@ import { useConfirm } from "@/components/useConfirm";
 import { pickForUser, useGroup, useMembers, usePicks, useSlateGames, useWeek } from "@/hooks/queries";
 import { useAction } from "@/hooks/useAction";
 import type { WithId } from "@/hooks/useFirestore";
-import { adminRescoreWeek, adminUpsertPick } from "@/lib/callables";
+import { adminRescoreWeek, adminScoreWeek, adminUpsertPick } from "@/lib/callables";
 import { favoriteSpreadLabel, formatTimestamp } from "@/lib/format";
 import type { MemberDoc, SlateGameDoc } from "@/lib/types";
 
@@ -174,6 +174,29 @@ export function WeekPicksPage() {
     });
   }
 
+  async function scoreAndFinalize() {
+    if (!(await confirm({
+      title: "Score and finalize this week?",
+      body: (
+        <>
+          Scores <strong>{groupName}</strong> week <code className="font-mono">{weekId}</code> from its
+          current games, updates awards and standings, and sets the week status to{" "}
+          <code className="font-mono">scored</code> — the same thing the scheduler does once every game
+          is final. Only final games contribute, and season records are re-summed, so running it again
+          is safe.
+        </>
+      ),
+      tone: "primary",
+      confirmLabel: "Score & finalize",
+    }))) {
+      return;
+    }
+    await action.run("finalize", async () => {
+      const result = await adminScoreWeek({ groupId: groupId!, weekId: weekId! });
+      return `Week finalized — scored ${result.entries.length} member(s) across ${result.weeksSummed} week(s).`;
+    });
+  }
+
   const loading = week.loading || games.loading || members.loading || picks.loading;
 
   return (
@@ -199,12 +222,19 @@ export function WeekPicksPage() {
               All weeks
             </Link>
             <Button
-              variant="primary"
               pending={action.isPending("rescore")}
               disabled={action.busy}
               onClick={() => void rescore()}
             >
               Rescore week
+            </Button>
+            <Button
+              variant="primary"
+              pending={action.isPending("finalize")}
+              disabled={action.busy}
+              onClick={() => void scoreAndFinalize()}
+            >
+              Score &amp; finalize
             </Button>
           </>
         }

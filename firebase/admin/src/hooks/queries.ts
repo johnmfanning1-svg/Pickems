@@ -12,11 +12,13 @@ import { db } from "@/lib/firebase";
 import type {
   AppConfigDoc,
   AuditEntryDoc,
+  CareerRecordDoc,
   ChatMessageDoc,
   GroupDoc,
   MemberDoc,
   NominationDoc,
   PickDoc,
+  SeasonArchiveDoc,
   SlateGameDoc,
   SubmissionDoc,
   UserDoc,
@@ -149,6 +151,39 @@ export function useSubmissions(
           : null,
       [groupId, weekId],
     ),
+  );
+}
+
+/** Archived seasons, newest year first. */
+export function useSeasons(groupId: string | undefined): QueryState<SeasonArchiveDoc> {
+  const state = useCollection<SeasonArchiveDoc>(
+    useMemo(() => (groupId ? collection(db, "groups", groupId, "seasons") : null), [groupId]),
+  );
+  return useMemo(
+    () => ({
+      ...state,
+      data: [...state.data].sort((a, b) => (b.seasonYear ?? 0) - (a.seasonYear ?? 0)),
+    }),
+    [state],
+  );
+}
+
+/** Career/dynasty records, most crowns then best record first. */
+export function useCareer(groupId: string | undefined): QueryState<CareerRecordDoc> {
+  const state = useCollection<CareerRecordDoc>(
+    useMemo(() => (groupId ? collection(db, "groups", groupId, "career") : null), [groupId]),
+  );
+  return useMemo(
+    () => ({
+      ...state,
+      data: [...state.data].sort(
+        (a, b) =>
+          (b.titles ?? 0) - (a.titles ?? 0) ||
+          (b.seasonWins ?? 0) - (a.seasonWins ?? 0) ||
+          (a.displayName ?? "").localeCompare(b.displayName ?? ""),
+      ),
+    }),
+    [state],
   );
 }
 

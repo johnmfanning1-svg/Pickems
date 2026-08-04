@@ -140,6 +140,44 @@ export interface SubmissionDoc {
   submittedAt?: Timestamp | null;
 }
 
+/** One row of an archived season's final standings. Mirrors iOS `SeasonStandingEntry`. */
+export interface SeasonStandingEntry {
+  id: string;
+  displayName: string;
+  avatarColorHex: string;
+  seasonWins: number;
+  seasonLosses: number;
+  rank: number;
+}
+
+/** `groups/{id}/seasons/{year}` — a closed season. Mirrors iOS `SeasonArchive`. */
+export interface SeasonArchiveDoc {
+  id: string;
+  seasonYear: number;
+  groupId: string;
+  championUserId?: string | null;
+  championDisplayName?: string | null;
+  finalStandings: SeasonStandingEntry[];
+  weekCount: number;
+  closedAt?: Timestamp | null;
+}
+
+/**
+ * `groups/{id}/career/{userId}` — cumulative dynasty record. `titles` is the
+ * "crown" count shown in the app. Mirrors iOS `CareerRecord`.
+ */
+export interface CareerRecordDoc {
+  id: string;
+  displayName: string;
+  avatarColorHex?: string;
+  titles?: number;
+  seasonWins?: number;
+  seasonLosses?: number;
+  seasonsPlayed?: number;
+  bestFinish?: number | null;
+  updatedAt?: Timestamp | null;
+}
+
 export interface UserDoc {
   id: string;
   displayName?: string;

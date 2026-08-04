@@ -7,6 +7,7 @@ import { ConfigPage } from "@/pages/ConfigPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { GroupDetailPage } from "@/pages/GroupDetailPage";
 import { GroupMembersPage } from "@/pages/GroupMembersPage";
+import { GroupSeasonsPage } from "@/pages/GroupSeasonsPage";
 import { GroupWeeksPage } from "@/pages/GroupWeeksPage";
 import { GroupsPage } from "@/pages/GroupsPage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
           { path: "/groups/:id", element: <GroupDetailPage /> },
           { path: "/groups/:id/members", element: <GroupMembersPage /> },
           { path: "/groups/:id/weeks", element: <GroupWeeksPage /> },
+          { path: "/groups/:id/seasons", element: <GroupSeasonsPage /> },
           { path: "/groups/:id/weeks/:weekId/picks", element: <WeekPicksPage /> },
           { path: "/config", element: <ConfigPage /> },
           { path: "/audit/weeks", element: <AuditWeeksPage /> },
