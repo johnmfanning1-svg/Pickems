@@ -5,12 +5,29 @@ struct PicksView: View {
     @Environment(\.themePalette) private var theme
     @State private var viewModel = PicksViewModel()
 
+    private var showsGroupPicker: Bool {
+        appState.groupService.groups.count > 1
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    if showsGroupPicker {
+                        picksGroupPicker
+                    }
+
+                    if !appState.groupService.availableWeeks.isEmpty {
+                        PicksWeekTabBar(
+                            weeks: appState.groupService.availableWeeks,
+                            selectedWeekId: appState.groupService.currentWeek?.id,
+                            activeWeekId: activeESPNWeekId
+                        ) { week in
+                            selectWeek(week)
+                        }
+                    }
+
                     if let week = appState.groupService.currentWeek {
-                        SeasonWeekHeader(label: week.displayLabel)
                         statusContent(for: week)
                     } else {
                         EmptyStateView(
@@ -19,6 +36,10 @@ struct PicksView: View {
                             message: "Join a group to start making picks.",
                             help: PickemsHelp.picksOverview
                         )
+                    }
+
+                    if appState.groupService.selectedGroup != nil {
+                        seasonHistoryControl
                     }
 
                     if let error = appState.pickService.errorMessage {
@@ -35,7 +56,7 @@ struct PicksView: View {
                     HelpToolbarButton(topic: PickemsHelp.picksOverview)
                 }
             }
-            .refreshable { await viewModel.loadWeek(appState: appState) }
+            .refreshable { await reloadPicks() }
             .sheet(isPresented: $viewModel.showGameBrowse) {
                 GameBrowseView(
                     games: viewModel.espnGames,
@@ -83,9 +104,10 @@ struct PicksView: View {
                 Text("You can still swap your games until the slate locks at the first kickoff.")
             }
             .task(id: appState.groupService.selectedGroup?.id) {
-                await viewModel.loadWeek(appState: appState)
+                await reloadPicks()
             }
-            .onChange(of: appState.groupService.currentWeek?.id) { _, _ in
+            .onChange(of: appState.groupService.currentWeek?.id) { _, newWeekId in
+                reobservePicks(weekId: newWeekId)
                 viewModel.refreshNominationSubmissionState(appState: appState)
             }
             .onChange(of: appState.pickService.userPick?.picks) { _, newPicks in
@@ -93,6 +115,79 @@ struct PicksView: View {
             }
         }
     }
+
+    // MARK: - Group / week chrome
+
+    private var picksGroupPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Your Leagues")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(PickemsColors.textSecondary)
+                .padding(.horizontal)
+                .accessibilityAddTraits(.isHeader)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(appState.groupService.groups) { group in
+                        GroupChip(
+                            name: group.name,
+                            isSelected: appState.groupService.selectedGroup?.id == group.id
+                        ) {
+                            PickemsHaptics.selection()
+                            appState.groupService.selectGroup(group)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+
+    private var seasonHistoryControl: some View {
+        NavigationLink { SeasonPickHistoryView() } label: {
+            Label("Season History", systemImage: "calendar")
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .foregroundStyle(theme.accent)
+        }
+        .padding(.horizontal)
+        .accessibilityHint("Review your picks across the season")
+    }
+
+    private var activeESPNWeekId: String? {
+        appState.groupService.cfbWeek.map { CFBWeekSync.weekId(for: $0) }
+            ?? appState.groupService.currentWeek?.id
+    }
+
+    private func selectWeek(_ week: WeekSummary) {
+        PickemsHaptics.selection()
+        viewModel.stopLiveRefresh()
+        viewModel.draftPicks = [:]
+        viewModel.confidenceGameId = nil
+        appState.groupService.selectWeek(weekId: week.id)
+        reobservePicks(weekId: week.id)
+    }
+
+    private func reobservePicks(weekId: String?) {
+        guard let group = appState.groupService.selectedGroup,
+              let weekId,
+              let userId = appState.currentUserId else { return }
+        appState.pickService.observeWeek(groupId: group.id, weekId: weekId, userId: userId)
+        if let picks = appState.pickService.userPick?.picks, !picks.isEmpty {
+            viewModel.draftPicks = picks
+        }
+        viewModel.confidenceGameId = appState.pickService.userPick?.confidenceGameId
+        viewModel.refreshNominationSubmissionState(appState: appState)
+    }
+
+    private func reloadPicks() async {
+        await viewModel.loadWeek(appState: appState)
+        if let groupId = appState.groupService.selectedGroup?.id {
+            await appState.groupService.loadAvailableWeeks(groupId: groupId)
+        }
+    }
+
+    // MARK: - Phase content
 
     @ViewBuilder
     private func statusContent(for week: WeekSummary) -> some View {
@@ -266,20 +361,20 @@ struct PicksView: View {
     }
 
     private func pickingPhase(week: WeekSummary) -> some View {
-        let pastDeadline = ScoringEngine.isPastDeadline(deadline: week.pickDeadline)
+        let pastDeadline = PickDeadlineCalculator.isPast(week.pickDeadline)
 
         return VStack(spacing: 16) {
             PickemsSectionHeader(title: "Spread Picks", subtitle: "Tap a team to pick against the spread", help: PickemsHelp.spreadPicks)
 
             if let deadline = week.pickDeadline {
-                PickDeadlineBanner(deadline: deadline, isPast: pastDeadline)
+                PickDeadlineBanner(deadline: deadline)
             }
 
             if appState.pickService.userPick?.isLocked == true {
                 VStack(alignment: .leading, spacing: 8) {
                     StatusBadge(text: "Submitted", color: PickemsColors.success)
                     if !pastDeadline {
-                        Text("Changed your mind? You can still edit your picks until the first game kicks off.")
+                        Text("Submitted — you can edit until lock")
                             .font(.caption)
                             .foregroundStyle(PickemsColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -356,25 +451,11 @@ struct PicksView: View {
                 .padding(.horizontal)
             }
 
-            VStack(spacing: 8) {
-                NavigationLink { SeasonPickHistoryView() } label: {
-                    Label("Season History", systemImage: "calendar")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .foregroundStyle(theme.accent)
-                }
-                NavigationLink { PickHistoryView() } label: {
-                    Label("This Week's Picks", systemImage: "clock.arrow.circlepath")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .foregroundStyle(theme.accent)
-                }
-                NavigationLink { GroupPicksView() } label: {
-                    Label("View Group Picks", systemImage: "person.3")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .foregroundStyle(theme.accent)
-                }
+            NavigationLink { GroupPicksView() } label: {
+                Label("View Group Picks", systemImage: "person.3")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(theme.accent)
             }
             .padding(.horizontal)
         }
@@ -385,5 +466,83 @@ struct PicksView: View {
             viewModel.startLiveRefresh(week: week, appState: appState)
         }
         .onDisappear { viewModel.stopLiveRefresh() }
+    }
+}
+
+// MARK: - Week tabs
+
+private struct PicksWeekTabBar: View {
+    @Environment(\.themePalette) private var theme
+    let weeks: [WeekSummary]
+    let selectedWeekId: String?
+    let activeWeekId: String?
+    let onSelect: (WeekSummary) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Week")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(PickemsColors.textSecondary)
+                .padding(.horizontal)
+                .accessibilityAddTraits(.isHeader)
+
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(weeks) { week in
+                            weekTab(week)
+                                .id(week.id)
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                .onAppear { scrollToSelected(proxy) }
+                .onChange(of: selectedWeekId) { _, _ in scrollToSelected(proxy) }
+                .onChange(of: weeks.map(\.id)) { _, _ in scrollToSelected(proxy) }
+            }
+        }
+    }
+
+    private func weekTab(_ week: WeekSummary) -> some View {
+        let isSelected = week.id == selectedWeekId
+        let isActive = week.id == activeWeekId
+        return Button {
+            onSelect(week)
+        } label: {
+            VStack(spacing: 2) {
+                Text("Week \(week.weekNumber)")
+                    .font(.subheadline.weight(.semibold))
+                if isActive {
+                    Text("Current")
+                        .font(.caption2.weight(.medium))
+                        .opacity(isSelected ? 0.9 : 0.7)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(isSelected ? theme.accent : PickemsColors.cardBackground)
+            .foregroundStyle(isSelected ? theme.onAccent : PickemsColors.textPrimary)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? Color.clear : Color.white.opacity(0.08),
+                        lineWidth: 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Week \(week.weekNumber)")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityHint(isActive ? "Current week" : "View picks for this week")
+    }
+
+    private func scrollToSelected(_ proxy: ScrollViewProxy) {
+        guard let selectedWeekId else { return }
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo(selectedWeekId, anchor: .center)
+            }
+        }
     }
 }
