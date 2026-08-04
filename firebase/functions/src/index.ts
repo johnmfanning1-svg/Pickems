@@ -63,10 +63,11 @@ export const onWeekStatusChange = onDocumentUpdated(
   }
 );
 
-/** Reminder ~2h before deadline for weeks still in picking. */
+/** Reminders 24h and 1h before pickDeadline for weeks still in picking. */
 export const deadlineReminders = onSchedule("every 15 minutes", async () => {
-  const now = admin.firestore.Timestamp.now();
-  const inTwoHours = admin.firestore.Timestamp.fromMillis(now.toMillis() + 2 * 60 * 60 * 1000);
+  const nowMs = Date.now();
+  const MS_PER_MIN = 60 * 1000;
+  const MS_PER_HOUR = 60 * MS_PER_MIN;
   const groups = await db.collection("groups").get();
 
   for (const groupDoc of groups.docs) {
@@ -79,10 +80,17 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
       const week = weekDoc.data();
       const deadline = week.pickDeadline as admin.firestore.Timestamp | undefined;
       if (!deadline) continue;
-      if (deadline.toMillis() < now.toMillis() || deadline.toMillis() > inTwoHours.toMillis()) {
-        continue;
-      }
-      if (week.deadlineReminderSent) continue;
+
+      const msUntil = deadline.toMillis() - nowMs;
+      if (msUntil <= 0) continue;
+
+      const in24hWindow = msUntil >= 23 * MS_PER_HOUR && msUntil <= 25 * MS_PER_HOUR;
+      const in1hWindow = msUntil >= 50 * MS_PER_MIN && msUntil <= 70 * MS_PER_MIN;
+      if (!in24hWindow && !in1hWindow) continue;
+
+      const need24h = in24hWindow && !week.deadlineReminder24hSent;
+      const need1h = in1hWindow && !week.deadlineReminder1hSent;
+      if (!need24h && !need1h) continue;
 
       const memberIds = (groupDoc.data().memberIds as string[]) ?? [];
       const submissions = await weekDoc.ref.collection("submissions").get();
@@ -90,14 +98,30 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
         submissions.docs.filter((d) => d.data().isLocked === true).map((d) => d.id)
       );
       const pending = memberIds.filter((id) => !submitted.has(id));
-      await sendToUsers(
-        pending,
-        "Pick deadline soon",
-        `Submit your Week ${week.weekNumber} picks before kickoff.`,
-        "deadline_reminder",
-        { groupId: groupDoc.id, weekId: weekDoc.id }
-      );
-      await weekDoc.ref.update({ deadlineReminderSent: true });
+      const data = { groupId: groupDoc.id, weekId: weekDoc.id };
+      const weekNum = week.weekNumber;
+
+      if (need24h) {
+        await sendToUsers(
+          pending,
+          "Picks lock in 24 hours",
+          `Week ${weekNum} picks lock in 24 hours. Submit before the deadline.`,
+          "deadline_reminder",
+          data
+        );
+        await weekDoc.ref.update({ deadlineReminder24hSent: true });
+      }
+
+      if (need1h) {
+        await sendToUsers(
+          pending,
+          "Picks lock in 1 hour",
+          `Week ${weekNum} picks lock in 1 hour. Submit before the deadline.`,
+          "deadline_reminder",
+          data
+        );
+        await weekDoc.ref.update({ deadlineReminder1hSent: true });
+      }
     }
   }
 });
