@@ -54,6 +54,9 @@
           }
         ]
       }
+    ],
+    "predeploy": [
+      "bash -lc 'cd admin && ./node_modules/.bin/tsc --noEmit && ./node_modules/.bin/vite build && node -e \"require(\\\"fs\\\").writeFileSync(\\\"dist/.gitkeep\\\",\\\"\\\")\"'"
     ]
   },
   "emulators": {
