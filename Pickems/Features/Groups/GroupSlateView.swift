@@ -79,7 +79,7 @@ struct GroupSlateView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("You can still swap your games until the slate locks at the first kickoff.")
+            Text("You can still swap your games until the slate locks.")
         }
         .task(id: "\(group.id)-\(activeWeek.id)") {
             await viewModel.loadWeek(appState: appState)
@@ -265,7 +265,7 @@ struct GroupSlateView: View {
                     Label("Nominations submitted", systemImage: "checkmark.seal.fill")
                         .font(.headline)
                         .foregroundStyle(PickemsColors.success)
-                    Text("Your \(userNoms) game\(userNoms == 1 ? "" : "s") \(userNoms == 1 ? "is" : "are") in. You can still edit them until the slate locks at the first kickoff.")
+                    Text("Your \(userNoms) game\(userNoms == 1 ? "" : "s") \(userNoms == 1 ? "is" : "are") in. You can still edit them until the slate locks.")
                         .font(.caption)
                         .foregroundStyle(PickemsColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

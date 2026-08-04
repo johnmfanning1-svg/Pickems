@@ -93,7 +93,7 @@ struct PicksView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("You can still edit your picks until the first game kicks off.")
+                Text("You can still edit your picks until the lock time shown on this week.")
             }
             .confirmationDialog("Submit your nominations?", isPresented: $viewModel.showConfirmNominations, titleVisibility: .visible) {
                 Button("Submit Nominations") {
@@ -101,7 +101,7 @@ struct PicksView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("You can still swap your games until the slate locks at the first kickoff.")
+                Text("You can still swap your games until the slate locks.")
             }
             .task(id: appState.groupService.selectedGroup?.id) {
                 await reloadPicks()
