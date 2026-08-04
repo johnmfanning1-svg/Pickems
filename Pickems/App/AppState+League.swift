@@ -99,10 +99,41 @@ extension AppState {
     }
 
     func rankedStandings(weekly: Bool) -> [StandingEntry] {
-        guard let standings = groupService.standings else { return [] }
+        let members = groupService.members
+        let joinedAtById = Dictionary(uniqueKeysWithValues: members.map { ($0.id, $0.joinedAt) })
+
+        let baseEntries: [StandingEntry]
+        if let standings = groupService.standings, !standings.entries.isEmpty {
+            baseEntries = standings.entries.map { entry in
+                var copy = entry
+                if copy.joinedAt == nil {
+                    copy.joinedAt = joinedAtById[entry.id]
+                }
+                return copy
+            }
+        } else if !members.isEmpty {
+            // Interim board before the first scored week: members ranked by join date.
+            baseEntries = members.map { member in
+                StandingEntry(
+                    id: member.id,
+                    displayName: member.displayName,
+                    avatarColorHex: member.avatarColorHex,
+                    weeklyWins: 0,
+                    weeklyLosses: 0,
+                    seasonWins: member.seasonWins,
+                    seasonLosses: member.seasonLosses,
+                    rank: 0,
+                    isTied: false,
+                    joinedAt: member.joinedAt
+                )
+            }
+        } else {
+            return []
+        }
+
         let tieBreaker = groupService.selectedGroup?.rules.tieBreaker ?? .commissionerOverride
         return ScoringEngine.rankedStandings(
-            entries: standings.entries,
+            entries: baseEntries,
             weekly: weekly,
             tieBreaker: tieBreaker,
             allPicks: pickService.allPicks,

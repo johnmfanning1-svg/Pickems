@@ -91,18 +91,25 @@ enum ScoringEngine {
         games: [SlateGame] = []
     ) -> [StandingEntry] {
         let picksByUser = Dictionary(uniqueKeysWithValues: allPicks.map { ($0.userId, $0.picks) })
+        let hasAnyWins = entries.contains { (weekly ? $0.weeklyWins : $0.seasonWins) > 0 }
 
-        var sorted = entries.sorted { lhs, rhs in
-            compareEntries(lhs, rhs, weekly: weekly, tieBreaker: tieBreaker, picksByUser: picksByUser, games: games)
-        }
+        var sorted: [StandingEntry]
+        if hasAnyWins {
+            sorted = entries.sorted { lhs, rhs in
+                compareEntries(lhs, rhs, weekly: weekly, tieBreaker: tieBreaker, picksByUser: picksByUser, games: games)
+            }
 
-        if tieBreaker == .headToHead, !allPicks.isEmpty, !games.isEmpty {
-            sorted = resolveHeadToHeadTieGroups(
-                sorted,
-                weekly: weekly,
-                picksByUser: picksByUser,
-                games: games
-            )
+            if tieBreaker == .headToHead, !allPicks.isEmpty, !games.isEmpty {
+                sorted = resolveHeadToHeadTieGroups(
+                    sorted,
+                    weekly: weekly,
+                    picksByUser: picksByUser,
+                    games: games
+                )
+            }
+        } else {
+            // Interim ranking: no wins yet → join order, then display name.
+            sorted = entries.sorted(by: compareJoinDateThenName)
         }
 
         var ranked: [StandingEntry] = []
@@ -110,16 +117,24 @@ enum ScoringEngine {
             entry.rank = index + 1
             if index > 0 {
                 let prev = ranked[index - 1]
-                entry.isTied = entriesAreTied(
-                    entry,
-                    prev,
-                    weekly: weekly,
-                    tieBreaker: tieBreaker,
-                    picksByUser: picksByUser,
-                    games: games
-                )
-                if entry.isTied && tieBreaker == .commissionerOverride {
-                    entry.rank = prev.rank
+                if hasAnyWins {
+                    entry.isTied = entriesAreTied(
+                        entry,
+                        prev,
+                        weekly: weekly,
+                        tieBreaker: tieBreaker,
+                        picksByUser: picksByUser,
+                        games: games
+                    )
+                    if entry.isTied && tieBreaker == .commissionerOverride {
+                        entry.rank = prev.rank
+                    }
+                } else {
+                    // Distinct join dates produce distinct ranks; same join instant can tie.
+                    entry.isTied = sameJoinInstant(entry, prev)
+                    if entry.isTied {
+                        entry.rank = prev.rank
+                    }
                 }
             } else {
                 entry.isTied = false
@@ -155,7 +170,23 @@ enum ScoringEngine {
             if h2h.a != h2h.b { return h2h.a > h2h.b }
         }
 
+        return compareJoinDateThenName(lhs, rhs)
+    }
+
+    /// Earlier join ranks higher; display name is the final stabilizer.
+    private static func compareJoinDateThenName(_ lhs: StandingEntry, _ rhs: StandingEntry) -> Bool {
+        let lhsDate = lhs.joinedAt ?? .distantFuture
+        let rhsDate = rhs.joinedAt ?? .distantFuture
+        if lhsDate != rhsDate { return lhsDate < rhsDate }
         return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+    }
+
+    private static func sameJoinInstant(_ lhs: StandingEntry, _ rhs: StandingEntry) -> Bool {
+        switch (lhs.joinedAt, rhs.joinedAt) {
+        case let (l?, r?): return l == r
+        case (nil, nil): return true
+        default: return false
+        }
     }
 
     private static func resolveHeadToHeadTieGroups(
@@ -191,7 +222,7 @@ enum ScoringEngine {
                         games: games
                     )
                     if lhsRecord != rhsRecord { return lhsRecord > rhsRecord }
-                    return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+                    return compareJoinDateThenName(lhs, rhs)
                 }
                 result.append(contentsOf: resolved)
             } else {

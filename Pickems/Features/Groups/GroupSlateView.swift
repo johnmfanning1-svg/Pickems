@@ -71,7 +71,7 @@ struct GroupSlateView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("You can still edit your picks until the first game kicks off.")
+            Text("You can still edit your picks until lock.")
         }
         .confirmationDialog("Submit your nominations?", isPresented: $viewModel.showConfirmNominations, titleVisibility: .visible) {
             Button("Submit Nominations") {
@@ -79,7 +79,7 @@ struct GroupSlateView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("You can still swap your games until the slate locks at the first kickoff.")
+            Text("You can still swap your games until the slate locks.")
         }
         .task(id: "\(group.id)-\(activeWeek.id)") {
             await viewModel.loadWeek(appState: appState)
@@ -265,7 +265,7 @@ struct GroupSlateView: View {
                     Label("Nominations submitted", systemImage: "checkmark.seal.fill")
                         .font(.headline)
                         .foregroundStyle(PickemsColors.success)
-                    Text("Your \(userNoms) game\(userNoms == 1 ? "" : "s") \(userNoms == 1 ? "is" : "are") in. You can still edit them until the slate locks at the first kickoff.")
+                    Text("Your \(userNoms) game\(userNoms == 1 ? "" : "s") \(userNoms == 1 ? "is" : "are") in. You can still edit them until the slate locks.")
                         .font(.caption)
                         .foregroundStyle(PickemsColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -303,14 +303,14 @@ struct GroupSlateView: View {
             )
 
             if let deadline = week.pickDeadline {
-                PickDeadlineBanner(deadline: deadline, isPast: pastDeadline)
+                PickDeadlineBanner(deadline: deadline)
             }
 
             if appState.pickService.userPick?.isLocked == true {
                 VStack(alignment: .leading, spacing: 8) {
                     StatusBadge(text: "Submitted", color: PickemsColors.success)
                     if !pastDeadline {
-                        Text("Changed your mind? You can still edit your picks until the first game kicks off.")
+                        Text("Submitted — you can edit until lock")
                             .font(.caption)
                             .foregroundStyle(PickemsColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)

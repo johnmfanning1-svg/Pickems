@@ -360,9 +360,6 @@ struct ProfileView: View {
             }
 
             if let group = appState.groupService.selectedGroup {
-                LabeledContent("Invite Code", value: group.inviteCode)
-                    .listRowBackground(PickemsColors.cardBackground)
-
                 InviteShareButton(group: group)
                     .listRowBackground(PickemsColors.cardBackground)
 
@@ -380,7 +377,7 @@ struct ProfileView: View {
                                 }
                             }
                         } label: {
-                            Label("Transfer Commissioner…", systemImage: "crown")
+                            Label("Transfer Commissioner…", systemImage: "gavel")
                                 .foregroundStyle(theme.accent)
                         }
                         .listRowBackground(PickemsColors.cardBackground)

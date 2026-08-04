@@ -2,8 +2,8 @@
 
 ## Version
 
-- **Marketing version:** 2.3.0
-- **Build:** 230
+- **Marketing version:** 2.4.0
+- **Build:** 240
 - **Bundle ID:** `FannypackInc.Pickems`
 - **Apple ID:** 6785697079
 - **ASO copy:** `docs/ASO.md` · upload via `fastlane/metadata/en-US/`

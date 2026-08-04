@@ -170,7 +170,7 @@ struct GroupsView: View {
                     Text(group.name)
                         .font(.title2.bold())
                         .foregroundStyle(PickemsColors.textPrimary)
-                    Text("\(group.memberCount) members · Code: \(group.inviteCode)")
+                    Text(heroSubtitle(for: group))
                         .font(.subheadline)
                         .foregroundStyle(PickemsColors.textSecondary)
                 }
@@ -206,6 +206,25 @@ struct GroupsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
+    }
+
+    /// Members + week/slate context only — invite code lives on Invite/Share.
+    private func heroSubtitle(for group: PickemGroup) -> String {
+        var parts = ["\(group.memberCount) members"]
+        if let week = appState.groupService.currentWeek {
+            parts.append("Week \(week.weekNumber)")
+            switch week.status {
+            case .selection:
+                parts.append(week.selectionMode.displayName)
+            case .picking:
+                parts.append("Picking open")
+            case .locked:
+                parts.append("Games locked")
+            case .scored:
+                parts.append("Scored")
+            }
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func totalsStat(value: String, label: String, emphasize: Bool = false) -> some View {
@@ -566,11 +585,14 @@ struct LeaderboardView: View {
             .accessibilityLabel("Standings period")
 
             if !displayEntries.isEmpty {
+                let hasWins = displayEntries.contains {
+                    (showWeekly ? $0.weeklyWins : $0.seasonWins) > 0
+                }
                 ForEach(displayEntries) { entry in
                     VStack(spacing: 4) {
                         LeaderboardRow(entry: entry, showWeekly: showWeekly)
-                        if entry.isTied && appState.isCommissioner
-                            && appState.groupService.selectedGroup?.rules.tieBreaker == .commissionerOverride {
+                        if hasWins, entry.isTied, appState.isCommissioner,
+                           appState.groupService.selectedGroup?.rules.tieBreaker == .commissionerOverride {
                             Button("Resolve Tie (Commissioner)") {
                                 PickemsHaptics.lightImpact()
                                 Task {
@@ -596,7 +618,7 @@ struct LeaderboardView: View {
                 EmptyStateView(
                     icon: "chart.bar.fill",
                     title: "No Standings Yet",
-                    message: "Standings appear after games are scored.",
+                    message: "Invite members to see an interim ranking by join order.",
                     help: PickemsHelp.leaderboard
                 )
             }

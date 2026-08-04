@@ -48,8 +48,23 @@ struct PickDeadlineCalculatorTests {
         #expect(deadline == expected)
     }
 
-    @Test func isPastTreatsNilAsPast() {
-        #expect(PickDeadlineCalculator.isPast(nil))
+    @Test func isPastTreatsNilAsOpen() {
+        #expect(!PickDeadlineCalculator.isPast(nil))
+    }
+
+    @Test func lockTimeLabelUsesWeekdayAndTime() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let deadline = calendar.date(from: DateComponents(
+            year: 2026,
+            month: 9,
+            day: 5,
+            hour: 12,
+            minute: 0
+        ))!
+        let label = PickDeadlineCalculator.lockTimeLabel(for: deadline)
+        #expect(label.contains("12:00"))
+        #expect(label.contains("PM") || label.contains("pm") || label.contains("p.m."))
     }
 
     @Test func countdownLabelShowsMinutesWhenUnderOneHour() {

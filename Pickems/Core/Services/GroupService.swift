@@ -10,6 +10,8 @@ final class GroupService {
     var members: [GroupMember] = []
     var standings: GroupStandings?
     var currentWeek: WeekSummary?
+    /// Weeks available for the selected group (Picks tab week bar). Ascending by season/week.
+    var availableWeeks: [WeekSummary] = []
     var cfbWeek: CFBWeekInfo?
     var seasonArchives: [SeasonArchive] = []
     var careerRecords: [CareerRecord] = []
@@ -36,6 +38,9 @@ final class GroupService {
     private var observedWeekId: String?
     @ObservationIgnored
     private var observedGroupId: String?
+    /// When true, Picks is browsing a non-active week — don't snap back to ESPN current on sync.
+    @ObservationIgnored
+    private var weekSelectionPinned = false
 
     func loadGroups(for userId: String) {
         groupListener?.remove()
@@ -103,8 +108,43 @@ final class GroupService {
 
     func selectGroup(_ group: PickemGroup) {
         selectedGroup = group
+        weekSelectionPinned = false
+        availableWeeks = []
         Task {
             await syncCurrentWeekFromESPN(groupId: group.id)
+            await loadAvailableWeeks(groupId: group.id)
+        }
+    }
+
+    /// Switch the observed week for the selected group (Picks week tabs). Defaults stay on the active ESPN week.
+    func selectWeek(weekId: String) {
+        guard let groupId = selectedGroup?.id else { return }
+        let activeWeekId = cfbWeek.map { CFBWeekSync.weekId(for: $0) }
+        weekSelectionPinned = activeWeekId.map { $0 != weekId } ?? (observedWeekId != weekId)
+        // Seed immediately so Picks/pick listeners don't briefly attach to the previous week.
+        if let known = availableWeeks.first(where: { $0.id == weekId }) {
+            currentWeek = known
+        }
+        if observedGroupId == groupId, observedWeekId == weekId, weekListener != nil {
+            return
+        }
+        observeGroupDetails(groupId: groupId, weekId: weekId)
+    }
+
+    /// Loads weeks for the horizontal Picks tab bar. Ensures the active/current week is included.
+    func loadAvailableWeeks(groupId: String) async {
+        do {
+            var weeks = try await fetchPastWeeks(groupId: groupId, limit: 20)
+            if let current = currentWeek, !weeks.contains(where: { $0.id == current.id }) {
+                weeks.append(current)
+            }
+            availableWeeks = Self.sortedWeeksAscending(weeks)
+        } catch {
+            if let current = currentWeek {
+                availableWeeks = [current]
+            } else {
+                availableWeeks = []
+            }
         }
     }
 
@@ -130,11 +170,24 @@ final class GroupService {
             return
         }
 
+        // Picks tab may be browsing a past week — keep that observation; still seed the active week doc.
+        if weekSelectionPinned, observedGroupId == groupId, observedWeekId != nil {
+            await ensureWeekDocumentExists(groupId: groupId, weekId: weekId, info: weekInfo, rules: rules)
+            return
+        }
+
         isLoading = currentWeek == nil
         defer { isLoading = false }
 
         await ensureWeekDocumentExists(groupId: groupId, weekId: weekId, info: weekInfo, rules: rules)
         observeGroupDetails(groupId: groupId, weekId: weekId)
+    }
+
+    private static func sortedWeeksAscending(_ weeks: [WeekSummary]) -> [WeekSummary] {
+        weeks.sorted {
+            if $0.seasonYear != $1.seasonYear { return $0.seasonYear < $1.seasonYear }
+            return $0.weekNumber < $1.weekNumber
+        }
     }
 
     private func ensureWeekDocumentExists(
@@ -873,7 +926,9 @@ final class GroupService {
         standingsListener = nil
         observedWeekId = nil
         observedGroupId = nil
+        weekSelectionPinned = false
         currentWeek = nil
+        availableWeeks = []
         cfbWeek = nil
         standings = nil
         members = []

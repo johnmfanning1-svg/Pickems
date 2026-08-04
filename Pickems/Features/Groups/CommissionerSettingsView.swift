@@ -365,7 +365,7 @@ struct CommissionerSettingsView: View {
                         Button {
                             memberToPromote = member
                         } label: {
-                            Image(systemName: "crown")
+                            Image(systemName: "gavel")
                                 .foregroundStyle(theme.accent)
                         }
                         .buttonStyle(.borderless)
@@ -392,7 +392,7 @@ struct CommissionerSettingsView: View {
                         }
                     }
                 } label: {
-                    Label("Transfer Commissioner…", systemImage: "crown")
+                    Label("Transfer Commissioner…", systemImage: "gavel")
                         .foregroundStyle(theme.accent)
                 }
                 .listRowBackground(PickemsColors.cardBackground)

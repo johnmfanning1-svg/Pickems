@@ -67,7 +67,7 @@ struct MemberListView: View {
                                 Button {
                                     memberToPromote = member
                                 } label: {
-                                    Label("Make Commissioner", systemImage: "crown")
+                                    Label("Make Commissioner", systemImage: "gavel")
                                 }
                                 Button(role: .destructive) {
                                     memberToRemove = member
@@ -162,7 +162,7 @@ struct MemberListView: View {
                             }
                         }
                     } label: {
-                        Label("Transfer Commissioner…", systemImage: "crown")
+                        Label("Transfer Commissioner…", systemImage: "gavel")
                             .foregroundStyle(theme.accent)
                     }
                     .listRowBackground(PickemsColors.cardBackground)
@@ -283,13 +283,14 @@ struct MemberRow: View {
                         .font(.headline)
                         .foregroundStyle(PickemsColors.textPrimary)
                     if isCommissioner {
-                        Text("Commissioner")
+                        Label("Commissioner", systemImage: "gavel")
                             .font(.caption2.weight(.semibold))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(theme.accent.opacity(0.25))
                             .foregroundStyle(theme.accent)
                             .clipShape(Capsule())
+                            .labelStyle(.titleAndIcon)
                     }
                     if let titles = career?.titles, titles > 0 {
                         Label("\(titles)", systemImage: "crown.fill")

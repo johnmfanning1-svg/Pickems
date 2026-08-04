@@ -4,6 +4,8 @@ struct GroupPicksView: View {
     @Environment(AppState.self) private var appState
     /// Collapse-by-exception keeps sections default-open without seeding from async data.
     @State private var collapsedUserIds: Set<String> = []
+    @State private var isRefreshingOwnPick = false
+    @State private var ownPickLoadAttempted = false
 
     private var members: [GroupMember] {
         appState.groupService.members
@@ -13,8 +15,13 @@ struct GroupPicksView: View {
         appState.pickService.slateGames
     }
 
+    /// Prefer `allPicks`, but always surface the signed-in member's `userPick` pre-deadline.
     private var picksByUserId: [String: UserPick] {
-        Dictionary(uniqueKeysWithValues: appState.pickService.allPicks.map { ($0.userId, $0) })
+        var map = Dictionary(uniqueKeysWithValues: appState.pickService.allPicks.map { ($0.userId, $0) })
+        if let own = appState.pickService.userPick {
+            map[own.userId] = own
+        }
+        return map
     }
 
     private var submittedUserIds: Set<String> {
@@ -26,6 +33,10 @@ struct GroupPicksView: View {
         guard let week = appState.groupService.currentWeek else { return false }
         if week.status == .locked || week.status == .scored { return true }
         return ScoringEngine.isPastDeadline(deadline: week.pickDeadline)
+    }
+
+    private var currentUserId: String? {
+        appState.authService.currentUser?.id ?? appState.authService.currentUserId
     }
 
     private var sortedMembers: [GroupMember] {
@@ -62,9 +73,10 @@ struct GroupPicksView: View {
         .scrollContentBackground(.hidden)
         .pickemsScreenBackground()
         .task(id: appState.groupService.currentWeek?.id) {
-            guard let group = appState.groupService.selectedGroup,
-                  let week = appState.groupService.currentWeek else { return }
-            await appState.pickService.loadAllPicks(groupId: group.id, weekId: week.id)
+            await refreshAllPicks()
+        }
+        .onChange(of: appState.pickService.userPick) { _, newPick in
+            appState.pickService.mergeOwnPickIntoAllPicks(newPick)
         }
     }
 
@@ -170,6 +182,9 @@ struct GroupPicksView: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                 }
+            } else if canRevealPickDetails(for: member.id), submitted {
+                // Own submitted picks must never show the "hidden until deadline" copy.
+                ownPickPendingState
             } else if submitted {
                 Text("Picks hidden until the deadline")
                     .font(.subheadline)
@@ -191,6 +206,32 @@ struct GroupPicksView: View {
         }
     }
 
+    private var ownPickPendingState: some View {
+        VStack(spacing: 10) {
+            if isRefreshingOwnPick || !ownPickLoadAttempted {
+                ProgressView()
+                Text("Loading your picks…")
+                    .font(.subheadline)
+                    .foregroundStyle(PickemsColors.textSecondary)
+            } else {
+                Text("Couldn't load your picks")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textPrimary)
+                Text("Try again to show your submitted picks.")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                Button("Retry") {
+                    Task { await refreshAllPicks() }
+                }
+                .buttonStyle(.bordered)
+                .tint(PickemsColors.accent)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .padding(.horizontal, 10)
+    }
+
     private func emptyPicksState(title: String, message: String) -> some View {
         VStack(spacing: 6) {
             Text(title)
@@ -206,6 +247,18 @@ struct GroupPicksView: View {
     }
 
     // MARK: - Helpers
+
+    private func refreshAllPicks() async {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek else { return }
+        isRefreshingOwnPick = true
+        defer {
+            isRefreshingOwnPick = false
+            ownPickLoadAttempted = true
+        }
+        await appState.pickService.loadAllPicks(groupId: group.id, weekId: week.id)
+        appState.pickService.mergeOwnPickIntoAllPicks(appState.pickService.userPick)
+    }
 
     private func isSubmitted(_ userId: String) -> Bool {
         if submittedUserIds.contains(userId) { return true }
@@ -223,6 +276,6 @@ struct GroupPicksView: View {
 
     /// Own pick may be present in `allPicks` before the deadline; others' are not.
     private func canRevealPickDetails(for userId: String) -> Bool {
-        userId == appState.authService.currentUser?.id
+        userId == currentUserId
     }
 }
