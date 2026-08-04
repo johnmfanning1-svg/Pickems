@@ -1,4 +1,5 @@
 import Foundation
+import FirebaseAuth
 import FirebaseFirestore
 
 @MainActor
@@ -80,7 +81,10 @@ final class PickService {
                         ], recordNonFatal: false)
                         return
                     }
-                    self.userPick = try? snapshot?.data(as: UserPick.self)
+                    let pick = try? snapshot?.data(as: UserPick.self)
+                    self.userPick = pick
+                    // Pre-deadline list queries fail; keep own pick visible in Group Picks.
+                    self.mergeOwnPickIntoAllPicks(pick)
                 }
             }
 
@@ -111,16 +115,24 @@ final class PickService {
                 .collection("weeks").document(weekId)
                 .collection("picks").getDocuments()
             allPicks = snapshot.documents.compactMap { try? $0.data(as: UserPick.self) }
+            // Ensure own pick stays present even if the list snapshot raced ahead of a write.
+            mergeOwnPickIntoAllPicks(userPick)
             if let current = errorMessage, UserFacingError.looksLikePermissionMessage(current) {
                 errorMessage = nil
             }
         } catch {
             // Before lock/deadline, rules hide other members' picks — expected, not a user error.
+            // Collection list fails; explicitly get picks/{uid} (readable for self) and merge.
             if UserFacingError.isPermissionDenied(error) {
-                allPicks = userPick.map { [$0] } ?? []
+                // Keep only self while list is denied — never drop an in-memory own pick before get.
+                let ownId = Auth.auth().currentUser?.uid
+                allPicks = allPicks.filter { $0.userId == ownId }
+                mergeOwnPickIntoAllPicks(userPick)
+                await fetchAndMergeOwnPick(groupId: groupId, weekId: weekId)
                 AppLog.notice(AppLog.firestore, "loadAllPicks deferred until picks are public", metadata: [
                     "group_id": groupId,
                     "week_id": weekId,
+                    "own_pick_loaded": allPicks.isEmpty ? "false" : "true",
                 ])
                 if let current = errorMessage, UserFacingError.looksLikePermissionMessage(current) {
                     errorMessage = nil
@@ -129,6 +141,40 @@ final class PickService {
             }
             UserFacingError.apply(error, to: &errorMessage)
         }
+    }
+
+    /// Upserts the signed-in member's pick into `allPicks` without wiping other entries.
+    func mergeOwnPickIntoAllPicks(_ pick: UserPick?) {
+        guard let pick else { return }
+        if let idx = allPicks.firstIndex(where: { $0.userId == pick.userId }) {
+            allPicks[idx] = pick
+        } else {
+            allPicks.append(pick)
+        }
+    }
+
+    /// Document get for `picks/{currentUid}` — allowed pre-deadline when collection list is not.
+    private func fetchAndMergeOwnPick(groupId: String, weekId: String) async {
+        let uid = Auth.auth().currentUser?.uid
+        if let uid {
+            do {
+                let snapshot = try await db.week(groupId: groupId, weekId: weekId)
+                    .picks.document(uid)
+                    .getDocument()
+                if snapshot.exists, let pick = try? snapshot.data(as: UserPick.self) {
+                    userPick = pick
+                    mergeOwnPickIntoAllPicks(pick)
+                    return
+                }
+            } catch {
+                AppLog.notice(AppLog.firestore, "fetchAndMergeOwnPick get failed", metadata: [
+                    "group_id": groupId,
+                    "week_id": weekId,
+                    "error": error.localizedDescription,
+                ])
+            }
+        }
+        mergeOwnPickIntoAllPicks(userPick)
     }
 
     func submitNomination(
@@ -319,6 +365,8 @@ final class PickService {
             confidenceGameId: confidenceGameId
         )
         try await ref.setData(from: pick)
+        userPick = pick
+        mergeOwnPickIntoAllPicks(pick)
         try await syncSubmission(
             groupId: groupId,
             weekId: weekId,
@@ -361,6 +409,8 @@ final class PickService {
             confidenceGameId: confidenceGameId
         )
         try await ref.setData(from: pick)
+        userPick = pick
+        mergeOwnPickIntoAllPicks(pick)
         try await syncSubmission(
             groupId: groupId,
             weekId: weekId,
