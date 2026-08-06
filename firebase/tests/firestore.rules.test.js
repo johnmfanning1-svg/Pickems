@@ -380,3 +380,77 @@ describe("existing invariants (regression)", () => {
     );
   });
 });
+
+describe("audit hardening (inviteCodes, member fields, pick delete, group create)", () => {
+  it("allows invite code get but denies listing all codes", async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "inviteCodes", "ABC123"), { groupId: GROUP_ID });
+      await setDoc(doc(ctx.firestore(), "inviteCodes", "XYZ999"), { groupId: "other" });
+    });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertSucceeds(getDoc(doc(memberDb, "inviteCodes", "ABC123")));
+    await assertFails(getDocs(collection(memberDb, "inviteCodes")));
+  });
+
+  it("blocks a member from rewriting their own seasonWins", async () => {
+    await seed();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertFails(
+      updateDoc(doc(memberDb, "groups", GROUP_ID, "members", MEMBER), { seasonWins: 99 })
+    );
+    await assertSucceeds(
+      updateDoc(doc(memberDb, "groups", GROUP_ID, "members", MEMBER), {
+        displayName: "Updated",
+      })
+    );
+  });
+
+  it("blocks self-delete of picks after the deadline", async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID), {
+        pickDeadline: new Date(Date.now() - 60 * 1000),
+        status: "picking",
+      });
+    });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertFails(
+      deleteDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", MEMBER))
+    );
+  });
+
+  it("rejects group create that spoofs commissioner or extra members", async () => {
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER).firestore();
+    await assertFails(
+      setDoc(doc(outsiderDb, "groups", "spoof1"), {
+        id: "spoof1",
+        name: "Hijack",
+        inviteCode: "HIJACK",
+        commissionerId: COMMISH,
+        memberIds: [OUTSIDER],
+        isPublic: false,
+      })
+    );
+    await assertFails(
+      setDoc(doc(outsiderDb, "groups", "spoof2"), {
+        id: "spoof2",
+        name: "Force add",
+        inviteCode: "FORCE1",
+        commissionerId: OUTSIDER,
+        memberIds: [OUTSIDER, MEMBER],
+        isPublic: false,
+      })
+    );
+    await assertSucceeds(
+      setDoc(doc(outsiderDb, "groups", "legit1"), {
+        id: "legit1",
+        name: "Legit",
+        inviteCode: "LEGIT1",
+        commissionerId: OUTSIDER,
+        memberIds: [OUTSIDER],
+        isPublic: false,
+      })
+    );
+  });
+});

@@ -153,7 +153,7 @@ struct OnboardingView: View {
                 HelpInfoButton(topic: PickemsHelp.joinGroup, size: .subheadline)
             }
 
-            TextField("6-character code", text: $inviteCode)
+            TextField("4–8 character code", text: $inviteCode)
                 .textFieldStyle(.pickems)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()

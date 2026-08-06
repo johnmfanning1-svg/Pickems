@@ -34,8 +34,12 @@ enum WeekAwardsEngine {
         }
 
         for pick in picks {
-            let scored = ScoringEngine.scorePicks(picks: pick.picks, games: games)
-            let wins = scored.wins + (pick.confidenceGameId != nil && scoredCorrect(pick: pick, gameId: pick.confidenceGameId!, games: games) ? 1 : 0)
+            let scored = ScoringEngine.scorePicks(
+                picks: pick.picks,
+                games: games,
+                confidenceGameId: pick.confidenceGameId
+            )
+            let wins = scored.wins
             if wins > bestWins {
                 bestWins = wins
                 sharp = pick.userId
@@ -75,12 +79,6 @@ enum WeekAwardsEngine {
             contrarianUserId: contra,
             contrarianName: contra.flatMap { nameById[$0] }
         )
-    }
-
-    private static func scoredCorrect(pick: UserPick, gameId: String, games: [SlateGame]) -> Bool {
-        guard let game = games.first(where: { $0.id == gameId }),
-              let picked = pick.picks[gameId] else { return false }
-        return ScoringEngine.isPickCorrect(pickedTeamId: picked, game: game) == true
     }
 }
 

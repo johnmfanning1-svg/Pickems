@@ -76,7 +76,10 @@ actor ESPNService {
         var components = URLComponents(string: Self.scoreboardBaseURL)!
         components.queryItems = [URLQueryItem(name: "event", value: eventId)]
         guard let url = components.url else { throw ESPNError.invalidURL }
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw ESPNError.requestFailed
+        }
         let decoded = try JSONDecoder().decode(ESPNScoreboardResponse.self, from: data)
         return decoded.events?.first.flatMap { parseEvent($0) }
     }

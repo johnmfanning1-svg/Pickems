@@ -24,7 +24,7 @@ struct JoinGroupSheet: View {
                         HelpInfoButton(topic: PickemsHelp.joinGroup, size: .caption)
                     }
                 } footer: {
-                    Text("Enter the 6-character code from your commissioner.")
+                    Text("Enter the 4–8 character code from your commissioner.")
                 }
 
                 if let errorMessage {
@@ -44,7 +44,7 @@ struct JoinGroupSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Join") { join() }
                         .fontWeight(.semibold)
-                        .disabled(inviteCode.count != 6 || isWorking)
+                        .disabled(!InviteCodeRules.isValidFormat(inviteCode) || isWorking)
                 }
             }
             .onAppear {

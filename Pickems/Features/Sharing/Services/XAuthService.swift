@@ -69,6 +69,12 @@ final class XAuthService: NSObject, ObservableObject {
     func disconnect() {
         tokens = nil
         codeVerifier = nil
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: tokenStorageKey,
+            kSecAttrAccount as String: "default",
+        ]
+        SecItemDelete(query as CFDictionary)
         UserDefaults.standard.removeObject(forKey: tokenStorageKey)
     }
 
@@ -187,22 +193,66 @@ final class XAuthService: NSObject, ObservableObject {
 
     private func saveTokens(_ tokens: XAuthTokens) {
         guard let data = try? JSONEncoder().encode(tokens) else { return }
-        UserDefaults.standard.set(data, forKey: tokenStorageKey)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: tokenStorageKey,
+            kSecAttrAccount as String: "default",
+        ]
+        SecItemDelete(query as CFDictionary)
+        var add = query
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        SecItemAdd(add as CFDictionary, nil)
+        // Clear any legacy UserDefaults copy.
+        UserDefaults.standard.removeObject(forKey: tokenStorageKey)
     }
 
     private func loadTokens() -> XAuthTokens? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: tokenStorageKey,
+            kSecAttrAccount as String: "default",
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        if status == errSecSuccess,
+           let data = item as? Data,
+           let tokens = try? JSONDecoder().decode(XAuthTokens.self, from: data) {
+            return tokens
+        }
+
+        // One-time migration from legacy UserDefaults storage.
         guard
             let data = UserDefaults.standard.data(forKey: tokenStorageKey),
             let tokens = try? JSONDecoder().decode(XAuthTokens.self, from: data)
         else {
             return nil
         }
+        saveTokens(tokens)
         return tokens
     }
 
     private static func randomURLSafeString(length: Int) -> String {
         let charset = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
-        return String((0..<length).map { _ in charset.randomElement() ?? "a" })
+        var result = ""
+        var remaining = length
+        while remaining > 0 {
+            let randoms: [UInt8] = (0..<16).map { _ in
+                var random: UInt8 = 0
+                _ = SecRandomCopyBytes(kSecRandomDefault, 1, &random)
+                return random
+            }
+            for random in randoms {
+                if remaining == 0 { break }
+                if random < charset.count {
+                    result.append(charset[Int(random)])
+                    remaining -= 1
+                }
+            }
+        }
+        return result
     }
 
     private static func codeChallenge(for verifier: String) -> String {

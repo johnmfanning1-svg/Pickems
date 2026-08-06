@@ -22,7 +22,7 @@ struct AdminLoginSheet: View {
                         Text("Gate password")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(PickemsColors.textSecondary)
-                        SecureField("pickems-admin", text: $gatePassword)
+                        SecureField("Gate password", text: $gatePassword)
                             .textFieldStyle(.pickems)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
