@@ -271,6 +271,12 @@ export function GroupWeeksPage() {
                   <dd className="inline font-mono text-slate-300">{week.slateSize ?? "—"}</dd>
                 </div>
                 <div>
+                  <dt className="inline">selectionDeadline </dt>
+                  <dd className="inline font-mono text-slate-300">
+                    {formatTimestamp(week.selectionDeadline)}
+                  </dd>
+                </div>
+                <div>
                   <dt className="inline">lockedAt </dt>
                   <dd className="inline font-mono text-slate-300">{formatTimestamp(week.lockedAt)}</dd>
                 </div>

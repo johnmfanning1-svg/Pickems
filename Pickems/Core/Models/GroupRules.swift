@@ -50,9 +50,16 @@ enum TieBreakerPolicy: String, Codable, CaseIterable, Identifiable {
 }
 
 struct GroupRules: Codable, Equatable {
+    /// Who builds the weekly slate. Either/or with the numeric knobs below:
+    /// - `.member`: only `selectionsPerMember` is active; expected slate size is derived at week mint.
+    /// - `.commissioner`: only `slateSize` is active; `selectionsPerMember` is ignored.
     var selectionMode: SelectionMode
+    /// Member mode only — nominations each member may submit.
     var selectionsPerMember: Int
+    /// Commissioner mode only — target games per week. In member mode this value on
+    /// `GroupRules` is ignored; the week snapshot stores the derived allowance.
     var slateSize: Int
+    /// Spread-pick deadline policy. Product default is earliest slate kickoff (`firstKickoff`).
     var pickDeadline: DeadlinePolicy
     var tieBreaker: TieBreakerPolicy
     var customDeadlineHour: Int
@@ -62,6 +69,16 @@ struct GroupRules: Codable, Equatable {
     /// Allow submissions after deadline with a win penalty.
     var allowLatePicks: Bool
     var latePickPenaltyWins: Int
+
+    /// Expected unique games for a week under the active mode.
+    func expectedSlateSize(memberCount: Int) -> Int {
+        switch selectionMode {
+        case .member:
+            return max(1, max(memberCount, 1) * max(selectionsPerMember, 1))
+        case .commissioner:
+            return max(1, slateSize)
+        }
+    }
 
     enum CodingKeys: String, CodingKey {
         case selectionMode, selectionsPerMember, slateSize, pickDeadline, tieBreaker

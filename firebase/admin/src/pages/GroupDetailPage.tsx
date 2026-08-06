@@ -298,34 +298,40 @@ export function GroupDetailPage() {
                 <option value="commissioner">commissioner — commissioner picks the slate</option>
               </Select>
             </Field>
-            <Field label="Selections per member">
-              <TextInput
-                type="number"
-                min={1}
-                max={20}
-                value={rules.selectionsPerMember}
-                onChange={(event) => setRule("selectionsPerMember", Number(event.target.value))}
-              />
-            </Field>
-            <Field label="Slate size">
-              <TextInput
-                type="number"
-                min={1}
-                max={40}
-                value={rules.slateSize}
-                onChange={(event) => setRule("slateSize", Number(event.target.value))}
-              />
-            </Field>
-            <Field label="Deadline policy">
+            {rules.selectionMode === "member" ? (
+              <Field
+                label="Nominations per member"
+                hint="Either/or with slate size. Weekly target = members × this value."
+              >
+                <TextInput
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={rules.selectionsPerMember}
+                  onChange={(event) => setRule("selectionsPerMember", Number(event.target.value))}
+                />
+              </Field>
+            ) : (
+              <Field label="Games per week (slate size)" hint="Either/or with nominations per member.">
+                <TextInput
+                  type="number"
+                  min={1}
+                  max={40}
+                  value={rules.slateSize}
+                  onChange={(event) => setRule("slateSize", Number(event.target.value))}
+                />
+              </Field>
+            )}
+            <Field label="Deadline policy" hint="Product default: earliest slate kickoff.">
               <Select
                 value={rules.pickDeadline}
                 onChange={(event) => setRule("pickDeadline", event.target.value as GroupRules["pickDeadline"])}
               >
                 <option value="firstKickoff">firstKickoff</option>
-                <option value="custom">custom</option>
+                <option value="custom">custom (legacy)</option>
               </Select>
             </Field>
-            <Field label="Custom deadline hour" hint="0–23, local to the member's device.">
+            <Field label="Custom deadline hour" hint="Only used if policy is custom.">
               <TextInput
                 type="number"
                 min={0}

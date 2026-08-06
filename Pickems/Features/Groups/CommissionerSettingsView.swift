@@ -67,44 +67,29 @@ struct CommissionerSettingsView: View {
                         }
                     }
                     .listRowBackground(PickemsColors.cardBackground)
+
+                    if rules.selectionMode == .member {
+                        Stepper(
+                            "Nominations per member: \(rules.selectionsPerMember)",
+                            value: $rules.selectionsPerMember,
+                            in: 1...10
+                        )
+                        .listRowBackground(PickemsColors.cardBackground)
+                    } else {
+                        Stepper("Games per week: \(rules.slateSize)", value: $rules.slateSize, in: 1...20)
+                            .listRowBackground(PickemsColors.cardBackground)
+                    }
                 } header: {
-                    sectionHeader("Selection Mode", help: PickemsHelp.commissionerSettings)
+                    sectionHeader("Slate Configuration", help: PickemsHelp.commissionerSettings)
                 } footer: {
                     Text(rules.selectionMode == .member
-                        ? "Members nominate games until the slate is full."
+                        ? "Each member nominates this many games. Weekly game target = members × nominations. You’ll set a nomination deadline each week."
                         : "You choose every game for the group each week.")
                 }
 
                 Section {
-                    Stepper("Games per week: \(rules.slateSize)", value: $rules.slateSize, in: 1...20)
+                    LabeledContent("Pick deadline", value: "First game kickoff")
                         .listRowBackground(PickemsColors.cardBackground)
-                    if rules.selectionMode == .member {
-                        Stepper("Selections per member: \(rules.selectionsPerMember)", value: $rules.selectionsPerMember, in: 1...10)
-                            .listRowBackground(PickemsColors.cardBackground)
-                    }
-                } header: {
-                    Text("Slate Configuration")
-                }
-
-                Section {
-                    Picker("Pick deadline", selection: $rules.pickDeadline) {
-                        ForEach(DeadlinePolicy.allCases) { policy in
-                            Text(policy.displayName).tag(policy)
-                        }
-                    }
-                    .listRowBackground(PickemsColors.cardBackground)
-
-                    if rules.pickDeadline == .custom {
-                        DatePicker(
-                            "Custom deadline time",
-                            selection: Binding(
-                                get: { customDeadlineDate },
-                                set: { updateCustomDeadline(from: $0) }
-                            ),
-                            displayedComponents: .hourAndMinute
-                        )
-                        .listRowBackground(PickemsColors.cardBackground)
-                    }
 
                     Picker("Tie breaker", selection: $rules.tieBreaker) {
                         ForEach(TieBreakerPolicy.allCases) { policy in
@@ -128,7 +113,7 @@ struct CommissionerSettingsView: View {
                 } header: {
                     sectionHeader("Deadlines & Ties", help: PickemsHelp.pickDeadline)
                 } footer: {
-                    Text("Changes apply to future weeks. Existing locked weeks are not affected.")
+                    Text("Spread picks lock at the earliest kickoff on the slate. Changes apply to future weeks.")
                 }
 
                 Section {
@@ -435,6 +420,7 @@ struct CommissionerSettingsView: View {
 
     private func save() {
         isSaving = true
+        rules.pickDeadline = .firstKickoff
         Task {
             do {
                 let trimmedName = groupName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -548,16 +534,4 @@ struct CommissionerSettingsView: View {
         }
     }
 
-    private var customDeadlineDate: Date {
-        var components = DateComponents()
-        components.hour = rules.customDeadlineHour
-        components.minute = rules.customDeadlineMinute
-        return Calendar.current.date(from: components) ?? Date()
-    }
-
-    private func updateCustomDeadline(from date: Date) {
-        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
-        rules.customDeadlineHour = components.hour ?? 18
-        rules.customDeadlineMinute = components.minute ?? 0
-    }
 }

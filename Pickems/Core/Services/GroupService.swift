@@ -201,7 +201,15 @@ final class GroupService {
         do {
             let snapshot = try await weekRef.getDocument()
             if !snapshot.exists {
-                let week = CFBWeekSync.makeWeekSummary(id: weekId, info: info, rules: rules)
+                let memberCount = selectedGroup?.id == groupId
+                    ? max(selectedGroup?.memberIds.count ?? members.count, 1)
+                    : max(members.count, 1)
+                let week = CFBWeekSync.makeWeekSummary(
+                    id: weekId,
+                    info: info,
+                    rules: rules,
+                    memberCount: memberCount
+                )
                 try await weekRef.setData(from: week)
                 // Seed local state immediately so Home doesn't flash an empty week card.
                 if currentWeek?.id != week.id {
@@ -210,6 +218,27 @@ final class GroupService {
             }
         } catch {
             UserFacingError.apply(error, to: &errorMessage)
+        }
+    }
+
+    /// Commissioner sets the nomination deadline for the current selection week.
+    func setSelectionDeadline(
+        groupId: String,
+        weekId: String,
+        deadline: Date,
+        setByUserId: String
+    ) async throws {
+        let updates: [String: Any] = [
+            "selectionDeadline": Timestamp(date: deadline),
+            "selectionDeadlineSetAt": Timestamp(date: Date()),
+            "selectionDeadlineSetBy": setByUserId,
+        ]
+        try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
+        if var week = currentWeek, week.id == weekId {
+            week.selectionDeadline = deadline
+            week.selectionDeadlineSetAt = Date()
+            week.selectionDeadlineSetBy = setByUserId
+            currentWeek = week
         }
     }
 
@@ -722,6 +751,24 @@ final class GroupService {
             "rules": try Firestore.Encoder().encode(rules)
         ])
         selectedGroup?.rules = rules
+        if let idx = groups.firstIndex(where: { $0.id == groupId }) {
+            groups[idx].rules = rules
+        }
+
+        // Keep an open selection-week snapshot aligned with the active either/or knob.
+        if var week = currentWeek, week.status == .selection {
+            let memberCount = max(selectedGroup?.memberIds.count ?? members.count, 1)
+            let expected = rules.expectedSlateSize(memberCount: memberCount)
+            try await db.week(groupId: groupId, weekId: week.id).updateData([
+                "slateSize": expected,
+                "selectionMode": rules.selectionMode.rawValue,
+                "selectionsPerMember": rules.selectionsPerMember,
+            ])
+            week.slateSize = expected
+            week.selectionMode = rules.selectionMode
+            week.selectionsPerMember = rules.selectionsPerMember
+            currentWeek = week
+        }
     }
 
     func setPublic(groupId: String, isPublic: Bool) async throws {

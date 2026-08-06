@@ -63,6 +63,93 @@ export const onWeekStatusChange = onDocumentUpdated(
   }
 );
 
+/**
+ * When a week doc is created in selection (member mode), nudge the commissioner
+ * to set a nomination deadline.
+ */
+export const onWeekCreated = onDocumentCreated(
+  "groups/{groupId}/weeks/{weekId}",
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    if (data.status !== "selection") return;
+    if (data.selectionMode !== "member") return;
+    if (data.selectionDeadline) return;
+    if (data.selectionDeadlineNudgeSent) return;
+
+    const groupId = event.params.groupId;
+    const weekId = event.params.weekId;
+    const group = await db.collection("groups").doc(groupId).get();
+    const commissionerId = group.data()?.commissionerId as string | undefined;
+    if (!commissionerId) return;
+
+    await sendToUser(
+      commissionerId,
+      "Set nomination deadline",
+      `Week ${data.weekNumber ?? ""} needs a nomination deadline so members finish before kickoff.`,
+      "set_selection_deadline",
+      { groupId, weekId }
+    );
+    await event.data?.ref.update({ selectionDeadlineNudgeSent: true });
+  }
+);
+
+/**
+ * Nudge commissioners who haven't set a selection deadline, and notify when
+ * the deadline passes while the week is still in selection.
+ */
+export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => {
+  const nowMs = Date.now();
+  const groups = await db.collection("groups").get();
+
+  for (const groupDoc of groups.docs) {
+    const commissionerId = groupDoc.data().commissionerId as string | undefined;
+    if (!commissionerId) continue;
+
+    const weeks = await groupDoc.ref
+      .collection("weeks")
+      .where("status", "==", "selection")
+      .get();
+
+    for (const weekDoc of weeks.docs) {
+      const week = weekDoc.data();
+      if (week.selectionMode !== "member") continue;
+
+      const groupId = groupDoc.id;
+      const weekId = weekDoc.id;
+      const weekNum = week.weekNumber ?? "";
+      const deadline = week.selectionDeadline as admin.firestore.Timestamp | undefined;
+
+      if (!deadline && !week.selectionDeadlineNudgeSent) {
+        await sendToUser(
+          commissionerId,
+          "Set nomination deadline",
+          `Week ${weekNum} needs a nomination deadline so members finish before kickoff.`,
+          "set_selection_deadline",
+          { groupId, weekId }
+        );
+        await weekDoc.ref.update({ selectionDeadlineNudgeSent: true });
+        continue;
+      }
+
+      if (
+        deadline &&
+        deadline.toMillis() <= nowMs &&
+        !week.selectionDeadlinePassedNotified
+      ) {
+        await sendToUser(
+          commissionerId,
+          "Nomination deadline passed",
+          `Week ${weekNum}: fill remaining games or open with fewer.`,
+          "selection_deadline_passed",
+          { groupId, weekId }
+        );
+        await weekDoc.ref.update({ selectionDeadlinePassedNotified: true });
+      }
+    }
+  }
+});
+
 /** Reminders 24h and 1h before pickDeadline for weeks still in picking. */
 export const deadlineReminders = onSchedule("every 15 minutes", async () => {
   const nowMs = Date.now();

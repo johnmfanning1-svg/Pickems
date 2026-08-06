@@ -4,6 +4,7 @@ struct PicksView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
     @State private var viewModel = PicksViewModel()
+    @State private var showSelectionDeadlineSheet = false
 
     private var showsGroupPicker: Bool {
         appState.groupService.groups.count > 1
@@ -103,6 +104,22 @@ struct PicksView: View {
             } message: {
                 Text("You can still swap your games until picks lock at the first kickoff.")
             }
+            .sheet(isPresented: $showSelectionDeadlineSheet) {
+                SelectionDeadlineSheet(
+                    weekLabel: appState.groupService.currentWeek?.displayLabel ?? "This week",
+                    initialDeadline: appState.groupService.currentWeek?.selectionDeadline
+                ) { deadline in
+                    viewModel.setSelectionDeadline(deadline, appState: appState)
+                }
+                .pickemsEnvironment(appState)
+            }
+            .onChange(of: appState.pendingSelectionDeadlinePrompt) { _, pending in
+                if pending, appState.isCommissioner,
+                   appState.groupService.currentWeek?.status == .selection {
+                    showSelectionDeadlineSheet = true
+                    appState.pendingSelectionDeadlinePrompt = false
+                }
+            }
             .task(id: appState.groupService.selectedGroup?.id) {
                 await reloadPicks()
             }
@@ -201,9 +218,10 @@ struct PicksView: View {
     @ViewBuilder
     private func selectionPhase(week: WeekSummary) -> some View {
         let rules = appState.groupService.selectedGroup?.rules ?? .default
-        if rules.selectionMode == .commissioner && appState.isCommissioner {
+        let mode = week.selectionMode
+        if mode == .commissioner && appState.isCommissioner {
             commissionerSelectionUI(week: week, rules: rules)
-        } else if rules.selectionMode == .member {
+        } else if mode == .member {
             memberNominationUI(week: week, rules: rules)
         } else {
             EmptyStateView(
@@ -216,10 +234,11 @@ struct PicksView: View {
     }
 
     private func commissionerSelectionUI(week: WeekSummary, rules: GroupRules) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let target = week.slateSize > 0 ? week.slateSize : rules.slateSize
+        return VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
                 title: "Build Slate",
-                subtitle: "\(appState.pickService.slateGames.count) of \(rules.slateSize) games selected",
+                subtitle: "\(appState.pickService.slateGames.count) of \(target) games selected",
                 help: PickemsHelp.commissionerSlate
             )
 
@@ -258,26 +277,49 @@ struct PicksView: View {
 
     private func memberNominationUI(week: WeekSummary, rules: GroupRules) -> some View {
         let userId = appState.currentUserId ?? ""
+        let perMember = week.selectionsPerMember > 0 ? week.selectionsPerMember : rules.selectionsPerMember
         let userNoms = appState.pickService.nominations.filter { $0.submittedBy == userId }.count
-        let atLimit = userNoms >= rules.selectionsPerMember
+        let atLimit = userNoms >= perMember
+        let memberIds = appState.groupService.selectedGroup?.memberIds ?? []
+        var byUser: [String: Int] = [:]
+        for nom in appState.pickService.nominations {
+            byUser[nom.submittedBy, default: 0] += 1
+        }
+        let membersDone = memberIds.filter { (byUser[$0] ?? 0) >= perMember }.count
+        let uniqueGames = Set(
+            appState.pickService.nominations.map(\.espnEventId)
+                + appState.pickService.slateGames.map(\.espnEventId)
+        ).count
+        let deadlinePassed = week.isSelectionDeadlinePassed
 
         return VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
                 title: "Nominate Games",
-                subtitle: "You: \(userNoms)/\(rules.selectionsPerMember) · Group: \(appState.pickService.nominations.count)/\(rules.slateSize)",
+                subtitle: "You: \(userNoms)/\(perMember) · Members done: \(membersDone)/\(max(memberIds.count, 1)) · Games: \(uniqueGames)/\(week.slateSize)",
                 help: PickemsHelp.nominations
             )
 
             if appState.isCommissioner {
-                SecondaryButton("Lock Slate Early", icon: "lock.fill") {
-                    viewModel.lockSlateEarly(appState: appState)
-                }
+                picksCommissionerSelectionControls(
+                    week: week,
+                    uniqueGames: uniqueGames,
+                    deadlinePassed: deadlinePassed
+                )
+            } else if let deadline = week.selectionDeadline {
+                ContextualTipBanner(
+                    icon: "clock",
+                    message: deadlinePassed
+                        ? "Nomination deadline passed. Waiting on your commissioner to open the week."
+                        : "Nominate by \(PickDeadlineCalculator.lockTimeLabel(for: deadline))."
+                )
                 .padding(.horizontal)
             }
 
-            if atLimit {
-                nominationSubmitSection(userNoms: userNoms, rules: rules)
-            } else {
+            if deadlinePassed, !appState.isCommissioner {
+                EmptyView()
+            } else if atLimit {
+                nominationSubmitSection(userNoms: userNoms, perMember: perMember)
+            } else if !deadlinePassed {
                 PrimaryButton(title: "Nominate Game", isLoading: viewModel.isLoadingGames) {
                     Task {
                         await viewModel.loadESPNGames(appState: appState)
@@ -298,7 +340,7 @@ struct PicksView: View {
                             Text("by \(nom.submitterName)").font(.caption).foregroundStyle(PickemsColors.textSecondary)
                         }
                         Spacer()
-                        if appState.isCommissioner || nom.submittedBy == userId {
+                        if !deadlinePassed, appState.isCommissioner || nom.submittedBy == userId {
                             Button(role: .destructive) {
                                 viewModel.removeNomination(nom, rules: rules, appState: appState)
                             } label: {
@@ -310,6 +352,56 @@ struct PicksView: View {
                 .padding(.horizontal)
             }
         }
+    }
+
+    @ViewBuilder
+    private func picksCommissionerSelectionControls(
+        week: WeekSummary,
+        uniqueGames: Int,
+        deadlinePassed: Bool
+    ) -> some View {
+        VStack(spacing: 8) {
+            if week.selectionDeadline == nil {
+                ContextualTipBanner(
+                    icon: "bell.badge",
+                    message: "Set a nomination deadline so members finish early enough to pick before kickoff."
+                )
+                PrimaryButton(title: "Set Nomination Deadline") {
+                    showSelectionDeadlineSheet = true
+                }
+            } else {
+                SecondaryButton("Edit Nomination Deadline", icon: "calendar") {
+                    showSelectionDeadlineSheet = true
+                }
+            }
+
+            if deadlinePassed {
+                ContextualTipBanner(
+                    icon: "gavel",
+                    message: uniqueGames < week.slateSize
+                        ? "Deadline passed with \(uniqueGames) of \(week.slateSize) games. Fill the rest or open with fewer."
+                        : "Deadline passed. Open the week when ready."
+                )
+                if uniqueGames < week.slateSize {
+                    PrimaryButton(title: "Fill Remaining Games", isLoading: viewModel.isLoadingGames) {
+                        Task {
+                            await viewModel.loadESPNGames(appState: appState)
+                            viewModel.showGameBrowse = true
+                        }
+                    }
+                }
+                SecondaryButton("Open With \(uniqueGames) Game\(uniqueGames == 1 ? "" : "s")", icon: "lock.open.fill") {
+                    viewModel.openWeekWithCurrentSlate(appState: appState)
+                }
+                .disabled(uniqueGames == 0)
+            } else {
+                SecondaryButton("Open Week Early", icon: "lock.fill") {
+                    viewModel.lockSlateEarly(appState: appState)
+                }
+                .disabled(uniqueGames == 0)
+            }
+        }
+        .padding(.horizontal)
     }
 
     private func nominationSpreadLabel(_ nom: Nomination) -> String {
@@ -329,7 +421,7 @@ struct PicksView: View {
     }
 
     @ViewBuilder
-    private func nominationSubmitSection(userNoms: Int, rules: GroupRules) -> some View {
+    private func nominationSubmitSection(userNoms: Int, perMember: Int) -> some View {
         if viewModel.didSubmitNominations {
             PickemsCard {
                 VStack(alignment: .leading, spacing: 6) {
@@ -346,7 +438,7 @@ struct PicksView: View {
             .padding(.horizontal)
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                Text("You've picked your \(rules.selectionsPerMember) game\(rules.selectionsPerMember == 1 ? "" : "s"). Submit to lock in your nominations.")
+                Text("You've picked your \(perMember) game\(perMember == 1 ? "" : "s"). Submit to lock in your nominations.")
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

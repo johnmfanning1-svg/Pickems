@@ -95,31 +95,48 @@ struct CreateGroupWizardView: View {
 
     private var rulesStep: some View {
         Form {
-            Section("Selection") {
+            Section {
                 Picker("Mode", selection: $rules.selectionMode) {
                     ForEach(SelectionMode.allCases) { mode in
                         Text(mode.displayName).tag(mode)
                     }
                 }
-                Stepper("Games per week: \(rules.slateSize)", value: $rules.slateSize, in: 1...20)
                 if rules.selectionMode == .member {
-                    Stepper("Per member: \(rules.selectionsPerMember)", value: $rules.selectionsPerMember, in: 1...10)
+                    Stepper(
+                        "Nominations per member: \(rules.selectionsPerMember)",
+                        value: $rules.selectionsPerMember,
+                        in: 1...10
+                    )
+                } else {
+                    Stepper("Games per week: \(rules.slateSize)", value: $rules.slateSize, in: 1...20)
                 }
+            } header: {
+                Text("Selection")
+            } footer: {
+                Text(rules.selectionMode == .member
+                    ? "Each member nominates this many games. The weekly slate size is members × nominations."
+                    : "You choose every game for the group each week.")
             }
-            Section("Deadlines") {
-                Picker("Pick deadline", selection: $rules.pickDeadline) {
-                    ForEach(DeadlinePolicy.allCases) { policy in
-                        Text(policy.displayName).tag(policy)
-                    }
-                }
+            Section {
                 Picker("Tie breaker", selection: $rules.tieBreaker) {
                     ForEach(TieBreakerPolicy.allCases) { policy in
                         Text(policy.displayName).tag(policy)
                     }
                 }
+            } header: {
+                Text("Deadlines & Ties")
+            } footer: {
+                Text("Spread picks lock at the earliest game kickoff on the slate. You’ll set a nomination deadline each week.")
             }
         }
         .scrollContentBackground(.hidden)
+        .onChange(of: rules.selectionMode) { _, mode in
+            // Product rule: spread picks always lock at first kickoff.
+            rules.pickDeadline = .firstKickoff
+            if mode == .commissioner, rules.slateSize < 1 {
+                rules.slateSize = 12
+            }
+        }
     }
 
     private var reviewStep: some View {
@@ -133,7 +150,12 @@ struct CreateGroupWizardView: View {
                     Text(groupName.isEmpty ? "My Pickems" : groupName)
                         .font(.headline)
                     Text(rules.selectionMode.displayName)
-                    Text("\(rules.slateSize) games · \(rules.pickDeadline.displayName)")
+                    if rules.selectionMode == .member {
+                        Text("\(rules.selectionsPerMember) nomination\(rules.selectionsPerMember == 1 ? "" : "s") per member")
+                    } else {
+                        Text("\(rules.slateSize) games per week")
+                    }
+                    Text("Picks lock at first kickoff")
                     Text("Tie-breaker: \(rules.tieBreaker.displayName)")
                 }
                 .foregroundStyle(PickemsColors.textPrimary)
@@ -214,6 +236,7 @@ struct CreateGroupWizardView: View {
                 return
             }
             do {
+                rules.pickDeadline = .firstKickoff
                 let group = try await appState.groupService.createGroup(
                     name: groupName.isEmpty ? "My Pickems" : groupName,
                     commissionerId: user.id,

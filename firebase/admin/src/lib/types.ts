@@ -82,6 +82,11 @@ export interface WeekDoc {
   lockedAt?: Timestamp | null;
   pickDeadline?: Timestamp | null;
   nominationCount?: number;
+  selectionDeadline?: Timestamp | null;
+  selectionDeadlineSetAt?: Timestamp | null;
+  selectionDeadlineSetBy?: string | null;
+  selectionDeadlineNudgeSent?: boolean;
+  selectionDeadlinePassedNotified?: boolean;
   awards?: WeekAwards | null;
   deadlineReminderSent?: boolean;
   scoredAt?: Timestamp | null;

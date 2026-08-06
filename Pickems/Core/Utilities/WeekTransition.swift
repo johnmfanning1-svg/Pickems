@@ -3,8 +3,8 @@ import FirebaseFirestore
 
 enum WeekTransition {
     /// Builds Firestore fields when a week moves into the picking phase.
-    /// Filling the slate sets `pickDeadline` from kickoffs but does **not** freeze the slate —
-    /// games stay swappable until that deadline (or commissioner early lock).
+    /// Filling the slate sets `pickDeadline` from the earliest kickoff but does **not**
+    /// freeze the slate — games stay swappable until that deadline (or commissioner early lock).
     static func toPickingUpdates(
         rules: GroupRules,
         kickoffs: [Date],
@@ -20,21 +20,21 @@ enum WeekTransition {
             updates[FirestoreField.nominationCount] = nominationCount
         }
 
-        if setDeadline || lockSlate, let deadline = deadline(for: kickoffs, rules: rules) {
+        // Product rule: spread picks lock at the earliest slate kickoff.
+        if setDeadline || lockSlate, let deadline = kickoffs.min() {
             updates["pickDeadline"] = Timestamp(date: deadline)
         }
 
         if lockSlate {
-            // Freeze immediately: deadline = now so picks + slate edits stop without waiting
-            // for the scheduled kickoff. `lockedAt` is the audit stamp.
-            updates["pickDeadline"] = Timestamp(date: Date())
+            // Audit stamp that the slate was closed by the commissioner.
+            // Do not zero pickDeadline — members still need time until first kickoff.
             updates["lockedAt"] = Timestamp(date: Date())
         }
 
         return updates
     }
 
-    /// Commissioner "Lock Slate Early" — freezes slate and picks immediately.
+    /// Commissioner opens picking early (end nomination) — pick deadline stays first kickoff.
     static func lockEarlyUpdates(rules: GroupRules, kickoffs: [Date]) -> [String: Any] {
         toPickingUpdates(rules: rules, kickoffs: kickoffs, setDeadline: true, lockSlate: true)
     }
@@ -53,14 +53,5 @@ enum WeekTransition {
         case .locked, .scored:
             return false
         }
-    }
-
-    private static func deadline(for kickoffs: [Date], rules: GroupRules) -> Date? {
-        PickDeadlineCalculator.compute(
-            kickoffs: kickoffs,
-            policy: rules.pickDeadline,
-            customHour: rules.customDeadlineHour,
-            customMinute: rules.customDeadlineMinute
-        )
     }
 }

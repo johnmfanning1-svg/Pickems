@@ -75,9 +75,9 @@ enum PickemsHelp {
         title: "Nominate Games",
         message: "Help build this week's slate by suggesting games for the group.",
         tips: [
-            "Each member can nominate a limited number of games.",
-            "When the slate is full, everyone moves to the picking phase.",
-            "Commissioners can remove nominations or lock the slate early."
+            "Each member nominates up to the league’s per-member limit.",
+            "When everyone finishes (or the commissioner opens the week), picking begins.",
+            "After the nomination deadline, only the commissioner can add games or open a shorter slate."
         ]
     )
 
@@ -87,8 +87,19 @@ enum PickemsHelp {
         message: "As commissioner, you choose every game for the group this week.",
         tips: [
             "Browse ESPN games and tap to add them.",
-            "Spreads are captured when the slate locks.",
-            "Add games until you reach your configured slate size."
+            "Add games until you reach your games-per-week setting.",
+            "Spread picks lock at the earliest kickoff on the slate."
+        ]
+    )
+
+    static let selectionDeadline = HelpTopic(
+        id: "picks.selectionDeadline",
+        title: "Nomination Deadline",
+        message: "Set when members must finish nominating so there’s still time to pick before kickoff.",
+        tips: [
+            "You’ll get a push at the start of each week to set this.",
+            "After it passes, you can fill remaining games or open the week with fewer.",
+            "Spread picks still lock at the earliest slate kickoff."
         ]
     )
 
@@ -106,8 +117,8 @@ enum PickemsHelp {
     static let pickDeadline = HelpTopic(
         id: "picks.deadline",
         title: "Pick Deadline",
-        message: "Your commissioner sets when picks lock — usually first kickoff or a custom time the day before.",
-        tips: ["After the deadline, picks cannot be changed."]
+        message: "Spread picks lock at the start time of the earliest game on this week’s slate.",
+        tips: ["After the deadline, picks cannot be changed unless late picks are allowed."]
     )
 
     // MARK: - Groups
@@ -142,11 +153,11 @@ enum PickemsHelp {
     static let commissionerSettings = HelpTopic(
         id: "groups.commissioner",
         title: "Commissioner Settings",
-        message: "Control how your league selects games, pick deadlines, and tie-breakers.",
+        message: "Choose either nominations-per-member or games-per-week — not both.",
         tips: [
-            "Member mode: everyone nominates games.",
-            "Commissioner mode: you pick the full slate.",
-            "Changes apply to future weeks."
+            "Members Nominate: set how many games each person submits.",
+            "Commissioner Selects: set total games per week and build the slate yourself.",
+            "Changes apply to future weeks. Set a nomination deadline each week in member mode."
         ]
     )
 

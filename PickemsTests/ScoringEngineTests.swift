@@ -55,8 +55,73 @@ struct ScoringEngineTests {
     @Test func slateCompletionRules() {
         #expect(ScoringEngine.isSlateComplete(nominationCount: 12, slateSize: 12))
         #expect(!ScoringEngine.isSlateComplete(nominationCount: 11, slateSize: 12))
-        #expect(ScoringEngine.canSubmitNomination(userNominationCount: 2, selectionsPerMember: 3, totalNominations: 10, slateSize: 12))
-        #expect(!ScoringEngine.canSubmitNomination(userNominationCount: 3, selectionsPerMember: 3, totalNominations: 10, slateSize: 12))
+        #expect(ScoringEngine.canSubmitNomination(
+            userNominationCount: 2,
+            selectionsPerMember: 3,
+            uniqueNominationCount: 10,
+            slateSize: 12,
+            selectionDeadline: nil
+        ))
+        #expect(!ScoringEngine.canSubmitNomination(
+            userNominationCount: 3,
+            selectionsPerMember: 3,
+            uniqueNominationCount: 10,
+            slateSize: 12,
+            selectionDeadline: nil
+        ))
+        let past = Date().addingTimeInterval(-60)
+        #expect(!ScoringEngine.canSubmitNomination(
+            userNominationCount: 0,
+            selectionsPerMember: 3,
+            uniqueNominationCount: 0,
+            slateSize: 12,
+            selectionDeadline: past
+        ))
+    }
+
+    @Test func expectedSlateSizeIsEitherOr() {
+        let member = GroupRules(
+            selectionMode: .member,
+            selectionsPerMember: 3,
+            slateSize: 99,
+            pickDeadline: .firstKickoff,
+            tieBreaker: .commissionerOverride
+        )
+        #expect(member.expectedSlateSize(memberCount: 4) == 12)
+
+        let commissioner = GroupRules(
+            selectionMode: .commissioner,
+            selectionsPerMember: 3,
+            slateSize: 8,
+            pickDeadline: .firstKickoff,
+            tieBreaker: .commissionerOverride
+        )
+        #expect(commissioner.expectedSlateSize(memberCount: 4) == 8)
+    }
+
+    @Test func memberNominationRoundCompletesWhenAllAtQuota() {
+        let byUser = ["a": 3, "b": 3, "c": 3]
+        #expect(ScoringEngine.isMemberNominationRoundComplete(
+            nominationsByUser: byUser,
+            memberIds: ["a", "b", "c"],
+            selectionsPerMember: 3,
+            uniqueNominationCount: 7,
+            slateSize: 9
+        ))
+        #expect(!ScoringEngine.isMemberNominationRoundComplete(
+            nominationsByUser: ["a": 3, "b": 2, "c": 3],
+            memberIds: ["a", "b", "c"],
+            selectionsPerMember: 3,
+            uniqueNominationCount: 7,
+            slateSize: 9
+        ))
+        #expect(ScoringEngine.isMemberNominationRoundComplete(
+            nominationsByUser: ["a": 1],
+            memberIds: ["a", "b"],
+            selectionsPerMember: 3,
+            uniqueNominationCount: 9,
+            slateSize: 9
+        ))
     }
 
     @Test func rankedStandingsAssignsRanks() {
