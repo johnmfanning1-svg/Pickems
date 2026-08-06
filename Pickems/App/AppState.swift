@@ -23,6 +23,8 @@ final class AppState {
     var pendingInviteCode: String?
     var showJoinGroupSheet = false
     var showFavoriteTeamPicker = false
+    /// Set by selection-deadline push; slate/picks UI presents the setter sheet.
+    var pendingSelectionDeadlinePrompt = false
     /// Set when Firebase failed to boot; RootView can show a non-crash error screen.
     var firebaseBootFailed = false
 
@@ -159,6 +161,9 @@ final class AppState {
             selectedTab = .groups
         case .openHome:
             selectedTab = .home
+        case .openSelectionDeadline:
+            pendingSelectionDeadlinePrompt = true
+            selectedTab = .groups
         }
     }
 

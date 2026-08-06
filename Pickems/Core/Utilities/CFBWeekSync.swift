@@ -42,18 +42,26 @@ enum CFBWeekSync {
         return max(1, min(15, weeks + 1))
     }
 
-    static func makeWeekSummary(id: String, info: CFBWeekInfo, rules: GroupRules) -> WeekSummary {
+    static func makeWeekSummary(
+        id: String,
+        info: CFBWeekInfo,
+        rules: GroupRules,
+        memberCount: Int
+    ) -> WeekSummary {
         WeekSummary(
             id: id,
             seasonYear: info.seasonYear,
             weekNumber: info.weekNumber,
             status: .selection,
-            slateSize: rules.slateSize,
+            slateSize: rules.expectedSlateSize(memberCount: memberCount),
             selectionMode: rules.selectionMode,
             selectionsPerMember: rules.selectionsPerMember,
             lockedAt: nil,
             pickDeadline: nil,
-            nominationCount: 0
+            nominationCount: 0,
+            selectionDeadline: nil,
+            selectionDeadlineSetAt: nil,
+            selectionDeadlineSetBy: nil
         )
     }
 }

@@ -5,6 +5,8 @@ export type PushType =
   | "deadline_reminder"
   | "deadline_locked"
   | "deadline_passed"
+  | "set_selection_deadline"
+  | "selection_deadline_passed"
   | "game_final"
   | "took_the_lead"
   | "season_closed"

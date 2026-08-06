@@ -111,12 +111,19 @@ final class PicksViewModel {
         Task {
             do {
                 let rules = group.rules
-                if rules.selectionMode == .commissioner {
+                let selectionMode = week.selectionMode
+                let commissionerFill =
+                    appState.isCommissioner
+                    && selectionMode == .member
+                    && week.isSelectionDeadlinePassed
+
+                if selectionMode == .commissioner || commissionerFill {
                     try await appState.pickService.submitCommissionerGame(
                         groupId: group.id,
                         weekId: week.id,
                         game: game.toSlateGame(),
-                        rules: rules
+                        rules: rules,
+                        week: week
                     )
                 } else {
                     try await appState.pickService.submitNomination(
@@ -140,7 +147,9 @@ final class PicksViewModel {
                             kickoff: game.kickoff,
                             createdAt: Date()
                         ),
-                        rules: rules
+                        rules: rules,
+                        week: week,
+                        memberIds: group.memberIds
                     )
                 }
                 PickemsHaptics.success()
@@ -196,20 +205,36 @@ final class PicksViewModel {
     func lockSlateEarly(appState: AppState) {
         guard let group = appState.groupService.selectedGroup,
               let week = appState.groupService.currentWeek else { return }
-        let kickoffs = appState.pickService.nominations.map(\.kickoff)
-        guard !kickoffs.isEmpty else { return }
         Task {
             do {
-                try await appState.pickService.materializeNominationsIfNeeded(
-                    groupId: group.id,
-                    weekId: week.id
-                )
-                try await appState.groupService.lockSlateEarly(
+                try await appState.pickService.openWeekWithCurrentSlate(
                     groupId: group.id,
                     weekId: week.id,
-                    rules: group.rules,
-                    kickoffs: kickoffs
+                    rules: group.rules
                 )
+            } catch {
+                UserFacingError.apply(error, to: &appState.groupService.errorMessage, context: .write)
+            }
+        }
+    }
+
+    func openWeekWithCurrentSlate(appState: AppState) {
+        lockSlateEarly(appState: appState)
+    }
+
+    func setSelectionDeadline(_ deadline: Date, appState: AppState) {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek,
+              let userId = appState.currentUserId else { return }
+        Task {
+            do {
+                try await appState.groupService.setSelectionDeadline(
+                    groupId: group.id,
+                    weekId: week.id,
+                    deadline: deadline,
+                    setByUserId: userId
+                )
+                PickemsHaptics.success()
             } catch {
                 UserFacingError.apply(error, to: &appState.groupService.errorMessage, context: .write)
             }
@@ -284,7 +309,8 @@ final class PicksViewModel {
                 groupId: group.id,
                 weekId: week.id,
                 games: scheduled,
-                rules: rules
+                rules: rules,
+                week: week
             )
             PickemsHaptics.success()
         } catch {

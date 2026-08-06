@@ -218,19 +218,28 @@ final class PickService {
         groupId: String,
         weekId: String,
         nomination: Nomination,
-        rules: GroupRules
+        rules: GroupRules,
+        week: WeekSummary,
+        memberIds: [String]
     ) async throws {
+        guard week.status == .selection else {
+            throw PickError.nominationLimitReached
+        }
         let existing = nominations.filter { $0.espnEventId == nomination.espnEventId }
         guard existing.isEmpty else {
             throw PickError.duplicateGame
         }
 
+        let slateSize = week.slateSize
+        let perMember = week.selectionsPerMember > 0 ? week.selectionsPerMember : rules.selectionsPerMember
+        let uniqueCount = Set(nominations.map(\.espnEventId)).count
         let userCount = nominations.filter { $0.submittedBy == nomination.submittedBy }.count
         guard ScoringEngine.canSubmitNomination(
             userNominationCount: userCount,
-            selectionsPerMember: rules.selectionsPerMember,
-            totalNominations: nominations.count,
-            slateSize: rules.slateSize
+            selectionsPerMember: perMember,
+            uniqueNominationCount: uniqueCount,
+            slateSize: slateSize,
+            selectionDeadline: week.selectionDeadline
         ) else {
             throw PickError.nominationLimitReached
         }
@@ -246,19 +255,31 @@ final class PickService {
         let weekRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
 
-        let weekSnapshot = try await weekRef.getDocument()
-        let currentCount = weekSnapshot.data()?["nominationCount"] as? Int ?? nominations.count
-        let newCount = currentCount + 1
-        let allKickoffs = (nominations + [nomination]).map(\.kickoff)
+        let updatedNoms = nominations + [nom]
+        let newUnique = Set(updatedNoms.map(\.espnEventId)).count
+        let newCount = updatedNoms.count
+        var byUser: [String: Int] = [:]
+        for n in updatedNoms {
+            byUser[n.submittedBy, default: 0] += 1
+        }
 
-        if ScoringEngine.isSlateComplete(nominationCount: newCount, slateSize: rules.slateSize) {
+        let complete = ScoringEngine.isMemberNominationRoundComplete(
+            nominationsByUser: byUser,
+            memberIds: memberIds,
+            selectionsPerMember: perMember,
+            uniqueNominationCount: newUnique,
+            slateSize: slateSize
+        )
+
+        if complete {
             try await materializeNominationsIfNeeded(groupId: groupId, weekId: weekId)
             // Open picking + set deadline from kickoffs; do not lock the slate yet.
+            let kickoffs = await slateKickoffs(groupId: groupId, weekId: weekId, fallback: updatedNoms.map(\.kickoff))
             try await transitionToPicking(
                 groupId: groupId,
                 weekId: weekId,
                 rules: rules,
-                kickoffs: allKickoffs,
+                kickoffs: kickoffs,
                 nominationCount: newCount,
                 lockSlate: false
             )
@@ -335,9 +356,13 @@ final class PickService {
         groupId: String,
         weekId: String,
         game: SlateGame,
-        rules: GroupRules
+        rules: GroupRules,
+        week: WeekSummary
     ) async throws {
-        guard slateGames.count < rules.slateSize else {
+        let slateSize = week.slateSize > 0 ? week.slateSize : rules.slateSize
+        // After nomination deadline (or in commissioner mode), fill against games collection.
+        let currentCount = max(slateGames.count, Set(nominations.map(\.espnEventId)).count)
+        guard currentCount < slateSize else {
             throw PickError.slateFull
         }
         guard !slateGames.contains(where: { $0.espnEventId == game.espnEventId }) else {
@@ -346,23 +371,66 @@ final class PickService {
         guard !nominations.contains(where: { $0.espnEventId == game.espnEventId }) else {
             throw PickError.duplicateGame
         }
+
+        // Ensure member nominations are on the slate before commissioner fill.
+        if week.selectionMode == .member {
+            try await materializeNominationsIfNeeded(groupId: groupId, weekId: weekId)
+        }
+
         let ref = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
             .collection("games").document(game.id)
         try await ref.setData(from: game)
 
+        let newCount = slateGames.count + 1
         let allKickoffs = (slateGames + [game]).map(\.kickoff)
-        if slateGames.count + 1 >= rules.slateSize {
+        if newCount >= slateSize {
             // Open picking + set deadline from kickoffs; do not lock the slate yet.
             try await transitionToPicking(
                 groupId: groupId,
                 weekId: weekId,
                 rules: rules,
                 kickoffs: allKickoffs,
-                nominationCount: nil,
+                nominationCount: week.selectionMode == .member ? nominations.count : nil,
                 lockSlate: false
             )
         }
+    }
+
+    /// Opens picking with whatever unique games/nominations exist (may be under slateSize).
+    func openWeekWithCurrentSlate(
+        groupId: String,
+        weekId: String,
+        rules: GroupRules
+    ) async throws {
+        try await materializeNominationsIfNeeded(groupId: groupId, weekId: weekId)
+        let kickoffs = await slateKickoffs(
+            groupId: groupId,
+            weekId: weekId,
+            fallback: nominations.map(\.kickoff) + slateGames.map(\.kickoff)
+        )
+        guard !kickoffs.isEmpty else {
+            throw PickError.slateFull
+        }
+        try await transitionToPicking(
+            groupId: groupId,
+            weekId: weekId,
+            rules: rules,
+            kickoffs: kickoffs,
+            nominationCount: nominations.count,
+            lockSlate: true
+        )
+    }
+
+    private func slateKickoffs(groupId: String, weekId: String, fallback: [Date]) async -> [Date] {
+        let gamesSnap = try? await db.collection("groups").document(groupId)
+            .collection("weeks").document(weekId)
+            .collection("games")
+            .getDocuments()
+        let fromGames = gamesSnap?.documents.compactMap { doc -> Date? in
+            (try? doc.data(as: SlateGame.self))?.kickoff
+        } ?? []
+        return fromGames.isEmpty ? fallback : fromGames
     }
 
     private func transitionToPicking(
@@ -587,15 +655,17 @@ final class PickService {
         groupId: String,
         weekId: String,
         games: [SlateGame],
-        rules: GroupRules
+        rules: GroupRules,
+        week: WeekSummary
     ) async throws {
+        let slateSize = week.slateSize > 0 ? week.slateSize : rules.slateSize
         let gamesRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
             .collection("games")
         let existingSnap = try await gamesRef.getDocuments()
         let existing = existingSnap.documents.compactMap { try? $0.data(as: SlateGame.self) }
         let existingIds = Set(existing.map(\.espnEventId))
-        let remaining = rules.slateSize - existing.count
+        let remaining = slateSize - existing.count
         guard remaining > 0 else { throw PickError.slateFull }
 
         var added: [SlateGame] = []
@@ -608,7 +678,7 @@ final class PickService {
         }
 
         let newCount = existing.count + added.count
-        if newCount >= rules.slateSize {
+        if newCount >= slateSize {
             let allKickoffs = (existing + added).map(\.kickoff)
             try await transitionToPicking(
                 groupId: groupId,
@@ -647,8 +717,8 @@ final class PickService {
         var errorDescription: String? {
             switch self {
             case .duplicateGame: return "This game has already been nominated."
-            case .nominationLimitReached: return "You've reached your nomination limit."
-            case .slateFull: return "The slate is full."
+            case .nominationLimitReached: return "You've reached your nomination limit or the nomination deadline has passed."
+            case .slateFull: return "The slate is full — or there are no games to open yet."
             case .deadlinePassed: return "The pick deadline has passed."
             case .incompletePicks: return "Please pick every game before submitting."
             case .unauthorized: return "You can't remove this nomination."

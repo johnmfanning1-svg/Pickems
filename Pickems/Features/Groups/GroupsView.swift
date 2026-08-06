@@ -256,21 +256,24 @@ struct GroupsView: View {
     private func thisWeekCard(_ group: PickemGroup) -> some View {
         if let week = appState.groupService.currentWeek,
            week.status == .selection || week.status == .picking {
-            // Prefer live slate/nomination listeners over the week-doc counter so Groups
-            // stays synced with Group Picks / Build Slate.
+            // Prefer live slate/nomination listeners over the week-doc counter.
+            let uniqueGames = Set(
+                appState.pickService.nominations.map(\.espnEventId)
+                    + appState.pickService.slateGames.map(\.espnEventId)
+            ).count
             let liveSlateCount = max(
+                uniqueGames,
                 appState.pickService.slateGames.count,
-                appState.pickService.nominations.count,
                 week.nominationCount
             )
+            let perMember = max(week.selectionsPerMember, 1)
+            let membersDone = appState.groupService.members.filter { member in
+                appState.pickService.nominations.filter { $0.submittedBy == member.id }.count >= perMember
+            }.count
             let statusCaption: String = {
                 if week.status == .selection {
                     if week.selectionMode == .member {
-                        let perMember = max(week.selectionsPerMember, 1)
-                        let done = appState.groupService.members.filter { member in
-                            appState.pickService.nominations.filter { $0.submittedBy == member.id }.count >= perMember
-                        }.count
-                        return "\(done) of \(group.memberCount) done nominating"
+                        return "\(membersDone) of \(group.memberCount) done nominating"
                     }
                     return "\(liveSlateCount)/\(week.slateSize) slate"
                 }
@@ -301,10 +304,17 @@ struct GroupsView: View {
                         .foregroundStyle(PickemsColors.textPrimary)
 
                     HStack(spacing: 16) {
-                        Label(
-                            "\(liveSlateCount)/\(week.slateSize) slate",
-                            systemImage: "sportscourt"
-                        )
+                        if week.status == .selection, week.selectionMode == .member {
+                            Label(
+                                "\(uniqueGames)/\(week.slateSize) games",
+                                systemImage: "sportscourt"
+                            )
+                        } else {
+                            Label(
+                                "\(liveSlateCount)/\(week.slateSize) slate",
+                                systemImage: "sportscourt"
+                            )
+                        }
                         Label(
                             statusCaption,
                             systemImage: "checkmark.circle"

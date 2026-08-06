@@ -319,8 +319,43 @@ describe("existing invariants (regression)", () => {
     const week = doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID);
 
     await assertSucceeds(updateDoc(week, { status: "locked", lockedAt: new Date() }));
-    // slateSize is not on commissionerWeekFieldUpdate's allow-list.
+    // slateSize alone is not on the allow-list once the week left selection.
     await assertFails(updateDoc(week, { slateSize: 12 }));
+  });
+
+  it("lets the commissioner set a selection deadline and sync slate knobs while selecting", async () => {
+    await seed();
+    const adminDb = testEnv.authenticatedContext(COMMISH).firestore();
+    // Reset week to selection for this case.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID),
+        {
+          id: WEEK_ID,
+          status: "selection",
+          slateSize: 12,
+          selectionMode: "member",
+          selectionsPerMember: 3,
+          nominationCount: 0,
+        },
+        { merge: true }
+      );
+    });
+    const week = doc(adminDb, "groups", GROUP_ID, "weeks", WEEK_ID);
+    await assertSucceeds(
+      updateDoc(week, {
+        selectionDeadline: new Date(),
+        selectionDeadlineSetAt: new Date(),
+        selectionDeadlineSetBy: COMMISH,
+      })
+    );
+    await assertSucceeds(
+      updateDoc(week, {
+        slateSize: 9,
+        selectionMode: "member",
+        selectionsPerMember: 3,
+      })
+    );
   });
 
   it("keeps submissions readable by members and picks unforgeable by others", async () => {

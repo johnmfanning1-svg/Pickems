@@ -274,17 +274,36 @@ enum ScoringEngine {
         return true
     }
 
+    /// True when unique nominations have hit the week's expected slate size.
     static func isSlateComplete(nominationCount: Int, slateSize: Int) -> Bool {
         nominationCount >= slateSize
+    }
+
+    /// Member-mode completion: every active member hit their quota, or unique noms filled the week target.
+    static func isMemberNominationRoundComplete(
+        nominationsByUser: [String: Int],
+        memberIds: [String],
+        selectionsPerMember: Int,
+        uniqueNominationCount: Int,
+        slateSize: Int
+    ) -> Bool {
+        if isSlateComplete(nominationCount: uniqueNominationCount, slateSize: slateSize) {
+            return true
+        }
+        guard !memberIds.isEmpty, selectionsPerMember > 0 else { return false }
+        return memberIds.allSatisfy { (nominationsByUser[$0] ?? 0) >= selectionsPerMember }
     }
 
     static func canSubmitNomination(
         userNominationCount: Int,
         selectionsPerMember: Int,
-        totalNominations: Int,
-        slateSize: Int
+        uniqueNominationCount: Int,
+        slateSize: Int,
+        selectionDeadline: Date?,
+        now: Date = Date()
     ) -> Bool {
-        userNominationCount < selectionsPerMember && totalNominations < slateSize
+        if let selectionDeadline, now >= selectionDeadline { return false }
+        return userNominationCount < selectionsPerMember && uniqueNominationCount < slateSize
     }
 
     static func isPastDeadline(deadline: Date?) -> Bool {

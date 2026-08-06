@@ -84,16 +84,28 @@ struct WeekSummary: Codable, Identifiable, Equatable {
     var seasonYear: Int
     var weekNumber: Int
     var status: WeekStatus
+    /// Expected/max unique games for this week (derived in member mode at mint).
     var slateSize: Int
     var selectionMode: SelectionMode
     var selectionsPerMember: Int
     var lockedAt: Date?
+    /// Spread-pick lock — earliest slate kickoff once picking opens.
     var pickDeadline: Date?
     var nominationCount: Int
+    /// Commissioner-set deadline for member nominations (member mode).
+    var selectionDeadline: Date? = nil
+    var selectionDeadlineSetAt: Date? = nil
+    var selectionDeadlineSetBy: String? = nil
     var awards: WeekAwards? = nil
 
     var displayLabel: String {
         "Season \(seasonYear.pickemsYearString) | Week \(weekNumber)"
+    }
+
+    /// True when a selection deadline is set and has passed.
+    var isSelectionDeadlinePassed: Bool {
+        guard let selectionDeadline else { return false }
+        return Date() >= selectionDeadline
     }
 }
 

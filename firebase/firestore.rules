@@ -73,11 +73,22 @@ service cloud.firestore {
         || changed.hasOnly(['status', 'nominationCount', 'pickDeadline'])
         || changed.hasOnly(['status', 'pickDeadline'])
         || changed.hasOnly(['status', 'lockedAt'])
-        || changed.hasOnly(['status', 'lockedAt', 'pickDeadline']);
+        || changed.hasOnly(['status', 'lockedAt', 'pickDeadline'])
+        || changed.hasOnly(['status', 'nominationCount', 'pickDeadline', 'lockedAt'])
+        || changed.hasOnly(['selectionDeadline', 'selectionDeadlineSetAt', 'selectionDeadlineSetBy'])
+        || (changed.hasOnly(['slateSize', 'selectionMode', 'selectionsPerMember'])
+            && resource.data.status == 'selection');
     }
 
     function weekData(groupId, weekId) {
       return get(/databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)).data;
+    }
+
+    function selectionNominationsOpen(groupId, weekId) {
+      let week = weekData(groupId, weekId);
+      return !('selectionDeadline' in week)
+        || week.selectionDeadline == null
+        || request.time < week.selectionDeadline;
     }
 
     function picksVisibleToAll(groupId, weekId) {
@@ -155,9 +166,13 @@ service cloud.firestore {
           allow create: if isSuperAdmin()
             || (isGroupMember(groupId)
                 && weekData(groupId, weekId).status == 'selection'
+                && selectionNominationsOpen(groupId, weekId)
                 && request.resource.data.submittedBy == request.auth.uid);
           allow update, delete: if isCommissioner(groupId)
-            || (isSignedIn() && resource.data.submittedBy == request.auth.uid);
+            || (isSignedIn()
+                && resource.data.submittedBy == request.auth.uid
+                && weekData(groupId, weekId).status == 'selection'
+                && selectionNominationsOpen(groupId, weekId));
         }
 
         match /games/{gameId} {
