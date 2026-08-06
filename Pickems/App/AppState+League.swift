@@ -51,7 +51,8 @@ extension AppState {
                 inviteCode: inviteCode,
                 userId: user.id,
                 displayName: user.displayName,
-                avatarColorHex: user.avatarColorHex
+                avatarColorHex: user.avatarColorHex,
+                avatarImageURL: user.avatarImageURL
             )
             if markOnboarding {
                 finishOnboarding(for: user.id)
@@ -103,11 +104,19 @@ extension AppState {
         let joinedAtById = Dictionary(uniqueKeysWithValues: members.map { ($0.id, $0.joinedAt) })
 
         let baseEntries: [StandingEntry]
+        let avatarURLById = Dictionary(uniqueKeysWithValues: members.compactMap { member -> (String, String)? in
+            guard let url = member.avatarImageURL, !url.isEmpty else { return nil }
+            return (member.id, url)
+        })
+
         if let standings = groupService.standings, !standings.entries.isEmpty {
             baseEntries = standings.entries.map { entry in
                 var copy = entry
                 if copy.joinedAt == nil {
                     copy.joinedAt = joinedAtById[entry.id]
+                }
+                if copy.avatarImageURL == nil {
+                    copy.avatarImageURL = avatarURLById[entry.id]
                 }
                 return copy
             }
@@ -124,7 +133,8 @@ extension AppState {
                     seasonLosses: member.seasonLosses,
                     rank: 0,
                     isTied: false,
-                    joinedAt: member.joinedAt
+                    joinedAt: member.joinedAt,
+                    avatarImageURL: member.avatarImageURL
                 )
             }
         } else {

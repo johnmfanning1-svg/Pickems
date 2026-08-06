@@ -50,10 +50,20 @@ service cloud.firestore {
 
     function memberWeekFieldUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
+      // Members may open picking (and set pickDeadline from kickoffs) when the
+      // slate fills — but must not set lockedAt (early lock is commissioner-only).
       return changed.hasOnly(['nominationCount'])
         || (changed.hasOnly(['status', 'nominationCount'])
             && resource.data.status == 'selection'
-            && request.resource.data.status == 'picking');
+            && request.resource.data.status == 'picking')
+        || (changed.hasOnly(['status', 'nominationCount', 'pickDeadline'])
+            && resource.data.status == 'selection'
+            && request.resource.data.status == 'picking'
+            && !request.resource.data.keys().hasAll(['lockedAt']))
+        || (changed.hasOnly(['status', 'pickDeadline'])
+            && resource.data.status == 'selection'
+            && request.resource.data.status == 'picking'
+            && !request.resource.data.keys().hasAll(['lockedAt']));
     }
 
     function commissionerWeekFieldUpdate() {
@@ -159,9 +169,14 @@ service cloud.firestore {
 
         match /picks/{pickId} {
           allow read: if isSuperAdmin()
+            || isCommissioner(groupId)
             || (isGroupMember(groupId)
                 && (pickId == request.auth.uid || picksVisibleToAll(groupId, weekId)));
           allow create, update: if isSuperAdmin()
+            // Commissioner can wipe or force-select picks for any member.
+            || (isCommissioner(groupId)
+                && pickId in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds
+                && weekData(groupId, weekId).status in ['selection', 'picking', 'locked'])
             || (isSignedIn()
                 && request.auth.uid == pickId
                 && isGroupMember(groupId)
@@ -178,6 +193,10 @@ service cloud.firestore {
         match /submissions/{userId} {
           allow read: if isGroupMember(groupId) || isSuperAdmin();
           allow create, update: if isSuperAdmin()
+            || (isCommissioner(groupId)
+                && userId in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds
+                && request.resource.data.userId == userId
+                && !('picks' in request.resource.data))
             || (isSignedIn()
                 && request.auth.uid == userId
                 && isGroupMember(groupId)

@@ -249,7 +249,7 @@ final class PicksViewModel {
                     groupId: group.id,
                     weekId: week.id,
                     gameId: game.id,
-                    weekStatus: week.status
+                    week: week
                 )
             } catch {
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)

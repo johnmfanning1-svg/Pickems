@@ -137,7 +137,8 @@ struct CommissionerSettingsView: View {
                     NavigationLink {
                         SubmissionStatusView(
                             members: appState.groupService.members,
-                            submissions: appState.pickService.submissions
+                            submissions: appState.pickService.submissions,
+                            slateSize: appState.pickService.slateGames.count
                         )
                     } label: {
                         Label("Submission chase", systemImage: "person.crop.circle.badge.clock")
@@ -350,8 +351,9 @@ struct CommissionerSettingsView: View {
                 ForEach(otherMembers) { member in
                     HStack(spacing: 12) {
                         InitialsAvatar(
-                            initials: String(member.displayName.prefix(2)).uppercased(),
+                            initials: member.initials,
                             colorHex: member.avatarColorHex,
+                            imageURL: member.avatarImageURL,
                             size: 36
                         )
                         VStack(alignment: .leading, spacing: 2) {

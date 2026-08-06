@@ -85,6 +85,13 @@ final class PickService {
                     self.userPick = pick
                     // Pre-deadline list queries fail; keep own pick visible in Group Picks.
                     self.mergeOwnPickIntoAllPicks(pick)
+                    if let pick, !pick.picks.isEmpty {
+                        Task { await self.reconcileOwnSubmissionPickCount(
+                            groupId: groupId,
+                            weekId: weekId,
+                            pick: pick
+                        ) }
+                    }
                 }
             }
 
@@ -153,6 +160,36 @@ final class PickService {
         }
     }
 
+    /// Backfill public `pickCount` on submissions written before that field existed,
+    /// so Group Picks can show 3/3 without waiting for the week to lock.
+    private func reconcileOwnSubmissionPickCount(
+        groupId: String,
+        weekId: String,
+        pick: UserPick
+    ) async {
+        let existing = submissions.first { $0.userId == pick.userId }
+        let needsCount = (existing?.pickCount ?? 0) < pick.picks.count
+        let needsLock = pick.isLocked && existing?.isLocked != true
+        guard needsCount || needsLock || existing == nil else { return }
+        do {
+            try await syncSubmission(
+                groupId: groupId,
+                weekId: weekId,
+                userId: pick.userId,
+                displayName: pick.displayName,
+                isLocked: pick.isLocked,
+                submittedAt: pick.submittedAt,
+                pickCount: pick.picks.count
+            )
+        } catch {
+            AppLog.notice(AppLog.firestore, "reconcileOwnSubmissionPickCount failed", metadata: [
+                "group_id": groupId,
+                "week_id": weekId,
+                "error": error.localizedDescription,
+            ])
+        }
+    }
+
     /// Document get for `picks/{currentUid}` — allowed pre-deadline when collection list is not.
     private func fetchAndMergeOwnPick(groupId: String, weekId: String) async {
         let uid = Auth.auth().currentUser?.uid
@@ -216,13 +253,14 @@ final class PickService {
 
         if ScoringEngine.isSlateComplete(nominationCount: newCount, slateSize: rules.slateSize) {
             try await materializeNominationsIfNeeded(groupId: groupId, weekId: weekId)
+            // Open picking + set deadline from kickoffs; do not lock the slate yet.
             try await transitionToPicking(
                 groupId: groupId,
                 weekId: weekId,
                 rules: rules,
                 kickoffs: allKickoffs,
                 nominationCount: newCount,
-                lockSlate: true
+                lockSlate: false
             )
         } else {
             try await weekRef.updateData(["nominationCount": newCount])
@@ -315,13 +353,14 @@ final class PickService {
 
         let allKickoffs = (slateGames + [game]).map(\.kickoff)
         if slateGames.count + 1 >= rules.slateSize {
+            // Open picking + set deadline from kickoffs; do not lock the slate yet.
             try await transitionToPicking(
                 groupId: groupId,
                 weekId: weekId,
                 rules: rules,
                 kickoffs: allKickoffs,
                 nominationCount: nil,
-                lockSlate: true
+                lockSlate: false
             )
         }
     }
@@ -338,6 +377,7 @@ final class PickService {
             rules: rules,
             kickoffs: kickoffs,
             nominationCount: nominationCount,
+            setDeadline: true,
             lockSlate: lockSlate
         )
         try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
@@ -373,7 +413,8 @@ final class PickService {
             userId: userId,
             displayName: displayName,
             isLocked: false,
-            submittedAt: nil
+            submittedAt: nil,
+            pickCount: picks.count
         )
     }
 
@@ -417,7 +458,8 @@ final class PickService {
             userId: userId,
             displayName: displayName,
             isLocked: true,
-            submittedAt: pick.submittedAt
+            submittedAt: pick.submittedAt,
+            pickCount: picks.count
         )
     }
 
@@ -427,29 +469,102 @@ final class PickService {
         userId: String,
         displayName: String,
         isLocked: Bool,
-        submittedAt: Date?
+        submittedAt: Date?,
+        pickCount: Int
     ) async throws {
         let submission = PickSubmission(
             id: userId,
             userId: userId,
             displayName: displayName,
             isLocked: isLocked,
-            submittedAt: submittedAt
+            submittedAt: submittedAt,
+            pickCount: pickCount
         )
         try await db.week(groupId: groupId, weekId: weekId)
             .collection(FirestoreCollection.submissions)
             .document(userId)
             .setData(from: submission)
+        // Keep local mirror in sync so Group Picks updates immediately.
+        if let idx = submissions.firstIndex(where: { $0.userId == userId }) {
+            submissions[idx] = submission
+        } else {
+            submissions.append(submission)
+        }
     }
 
-    func removeCommissionerGame(groupId: String, weekId: String, gameId: String, weekStatus: WeekStatus) async throws {
-        guard weekStatus == .selection else {
+    func removeCommissionerGame(
+        groupId: String,
+        weekId: String,
+        gameId: String,
+        week: WeekSummary
+    ) async throws {
+        guard WeekTransition.isSlateEditable(week) else {
             throw PickError.cannotModifyLockedSlate
         }
         try await db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
             .collection("games").document(gameId)
             .delete()
+    }
+
+    /// Commissioner wipe or force-write of another member's picks for the week.
+    func commissionerSetPicks(
+        groupId: String,
+        weekId: String,
+        userId: String,
+        displayName: String,
+        picks: [String: String],
+        isLocked: Bool
+    ) async throws {
+        let pick = UserPick(
+            id: userId,
+            userId: userId,
+            displayName: displayName,
+            picks: picks,
+            submittedAt: isLocked ? Date() : nil,
+            isLocked: isLocked,
+            confidenceGameId: nil
+        )
+        let pickRef = db.collection("groups").document(groupId)
+            .collection("weeks").document(weekId)
+            .collection("picks").document(userId)
+        // Full replace so wiped keys actually disappear (merge cannot clear map entries).
+        try await pickRef.setData(from: pick)
+        try await syncSubmission(
+            groupId: groupId,
+            weekId: weekId,
+            userId: userId,
+            displayName: displayName,
+            isLocked: isLocked,
+            submittedAt: pick.submittedAt,
+            pickCount: picks.count
+        )
+        if picks.isEmpty && !isLocked {
+            allPicks.removeAll { $0.userId == userId }
+        } else if allPicks.contains(where: { $0.userId == userId }) {
+            allPicks = allPicks.map { $0.userId == userId ? pick : $0 }
+        } else {
+            allPicks.append(pick)
+        }
+        if userPick?.userId == userId {
+            userPick = picks.isEmpty && !isLocked ? nil : pick
+        }
+    }
+
+    func commissionerClearPicks(
+        groupId: String,
+        weekId: String,
+        userId: String,
+        displayName: String
+    ) async throws {
+        try await commissionerSetPicks(
+            groupId: groupId,
+            weekId: weekId,
+            userId: userId,
+            displayName: displayName,
+            picks: [:],
+            isLocked: false
+        )
     }
 
     func updateGameSpread(
@@ -501,7 +616,7 @@ final class PickService {
                 rules: rules,
                 kickoffs: allKickoffs,
                 nominationCount: nil,
-                lockSlate: true
+                lockSlate: false
             )
         }
     }

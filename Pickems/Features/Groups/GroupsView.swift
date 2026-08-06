@@ -83,6 +83,9 @@ struct GroupsView: View {
                 CreateGroupWizardView()
                     .pickemsEnvironment(appState)
             }
+            .task(id: appState.groupService.selectedGroup?.id) {
+                await appState.syncSelectedWeek()
+            }
             .confirmationDialog("Leave this league?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
                 Button("Leave League", role: .destructive) { leaveSelectedLeague() }
                 Button("Cancel", role: .cancel) {}
@@ -148,6 +151,7 @@ struct GroupsView: View {
                         ) {
                             PickemsHaptics.selection()
                             appState.groupService.selectGroup(group)
+                            Task { await appState.syncSelectedWeek() }
                         }
                     }
                 }
@@ -219,7 +223,7 @@ struct GroupsView: View {
             case .picking:
                 parts.append("Picking open")
             case .locked:
-                parts.append("Games locked")
+                parts.append("Picks locked")
             case .scored:
                 parts.append("Scored")
             }
@@ -252,9 +256,38 @@ struct GroupsView: View {
     private func thisWeekCard(_ group: PickemGroup) -> some View {
         if let week = appState.groupService.currentWeek,
            week.status == .selection || week.status == .picking {
-            let submittedCount = Set(
-                appState.pickService.submissions.filter(\.isLocked).map(\.userId)
-            ).count
+            // Prefer live slate/nomination listeners over the week-doc counter so Groups
+            // stays synced with Group Picks / Build Slate.
+            let liveSlateCount = max(
+                appState.pickService.slateGames.count,
+                appState.pickService.nominations.count,
+                week.nominationCount
+            )
+            let statusCaption: String = {
+                if week.status == .selection {
+                    if week.selectionMode == .member {
+                        let perMember = max(week.selectionsPerMember, 1)
+                        let done = appState.groupService.members.filter { member in
+                            appState.pickService.nominations.filter { $0.submittedBy == member.id }.count >= perMember
+                        }.count
+                        return "\(done) of \(group.memberCount) done nominating"
+                    }
+                    return "\(liveSlateCount)/\(week.slateSize) slate"
+                }
+                let slateTotal = max(appState.pickService.slateGames.count, 1)
+                let submittedCount = appState.groupService.members.filter { member in
+                    if let sub = appState.pickService.submissions.first(where: { $0.userId == member.id }) {
+                        if sub.isLocked { return true }
+                        if sub.pickCount >= slateTotal { return true }
+                    }
+                    if let pick = appState.pickService.userPick, pick.userId == member.id {
+                        if pick.isLocked { return true }
+                        if pick.picks.count >= slateTotal { return true }
+                    }
+                    return false
+                }.count
+                return "\(submittedCount) of \(group.memberCount) submitted"
+            }()
 
             PickemsCard {
                 VStack(alignment: .leading, spacing: 10) {
@@ -269,11 +302,11 @@ struct GroupsView: View {
 
                     HStack(spacing: 16) {
                         Label(
-                            "\(week.nominationCount)/\(week.slateSize) slate",
+                            "\(liveSlateCount)/\(week.slateSize) slate",
                             systemImage: "sportscourt"
                         )
                         Label(
-                            "\(submittedCount) of \(group.memberCount) submitted",
+                            statusCaption,
                             systemImage: "checkmark.circle"
                         )
                     }
@@ -590,7 +623,11 @@ struct LeaderboardView: View {
                 }
                 ForEach(displayEntries) { entry in
                     VStack(spacing: 4) {
-                        LeaderboardRow(entry: entry, showWeekly: showWeekly)
+                        LeaderboardRow(
+                            entry: entry,
+                            showWeekly: showWeekly,
+                            isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId
+                        )
                         if hasWins, entry.isTied, appState.isCommissioner,
                            appState.groupService.selectedGroup?.rules.tieBreaker == .commissionerOverride {
                             Button("Resolve Tie (Commissioner)") {

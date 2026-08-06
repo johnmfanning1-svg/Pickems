@@ -281,7 +281,11 @@ struct HomeView: View {
                         help: PickemsHelp.standingsPreview
                     )
                     ForEach(Array(topEntries)) { entry in
-                        LeaderboardRow(entry: entry, showWeekly: true)
+                        LeaderboardRow(
+                            entry: entry,
+                            showWeekly: true,
+                            isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId
+                        )
                             .padding(.horizontal)
                     }
                 }

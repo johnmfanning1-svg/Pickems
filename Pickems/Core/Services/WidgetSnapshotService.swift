@@ -17,10 +17,14 @@ enum WidgetSnapshotService {
         let group = appState.groupService.selectedGroup
         let user = appState.authService.currentUser
 
+        // Align with ESPN regular-season week numbering (never publish Week 0).
+        let espnWeek = appState.groupService.cfbWeek?.weekNumber
+            ?? appState.groupService.currentWeek?.weekNumber
+            ?? CFBWeekSync.estimatedCFBWeek()
         let snapshot = StandingsSnapshot(
             groupId: group?.id ?? "",
             groupName: group?.name ?? "Pickems",
-            weekNumber: 0,
+            weekNumber: max(1, espnWeek),
             seasonYear: seasonYear,
             userId: user?.id ?? "",
             userDisplayName: user?.displayName ?? "You",

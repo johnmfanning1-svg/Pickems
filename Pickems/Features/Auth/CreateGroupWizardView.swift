@@ -217,7 +217,9 @@ struct CreateGroupWizardView: View {
                 let group = try await appState.groupService.createGroup(
                     name: groupName.isEmpty ? "My Pickems" : groupName,
                     commissionerId: user.id,
-                    displayName: user.displayName
+                    displayName: user.displayName,
+                    avatarColorHex: user.avatarColorHex,
+                    avatarImageURL: user.avatarImageURL
                 )
                 try await appState.groupService.updateRules(groupId: group.id, rules: rules)
                 appState.groupService.loadGroups(for: user.id)

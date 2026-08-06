@@ -213,7 +213,13 @@ final class GroupService {
         }
     }
 
-    func createGroup(name: String, commissionerId: String, displayName: String) async throws -> PickemGroup {
+    func createGroup(
+        name: String,
+        commissionerId: String,
+        displayName: String,
+        avatarColorHex: String? = nil,
+        avatarImageURL: String? = nil
+    ) async throws -> PickemGroup {
         AppEvents.track(.onboardingCreateStarted, metadata: [
             "uid": AppEvents.shortUID(commissionerId),
         ])
@@ -235,11 +241,12 @@ final class GroupService {
             let member = GroupMember(
                 id: commissionerId,
                 displayName: displayName,
-                avatarColorHex: AvatarColors.randomHex(),
+                avatarColorHex: avatarColorHex ?? AvatarColors.randomHex(),
                 role: .commissioner,
                 joinedAt: Date(),
                 seasonWins: 0,
-                seasonLosses: 0
+                seasonLosses: 0,
+                avatarImageURL: avatarImageURL
             )
             try await groupRef.collection("members").document(commissionerId).setData(from: member)
             selectedGroup = group
@@ -260,7 +267,13 @@ final class GroupService {
         }
     }
 
-    func joinGroup(inviteCode: String, userId: String, displayName: String, avatarColorHex: String) async throws {
+    func joinGroup(
+        inviteCode: String,
+        userId: String,
+        displayName: String,
+        avatarColorHex: String,
+        avatarImageURL: String? = nil
+    ) async throws {
         let normalizedCode = inviteCode.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
         let codeDoc = try await db.collection("inviteCodes").document(normalizedCode).getDocument()
         guard codeDoc.exists, let groupId = codeDoc.data()?["groupId"] as? String else {
@@ -289,7 +302,8 @@ final class GroupService {
             role: .member,
             joinedAt: Date(),
             seasonWins: 0,
-            seasonLosses: 0
+            seasonLosses: 0,
+            avatarImageURL: avatarImageURL
         )
         try await doc.reference.collection("members").document(userId).setData(from: member)
         selectedGroup = group
@@ -298,17 +312,37 @@ final class GroupService {
 
     /// Keeps league member rows in sync when a user changes their unique display name.
     func syncMemberDisplayName(userId: String, displayName: String) async {
+        await syncMemberProfileFields(userId: userId, fields: ["displayName": displayName])
+    }
+
+    /// Mirrors profile photo onto every league membership doc.
+    func syncMemberAvatarURL(userId: String, avatarImageURL: String?) async {
+        let fields: [String: Any]
+        if let avatarImageURL, !avatarImageURL.isEmpty {
+            fields = ["avatarImageURL": avatarImageURL]
+        } else {
+            fields = ["avatarImageURL": FieldValue.delete()]
+        }
+        await syncMemberProfileFields(userId: userId, fields: fields)
+    }
+
+    private func syncMemberProfileFields(userId: String, fields: [String: Any]) async {
         for group in groups {
             let ref = db.collection("groups").document(group.id)
                 .collection("members").document(userId)
             do {
-                try await ref.updateData(["displayName": displayName])
+                try await ref.updateData(fields)
                 if let idx = members.firstIndex(where: { $0.id == userId }),
                    selectedGroup?.id == group.id {
-                    members[idx].displayName = displayName
+                    if let name = fields["displayName"] as? String {
+                        members[idx].displayName = name
+                    }
+                    if fields.keys.contains("avatarImageURL") {
+                        members[idx].avatarImageURL = fields["avatarImageURL"] as? String
+                    }
                 }
             } catch {
-                AppLog.error(AppLog.firestore, "member displayName sync failed", error: error, metadata: [
+                AppLog.error(AppLog.firestore, "member profile sync failed", error: error, metadata: [
                     "group_id": group.id,
                     "uid": AppEvents.shortUID(userId),
                 ])
@@ -850,6 +884,29 @@ final class GroupService {
         careerRecords.first { $0.id == userId }
     }
 
+    /// Fill missing member photo URLs from `users/{uid}` (and mirror onto the member doc).
+    private func hydrateMemberAvatars(_ members: [GroupMember]) async -> [GroupMember] {
+        var result = members
+        for idx in result.indices {
+            if let existing = result[idx].avatarImageURL, !existing.isEmpty { continue }
+            let userId = result[idx].id
+            do {
+                let snap = try await db.collection("users").document(userId).getDocument()
+                guard let url = snap.data()?["avatarImageURL"] as? String, !url.isEmpty else { continue }
+                result[idx].avatarImageURL = url
+                // Best-effort mirror so future loads skip the user doc read.
+                if let groupId = selectedGroup?.id {
+                    try? await db.collection("groups").document(groupId)
+                        .collection("members").document(userId)
+                        .updateData(["avatarImageURL": url])
+                }
+            } catch {
+                continue
+            }
+        }
+        return result
+    }
+
     private func observeGroupDetails(groupId: String, weekId: String) {
         if observedGroupId == groupId, observedWeekId == weekId, weekListener != nil {
             return
@@ -910,7 +967,9 @@ final class GroupService {
             do {
                 let membersSnapshot = try await db.collection("groups").document(groupId)
                     .collection("members").getDocuments()
-                members = membersSnapshot.documents.compactMap { try? $0.data(as: GroupMember.self) }
+                var loaded = membersSnapshot.documents.compactMap { try? $0.data(as: GroupMember.self) }
+                loaded = await hydrateMemberAvatars(loaded)
+                members = loaded
             } catch {
                 AppLog.error(AppLog.firestore, "members fetch failed", error: error, metadata: [
                     "group_id": groupId,

@@ -61,6 +61,8 @@ struct GroupMember: Codable, Identifiable, Equatable {
     var joinedAt: Date
     var seasonWins: Int
     var seasonLosses: Int
+    /// Profile photo URL mirrored from `users/{uid}.avatarImageURL` when set.
+    var avatarImageURL: String? = nil
 
     enum MemberRole: String, Codable {
         case commissioner
@@ -69,6 +71,11 @@ struct GroupMember: Codable, Identifiable, Equatable {
 
     var battingAverage: Double {
         BattingAverage.rate(wins: seasonWins, losses: seasonLosses)
+    }
+
+    var initials: String {
+        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(trimmed.prefix(2)).uppercased()
     }
 }
 
@@ -174,6 +181,9 @@ struct PickSubmission: Codable, Identifiable, Equatable {
     var displayName: String
     var isLocked: Bool
     var submittedAt: Date?
+    /// Number of games picked — public so Group Picks can show 3/3 before week lock
+    /// without revealing which teams were chosen.
+    var pickCount: Int = 0
 }
 
 struct StandingEntry: Codable, Identifiable, Equatable {
@@ -188,6 +198,7 @@ struct StandingEntry: Codable, Identifiable, Equatable {
     var isTied: Bool
     /// Used for interim ranking (no wins yet) and as a tiebreaker before display name.
     var joinedAt: Date? = nil
+    var avatarImageURL: String? = nil
 
     var weeklyBattingAverage: Double {
         BattingAverage.rate(wins: weeklyWins, losses: weeklyLosses)
