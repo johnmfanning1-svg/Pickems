@@ -10,6 +10,7 @@ struct GroupSlateView: View {
     @Environment(\.themePalette) private var theme
     @State private var viewModel = PicksViewModel()
     @State private var showSelectionDeadlineSheet = false
+    @State private var showPickDeadlineSheet = false
 
     private var activeWeek: WeekSummary {
         if let current = appState.groupService.currentWeek, current.id == week.id {
@@ -88,6 +89,22 @@ struct GroupSlateView: View {
                 initialDeadline: activeWeek.selectionDeadline
             ) { deadline in
                 viewModel.setSelectionDeadline(deadline, appState: appState)
+            }
+            .pickemsEnvironment(appState)
+        }
+        .sheet(isPresented: $showPickDeadlineSheet) {
+            PickDeadlineEditorSheet(
+                weekLabel: activeWeek.displayLabel,
+                weekStatus: activeWeek.status,
+                initialDeadline: activeWeek.pickDeadline,
+                isPastDeadline: PickDeadlineCalculator.isPast(activeWeek.pickDeadline)
+            ) { deadline, reopen, unlock in
+                viewModel.setPickDeadline(
+                    deadline,
+                    reopenWeek: reopen,
+                    unlockMemberPicks: unlock,
+                    appState: appState
+                )
             }
             .pickemsEnvironment(appState)
         }
@@ -422,6 +439,14 @@ struct GroupSlateView: View {
                     submissions: appState.pickService.submissions,
                     slateSize: appState.pickService.slateGames.count
                 )
+
+                SecondaryButton(
+                    pastDeadline ? "Extend / Unlock Deadline" : "Set Pick Deadline",
+                    icon: "calendar.badge.clock"
+                ) {
+                    showPickDeadlineSheet = true
+                }
+                .padding(.horizontal)
             }
 
             if slateGames.isEmpty {
@@ -497,6 +522,13 @@ struct GroupSlateView: View {
                 color: week.status == .scored ? PickemsColors.success : PickemsColors.textSecondary
             )
             .padding(.horizontal)
+
+            if appState.isCommissioner, week.status == .locked {
+                SecondaryButton("Reopen Picks", icon: "lock.open") {
+                    showPickDeadlineSheet = true
+                }
+                .padding(.horizontal)
+            }
 
             if !liveCards.isEmpty {
                 LiveScoreboardSection(

@@ -5,6 +5,7 @@ struct PicksView: View {
     @Environment(\.themePalette) private var theme
     @State private var viewModel = PicksViewModel()
     @State private var showSelectionDeadlineSheet = false
+    @State private var showPickDeadlineSheet = false
 
     private var showsGroupPicker: Bool {
         appState.groupService.groups.count > 1
@@ -112,6 +113,24 @@ struct PicksView: View {
                     viewModel.setSelectionDeadline(deadline, appState: appState)
                 }
                 .pickemsEnvironment(appState)
+            }
+            .sheet(isPresented: $showPickDeadlineSheet) {
+                if let week = appState.groupService.currentWeek {
+                    PickDeadlineEditorSheet(
+                        weekLabel: week.displayLabel,
+                        weekStatus: week.status,
+                        initialDeadline: week.pickDeadline,
+                        isPastDeadline: PickDeadlineCalculator.isPast(week.pickDeadline)
+                    ) { deadline, reopen, unlock in
+                        viewModel.setPickDeadline(
+                            deadline,
+                            reopenWeek: reopen,
+                            unlockMemberPicks: unlock,
+                            appState: appState
+                        )
+                    }
+                    .pickemsEnvironment(appState)
+                }
             }
             .onChange(of: appState.pendingSelectionDeadlinePrompt) { _, pending in
                 if pending, appState.isCommissioner,
@@ -485,6 +504,14 @@ struct PicksView: View {
                     submissions: appState.pickService.submissions,
                     slateSize: appState.pickService.slateGames.count
                 )
+
+                SecondaryButton(
+                    pastDeadline ? "Extend / Unlock Deadline" : "Set Pick Deadline",
+                    icon: "calendar.badge.clock"
+                ) {
+                    showPickDeadlineSheet = true
+                }
+                .padding(.horizontal)
             }
 
             let slateEditable = WeekTransition.isSlateEditable(week)
@@ -540,6 +567,13 @@ struct PicksView: View {
                 color: week.status == .scored ? PickemsColors.success : PickemsColors.textSecondary
             )
             .padding(.horizontal)
+
+            if appState.isCommissioner, week.status == .locked {
+                SecondaryButton("Reopen Picks", icon: "lock.open") {
+                    showPickDeadlineSheet = true
+                }
+                .padding(.horizontal)
+            }
 
             ForEach(appState.pickService.slateGames) { game in
                 GamePickRow(

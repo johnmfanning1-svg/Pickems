@@ -173,7 +173,10 @@ actor ESPNService {
             awayAbbreviation: away.team.abbreviation
         )
 
-        let kickoff = ISO8601DateFormatter().date(from: event.date) ?? Date()
+        // ESPN often sends fractional seconds (`…T19:30:00.000Z`). Default ISO8601
+        // parsing fails on those and previously fell back to `Date()` ("now"), which
+        // stamped `pickDeadline` in the past while game rows still showed future kickoffs.
+        guard let kickoff = Self.parseKickoffDate(event.date) else { return nil }
         let status: SlateGame.GameStatus = {
             guard let type = competition.status?.type else { return .scheduled }
             if type.completed { return .final }
@@ -264,6 +267,17 @@ actor ESPNService {
             URLQueryItem(name: "limit", value: "300")
         ]
         return components.url
+    }
+
+    /// Parses ESPN ISO8601 kickoff strings with and without fractional seconds.
+    /// Returns nil instead of inventing "now" — callers must skip unparseable events.
+    nonisolated static func parseKickoffDate(_ raw: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: raw) { return date }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return plain.date(from: raw)
     }
 
     enum ESPNError: LocalizedError {
