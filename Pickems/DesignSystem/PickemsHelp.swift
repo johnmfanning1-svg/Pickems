@@ -136,7 +136,7 @@ enum PickemsHelp {
     static let inviteFriends = HelpTopic(
         id: "groups.invite",
         title: "Invite Friends",
-        message: "Send your league's 6-character invite code. Friends join from onboarding or when they sign in.",
+        message: "Send your league's 4–8 character invite code. Friends join from onboarding or when they sign in.",
         tips: ["Only people with the code can join your private league."]
     )
 
@@ -197,7 +197,7 @@ enum PickemsHelp {
     static let joinGroup = HelpTopic(
         id: "onboarding.join",
         title: "Join a Group",
-        message: "Enter the 6-character invite code from your commissioner.",
+        message: "Enter the 4–8 character invite code from your commissioner.",
         tips: ["Codes are case-insensitive.", "Ask your commissioner to tap Invite Friends on the Groups tab."]
     )
 }

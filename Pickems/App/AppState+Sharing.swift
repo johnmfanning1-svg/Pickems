@@ -41,7 +41,7 @@ extension AppState {
             season: season,
             leagueName: group.name,
             totalPoints: entry.seasonWins,
-            weeklyWins: entry.seasonWins,
+            weeklyWins: 0,
             rank: entry.rank,
             totalPlayers: group.memberCount
         )

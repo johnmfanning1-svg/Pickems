@@ -50,7 +50,7 @@ struct PickemsApp: App {
                         guard !DevAuthBypass.isEnabled else { return }
                         #endif
                         guard signedIn else {
-                            appState.groupService.resetSession()
+                            appState.resetSession()
                             return
                         }
                         Task { await appState.onAuthStateReady() }

@@ -126,7 +126,9 @@ service cloud.firestore {
     }
 
     match /inviteCodes/{code} {
-      allow read: if isSignedIn();
+      // get by exact code for join; deny collection list so codes cannot be scraped.
+      allow get: if isSignedIn();
+      allow list: if false;
       allow create: if isSignedIn()
         && request.resource.data.keys().hasOnly(['groupId'])
         && isCommissioner(request.resource.data.groupId);
@@ -140,14 +142,23 @@ service cloud.firestore {
       // the admin portal needs an unscoped list, which only the claim grants.
       allow get: if isSignedIn();
       allow list: if isSuperAdmin() || (isSignedIn() && request.auth.uid in resource.data.memberIds);
-      allow create: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.commissionerId == request.auth.uid
+        && request.resource.data.memberIds.size() == 1
+        && request.auth.uid in request.resource.data.memberIds;
       allow update: if isCommissioner(groupId) || isJoiningGroup() || isLeavingGroup();
       allow delete: if isCommissioner(groupId);
 
       match /members/{memberId} {
         allow read: if isGroupMember(groupId) || isSuperAdmin();
         allow create: if isSuperAdmin() || (isSignedIn() && request.auth.uid == memberId);
-        allow update, delete: if isCommissioner(groupId) || (isSignedIn() && request.auth.uid == memberId);
+        allow update: if isCommissioner(groupId)
+          || (isSignedIn()
+              && request.auth.uid == memberId
+              && request.resource.data.diff(resource.data).affectedKeys()
+                   .hasOnly(['displayName', 'avatarColorHex', 'avatarImageURL', 'chatMuted', 'lastReadChatAt']));
+        allow delete: if isCommissioner(groupId)
+          || (isSignedIn() && request.auth.uid == memberId);
       }
 
       match /weeks/{weekId} {
@@ -202,7 +213,9 @@ service cloud.firestore {
                         && (!resource.exists || resource.data.isLocked == false))));
           // Members can remove their own pick; commissioner clears picks on league teardown.
           allow delete: if isCommissioner(groupId)
-            || (isSignedIn() && request.auth.uid == pickId);
+            || (isSignedIn()
+                && request.auth.uid == pickId
+                && pickDeadlineOpen(groupId, weekId));
         }
 
         match /submissions/{userId} {

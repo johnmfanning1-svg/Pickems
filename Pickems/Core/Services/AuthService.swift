@@ -350,7 +350,9 @@ final class AuthService {
 
     #if DEBUG
     func signInAsAdmin(gatePassword: String, email: String, firebasePassword: String) async throws {
-        guard gatePassword == DevAdminConfig.gatePassword else {
+        // Reject empty configured gate so clearing committed secrets cannot open admin with blank input.
+        guard !DevAdminConfig.gatePassword.isEmpty,
+              gatePassword == DevAdminConfig.gatePassword else {
             throw AuthError.invalidAdminPassword
         }
 

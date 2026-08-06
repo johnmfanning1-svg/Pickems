@@ -68,20 +68,21 @@ final class AppState {
     }
 
     func onAuthStateReady() async {
-        if let authReadyTask, !authReadyTask.isCancelled {
-            await authReadyTask.value
-            return
-        }
-
+        // Cancel any in-flight bootstrap so a newer sign-in/out identity is not skipped
+        // after awaiting a stale task (coalesce-and-return left sessions half-loaded).
+        authReadyTask?.cancel()
         let task = Task { @MainActor in
             await performAuthStateReady()
         }
         authReadyTask = task
         await task.value
-        authReadyTask = nil
+        if authReadyTask === task {
+            authReadyTask = nil
+        }
     }
 
     private func performAuthStateReady() async {
+        guard !Task.isCancelled else { return }
         authReadyGeneration += 1
         let generation = authReadyGeneration
         CrashReport.breadcrumb("session.on_auth_ready_begin", metadata: [
@@ -170,5 +171,11 @@ final class AppState {
     func processPendingInviteIfNeeded() {
         guard pendingInviteCode != nil, authService.isAuthenticated else { return }
         showJoinGroupSheet = true
+    }
+
+    func resetSession() {
+        groupService.resetSession()
+        pickService.resetSession()
+        chatService.stopObserving()
     }
 }

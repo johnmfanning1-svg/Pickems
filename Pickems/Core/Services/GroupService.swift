@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import FirebaseFirestore
 import FirebaseAuth
 
@@ -321,8 +322,10 @@ final class GroupService {
             return
         }
 
-        group.memberIds.append(userId)
-        try await doc.reference.updateData(["memberIds": group.memberIds])
+        try await doc.reference.updateData(["memberIds": FieldValue.arrayUnion([userId])])
+        if !group.memberIds.contains(userId) {
+            group.memberIds.append(userId)
+        }
 
         let member = GroupMember(
             id: userId,
@@ -672,10 +675,8 @@ final class GroupService {
             throw GroupError.notCommissioner
         }
 
-        let code = rawCode.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-        guard code.count >= 4, code.count <= 8,
-              code.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
+        let code = InviteCodeRules.normalize(rawCode)
+        guard InviteCodeRules.isValidFormat(code) else {
             throw GroupError.invalidInviteCodeFormat
         }
         if code == group.inviteCode { return code }
@@ -1079,7 +1080,23 @@ final class GroupService {
 
     private func generateInviteCode() -> String {
         let chars = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
-        return String((0..<6).map { _ in chars.randomElement() ?? "A" })
+        var result = ""
+        var remaining = 6
+        while remaining > 0 {
+            let randoms: [UInt8] = (0..<16).map { _ in
+                var random: UInt8 = 0
+                _ = SecRandomCopyBytes(kSecRandomDefault, 1, &random)
+                return random
+            }
+            randoms.forEach { random in
+                if remaining == 0 { return }
+                if random < chars.count {
+                    result.append(chars[Int(random)])
+                    remaining -= 1
+                }
+            }
+        }
+        return result
     }
 
     enum GroupError: LocalizedError {

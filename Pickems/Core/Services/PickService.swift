@@ -116,6 +116,24 @@ final class PickService {
             }
     }
 
+    func resetSession() {
+        nominationsListener?.remove()
+        gamesListener?.remove()
+        pickListener?.remove()
+        submissionsListener?.remove()
+        nominationsListener = nil
+        gamesListener = nil
+        pickListener = nil
+        submissionsListener = nil
+        nominations = []
+        slateGames = []
+        userPick = nil
+        allPicks = []
+        submissions = []
+        errorMessage = nil
+        isLoading = false
+    }
+
     func loadAllPicks(groupId: String, weekId: String) async {
         do {
             let snapshot = try await db.collection("groups").document(groupId)

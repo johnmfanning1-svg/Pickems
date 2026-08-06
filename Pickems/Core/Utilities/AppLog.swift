@@ -21,11 +21,19 @@ enum AppLog {
     }
 
     static func info(_ logger: Logger, _ message: String, metadata: [String: String] = [:]) {
+        #if DEBUG
         logger.info("\(format(message, metadata: metadata), privacy: .public)")
+        #else
+        logger.info("\(format(message, metadata: metadata), privacy: .private)")
+        #endif
     }
 
     static func notice(_ logger: Logger, _ message: String, metadata: [String: String] = [:]) {
+        #if DEBUG
         logger.notice("\(format(message, metadata: metadata), privacy: .public)")
+        #else
+        logger.notice("\(format(message, metadata: metadata), privacy: .private)")
+        #endif
     }
 
     static func error(
@@ -40,7 +48,11 @@ enum AppLog {
             let nsError = error as NSError
             meta["ns_code"] = "\(nsError.domain):\(nsError.code)"
         }
+        #if DEBUG
         logger.error("\(format(message, metadata: meta), privacy: .public)")
+        #else
+        logger.error("\(format(message, metadata: meta), privacy: .private)")
+        #endif
     }
 
     static func describe(_ error: Error) -> String {

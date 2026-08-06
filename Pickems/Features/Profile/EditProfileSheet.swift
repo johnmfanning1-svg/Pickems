@@ -96,6 +96,7 @@ struct EditProfileSheet: View {
                 }
             }
             .onAppear(perform: loadFields)
+            .onDisappear { usernameCheckTask?.cancel() }
         }
     }
 
