@@ -31,6 +31,8 @@ final class AppState {
     /// Bumps on each `onAuthStateReady` so overlapping login callbacks cannot finish out of order.
     private var authReadyGeneration = 0
     private var authReadyTask: Task<Void, Never>?
+    /// Distinguishes the latest bootstrap task so a superseded await does not clear a newer one.
+    private var authReadyTaskID = 0
 
     func configure() {
         let ok = FirebaseBootstrap.configureIfNeeded()
@@ -71,12 +73,14 @@ final class AppState {
         // Cancel any in-flight bootstrap so a newer sign-in/out identity is not skipped
         // after awaiting a stale task (coalesce-and-return left sessions half-loaded).
         authReadyTask?.cancel()
+        authReadyTaskID += 1
+        let taskID = authReadyTaskID
         let task = Task { @MainActor in
             await performAuthStateReady()
         }
         authReadyTask = task
         await task.value
-        if authReadyTask === task {
+        if taskID == authReadyTaskID {
             authReadyTask = nil
         }
     }
