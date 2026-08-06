@@ -390,7 +390,8 @@ struct PicksView: View {
             if appState.isCommissioner {
                 SubmissionStatusView(
                     members: appState.groupService.members,
-                    submissions: appState.pickService.submissions
+                    submissions: appState.pickService.submissions,
+                    slateSize: appState.pickService.slateGames.count
                 )
             }
 

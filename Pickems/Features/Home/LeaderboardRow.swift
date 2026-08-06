@@ -20,6 +20,7 @@ struct LeaderboardRow: View {
             InitialsAvatar(
                 initials: String(entry.displayName.prefix(2)).uppercased(),
                 colorHex: entry.avatarColorHex,
+                imageURL: entry.avatarImageURL,
                 size: 36
             )
             .accessibilityHidden(true)

@@ -54,8 +54,9 @@ struct GroupPicksView: View {
         return map
     }
 
+    /// Members who have finished picking (locked-in or full slate). Week deadline lock is separate.
     private var submittedUserIds: Set<String> {
-        Set(appState.pickService.submissions.filter(\.isLocked).map(\.userId))
+        Set(members.map(\.id).filter(isSubmitted))
     }
 
     /// Picks docs are readable by all members only after lock/deadline (see firestore `picksVisibleToAll`).
@@ -173,8 +174,10 @@ struct GroupPicksView: View {
             } label: {
                 HStack(spacing: 10) {
                     InitialsAvatar(
-                        initials: String(member.displayName.prefix(2)).uppercased(),
+                        initials: member.initials,
                         colorHex: member.avatarColorHex,
+                        imageURL: member.avatarImageURL
+                            ?? (member.id == currentUserId ? appState.authService.currentUser?.avatarImageURL : nil),
                         size: 32
                     )
 
@@ -194,7 +197,7 @@ struct GroupPicksView: View {
                             Text("\(made)/\(total)")
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(PickemsColors.textSecondary)
-                            if remaining > 0, total > 0 {
+                            if remaining > 0, total > 0, !submitted {
                                 Text("\(remaining) left")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(PickemsColors.warning)
@@ -205,7 +208,7 @@ struct GroupPicksView: View {
                     Spacer(minLength: 8)
 
                     StatusBadge(
-                        text: submitted ? "Submitted" : "In progress",
+                        text: statusLabel(submitted: submitted, made: made, total: total),
                         color: submitted ? PickemsColors.success : PickemsColors.warning
                     )
 
@@ -346,18 +349,41 @@ struct GroupPicksView: View {
         appState.pickService.mergeOwnPickIntoAllPicks(appState.pickService.userPick)
     }
 
-    private func isSubmitted(_ userId: String) -> Bool {
-        if submittedUserIds.contains(userId) { return true }
-        return picksByUserId[userId]?.isLocked == true
+    private func submission(for userId: String) -> PickSubmission? {
+        appState.pickService.submissions.first { $0.userId == userId }
     }
 
-    private func madeCount(for userId: String, pick: UserPick?, submitted: Bool) -> Int {
-        if let pick {
-            return pick.picks.keys.count
+    /// User locked in picks, or has a complete slate worth of picks (week may still be open).
+    private func isSubmitted(_ userId: String) -> Bool {
+        if isLockedIn(userId) { return true }
+        let total = displayGames.count
+        guard total > 0 else { return false }
+        return madeCount(for: userId, pick: picksByUserId[userId]) >= total
+    }
+
+    private func isLockedIn(_ userId: String) -> Bool {
+        if picksByUserId[userId]?.isLocked == true { return true }
+        return submission(for: userId)?.isLocked == true
+    }
+
+    private func madeCount(for userId: String, pick: UserPick?, submitted: Bool = false) -> Int {
+        let fromPick = pick?.picks.count ?? 0
+        let fromSub = submission(for: userId)?.pickCount ?? 0
+        let total = displayGames.count
+        // Legacy locked submissions may lack pickCount — treat as full slate.
+        if isLockedIn(userId), max(fromPick, fromSub) == 0, total > 0 {
+            return total
         }
-        // Submissions are public pre-deadline; locked submit requires a full slate.
-        if submitted { return displayGames.count }
-        return 0
+        if submitted, max(fromPick, fromSub) == 0, total > 0 {
+            return total
+        }
+        return max(fromPick, fromSub)
+    }
+
+    private func statusLabel(submitted: Bool, made: Int, total: Int) -> String {
+        if submitted { return "Submitted" }
+        if made > 0 { return "In progress" }
+        return "In progress"
     }
 
     /// Own pick may be present in `allPicks` before the deadline; others' are not.

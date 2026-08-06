@@ -272,8 +272,9 @@ struct MemberRow: View {
     var body: some View {
         HStack(spacing: 12) {
             InitialsAvatar(
-                initials: String(member.displayName.prefix(2)).uppercased(),
+                initials: member.initials,
                 colorHex: member.avatarColorHex,
+                imageURL: member.avatarImageURL,
                 size: 44
             )
 

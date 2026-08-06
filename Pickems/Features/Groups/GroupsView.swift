@@ -256,9 +256,25 @@ struct GroupsView: View {
     private func thisWeekCard(_ group: PickemGroup) -> some View {
         if let week = appState.groupService.currentWeek,
            week.status == .selection || week.status == .picking {
-            let submittedCount = Set(
-                appState.pickService.submissions.filter(\.isLocked).map(\.userId)
-            ).count
+            let slateTotal = max(
+                appState.pickService.slateGames.count,
+                appState.pickService.nominations.count,
+                week.slateSize,
+                1
+            )
+            // Count members who locked in OR have a full slate of picks (public pickCount).
+            // Week deadline lock is separate — complete picks show as submitted while the week is open.
+            let submittedCount = appState.groupService.members.filter { member in
+                if let sub = appState.pickService.submissions.first(where: { $0.userId == member.id }) {
+                    if sub.isLocked { return true }
+                    if sub.pickCount >= slateTotal { return true }
+                }
+                if let pick = appState.pickService.userPick, pick.userId == member.id {
+                    if pick.isLocked { return true }
+                    if pick.picks.count >= slateTotal { return true }
+                }
+                return false
+            }.count
             // Prefer live slate/nomination listeners over the week-doc counter so Groups
             // stays synced with Group Picks / Build Slate.
             let liveSlateCount = max(

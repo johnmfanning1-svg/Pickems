@@ -326,7 +326,8 @@ struct GroupSlateView: View {
             if appState.isCommissioner {
                 SubmissionStatusView(
                     members: appState.groupService.members,
-                    submissions: appState.pickService.submissions
+                    submissions: appState.pickService.submissions,
+                    slateSize: appState.pickService.slateGames.count
                 )
             }
 
@@ -468,8 +469,9 @@ struct GroupSlateView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     InitialsAvatar(
-                        initials: String(member.displayName.prefix(2)).uppercased(),
+                        initials: member.initials,
                         colorHex: member.avatarColorHex,
+                        imageURL: member.avatarImageURL,
                         size: 28
                     )
                     Text(member.displayName)

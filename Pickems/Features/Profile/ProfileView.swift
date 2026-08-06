@@ -494,6 +494,7 @@ struct ProfileView: View {
             do {
                 let url = try await AvatarService.uploadAvatar(userId: userId, image: image)
                 try await appState.authService.updateAvatarURL(url)
+                await appState.groupService.syncMemberAvatarURL(userId: userId, avatarImageURL: url)
                 PickemsHaptics.success()
             } catch {
                 managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."

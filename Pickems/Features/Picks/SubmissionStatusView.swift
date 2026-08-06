@@ -3,9 +3,10 @@ import SwiftUI
 struct SubmissionStatusView: View {
     let members: [GroupMember]
     let submissions: [PickSubmission]
+    var slateSize: Int = 0
 
     private var submittedIds: Set<String> {
-        Set(submissions.filter(\.isLocked).map(\.userId))
+        Set(members.map(\.id).filter(isSubmitted))
     }
 
     var body: some View {
@@ -18,13 +19,22 @@ struct SubmissionStatusView: View {
             ForEach(members) { member in
                 HStack {
                     InitialsAvatar(
-                        initials: String(member.displayName.prefix(2)).uppercased(),
+                        initials: member.initials,
                         colorHex: member.avatarColorHex,
+                        imageURL: member.avatarImageURL,
                         size: 32
                     )
-                    Text(member.displayName)
-                        .font(.subheadline)
-                        .foregroundStyle(PickemsColors.textPrimary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(member.displayName)
+                            .font(.subheadline)
+                            .foregroundStyle(PickemsColors.textPrimary)
+                        let made = pickCount(for: member.id)
+                        if slateSize > 0 {
+                            Text("\(made)/\(slateSize)")
+                                .font(.caption2)
+                                .foregroundStyle(PickemsColors.textSecondary)
+                        }
+                    }
                     Spacer()
                     if submittedIds.contains(member.id) {
                         Label("In", systemImage: "checkmark.circle.fill")
@@ -39,5 +49,22 @@ struct SubmissionStatusView: View {
                 .padding(.horizontal)
             }
         }
+    }
+
+    private func submission(for userId: String) -> PickSubmission? {
+        submissions.first { $0.userId == userId }
+    }
+
+    private func pickCount(for userId: String) -> Int {
+        let sub = submission(for: userId)
+        if let count = sub?.pickCount, count > 0 { return count }
+        if sub?.isLocked == true, slateSize > 0 { return slateSize }
+        return sub?.pickCount ?? 0
+    }
+
+    private func isSubmitted(_ userId: String) -> Bool {
+        guard let sub = submission(for: userId) else { return false }
+        if sub.isLocked { return true }
+        return slateSize > 0 && sub.pickCount >= slateSize
     }
 }
