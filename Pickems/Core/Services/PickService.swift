@@ -653,6 +653,57 @@ final class PickService {
         )
     }
 
+    /// Unlocks every member's submitted picks so they can edit again after a deadline extension.
+    func commissionerUnlockAllPicks(groupId: String, weekId: String) async throws {
+        let picksSnap = try await db.week(groupId: groupId, weekId: weekId)
+            .collection(FirestoreCollection.picks)
+            .getDocuments()
+        guard !picksSnap.documents.isEmpty else { return }
+
+        let batch = db.batch()
+        for doc in picksSnap.documents {
+            batch.updateData(
+                [
+                    "isLocked": false,
+                    "submittedAt": FieldValue.delete(),
+                ],
+                forDocument: doc.reference
+            )
+            let submissionRef = db.week(groupId: groupId, weekId: weekId)
+                .collection(FirestoreCollection.submissions)
+                .document(doc.documentID)
+            batch.setData(
+                [
+                    "id": doc.documentID,
+                    "userId": doc.documentID,
+                    "isLocked": false,
+                    "submittedAt": FieldValue.delete(),
+                ],
+                forDocument: submissionRef,
+                merge: true
+            )
+        }
+        try await batch.commit()
+
+        allPicks = allPicks.map { pick in
+            var unlocked = pick
+            unlocked.isLocked = false
+            unlocked.submittedAt = nil
+            return unlocked
+        }
+        if var own = userPick {
+            own.isLocked = false
+            own.submittedAt = nil
+            userPick = own
+        }
+        submissions = submissions.map { sub in
+            var unlocked = sub
+            unlocked.isLocked = false
+            unlocked.submittedAt = nil
+            return unlocked
+        }
+    }
+
     func updateGameSpread(
         groupId: String,
         weekId: String,

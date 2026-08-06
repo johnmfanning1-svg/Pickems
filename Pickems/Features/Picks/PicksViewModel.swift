@@ -241,6 +241,43 @@ final class PicksViewModel {
         }
     }
 
+    /// Commissioner sets/extends pick deadline; optionally reopens a locked week and unlocks submissions.
+    func setPickDeadline(
+        _ deadline: Date,
+        reopenWeek: Bool,
+        unlockMemberPicks: Bool,
+        appState: AppState
+    ) {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek else { return }
+        Task {
+            do {
+                if reopenWeek {
+                    try await appState.groupService.reopenWeekForPicking(
+                        groupId: group.id,
+                        weekId: week.id,
+                        deadline: deadline
+                    )
+                } else {
+                    try await appState.groupService.setPickDeadline(
+                        groupId: group.id,
+                        weekId: week.id,
+                        deadline: deadline
+                    )
+                }
+                if unlockMemberPicks {
+                    try await appState.pickService.commissionerUnlockAllPicks(
+                        groupId: group.id,
+                        weekId: week.id
+                    )
+                }
+                PickemsHaptics.success()
+            } catch {
+                UserFacingError.apply(error, to: &appState.groupService.errorMessage, context: .write)
+            }
+        }
+    }
+
     func removeNomination(_ nomination: Nomination, rules: GroupRules, appState: AppState) {
         guard let group = appState.groupService.selectedGroup,
               let week = appState.groupService.currentWeek,

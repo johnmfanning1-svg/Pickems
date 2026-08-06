@@ -179,7 +179,7 @@ struct HomeView: View {
                                 Text(group.name)
                                     .font(.headline)
                                 if let week = appState.groupService.currentWeek {
-                                    Text(weekStatusLabel(week.status))
+                                    Text(weekStatusLabel(week))
                                         .font(.subheadline)
                                         .foregroundStyle(PickemsColors.textSecondary)
                                 }
@@ -373,19 +373,33 @@ struct HomeView: View {
     }
 
     private var ctaTitle: String {
-        switch appState.groupService.currentWeek?.status {
+        guard let week = appState.groupService.currentWeek else { return "Open Picks" }
+        switch week.status {
         case .selection: return "Build Slate"
-        case .picking: return "Submit Picks"
+        case .picking:
+            if PickDeadlineCalculator.isPast(week.pickDeadline) {
+                return "View Picks"
+            }
+            if appState.pickService.userPick?.isLocked == true {
+                return "Edit Picks"
+            }
+            return "Submit Picks"
         case .locked: return "Watch Live"
         case .scored: return "See Results"
-        case .none: return "Open Picks"
         }
     }
 
-    private func weekStatusLabel(_ status: WeekStatus) -> String {
-        switch status {
+    private func weekStatusLabel(_ week: WeekSummary) -> String {
+        switch week.status {
         case .selection: return "Building this week's slate"
-        case .picking: return "Submit your spread picks"
+        case .picking:
+            if PickDeadlineCalculator.isPast(week.pickDeadline) {
+                return "Pick deadline has passed"
+            }
+            if appState.pickService.userPick?.isLocked == true {
+                return "Picks submitted — edit until lock"
+            }
+            return "Submit your spread picks"
         case .locked: return "Games in progress"
         case .scored: return "Week complete"
         }

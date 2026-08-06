@@ -3,6 +3,30 @@ import Testing
 @testable import Pickems
 
 struct ESPNServiceTests {
+    @Test func parseKickoffDateHandlesFractionalSeconds() {
+        let date = ESPNService.parseKickoffDate("2026-09-05T19:30:00.000Z")
+        #expect(date != nil)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date!)
+        #expect(parts.year == 2026)
+        #expect(parts.month == 9)
+        #expect(parts.day == 5)
+        #expect(parts.hour == 19)
+        #expect(parts.minute == 30)
+    }
+
+    @Test func parseKickoffDateHandlesPlainISO8601() {
+        let fractional = ESPNService.parseKickoffDate("2026-09-05T19:30:00.000Z")
+        let plain = ESPNService.parseKickoffDate("2026-09-05T19:30:00Z")
+        #expect(fractional == plain)
+        #expect(plain != nil)
+    }
+
+    @Test func parseKickoffDateRejectsGarbage() {
+        #expect(ESPNService.parseKickoffDate("not-a-date") == nil)
+    }
+
     @Test func scoreboardURLIncludesFBSGroupsAndLimit() throws {
         let url = try #require(ESPNService.scoreboardURL(week: 1, seasonType: 2))
         let items = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)

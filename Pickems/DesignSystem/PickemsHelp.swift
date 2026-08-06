@@ -117,8 +117,11 @@ enum PickemsHelp {
     static let pickDeadline = HelpTopic(
         id: "picks.deadline",
         title: "Pick Deadline",
-        message: "Spread picks lock at the start time of the earliest game on this week’s slate.",
-        tips: ["After the deadline, picks cannot be changed unless late picks are allowed."]
+        message: "Spread picks lock at the start time of the earliest game on this week’s slate — unless the commissioner sets a custom deadline.",
+        tips: [
+            "Commissioners can extend or reopen the deadline from the Picks screen.",
+            "After the deadline, picks cannot be changed unless the commissioner unlocks them."
+        ]
     )
 
     // MARK: - Groups

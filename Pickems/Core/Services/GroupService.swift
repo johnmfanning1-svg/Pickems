@@ -243,6 +243,48 @@ final class GroupService {
         }
     }
 
+    /// Commissioner sets or extends the spread-pick deadline for the current week.
+    func setPickDeadline(
+        groupId: String,
+        weekId: String,
+        deadline: Date
+    ) async throws {
+        try await db.week(groupId: groupId, weekId: weekId).updateData([
+            "pickDeadline": Timestamp(date: deadline),
+        ])
+        if var week = currentWeek, week.id == weekId {
+            week.pickDeadline = deadline
+            currentWeek = week
+        }
+        if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
+            availableWeeks[idx].pickDeadline = deadline
+        }
+    }
+
+    /// Commissioner reopens a locked week for picking with a new deadline.
+    func reopenWeekForPicking(
+        groupId: String,
+        weekId: String,
+        deadline: Date
+    ) async throws {
+        try await db.week(groupId: groupId, weekId: weekId).updateData([
+            "status": WeekStatus.picking.rawValue,
+            "pickDeadline": Timestamp(date: deadline),
+            "lockedAt": FieldValue.delete(),
+        ])
+        if var week = currentWeek, week.id == weekId {
+            week.status = .picking
+            week.pickDeadline = deadline
+            week.lockedAt = nil
+            currentWeek = week
+        }
+        if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
+            availableWeeks[idx].status = .picking
+            availableWeeks[idx].pickDeadline = deadline
+            availableWeeks[idx].lockedAt = nil
+        }
+    }
+
     func createGroup(
         name: String,
         commissionerId: String,

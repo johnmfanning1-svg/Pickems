@@ -33,11 +33,12 @@ enum PickDeadlineCalculator {
         return Date() >= deadline
     }
 
-    /// Absolute lock time for UI, e.g. "Sat 12:00 PM".
+    /// Absolute lock time for UI, e.g. "Sat, Sep 6, 12:00 PM" (includes date so
+    /// multi-week-out deadlines are not mistaken for "this Saturday").
     static func lockTimeLabel(for deadline: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = .current
-        formatter.dateFormat = "EEE h:mm a"
+        formatter.dateFormat = "EEE, MMM d, h:mm a"
         return formatter.string(from: deadline)
     }
 

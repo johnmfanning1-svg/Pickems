@@ -52,7 +52,7 @@ struct PickDeadlineCalculatorTests {
         #expect(!PickDeadlineCalculator.isPast(nil))
     }
 
-    @Test func lockTimeLabelUsesWeekdayAndTime() {
+    @Test func lockTimeLabelIncludesMonthAndDay() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .current
         let deadline = calendar.date(from: DateComponents(
@@ -64,6 +64,8 @@ struct PickDeadlineCalculatorTests {
         ))!
         let label = PickDeadlineCalculator.lockTimeLabel(for: deadline)
         #expect(label.contains("12:00"))
+        #expect(label.contains("Sep") || label.contains("9"))
+        #expect(label.contains("5"))
         #expect(label.contains("PM") || label.contains("pm") || label.contains("p.m."))
     }
 

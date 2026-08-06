@@ -14,6 +14,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   query,
   where,
   serverTimestamp,
@@ -354,6 +355,38 @@ describe("existing invariants (regression)", () => {
         slateSize: 9,
         selectionMode: "member",
         selectionsPerMember: 3,
+      })
+    );
+  });
+
+  it("lets the commissioner extend pickDeadline alone and reopen a locked week", async () => {
+    await seed();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const week = doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID);
+
+    await assertSucceeds(
+      updateDoc(week, {
+        pickDeadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      })
+    );
+
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID),
+        {
+          status: "locked",
+          lockedAt: new Date(),
+          pickDeadline: new Date(Date.now() - 60 * 1000),
+        },
+        { merge: true }
+      );
+    });
+
+    await assertSucceeds(
+      updateDoc(week, {
+        status: "picking",
+        pickDeadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+        lockedAt: deleteField(),
       })
     );
   });
