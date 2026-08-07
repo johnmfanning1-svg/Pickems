@@ -87,10 +87,12 @@ struct GamePickRow: View {
     }
 
     private func teamButton(teamId: String, name: String, logo: String?) -> some View {
-        Button {
+        let isSelected = selectedTeamId == teamId
+        return Button {
             if !isDisabled {
                 PickemsHaptics.selection()
-                onSelect(teamId)
+                // Tap again to clear — lets members remake picks after a wipe.
+                onSelect(isSelected ? "" : teamId)
             }
         } label: {
             VStack {
@@ -107,16 +109,20 @@ struct GamePickRow: View {
             }
             .frame(maxWidth: .infinity)
             .padding(8)
-            .background(selectedTeamId == teamId ? theme.accent.opacity(0.3) : Color.clear)
+            .background(isSelected ? theme.accent.opacity(0.3) : Color.clear)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(selectedTeamId == teamId ? theme.accent : Color.clear, lineWidth: 2)
+                    .stroke(isSelected ? theme.accent : Color.clear, lineWidth: 2)
             )
         }
         .disabled(isDisabled)
         .foregroundStyle(PickemsColors.textPrimary)
         .accessibilityLabel(name)
-        .accessibilityAddTraits(selectedTeamId == teamId ? [.isSelected] : [])
-        .accessibilityHint(isDisabled ? "Picks are locked" : "Select \(name) against the spread")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityHint(
+            isDisabled
+                ? "Picks are locked"
+                : (isSelected ? "Clear \(name) pick" : "Select \(name) against the spread")
+        )
     }
 }

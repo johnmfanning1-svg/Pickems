@@ -169,8 +169,13 @@ final class PickService {
     }
 
     /// Upserts the signed-in member's pick into `allPicks` without wiping other entries.
+    /// Empty unlocked picks are removed so commissioner clears don't leave ghost rows.
     func mergeOwnPickIntoAllPicks(_ pick: UserPick?) {
         guard let pick else { return }
+        if pick.picks.isEmpty && !pick.isLocked {
+            allPicks.removeAll { $0.userId == pick.userId }
+            return
+        }
         if let idx = allPicks.firstIndex(where: { $0.userId == pick.userId }) {
             allPicks[idx] = pick
         } else {

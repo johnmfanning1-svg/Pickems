@@ -121,6 +121,9 @@ actor ESPNService {
                 statusDetail: statusDetail(for: game),
                 kickoff: game.kickoff,
                 isSlateGame: isSlate,
+                isTop25: game.isTop25,
+                homeConferenceId: game.homeConferenceId,
+                awayConferenceId: game.awayConferenceId,
                 userPickTeamAbbreviation: pickAbbr,
                 pickResult: result
             )
@@ -269,15 +272,38 @@ actor ESPNService {
         return components.url
     }
 
-    /// Parses ESPN ISO8601 kickoff strings with and without fractional seconds.
+    /// Parses ESPN ISO8601 kickoff strings with fractional seconds, full seconds,
+    /// or minute precision (`2026-08-29T16:00Z` — common on scoreboard payloads).
     /// Returns nil instead of inventing "now" — callers must skip unparseable events.
     nonisolated static func parseKickoffDate(_ raw: String) -> Date? {
         let fractional = ISO8601DateFormatter()
         fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let date = fractional.date(from: raw) { return date }
+
         let plain = ISO8601DateFormatter()
         plain.formatOptions = [.withInternetDateTime]
-        return plain.date(from: raw)
+        if let date = plain.date(from: raw) { return date }
+
+        // ESPN often omits seconds (`…T16:00Z`). Normalize to full ISO8601.
+        if let normalized = normalizeMinutePrecisionISO8601(raw) {
+            if let date = fractional.date(from: normalized) { return date }
+            if let date = plain.date(from: normalized) { return date }
+        }
+        return nil
+    }
+
+    /// Turns `2026-08-29T16:00Z` / `2026-08-29T16:00+00:00` into a seconds-bearing form.
+    nonisolated static func normalizeMinutePrecisionISO8601(_ raw: String) -> String? {
+        // Match …THH:mm immediately before a timezone designator (Z or ±HH:MM).
+        guard let regex = try? NSRegularExpression(
+            pattern: #"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(Z|[+-]\d{2}:?\d{2})$"#
+        ) else { return nil }
+        let range = NSRange(raw.startIndex..<raw.endIndex, in: raw)
+        guard let match = regex.firstMatch(in: raw, range: range),
+              match.numberOfRanges == 3,
+              let head = Range(match.range(at: 1), in: raw),
+              let zone = Range(match.range(at: 2), in: raw) else { return nil }
+        return "\(raw[head]):00\(raw[zone])"
     }
 
     enum ESPNError: LocalizedError {

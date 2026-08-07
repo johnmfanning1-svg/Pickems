@@ -40,7 +40,11 @@ struct CommissionerManagePicksSheet: View {
                                 selectedTeamId: draftPicks[game.id],
                                 showConfidenceToggle: false
                             ) { teamId in
-                                draftPicks[game.id] = teamId
+                                if teamId.isEmpty {
+                                    draftPicks.removeValue(forKey: game.id)
+                                } else {
+                                    draftPicks[game.id] = teamId
+                                }
                             }
                         }
                     }
