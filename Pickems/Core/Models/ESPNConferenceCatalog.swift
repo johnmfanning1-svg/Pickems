@@ -22,6 +22,18 @@ enum ESPNConferenceCatalog {
         ESPNConference(id: "18", name: "FBS Independents", shortName: "Ind"),
     ]
 
+    /// Power 4 conference ESPN ids: SEC, Big Ten, Big 12, ACC.
+    static let power4Ids: Set<String> = ["8", "5", "4", "1"]
+
+    static var power4: [ESPNConference] {
+        fbs.filter { power4Ids.contains($0.id) }
+    }
+
+    static func isPower4(_ conferenceId: String?) -> Bool {
+        guard let conferenceId else { return false }
+        return power4Ids.contains(conferenceId)
+    }
+
     static func conference(id: String?) -> ESPNConference? {
         guard let id else { return nil }
         return fbs.first { $0.id == id }
@@ -31,4 +43,26 @@ enum ESPNConferenceCatalog {
 enum GameSlateFilter: Hashable {
     case all, top25
     case conference(id: String)
+}
+
+/// Filters for the Home "CFB This Week" scoreboard. Defaults to Power 4.
+enum HomeScoreboardFilter: Hashable {
+    case power4
+    case top25
+    case all
+    case myPicks
+    case groupSlate
+    case conference(id: String)
+
+    var title: String {
+        switch self {
+        case .power4: return "Power 4"
+        case .top25: return "Top 25"
+        case .all: return "All"
+        case .myPicks: return "My Picks"
+        case .groupSlate: return "Group"
+        case .conference(let id):
+            return ESPNConferenceCatalog.conference(id: id)?.shortName ?? "Conf"
+        }
+    }
 }

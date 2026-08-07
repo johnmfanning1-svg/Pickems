@@ -9,6 +9,7 @@ struct HomeView: View {
     @State private var showFavoriteTeamPicker = false
     @State private var showJoinSheet = false
     @State private var showCreateWizard = false
+    @State private var scoreboardFilter: HomeScoreboardFilter = .power4
 
     var body: some View {
         NavigationStack {
@@ -264,12 +265,11 @@ struct HomeView: View {
             LiveScoreboardSection(
                 games: viewModel.slateGames.isEmpty
                     ? viewModel.liveGames
-                    : Array(viewModel.liveGames.filter { !$0.isSlateGame }.prefix(6)),
+                    : viewModel.liveGames.filter { !$0.isSlateGame },
                 title: viewModel.slateGames.isEmpty ? "CFB This Week" : "Other Games",
-                subtitle: viewModel.slateGames.isEmpty
-                    ? "Live scores from ESPN"
-                    : "More games on the board",
-                help: PickemsHelp.liveScores
+                subtitle: scoreboardSubtitle,
+                help: PickemsHelp.liveScores,
+                scoreboardFilter: $scoreboardFilter
             )
 
             if appState.groupService.standings != nil {
@@ -372,6 +372,19 @@ struct HomeView: View {
         return appState.rankedStandings(weekly: true).first { $0.id == userId }
     }
 
+    private var scoreboardSubtitle: String {
+        switch scoreboardFilter {
+        case .power4: return "Power 4 — live scores from ESPN"
+        case .top25: return "Top 25 matchups"
+        case .myPicks: return "Games you've picked"
+        case .groupSlate: return "Your group's slate"
+        case .all: return "All FBS games this week"
+        case .conference(let id):
+            let name = ESPNConferenceCatalog.conference(id: id)?.shortName ?? "Conference"
+            return "\(name) games this week"
+        }
+    }
+
     private var ctaTitle: String {
         guard let week = appState.groupService.currentWeek else { return "Open Picks" }
         switch week.status {
@@ -383,6 +396,10 @@ struct HomeView: View {
             if appState.pickService.userPick?.isLocked == true {
                 return "Edit Picks"
             }
+            let pickCount = appState.pickService.userPick?.picks.count ?? 0
+            let slateCount = appState.pickService.slateGames.count
+            if pickCount == 0 { return "Make Picks" }
+            if slateCount > 0, pickCount < slateCount { return "Finish Picks" }
             return "Submit Picks"
         case .locked: return "Watch Live"
         case .scored: return "See Results"
@@ -398,6 +415,12 @@ struct HomeView: View {
             }
             if appState.pickService.userPick?.isLocked == true {
                 return "Picks submitted — edit until lock"
+            }
+            let pickCount = appState.pickService.userPick?.picks.count ?? 0
+            let slateCount = appState.pickService.slateGames.count
+            if pickCount == 0 { return "Make your spread picks" }
+            if slateCount > 0, pickCount < slateCount {
+                return "\(pickCount) of \(slateCount) picks made"
             }
             return "Submit your spread picks"
         case .locked: return "Games in progress"

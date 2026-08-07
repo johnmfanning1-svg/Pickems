@@ -122,23 +122,86 @@ struct LiveScoreboardSection: View {
     let title: String
     var subtitle: String? = nil
     var help: HelpTopic? = nil
+    /// When non-nil, shows filter chips and filters `games` before display.
+    var scoreboardFilter: Binding<HomeScoreboardFilter>? = nil
+
+    @Environment(\.themePalette) private var theme
+
+    private var filteredGames: [ESPNLiveGameCard] {
+        guard let scoreboardFilter else { return games }
+        return games.filter { $0.matches(scoreboardFilter.wrappedValue) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(title: title, subtitle: subtitle, help: help)
 
-            if games.isEmpty {
-                Text("No games this week.")
+            if scoreboardFilter != nil {
+                filterBar
+            }
+
+            if filteredGames.isEmpty {
+                Text(emptyMessage)
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .padding(.horizontal)
-                    .accessibilityLabel("No games this week")
+                    .accessibilityLabel(emptyMessage)
             } else {
-                ForEach(games.prefix(8)) { card in
+                ForEach(filteredGames.prefix(8)) { card in
                     LiveGameRow(card: card)
                         .padding(.horizontal)
                 }
             }
+        }
+    }
+
+    private var filterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                filterChip(.power4)
+                filterChip(.top25)
+                filterChip(.myPicks)
+                filterChip(.groupSlate)
+                filterChip(.all)
+                ForEach(ESPNConferenceCatalog.fbs) { conference in
+                    filterChip(.conference(id: conference.id))
+                }
+            }
+            .padding(.horizontal)
+        }
+        .accessibilityLabel("Scoreboard filters")
+    }
+
+    private func filterChip(_ filter: HomeScoreboardFilter) -> some View {
+        let selected = scoreboardFilter?.wrappedValue == filter
+        return Button {
+            PickemsHaptics.selection()
+            scoreboardFilter?.wrappedValue = filter
+        } label: {
+            Text(filter.title)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(selected == true ? theme.accent : PickemsColors.cardBackground)
+                .foregroundStyle(selected == true ? theme.onAccent : PickemsColors.textPrimary)
+                .clipShape(Capsule())
+        }
+        .accessibilityAddTraits(selected == true ? [.isSelected] : [])
+    }
+
+    private var emptyMessage: String {
+        guard let filter = scoreboardFilter?.wrappedValue else {
+            return "No games this week."
+        }
+        switch filter {
+        case .power4: return "No Power 4 games this week."
+        case .top25: return "No Top 25 games this week."
+        case .myPicks: return "No picks selected yet."
+        case .groupSlate: return "No games on your group slate."
+        case .conference(let id):
+            let name = ESPNConferenceCatalog.conference(id: id)?.shortName ?? "conference"
+            return "No \(name) games this week."
+        case .all: return "No games this week."
         }
     }
 }

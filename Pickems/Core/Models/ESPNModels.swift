@@ -124,11 +124,34 @@ struct ESPNLiveGameCard: Identifiable, Equatable {
     let statusDetail: String
     let kickoff: Date
     let isSlateGame: Bool
+    let isTop25: Bool
+    let homeConferenceId: String?
+    let awayConferenceId: String?
     var userPickTeamAbbreviation: String?
     var pickResult: PickResult?
 
     enum PickResult: Equatable {
         case win, loss, push, pending
+    }
+
+    var hasUserPick: Bool { userPickTeamAbbreviation != nil }
+
+    func matches(_ filter: HomeScoreboardFilter) -> Bool {
+        switch filter {
+        case .power4:
+            return ESPNConferenceCatalog.isPower4(homeConferenceId)
+                || ESPNConferenceCatalog.isPower4(awayConferenceId)
+        case .top25:
+            return isTop25
+        case .all:
+            return true
+        case .myPicks:
+            return hasUserPick
+        case .groupSlate:
+            return isSlateGame
+        case .conference(let id):
+            return homeConferenceId == id || awayConferenceId == id
+        }
     }
 }
 

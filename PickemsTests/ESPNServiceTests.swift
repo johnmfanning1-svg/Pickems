@@ -23,6 +23,24 @@ struct ESPNServiceTests {
         #expect(plain != nil)
     }
 
+    @Test func parseKickoffDateHandlesMinutePrecisionESPNDates() {
+        // Live ESPN scoreboard currently returns kickoffs without seconds.
+        let minutePrecision = ESPNService.parseKickoffDate("2026-08-29T16:00Z")
+        #expect(minutePrecision != nil)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: minutePrecision!)
+        #expect(parts.year == 2026)
+        #expect(parts.month == 8)
+        #expect(parts.day == 29)
+        #expect(parts.hour == 16)
+        #expect(parts.minute == 0)
+        #expect(parts.second == 0)
+
+        let withOffset = ESPNService.parseKickoffDate("2026-08-29T19:30-04:00")
+        #expect(withOffset != nil)
+    }
+
     @Test func parseKickoffDateRejectsGarbage() {
         #expect(ESPNService.parseKickoffDate("not-a-date") == nil)
     }

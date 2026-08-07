@@ -19,9 +19,8 @@ final class PicksViewModel {
 
     func loadWeek(appState: AppState) async {
         await appState.syncSelectedWeek()
-        if let picks = appState.pickService.userPick?.picks, !picks.isEmpty {
-            draftPicks = picks
-        }
+        // Always mirror server — including empty clears from Group Picks / commissioner wipe.
+        draftPicks = appState.pickService.userPick?.picks ?? [:]
         confidenceGameId = appState.pickService.userPick?.confidenceGameId
         refreshNominationSubmissionState(appState: appState)
     }
@@ -73,13 +72,11 @@ final class PicksViewModel {
         PickemsHaptics.lightImpact()
     }
 
+    /// Mirrors Firestore picks into the local draft. Empty/nil clears stale selections so
+    /// Group Picks clears and Picks-tab UI stay in sync.
     func syncDraftFromServer(_ picks: [String: String]?, confidenceGameId: String? = nil) {
-        if let picks, !picks.isEmpty {
-            draftPicks = picks
-        }
-        if let confidenceGameId {
-            self.confidenceGameId = confidenceGameId
-        }
+        draftPicks = picks ?? [:]
+        self.confidenceGameId = confidenceGameId
     }
 
     func startLiveRefresh(week: WeekSummary, appState: AppState) {

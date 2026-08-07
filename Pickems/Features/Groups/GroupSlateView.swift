@@ -473,7 +473,14 @@ struct GroupSlateView: View {
                                 viewModel.saveDraft(appState: appState)
                             }
                         ) { teamId in
-                            viewModel.draftPicks[game.id] = teamId
+                            if teamId.isEmpty {
+                                viewModel.draftPicks.removeValue(forKey: game.id)
+                                if viewModel.confidenceGameId == game.id {
+                                    viewModel.confidenceGameId = nil
+                                }
+                            } else {
+                                viewModel.draftPicks[game.id] = teamId
+                            }
                             viewModel.saveDraft(appState: appState)
                         }
                         if appState.isCommissioner && slateEditable {
@@ -495,13 +502,22 @@ struct GroupSlateView: View {
             }
 
             if appState.pickService.userPick?.isLocked != true, !slateGames.isEmpty {
-                PrimaryButton(title: pastDeadline ? "Deadline Passed" : "Submit Picks") {
+                PrimaryButton(title: groupPickingSubmitTitle(pastDeadline: pastDeadline, slateCount: slateGames.count)) {
                     viewModel.showConfirmSubmit = true
                 }
-                .disabled(pastDeadline || viewModel.draftPicks.count < slateGames.count)
+                .disabled(pastDeadline || viewModel.draftPicks.isEmpty
+                          || viewModel.draftPicks.count < slateGames.count)
                 .padding(.horizontal)
             }
         }
+    }
+
+    private func groupPickingSubmitTitle(pastDeadline: Bool, slateCount: Int) -> String {
+        if pastDeadline { return "Deadline Passed" }
+        let count = viewModel.draftPicks.count
+        if count == 0 { return "Make Picks" }
+        if count < slateCount { return "Finish Picks (\(count)/\(slateCount))" }
+        return "Submit Picks"
     }
 
     // MARK: - Monitor (locked / scored)

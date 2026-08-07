@@ -209,10 +209,10 @@ struct PicksView: View {
               let weekId,
               let userId = appState.currentUserId else { return }
         appState.pickService.observeWeek(groupId: group.id, weekId: weekId, userId: userId)
-        if let picks = appState.pickService.userPick?.picks, !picks.isEmpty {
-            viewModel.draftPicks = picks
-        }
-        viewModel.confidenceGameId = appState.pickService.userPick?.confidenceGameId
+        viewModel.syncDraftFromServer(
+            appState.pickService.userPick?.picks,
+            confidenceGameId: appState.pickService.userPick?.confidenceGameId
+        )
         viewModel.refreshNominationSubmissionState(appState: appState)
     }
 
@@ -530,7 +530,14 @@ struct PicksView: View {
                             viewModel.saveDraft(appState: appState)
                         }
                     ) { teamId in
-                        viewModel.draftPicks[game.id] = teamId
+                        if teamId.isEmpty {
+                            viewModel.draftPicks.removeValue(forKey: game.id)
+                            if viewModel.confidenceGameId == game.id {
+                                viewModel.confidenceGameId = nil
+                            }
+                        } else {
+                            viewModel.draftPicks[game.id] = teamId
+                        }
                         viewModel.saveDraft(appState: appState)
                     }
                     if appState.isCommissioner && slateEditable {
@@ -551,13 +558,23 @@ struct PicksView: View {
             }
 
             if appState.pickService.userPick?.isLocked != true {
-                PrimaryButton(title: pastDeadline ? "Deadline Passed" : "Submit Picks") {
+                PrimaryButton(title: pickingSubmitTitle(pastDeadline: pastDeadline)) {
                     viewModel.showConfirmSubmit = true
                 }
-                .disabled(pastDeadline || viewModel.draftPicks.count < appState.pickService.slateGames.count)
+                .disabled(pastDeadline || viewModel.draftPicks.isEmpty
+                          || viewModel.draftPicks.count < appState.pickService.slateGames.count)
                 .padding(.horizontal)
             }
         }
+    }
+
+    private func pickingSubmitTitle(pastDeadline: Bool) -> String {
+        if pastDeadline { return "Deadline Passed" }
+        let count = viewModel.draftPicks.count
+        let slate = appState.pickService.slateGames.count
+        if count == 0 { return "Make Picks" }
+        if slate > 0, count < slate { return "Finish Picks (\(count)/\(slate))" }
+        return "Submit Picks"
     }
 
     private func lockedPhase(week: WeekSummary) -> some View {
