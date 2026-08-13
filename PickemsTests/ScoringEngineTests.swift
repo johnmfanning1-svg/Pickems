@@ -105,6 +105,8 @@ struct ScoringEngineTests {
             tieBreaker: .commissionerOverride
         )
         #expect(member.expectedSlateSize(memberCount: 4) == 12)
+        #expect(member.expectedSlateSize(memberCount: 1) == 3)
+        #expect(member.expectedSlateSize(memberCount: 2) == 6)
 
         let commissioner = GroupRules(
             selectionMode: .commissioner,

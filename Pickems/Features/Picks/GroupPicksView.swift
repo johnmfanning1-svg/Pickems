@@ -27,8 +27,8 @@ struct GroupPicksView: View {
     }
 
     private var selectionMode: SelectionMode {
-        week?.selectionMode
-            ?? appState.groupService.selectedGroup?.rules.selectionMode
+        appState.groupService.selectedGroup?.rules.selectionMode
+            ?? week?.selectionMode
             ?? .member
     }
 
@@ -43,12 +43,14 @@ struct GroupPicksView: View {
     }
 
     private var slateSize: Int {
-        max(
-            week?.slateSize
-                ?? appState.groupService.selectedGroup?.rules.slateSize
-                ?? 1,
+        let memberCount = max(
+            appState.groupService.selectedGroup?.memberCount ?? members.count,
             1
         )
+        if isNominatingPhase, let rules = appState.groupService.selectedGroup?.rules {
+            return rules.expectedSlateSize(memberCount: memberCount)
+        }
+        return max(slateGames.count, 1)
     }
 
     /// Materialized slate for spread picks. Do **not** fall back to nominations —

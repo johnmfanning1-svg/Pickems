@@ -264,16 +264,20 @@ struct GroupsView: View {
                 appState.pickService.slateGames.count,
                 week.nominationCount
             )
-            let perMember = max(week.selectionsPerMember, 1)
+            let perMember = max(
+                week.selectionsPerMember > 0 ? week.selectionsPerMember : group.rules.selectionsPerMember,
+                1
+            )
             let membersDone = appState.groupService.members.filter { member in
                 appState.pickService.nominations.filter { $0.submittedBy == member.id }.count >= perMember
             }.count
+            let targetSlate = group.rules.expectedSlateSize(memberCount: max(group.memberCount, 1))
             let statusCaption: String = {
                 if week.status == .selection {
-                    if week.selectionMode == .member {
+                    if group.rules.selectionMode == .member {
                         return "\(membersDone) of \(group.memberCount) done making Selections"
                     }
-                    return "\(liveSlateCount)/\(week.slateSize) slate"
+                    return "\(liveSlateCount)/\(targetSlate) slate"
                 }
                 let slateTotal = max(appState.pickService.slateGames.count, 1)
                 let submittedCount = appState.groupService.members.filter { member in
@@ -302,14 +306,19 @@ struct GroupsView: View {
                         .foregroundStyle(PickemsColors.textPrimary)
 
                     HStack(spacing: 16) {
-                        if week.status == .selection, week.selectionMode == .member {
+                        if week.status == .selection, group.rules.selectionMode == .member {
                             Label(
-                                "\(uniqueGames)/\(week.slateSize) games",
+                                "\(uniqueGames)/\(targetSlate) games",
+                                systemImage: "sportscourt"
+                            )
+                        } else if week.status == .selection {
+                            Label(
+                                "\(liveSlateCount)/\(targetSlate) slate",
                                 systemImage: "sportscourt"
                             )
                         } else {
                             Label(
-                                "\(liveSlateCount)/\(week.slateSize) slate",
+                                "\(liveSlateCount) on slate",
                                 systemImage: "sportscourt"
                             )
                         }

@@ -216,6 +216,11 @@ final class GroupService {
                 if currentWeek?.id != week.id {
                     currentWeek = week
                 }
+            } else {
+                if currentWeek?.id != weekId, let existing = try? snapshot.data(as: WeekSummary.self) {
+                    currentWeek = existing
+                }
+                await reconcileSelectionWeekSnapshot(groupId: groupId, rules: rules)
             }
         } catch {
             UserFacingError.apply(error, to: &errorMessage)
@@ -382,6 +387,7 @@ final class GroupService {
         try await doc.reference.collection("members").document(userId).setData(from: member)
         selectedGroup = group
         await syncCurrentWeekFromESPN(groupId: group.id)
+        await reconcileSelectionWeekSnapshot(groupId: group.id, rules: group.rules)
     }
 
     /// Keeps league member rows in sync when a user changes their unique display name.
@@ -799,9 +805,20 @@ final class GroupService {
         }
 
         // Keep an open selection-week snapshot aligned with the active either/or knob.
-        if var week = currentWeek, week.status == .selection {
-            let memberCount = max(selectedGroup?.memberIds.count ?? members.count, 1)
-            let expected = rules.expectedSlateSize(memberCount: memberCount)
+        await reconcileSelectionWeekSnapshot(groupId: groupId, rules: rules)
+    }
+
+    /// Member-mode weeks store a derived slate size (`members × Selections`). Rewrite it
+    /// whenever membership or rules change so UI and nomination limits don't keep the
+    /// old commissioner default of 12.
+    func reconcileSelectionWeekSnapshot(groupId: String, rules: GroupRules) async {
+        guard var week = currentWeek, week.status == .selection else { return }
+        let memberCount = max(selectedGroup?.memberIds.count ?? members.count, 1)
+        let expected = rules.expectedSlateSize(memberCount: memberCount)
+        guard week.slateSize != expected
+            || week.selectionMode != rules.selectionMode
+            || week.selectionsPerMember != rules.selectionsPerMember else { return }
+        do {
             try await db.week(groupId: groupId, weekId: week.id).updateData([
                 "slateSize": expected,
                 "selectionMode": rules.selectionMode.rawValue,
@@ -811,6 +828,11 @@ final class GroupService {
             week.selectionMode = rules.selectionMode
             week.selectionsPerMember = rules.selectionsPerMember
             currentWeek = week
+        } catch {
+            AppLog.error(AppLog.firestore, "selection slate size reconcile failed", error: error, metadata: [
+                "group_id": groupId,
+                "week_id": week.id,
+            ])
         }
     }
 

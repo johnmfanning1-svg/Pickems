@@ -262,7 +262,8 @@ struct PicksView: View {
     }
 
     private func commissionerSelectionUI(week: WeekSummary, rules: GroupRules) -> some View {
-        let target = week.slateSize > 0 ? week.slateSize : rules.slateSize
+        let memberCount = max(appState.groupService.selectedGroup?.memberCount ?? 1, 1)
+        let target = rules.expectedSlateSize(memberCount: memberCount)
         return VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
                 title: "Build Slate",
@@ -317,12 +318,14 @@ struct PicksView: View {
             appState.pickService.nominations.map(\.espnEventId)
                 + appState.pickService.slateGames.map(\.espnEventId)
         ).count
+        let memberCount = max(memberIds.count, 1)
+        let targetGames = rules.expectedSlateSize(memberCount: memberCount)
         let deadlinePassed = week.isSelectionDeadlinePassed
 
         return VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
                 title: "Make Selections",
-                subtitle: "You: \(userNoms)/\(perMember) · Members done: \(membersDone)/\(max(memberIds.count, 1)) · Games: \(uniqueGames)/\(week.slateSize)",
+                subtitle: "You: \(userNoms)/\(perMember) · Members done: \(membersDone)/\(memberCount) · Games: \(uniqueGames)/\(targetGames)",
                 help: PickemsHelp.nominations
             )
 
@@ -386,6 +389,9 @@ struct PicksView: View {
         uniqueGames: Int,
         deadlinePassed: Bool
     ) -> some View {
+        let target = appState.groupService.selectedGroup?.rules.expectedSlateSize(
+            memberCount: max(appState.groupService.selectedGroup?.memberCount ?? 1, 1)
+        ) ?? max(week.slateSize, 1)
         VStack(spacing: 8) {
             if week.selectionDeadline == nil {
                 ContextualTipBanner(
@@ -404,11 +410,11 @@ struct PicksView: View {
             if deadlinePassed {
                 ContextualTipBanner(
                     icon: "gavel",
-                    message: uniqueGames < week.slateSize
-                        ? "Deadline passed with \(uniqueGames) of \(week.slateSize) games. Fill the rest or open with fewer."
+                    message: uniqueGames < target
+                        ? "Deadline passed with \(uniqueGames) of \(target) games. Fill the rest or open with fewer."
                         : "Deadline passed. Open the week when ready."
                 )
-                if uniqueGames < week.slateSize {
+                if uniqueGames < target {
                     PrimaryButton(title: "Fill Remaining Games", isLoading: viewModel.isLoadingGames) {
                         Task {
                             await viewModel.browseGames(appState: appState)

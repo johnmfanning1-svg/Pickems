@@ -71,6 +71,8 @@ struct GroupRules: Codable, Equatable {
     var latePickPenaltyWins: Int
 
     /// Expected unique games for a week under the active mode.
+    /// Member mode is always `members × Selections per person`, never the unused
+    /// `slateSize` default (12) left over from commissioner-mode config.
     func expectedSlateSize(memberCount: Int) -> Int {
         switch selectionMode {
         case .member:
