@@ -57,6 +57,13 @@ final class PicksViewModel {
         PickemsHaptics.success()
     }
 
+    /// Re-opens submitted Selections so a member can remove a game and pick another
+    /// before the Selection deadline — same idea as Edit Pickems.
+    func unlockSelectionsForEditing(appState: AppState) {
+        clearNominationSubmission(appState: appState)
+        PickemsHaptics.lightImpact()
+    }
+
     private func clearNominationSubmission(appState: AppState) {
         guard let groupId = appState.groupService.selectedGroup?.id,
               let weekId = appState.groupService.currentWeek?.id,

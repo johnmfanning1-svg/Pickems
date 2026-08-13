@@ -76,6 +76,7 @@ enum PickemsHelp {
         message: "Help build this week's slate by selecting games for the group.",
         tips: [
             "Each member selects up to the league’s per-member limit.",
+            "Before the Selection deadline, tap Edit Selections, remove a game, then Select Game to replace it.",
             "When everyone finishes (or the commissioner opens the week), Pickems begin.",
             "After the Selection deadline, only the commissioner can add games or open a shorter slate."
         ]
@@ -203,4 +204,30 @@ enum PickemsHelp {
         message: "Enter the 4–8 character invite code from your commissioner.",
         tips: ["Codes are case-insensitive.", "Ask your commissioner to tap Invite Friends on the Groups tab."]
     )
+}
+
+enum SelectionPhaseCopy {
+    static let confirmSubmit =
+        "You can still remove a Selection and pick a different game until the Selection deadline."
+
+    static let swapHint =
+        "Want a different game? Remove one below, then tap Select Game."
+
+    static func submittedCaption(gameCount: Int, week: WeekSummary) -> String {
+        let games = "\(gameCount) game\(gameCount == 1 ? "" : "s")"
+        if let deadline = week.selectionDeadline {
+            return "Your \(games) \(gameCount == 1 ? "is" : "are") in. Tap Edit Selections to swap games until \(PickDeadlineCalculator.lockTimeLabel(for: deadline))."
+        }
+        return "Your \(games) \(gameCount == 1 ? "is" : "are") in. Tap Edit Selections to swap games until the Selection deadline."
+    }
+
+    static func memberDeadlineBanner(hasSelections: Bool, deadline: Date, deadlinePassed: Bool) -> String {
+        if deadlinePassed {
+            return "Selection deadline passed. Waiting on your commissioner to open the week."
+        }
+        if hasSelections {
+            return "You can swap Selections until \(PickDeadlineCalculator.lockTimeLabel(for: deadline))."
+        }
+        return "Select by \(PickDeadlineCalculator.lockTimeLabel(for: deadline))."
+    }
 }

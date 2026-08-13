@@ -106,7 +106,7 @@ struct PicksView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("You can still swap your games until Pickems lock at the first kickoff.")
+                Text(SelectionPhaseCopy.confirmSubmit)
             }
             .alert("Finish your Pickems", isPresented: $showIncompletePickemsAlert) {
                 Button("OK", role: .cancel) {}
@@ -338,9 +338,11 @@ struct PicksView: View {
             } else if let deadline = week.selectionDeadline {
                 ContextualTipBanner(
                     icon: "clock",
-                    message: deadlinePassed
-                        ? "Selection deadline passed. Waiting on your commissioner to open the week."
-                        : "Select by \(PickDeadlineCalculator.lockTimeLabel(for: deadline))."
+                    message: SelectionPhaseCopy.memberDeadlineBanner(
+                        hasSelections: userNoms > 0,
+                        deadline: deadline,
+                        deadlinePassed: deadlinePassed
+                    )
                 )
                 .padding(.horizontal)
             }
@@ -348,7 +350,7 @@ struct PicksView: View {
             if deadlinePassed, !appState.isCommissioner {
                 EmptyView()
             } else if atLimit {
-                nominationSubmitSection(userNoms: userNoms, perMember: perMember)
+                nominationSubmitSection(userNoms: userNoms, perMember: perMember, week: week)
             } else if !deadlinePassed {
                 PrimaryButton(title: "Select Game", isLoading: viewModel.isLoadingGames) {
                     Task {
@@ -369,12 +371,16 @@ struct PicksView: View {
                             Text("by \(nom.submitterName)").font(.caption).foregroundStyle(PickemsColors.textSecondary)
                         }
                         Spacer()
-                        if !deadlinePassed, appState.isCommissioner || nom.submittedBy == userId {
+                        if !deadlinePassed, appState.isCommissioner || (nom.submittedBy == userId && !viewModel.didSubmitNominations) {
                             Button(role: .destructive) {
                                 viewModel.removeNomination(nom, rules: rules, appState: appState)
                             } label: {
-                                Image(systemName: "trash").foregroundStyle(theme.accent)
+                                Label("Remove", systemImage: "trash")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(theme.accent)
                             }
+                            .accessibilityLabel("Remove Selection")
+                            .accessibilityHint("Frees a slot so you can select a different game")
                         }
                     }
                 }
@@ -462,20 +468,19 @@ struct PicksView: View {
     }
 
     @ViewBuilder
-    private func nominationSubmitSection(userNoms: Int, perMember: Int) -> some View {
+    private func nominationSubmitSection(userNoms: Int, perMember: Int, week: WeekSummary) -> some View {
         if viewModel.didSubmitNominations {
-            PickemsCard {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("Selections submitted", systemImage: "checkmark.seal.fill")
-                        .font(.headline)
-                        .foregroundStyle(PickemsColors.success)
-                    Text("Your \(userNoms) game\(userNoms == 1 ? "" : "s") \(userNoms == 1 ? "is" : "are") in. You can still edit them until Pickems lock at the first kickoff.")
-                        .font(.caption)
-                        .foregroundStyle(PickemsColors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 8) {
+                StatusBadge(text: "Submitted", color: PickemsColors.success)
+                Text(SelectionPhaseCopy.submittedCaption(gameCount: userNoms, week: week))
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                SecondaryButton("Edit Selections", icon: "pencil") {
+                    viewModel.unlockSelectionsForEditing(appState: appState)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal)
         } else {
             VStack(alignment: .leading, spacing: 8) {
@@ -483,13 +488,16 @@ struct PicksView: View {
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal)
+                Text(SelectionPhaseCopy.swapHint)
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 PrimaryButton(title: "Submit Selections") {
                     viewModel.showConfirmNominations = true
                 }
-                .padding(.horizontal)
             }
+            .padding(.horizontal)
         }
     }
 
