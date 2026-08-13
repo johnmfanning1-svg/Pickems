@@ -306,16 +306,8 @@ struct GroupPicksView: View {
     private func memberBody(member: GroupMember, pick: UserPick?, done: Bool) -> some View {
         if isNominatingPhase {
             nominationBody(for: member)
-        } else if !picksVisibleToAll {
-            if let pick, canRevealPickDetails(for: member.id), !pick.picks.isEmpty {
-                ForEach(slateGames) { game in
-                    PickResultRow(game: game, pickedTeamId: pick.picks[game.id], showSpread: true)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                }
-            } else if canRevealPickDetails(for: member.id), done {
-                ownPickPendingState
-            } else if done {
+        } else if !picksVisibleToAll, !canRevealPickDetails(for: member.id) {
+            if done {
                 Text("Pickems hidden until the deadline")
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
@@ -325,14 +317,33 @@ struct GroupPicksView: View {
             } else {
                 emptyPicksState(title: "No Pickems yet", message: "\(member.displayName) hasn't submitted.")
             }
-        } else if let pick, !pick.picks.isEmpty {
-            ForEach(slateGames) { game in
-                PickResultRow(game: game, pickedTeamId: pick.picks[game.id], showSpread: true)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-            }
+        } else if canRevealPickDetails(for: member.id),
+                  done,
+                  pick == nil || pick?.picks.isEmpty == true,
+                  isRefreshingOwnPick || !ownPickLoadAttempted {
+            ownPickPendingState
         } else {
-            emptyPicksState(title: "No Pickems yet", message: "\(member.displayName) hasn't submitted.")
+            pickemsBody(pick: pick)
+        }
+    }
+
+    /// Slate Selections stay visible even when Pickems are cleared.
+    @ViewBuilder
+    private func pickemsBody(pick: UserPick?) -> some View {
+        if slateGames.isEmpty {
+            emptyPicksState(title: "No slate yet", message: "Selections will show here once the slate is built.")
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Selections stay on the slate. A dash means no Pickem yet.")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .padding(.horizontal, 10)
+                ForEach(slateGames) { game in
+                    PickResultRow(game: game, pickedTeamId: pick?.picks[game.id], showSpread: true)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                }
+            }
         }
     }
 
@@ -347,6 +358,12 @@ struct GroupPicksView: View {
         )
 
         VStack(alignment: .leading, spacing: 8) {
+            if isOwn, !deadlinePassed {
+                Text("This list is Selections (the games). Remove Selection frees a slot. Pickems (who covers) start after the slate opens.")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .padding(.horizontal, 6)
+            }
             if isOwn, !deadlinePassed, appState.pickService.didSubmitNominations {
                 SecondaryButton("Edit Selections", icon: "pencil") {
                     appState.picksViewModel.unlockSelectionsForEditing(appState: appState)
@@ -376,11 +393,10 @@ struct GroupPicksView: View {
                                 Button(role: .destructive) {
                                     appState.picksViewModel.removeNomination(nom, rules: rules, appState: appState)
                                 } label: {
-                                    Label("Remove", systemImage: "trash")
+                                    Label("Remove Selection", systemImage: "trash")
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(theme.accent)
                                 }
-                                .accessibilityLabel("Remove Selection")
                                 .accessibilityHint("Frees a slot so you can select a different game")
                             }
                         }

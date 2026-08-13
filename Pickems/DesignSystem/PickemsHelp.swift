@@ -110,6 +110,7 @@ enum PickemsHelp {
         message: "Pick the team you think will cover the point spread — not necessarily who wins outright.",
         tips: [
             "Example: Ohio State -7 means OSU must win by more than 7.",
+            "Tap a selected team to clear that Pickem. The Selection (the game) stays on the slate.",
             "A push (exact spread) is neither a win nor a loss.",
             "You must make a Pickem on every slate game before submitting."
         ]

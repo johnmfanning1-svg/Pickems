@@ -207,7 +207,7 @@ struct GroupSlateView: View {
                             Button(role: .destructive) {
                                 viewModel.removeCommissionerGame(game, week: week, appState: appState)
                             } label: {
-                                Label("Remove", systemImage: "trash").font(.caption)
+                                Label("Remove Selection", systemImage: "trash").font(.caption)
                             }
                         }
                         .padding(.horizontal, 24)
@@ -297,11 +297,10 @@ struct GroupSlateView: View {
                                 Button(role: .destructive) {
                                     viewModel.removeNomination(nom, rules: rules, appState: appState)
                                 } label: {
-                                    Label("Remove", systemImage: "trash")
+                                    Label("Remove Selection", systemImage: "trash")
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(theme.accent)
                                 }
-                                .accessibilityLabel("Remove Selection")
                                 .accessibilityHint("Frees a slot so you can select a different game")
                             }
                         }
@@ -439,7 +438,7 @@ struct GroupSlateView: View {
         return VStack(spacing: 16) {
             PickemsSectionHeader(
                 title: "Spread Pickems",
-                subtitle: "Tap a team to choose a winner against the spread",
+                subtitle: "Tap a team to pick. Tap again to clear that Pickem — the Selection stays on the slate.",
                 help: PickemsHelp.spreadPicks
             )
 
@@ -515,10 +514,17 @@ struct GroupSlateView: View {
                             viewModel.saveDraft(appState: appState)
                         }
                         if appState.isCommissioner && slateEditable {
-                            Button("Edit Spread") { viewModel.spreadEditGame = game }
-                                .font(.caption).foregroundStyle(theme.accent)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 24)
+                            HStack {
+                                Button("Edit Spread") { viewModel.spreadEditGame = game }
+                                    .font(.caption).foregroundStyle(theme.accent)
+                                Spacer()
+                                Button(role: .destructive) {
+                                    viewModel.removeCommissionerGame(game, week: week, appState: appState)
+                                } label: {
+                                    Label("Remove Selection", systemImage: "trash").font(.caption)
+                                }
+                            }
+                            .padding(.horizontal, 24)
                         }
                     }
                     .padding(.horizontal)

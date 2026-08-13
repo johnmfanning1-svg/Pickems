@@ -23,7 +23,7 @@ struct CommissionerManagePicksSheet: View {
                         .font(.headline)
                         .foregroundStyle(PickemsColors.textPrimary)
 
-                    Text("Choose a side for each slate game, or clear their Pickems entirely.")
+                    Text("Choose a side for each slate game, or clear their Pickems entirely. This never removes Selections from the slate.")
                         .font(.subheadline)
                         .foregroundStyle(PickemsColors.textSecondary)
 
@@ -93,7 +93,7 @@ struct CommissionerManagePicksSheet: View {
                 Button("Clear Pickems", role: .destructive) { clearPicks() }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Their Pickems and submitted status for this week will be wiped.")
+                Text("Their spread Pickems and submitted status for this week will be wiped. Slate Selections stay.")
             }
             .onAppear {
                 if let existing = appState.pickService.allPicks.first(where: { $0.userId == member.id }) {
