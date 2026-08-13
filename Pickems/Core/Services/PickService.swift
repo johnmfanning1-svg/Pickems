@@ -8,6 +8,11 @@ final class PickService {
     var nominations: [Nomination] = []
     var slateGames: [SlateGame] = []
     var userPick: UserPick?
+    /// Bumped when a local commissioner set/clear (or week reset) must beat a
+    /// pending Picks-tab draft, including empty wipes from Group Pickems.
+    private(set) var userPickEpoch = 0
+    /// Shared Selections "submitted" ack so Groups and the Picks tab cannot diverge.
+    private(set) var didSubmitNominations = false
     var allPicks: [UserPick] = []
     var submissions: [PickSubmission] = []
     var isLoading = false
@@ -24,12 +29,26 @@ final class PickService {
     private var pickListener: ListenerRegistration?
     @ObservationIgnored
     private var submissionsListener: ListenerRegistration?
+    @ObservationIgnored
+    private var observedUserId: String?
+    /// Invalidates in-flight `savePickDraft` local mirrors after a later clear/set.
+    @ObservationIgnored
+    private var userPickWriteGeneration = 0
 
     func observeWeek(groupId: String, weekId: String, userId: String) {
         nominationsListener?.remove()
         gamesListener?.remove()
         pickListener?.remove()
         submissionsListener?.remove()
+        nominations = []
+        slateGames = []
+        observedUserId = userId
+        userPickWriteGeneration += 1
+        userPick = nil
+        userPickEpoch += 1
+        allPicks = []
+        submissions = []
+        refreshNominationSubmissionState(groupId: groupId, weekId: weekId, userId: userId)
 
         nominationsListener = db.week(groupId: groupId, weekId: weekId)
             .nominations
@@ -127,11 +146,47 @@ final class PickService {
         submissionsListener = nil
         nominations = []
         slateGames = []
+        observedUserId = nil
+        userPickWriteGeneration += 1
         userPick = nil
+        userPickEpoch += 1
         allPicks = []
         submissions = []
+        didSubmitNominations = false
         errorMessage = nil
         isLoading = false
+    }
+
+    // MARK: - Selections submitted acknowledgement (shared)
+
+    private func nominationsSubmittedKey(groupId: String, weekId: String, userId: String) -> String {
+        "pickems.nominationsSubmitted.\(groupId).\(weekId).\(userId)"
+    }
+
+    func refreshNominationSubmissionState(groupId: String?, weekId: String?, userId: String?) {
+        guard let groupId, let weekId, let userId else {
+            didSubmitNominations = false
+            return
+        }
+        didSubmitNominations = UserDefaults.standard.bool(
+            forKey: nominationsSubmittedKey(groupId: groupId, weekId: weekId, userId: userId)
+        )
+    }
+
+    func markNominationsSubmitted(groupId: String, weekId: String, userId: String) {
+        UserDefaults.standard.set(
+            true,
+            forKey: nominationsSubmittedKey(groupId: groupId, weekId: weekId, userId: userId)
+        )
+        didSubmitNominations = true
+    }
+
+    func clearNominationsSubmitted(groupId: String, weekId: String, userId: String) {
+        UserDefaults.standard.set(
+            false,
+            forKey: nominationsSubmittedKey(groupId: groupId, weekId: weekId, userId: userId)
+        )
+        didSubmitNominations = false
     }
 
     func loadAllPicks(groupId: String, weekId: String) async {
@@ -237,6 +292,16 @@ final class PickService {
         mergeOwnPickIntoAllPicks(userPick)
     }
 
+    /// Drops blank game/team ids so a cleared Pickem is stored as "no pick", not a fake selection.
+    nonisolated static func sanitizedPicks(_ picks: [String: String]) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: picks.compactMap { key, value in
+            let gameId = key.trimmingCharacters(in: .whitespacesAndNewlines)
+            let teamId = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !gameId.isEmpty, !teamId.isEmpty else { return nil }
+            return (gameId, teamId)
+        })
+    }
+
     func submitNomination(
         groupId: String,
         weekId: String,
@@ -245,17 +310,31 @@ final class PickService {
         week: WeekSummary,
         memberIds: [String]
     ) async throws {
-        guard week.status == .selection else {
-            throw PickError.nominationLimitReached
+        switch week.status {
+        case .locked, .scored:
+            throw PickError.cannotModifyLockedSlate
+        case .picking:
+            // Replacement after a slate game was removed while picking is still open.
+            if ScoringEngine.isPastDeadline(deadline: week.pickDeadline) {
+                throw PickError.deadlinePassed
+            }
+        case .selection:
+            break
         }
-        let existing = nominations.filter { $0.espnEventId == nomination.espnEventId }
-        guard existing.isEmpty else {
+        let existingNoms = nominations.contains { $0.espnEventId == nomination.espnEventId }
+        let existingGames = slateGames.contains { $0.espnEventId == nomination.espnEventId }
+        guard !existingNoms, !existingGames else {
             throw PickError.duplicateGame
         }
 
         let slateSize = week.slateSize
         let perMember = week.selectionsPerMember > 0 ? week.selectionsPerMember : rules.selectionsPerMember
-        let uniqueCount = Set(nominations.map(\.espnEventId)).count
+        let uniqueCount: Int
+        if week.status == .picking {
+            uniqueCount = Set(slateGames.map(\.espnEventId)).count
+        } else {
+            uniqueCount = Set(nominations.map(\.espnEventId) + slateGames.map(\.espnEventId)).count
+        }
         let userCount = nominations.filter { $0.submittedBy == nomination.submittedBy }.count
         guard ScoringEngine.canSubmitNomination(
             userNominationCount: userCount,
@@ -274,11 +353,12 @@ final class PickService {
         var nom = nomination
         nom.id = ref.documentID
         try await ref.setData(from: nom)
+        nominations.append(nom)
 
         let weekRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
 
-        let updatedNoms = nominations + [nom]
+        let updatedNoms = nominations
         let newUnique = Set(updatedNoms.map(\.espnEventId)).count
         let newCount = updatedNoms.count
         var byUser: [String: Int] = [:]
@@ -358,11 +438,28 @@ final class PickService {
         weekId: String,
         nomination: Nomination,
         rules: GroupRules,
+        week: WeekSummary,
         isCommissioner: Bool,
         userId: String
     ) async throws {
-        guard isCommissioner || nomination.submittedBy == userId else {
-            throw PickError.unauthorized
+        if isCommissioner {
+            switch week.status {
+            case .locked, .scored:
+                throw PickError.cannotModifyLockedSlate
+            case .picking:
+                if ScoringEngine.isPastDeadline(deadline: week.pickDeadline) {
+                    throw PickError.cannotModifyLockedSlate
+                }
+            case .selection:
+                break
+            }
+        } else {
+            guard nomination.submittedBy == userId else {
+                throw PickError.unauthorized
+            }
+            guard week.status == .selection, !week.isSelectionDeadlinePassed else {
+                throw PickError.selectionClosed
+            }
         }
 
         try await db.collection("groups").document(groupId)
@@ -370,9 +467,15 @@ final class PickService {
             .collection("nominations").document(nomination.id)
             .delete()
 
+        nominations.removeAll { $0.id == nomination.id }
+
         let weekRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
         try await weekRef.updateData(["nominationCount": FieldValue.increment(Int64(-1))])
+
+        if nomination.submittedBy == userId {
+            clearNominationsSubmitted(groupId: groupId, weekId: weekId, userId: userId)
+        }
     }
 
     func submitCommissionerGame(
@@ -382,21 +485,39 @@ final class PickService {
         rules: GroupRules,
         week: WeekSummary
     ) async throws {
+        switch week.status {
+        case .locked, .scored:
+            throw PickError.cannotModifyLockedSlate
+        case .picking:
+            if ScoringEngine.isPastDeadline(deadline: week.pickDeadline) {
+                throw PickError.cannotModifyLockedSlate
+            }
+        case .selection:
+            break
+        }
+
         let slateSize = week.slateSize > 0 ? week.slateSize : rules.slateSize
-        // After nomination deadline (or in commissioner mode), fill against games collection.
-        let currentCount = max(slateGames.count, Set(nominations.map(\.espnEventId)).count)
+        // During picking the live slate is `games`; leftover nominations must not block a replacement.
+        let currentCount: Int
+        if week.status == .picking {
+            currentCount = slateGames.count
+        } else {
+            currentCount = max(slateGames.count, Set(nominations.map(\.espnEventId)).count)
+        }
         guard currentCount < slateSize else {
             throw PickError.slateFull
         }
         guard !slateGames.contains(where: { $0.espnEventId == game.espnEventId }) else {
             throw PickError.duplicateGame
         }
-        guard !nominations.contains(where: { $0.espnEventId == game.espnEventId }) else {
-            throw PickError.duplicateGame
+        if week.status != .picking {
+            guard !nominations.contains(where: { $0.espnEventId == game.espnEventId }) else {
+                throw PickError.duplicateGame
+            }
         }
 
         // Ensure member nominations are on the slate before commissioner fill.
-        if week.selectionMode == .member {
+        if week.selectionMode == .member, week.status == .selection {
             try await materializeNominationsIfNeeded(groupId: groupId, weekId: weekId)
         }
 
@@ -404,10 +525,13 @@ final class PickService {
             .collection("weeks").document(weekId)
             .collection("games").document(game.id)
         try await ref.setData(from: game)
+        if !slateGames.contains(where: { $0.id == game.id }) {
+            slateGames.append(game)
+        }
 
-        let newCount = slateGames.count + 1
-        let allKickoffs = (slateGames + [game]).map(\.kickoff)
-        if newCount >= slateSize {
+        let newCount = slateGames.count
+        let allKickoffs = slateGames.map(\.kickoff)
+        if week.status == .selection, newCount >= slateSize {
             // Open picking + set deadline from kickoffs; do not lock the slate yet.
             try await transitionToPicking(
                 groupId: groupId,
@@ -480,22 +604,48 @@ final class PickService {
         userId: String,
         displayName: String,
         picks: [String: String],
-        confidenceGameId: String? = nil
+        confidenceGameId: String? = nil,
+        week: WeekSummary? = nil,
+        allowLatePicks: Bool = false
     ) async throws {
+        if let week {
+            switch week.status {
+            case .locked, .scored:
+                throw PickError.deadlinePassed
+            case .picking, .selection:
+                if ScoringEngine.isPastDeadline(deadline: week.pickDeadline), !allowLatePicks {
+                    throw PickError.deadlinePassed
+                }
+            }
+        }
+
+        let cleaned = Self.sanitizedPicks(picks)
+        let validGameIds = Set(slateGames.map(\.id))
+        let trimmed = validGameIds.isEmpty
+            ? cleaned
+            : cleaned.filter { validGameIds.contains($0.key) }
+        let trimmedConfidence: String? = {
+            guard let confidenceGameId, trimmed.keys.contains(confidenceGameId) else { return nil }
+            return confidenceGameId
+        }()
+
         let ref = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
             .collection("picks").document(userId)
 
+        // Clearing or editing Pickems never touches nominations or slate games.
         let pick = UserPick(
             id: userId,
             userId: userId,
             displayName: displayName,
-            picks: picks,
+            picks: trimmed,
             submittedAt: nil,
             isLocked: false,
-            confidenceGameId: confidenceGameId
+            confidenceGameId: trimmedConfidence
         )
+        let generation = userPickWriteGeneration
         try await ref.setData(from: pick)
+        guard generation == userPickWriteGeneration else { return }
         userPick = pick
         mergeOwnPickIntoAllPicks(pick)
         try await syncSubmission(
@@ -505,7 +655,7 @@ final class PickService {
             displayName: displayName,
             isLocked: false,
             submittedAt: nil,
-            pickCount: picks.count
+            pickCount: trimmed.count
         )
     }
 
@@ -523,7 +673,8 @@ final class PickService {
             throw PickError.deadlinePassed
         }
         let requiredGameIds = Set(slateGames.map(\.id))
-        guard Set(picks.keys) == requiredGameIds else {
+        let cleaned = Self.sanitizedPicks(picks).filter { requiredGameIds.contains($0.key) }
+        guard Set(cleaned.keys) == requiredGameIds else {
             throw PickError.incompletePicks
         }
 
@@ -535,12 +686,14 @@ final class PickService {
             id: userId,
             userId: userId,
             displayName: displayName,
-            picks: picks,
+            picks: cleaned,
             submittedAt: Date(),
             isLocked: true,
-            confidenceGameId: confidenceGameId
+            confidenceGameId: confidenceGameId.flatMap { cleaned.keys.contains($0) ? $0 : nil }
         )
+        let generation = userPickWriteGeneration
         try await ref.setData(from: pick)
+        guard generation == userPickWriteGeneration else { return }
         userPick = pick
         mergeOwnPickIntoAllPicks(pick)
         try await syncSubmission(
@@ -550,7 +703,7 @@ final class PickService {
             displayName: displayName,
             isLocked: true,
             submittedAt: pick.submittedAt,
-            pickCount: picks.count
+            pickCount: cleaned.count
         )
     }
 
@@ -589,13 +742,37 @@ final class PickService {
         gameId: String,
         week: WeekSummary
     ) async throws {
-        guard WeekTransition.isSlateEditable(week) else {
+        switch week.status {
+        case .locked, .scored:
             throw PickError.cannotModifyLockedSlate
+        case .picking:
+            if ScoringEngine.isPastDeadline(deadline: week.pickDeadline)
+                || !WeekTransition.isSlateEditable(week) {
+                throw PickError.cannotModifyLockedSlate
+            }
+        case .selection:
+            break
         }
-        try await db.collection("groups").document(groupId)
+        let weekRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
-            .collection("games").document(gameId)
-            .delete()
+        try await weekRef.collection("games").document(gameId).delete()
+
+        let removed = slateGames.first { $0.id == gameId }
+        slateGames.removeAll { $0.id == gameId }
+
+        // Drop the matching Selection nomination so a replacement can be added.
+        // Never called from Pickem clears — those only write the picks document.
+        let eventId = removed?.espnEventId ?? gameId
+        let matchingNoms = nominations.filter { $0.espnEventId == eventId }
+        for nom in matchingNoms {
+            try await weekRef.collection("nominations").document(nom.id).delete()
+        }
+        if !matchingNoms.isEmpty {
+            nominations.removeAll { $0.espnEventId == eventId }
+            try await weekRef.updateData([
+                "nominationCount": FieldValue.increment(Int64(-matchingNoms.count))
+            ])
+        }
     }
 
     /// Commissioner wipe or force-write of another member's picks for the week.
@@ -607,15 +784,19 @@ final class PickService {
         picks: [String: String],
         isLocked: Bool
     ) async throws {
+        let cleaned = Self.sanitizedPicks(picks)
         let pick = UserPick(
             id: userId,
             userId: userId,
             displayName: displayName,
-            picks: picks,
+            picks: cleaned,
             submittedAt: isLocked ? Date() : nil,
             isLocked: isLocked,
             confidenceGameId: nil
         )
+        if userId == observedUserId {
+            userPickWriteGeneration += 1
+        }
         let pickRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
             .collection("picks").document(userId)
@@ -628,17 +809,18 @@ final class PickService {
             displayName: displayName,
             isLocked: isLocked,
             submittedAt: pick.submittedAt,
-            pickCount: picks.count
+            pickCount: cleaned.count
         )
-        if picks.isEmpty && !isLocked {
+        if cleaned.isEmpty && !isLocked {
             allPicks.removeAll { $0.userId == userId }
         } else if allPicks.contains(where: { $0.userId == userId }) {
             allPicks = allPicks.map { $0.userId == userId ? pick : $0 }
         } else {
             allPicks.append(pick)
         }
-        if userPick?.userId == userId {
-            userPick = picks.isEmpty && !isLocked ? nil : pick
+        if userId == observedUserId {
+            userPick = cleaned.isEmpty && !isLocked ? nil : pick
+            userPickEpoch += 1
         }
     }
 
@@ -787,16 +969,18 @@ final class PickService {
         case incompletePicks
         case unauthorized
         case cannotModifyLockedSlate
+        case selectionClosed
 
         var errorDescription: String? {
             switch self {
-            case .duplicateGame: return "This game has already been nominated."
-            case .nominationLimitReached: return "You've reached your nomination limit or the nomination deadline has passed."
+            case .duplicateGame: return "This game has already been selected."
+            case .nominationLimitReached: return "You've reached your Selection limit or the Selection deadline has passed."
             case .slateFull: return "The slate is full — or there are no games to open yet."
-            case .deadlinePassed: return "The pick deadline has passed."
-            case .incompletePicks: return "Please pick every game before submitting."
-            case .unauthorized: return "You can't remove this nomination."
+            case .deadlinePassed: return "The Pickems deadline has passed."
+            case .incompletePicks: return "Please pick every game before submitting your Pickems."
+            case .unauthorized: return "You can't remove this Selection."
             case .cannotModifyLockedSlate: return "The slate is locked — games can't be removed."
+            case .selectionClosed: return "Selections can't be changed after the Selection deadline."
             }
         }
     }

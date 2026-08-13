@@ -234,7 +234,7 @@ struct GameBrowseRow: View {
                 rowContent
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(
-                        "\(game.awayTeamAbbreviation) at \(game.homeTeamAbbreviation), already nominated by \(nominatorName ?? "another member")"
+                        "\(game.awayTeamAbbreviation) at \(game.homeTeamAbbreviation), already selected by \(nominatorName ?? "another member")"
                     )
                     .accessibilityRemoveTraits(.isButton)
             } else {
@@ -273,7 +273,7 @@ struct GameBrowseRow: View {
                 if isNominated, let nominatorName {
                     Text(nominatorName == "the slate"
                           ? "Already on the slate"
-                          : "Nominated by \(nominatorName)")
+                          : "Selected by \(nominatorName)")
                         .font(.caption2)
                         .foregroundStyle(PickemsColors.textSecondary)
                 }

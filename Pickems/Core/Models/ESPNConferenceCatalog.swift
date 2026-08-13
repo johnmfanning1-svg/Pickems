@@ -66,3 +66,16 @@ enum HomeScoreboardFilter: Hashable {
         }
     }
 }
+
+enum HomeScoreboardDisplay {
+    static let previewLimit = 12
+
+    static func games(_ filtered: [ESPNLiveGameCard], filter: HomeScoreboardFilter?) -> [ESPNLiveGameCard] {
+        switch filter {
+        case .myPicks, .groupSlate:
+            return filtered
+        default:
+            return Array(filtered.prefix(previewLimit))
+        }
+    }
+}

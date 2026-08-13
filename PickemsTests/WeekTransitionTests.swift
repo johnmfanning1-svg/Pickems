@@ -50,6 +50,25 @@ struct WeekTransitionTests {
         #expect(!WeekTransition.isSlateEditable(week(status: .scored)))
     }
 
+    @Test func slateNotEditableWhenLockedEvenIfDeadlineIsFuture() {
+        let deadline = Date().addingTimeInterval(7 * 24 * 3600)
+        #expect(!WeekTransition.isSlateEditable(week(status: .locked, deadline: deadline)))
+        #expect(!WeekTransition.isSlateEditable(week(status: .scored, deadline: deadline)))
+        #expect(!WeekTransition.arePicksEditable(week(status: .locked, deadline: deadline)))
+        #expect(!WeekTransition.arePicksEditable(week(status: .scored, deadline: deadline)))
+    }
+
+    @Test func picksEditableDuringPickingBeforeDeadline() {
+        let deadline = Date().addingTimeInterval(7 * 24 * 3600)
+        #expect(WeekTransition.arePicksEditable(week(status: .picking, deadline: deadline)))
+        #expect(!WeekTransition.arePicksEditable(week(status: .selection, deadline: deadline)))
+    }
+
+    @Test func picksNotEditableAfterPickDeadline() {
+        let deadline = Date().addingTimeInterval(-60)
+        #expect(!WeekTransition.arePicksEditable(week(status: .picking, deadline: deadline)))
+    }
+
     @Test func fillingSlateSetsDeadlineWithoutLockedAt() {
         let kickoff = Date().addingTimeInterval(21 * 24 * 3600)
         let updates = WeekTransition.toPickingUpdates(

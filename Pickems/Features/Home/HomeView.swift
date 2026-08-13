@@ -73,9 +73,7 @@ struct HomeView: View {
                 ToolbarItem(placement: .principal) {
                     groupTitleMenu
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    HelpToolbarButton(topic: PickemsHelp.homeOverview)
-                }
+                HelpToolbarItem(topic: PickemsHelp.homeOverview)
             }
             .refreshable {
                 await viewModel.refresh(appState: appState)
@@ -86,17 +84,26 @@ struct HomeView: View {
                 WidgetSnapshotService.publish(from: appState)
                 LiveActivityController.sync(from: appState)
             }
+            .onAppear {
+                viewModel.startLiveUpdates(appState: appState)
+            }
+            .onChange(of: appState.selectedTab) { _, tab in
+                if tab == .home {
+                    viewModel.startLiveUpdates(appState: appState)
+                }
+            }
+            .onChange(of: appState.pickService.userPick) { _, _ in
+                Task { await viewModel.refresh(appState: appState) }
+            }
             .onChange(of: appState.pickService.slateGames) { _, _ in
                 coverMoment.observe(appState: appState)
                 WidgetSnapshotService.publish(from: appState)
                 LiveActivityController.sync(from: appState)
+                Task { await viewModel.refresh(appState: appState) }
             }
             .onChange(of: appState.groupService.standings) { _, _ in
                 WidgetSnapshotService.publish(from: appState)
                 LiveActivityController.sync(from: appState)
-            }
-            .onDisappear {
-                viewModel.stopLiveUpdates()
             }
             .sheet(isPresented: $coverMoment.isPresented) {
                 CoverMomentView(
@@ -187,7 +194,7 @@ struct HomeView: View {
                             }
                             Spacer()
                             if let week = appState.groupService.currentWeek {
-                                StatusBadge(text: week.status.rawValue.capitalized, color: statusColor(week.status))
+                                StatusBadge(text: weekStatusBadge(week.status), color: statusColor(week.status))
                                     .pickemsPulse(enabled: week.status == .locked)
                             }
                         }
@@ -249,24 +256,13 @@ struct HomeView: View {
 
     private var moreSections: some View {
         VStack(alignment: .leading, spacing: 24) {
-            if !viewModel.slateGames.isEmpty {
-                LiveScoreboardSection(
-                    games: viewModel.slateGames,
-                    title: "Your Slate",
-                    subtitle: "Games you picked this week",
-                    help: PickemsHelp.liveScores
-                )
-            }
-
             if !viewModel.newsItems.isEmpty {
                 NewsFeedSection(items: viewModel.newsItems)
             }
 
             LiveScoreboardSection(
-                games: viewModel.slateGames.isEmpty
-                    ? viewModel.liveGames
-                    : viewModel.liveGames.filter { !$0.isSlateGame },
-                title: viewModel.slateGames.isEmpty ? "CFB This Week" : "Other Games",
+                games: viewModel.liveGames,
+                title: "CFB This Week",
                 subtitle: scoreboardSubtitle,
                 help: PickemsHelp.liveScores,
                 scoreboardFilter: $scoreboardFilter
@@ -376,7 +372,7 @@ struct HomeView: View {
         switch scoreboardFilter {
         case .power4: return "Power 4 — live scores from ESPN"
         case .top25: return "Top 25 matchups"
-        case .myPicks: return "Games you've picked"
+        case .myPicks: return "Your Pickems this week"
         case .groupSlate: return "Your group's slate"
         case .all: return "All FBS games this week"
         case .conference(let id):
@@ -388,21 +384,31 @@ struct HomeView: View {
     private var ctaTitle: String {
         guard let week = appState.groupService.currentWeek else { return "Open Picks" }
         switch week.status {
-        case .selection: return "Build Slate"
+        case .selection:
+            return appState.isCommissioner ? "Build Slate" : "Make Selections"
         case .picking:
             if PickDeadlineCalculator.isPast(week.pickDeadline) {
-                return "View Picks"
+                return "View Pickems"
             }
             if appState.pickService.userPick?.isLocked == true {
-                return "Edit Picks"
+                return "Edit Pickems"
             }
             let pickCount = appState.pickService.userPick?.picks.count ?? 0
             let slateCount = appState.pickService.slateGames.count
-            if pickCount == 0 { return "Make Picks" }
-            if slateCount > 0, pickCount < slateCount { return "Finish Picks" }
-            return "Submit Picks"
+            if pickCount == 0 { return "Make Pickems" }
+            if slateCount > 0, pickCount < slateCount { return "Finish Pickems" }
+            return "Submit Pickems"
         case .locked: return "Watch Live"
         case .scored: return "See Results"
+        }
+    }
+
+    private func weekStatusBadge(_ status: WeekStatus) -> String {
+        switch status {
+        case .selection: return "Selections"
+        case .picking: return "Pickems"
+        case .locked: return "Locked"
+        case .scored: return "Scored"
         }
     }
 
@@ -411,18 +417,18 @@ struct HomeView: View {
         case .selection: return "Building this week's slate"
         case .picking:
             if PickDeadlineCalculator.isPast(week.pickDeadline) {
-                return "Pick deadline has passed"
+                return "Pickems deadline has passed"
             }
             if appState.pickService.userPick?.isLocked == true {
-                return "Picks submitted — edit until lock"
+                return "Pickems submitted — edit until lock"
             }
             let pickCount = appState.pickService.userPick?.picks.count ?? 0
             let slateCount = appState.pickService.slateGames.count
-            if pickCount == 0 { return "Make your spread picks" }
+            if pickCount == 0 { return "Make your Pickems" }
             if slateCount > 0, pickCount < slateCount {
-                return "\(pickCount) of \(slateCount) picks made"
+                return "\(pickCount) of \(slateCount) Pickems made"
             }
-            return "Submit your spread picks"
+            return "Submit your Pickems"
         case .locked: return "Games in progress"
         case .scored: return "Week complete"
         }

@@ -21,7 +21,7 @@ extension ESPNService {
             let images = article["images"] as? [[String: Any]]
             let imageURL = images?.first?["url"] as? String
             let published = article["published"] as? String
-            let date = ISO8601DateFormatter().date(from: published ?? "") ?? Date()
+            let date = published.flatMap { ESPNService.parseKickoffDate($0) } ?? Date()
             let links = article["links"] as? [String: Any]
             let web = links?["web"] as? [String: Any]
             let href = web?["href"] as? String

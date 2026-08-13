@@ -52,9 +52,7 @@ struct GroupsView: View {
             .navigationTitle("Groups")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    HelpToolbarButton(topic: PickemsHelp.groupsOverview)
-                }
+                HelpToolbarItem(topic: PickemsHelp.groupsOverview)
             }
             .sheet(isPresented: $showCommissionerSettings) {
                 // Always emit a concrete root view + explicit environment.
@@ -86,13 +84,13 @@ struct GroupsView: View {
             .task(id: appState.groupService.selectedGroup?.id) {
                 await appState.syncSelectedWeek()
             }
-            .confirmationDialog("Leave this league?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
+            .alert("Leave this league?", isPresented: $showLeaveConfirm) {
                 Button("Leave League", role: .destructive) { leaveSelectedLeague() }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("You’ll lose access until you rejoin with the invite code.")
             }
-            .confirmationDialog("Delete this league permanently?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            .alert("Delete this league permanently?", isPresented: $showDeleteConfirm) {
                 Button("Delete League", role: .destructive) { deleteSelectedLeague() }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -221,9 +219,9 @@ struct GroupsView: View {
             case .selection:
                 parts.append(week.selectionMode.displayName)
             case .picking:
-                parts.append("Picking open")
+                parts.append("Pickems open")
             case .locked:
-                parts.append("Picks locked")
+                parts.append("Pickems locked")
             case .scored:
                 parts.append("Scored")
             }
@@ -266,16 +264,20 @@ struct GroupsView: View {
                 appState.pickService.slateGames.count,
                 week.nominationCount
             )
-            let perMember = max(week.selectionsPerMember, 1)
+            let perMember = max(
+                week.selectionsPerMember > 0 ? week.selectionsPerMember : group.rules.selectionsPerMember,
+                1
+            )
             let membersDone = appState.groupService.members.filter { member in
                 appState.pickService.nominations.filter { $0.submittedBy == member.id }.count >= perMember
             }.count
+            let targetSlate = group.rules.expectedSlateSize(memberCount: max(group.memberCount, 1))
             let statusCaption: String = {
                 if week.status == .selection {
-                    if week.selectionMode == .member {
-                        return "\(membersDone) of \(group.memberCount) done nominating"
+                    if group.rules.selectionMode == .member {
+                        return "\(membersDone) of \(group.memberCount) done making Selections"
                     }
-                    return "\(liveSlateCount)/\(week.slateSize) slate"
+                    return "\(liveSlateCount)/\(targetSlate) slate"
                 }
                 let slateTotal = max(appState.pickService.slateGames.count, 1)
                 let submittedCount = appState.groupService.members.filter { member in
@@ -304,14 +306,19 @@ struct GroupsView: View {
                         .foregroundStyle(PickemsColors.textPrimary)
 
                     HStack(spacing: 16) {
-                        if week.status == .selection, week.selectionMode == .member {
+                        if week.status == .selection, group.rules.selectionMode == .member {
                             Label(
-                                "\(uniqueGames)/\(week.slateSize) games",
+                                "\(uniqueGames)/\(targetSlate) games",
+                                systemImage: "sportscourt"
+                            )
+                        } else if week.status == .selection {
+                            Label(
+                                "\(liveSlateCount)/\(targetSlate) slate",
                                 systemImage: "sportscourt"
                             )
                         } else {
                             Label(
-                                "\(liveSlateCount)/\(week.slateSize) slate",
+                                "\(liveSlateCount) on slate",
                                 systemImage: "sportscourt"
                             )
                         }
@@ -342,16 +349,16 @@ struct GroupsView: View {
                 NavigationLink {
                     GroupPicksView()
                 } label: {
-                    gridActionLabel("Group Picks", systemImage: "list.bullet.clipboard")
+                    gridActionLabel("Group Pickems", systemImage: "list.bullet.clipboard")
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("See who has submitted and view group picks")
+                .accessibilityHint("See who has submitted and view group Pickems")
 
                 if let week = appState.groupService.currentWeek {
                     NavigationLink {
                         GroupSlateView(group: group, week: week)
                     } label: {
-                        gridActionLabel(slateActionTitle(for: week.status), systemImage: slateActionIcon(for: week.status))
+                        gridActionLabel(slateActionTitle(for: week), systemImage: slateActionIcon(for: week.status))
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint(slateActionHint(for: week.status))
@@ -386,11 +393,22 @@ struct GroupsView: View {
             )
     }
 
-    private func slateActionTitle(for status: WeekStatus) -> String {
-        switch status {
-        case .selection: return "Build Slate"
-        case .picking: return "Make Picks"
-        case .locked, .scored: return "Live Picks"
+    private func slateActionTitle(for week: WeekSummary) -> String {
+        switch week.status {
+        case .selection: return appState.isCommissioner ? "Build Slate" : "Make Selections"
+        case .picking:
+            if PickDeadlineCalculator.isPast(week.pickDeadline) {
+                return "View Pickems"
+            }
+            if appState.pickService.userPick?.isLocked == true {
+                return "Edit Pickems"
+            }
+            let pickCount = appState.pickService.userPick?.picks.count ?? 0
+            let slateCount = appState.pickService.slateGames.count
+            if pickCount == 0 { return "Make Pickems" }
+            if slateCount > 0, pickCount < slateCount { return "Finish Pickems" }
+            return "Submit Pickems"
+        case .locked, .scored: return "Live Pickems"
         }
     }
 
@@ -404,8 +422,10 @@ struct GroupsView: View {
 
     private func slateActionHint(for status: WeekStatus) -> String {
         switch status {
-        case .selection: return "Nominate or build this week's slate"
-        case .picking: return "Make your spread picks for this week"
+        case .selection: return appState.isCommissioner
+            ? "Build this week's slate"
+            : "Make Selections for this week's slate"
+        case .picking: return "Make your Pickems for this week"
         case .locked, .scored: return "Monitor live slate scores and results"
         }
     }
@@ -615,7 +635,7 @@ struct LeaderboardView: View {
         VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
                 title: "Leaderboard",
-                subtitle: showWeekly ? "This week's spread record" : "Season standings",
+                subtitle: showWeekly ? "This week's Pickem record" : "Season standings",
                 help: PickemsHelp.leaderboard
             )
 

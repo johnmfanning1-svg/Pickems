@@ -86,14 +86,19 @@ struct GamePickRow: View {
         game.spreadTeamId == game.homeTeamId ? game.homeTeamAbbreviation : game.awayTeamAbbreviation
     }
 
+    /// Empty string is treated as no pick so a cleared Pickem can be tapped again.
+    private var resolvedSelectedTeamId: String? {
+        guard let selectedTeamId, !selectedTeamId.isEmpty else { return nil }
+        return selectedTeamId
+    }
+
     private func teamButton(teamId: String, name: String, logo: String?) -> some View {
-        let isSelected = selectedTeamId == teamId
+        let isSelected = resolvedSelectedTeamId == teamId
         return Button {
-            if !isDisabled {
-                PickemsHaptics.selection()
-                // Tap again to clear — lets members remake picks after a wipe.
-                onSelect(isSelected ? "" : teamId)
-            }
+            guard !isDisabled else { return }
+            PickemsHaptics.selection()
+            // Tap again to clear the Pickem only — never the slate Selection.
+            onSelect(isSelected ? "" : teamId)
         } label: {
             VStack {
                 if let logo, let url = URL(string: logo) {
@@ -121,7 +126,7 @@ struct GamePickRow: View {
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         .accessibilityHint(
             isDisabled
-                ? "Picks are locked"
+                ? "Pickems are locked"
                 : (isSelected ? "Clear \(name) pick" : "Select \(name) against the spread")
         )
     }

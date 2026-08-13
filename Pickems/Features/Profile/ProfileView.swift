@@ -15,7 +15,7 @@ struct ProfileView: View {
     @State private var showDeleteConfirm = false
     @State private var showSignOutConfirm = false
     @State private var showDeleteAccountConfirm = false
-    @State private var isDeletingAccount = false
+    @State private var showDeleteAccountSheet = false
     @State private var showTeamPicker = false
     @State private var showTransferConfirm = false
     @State private var memberToPromote: GroupMember?
@@ -52,10 +52,12 @@ struct ProfileView: View {
                         HelpInfoButton(
                             topic: PickemsHelp.profileOverview,
                             alignment: .center,
-                            presentedTopic: $presentedHelp
+                            presentedTopic: $presentedHelp,
+                            isToolbar: true
                         )
                     }
                 }
+                .sharedBackgroundVisibility(.hidden)
             }
             .sheet(item: $presentedHelp) { topic in
                 HelpDetailView(topic: topic)
@@ -77,22 +79,28 @@ struct ProfileView: View {
                 FavoriteTeamPickerView()
                     .pickemsEnvironment(appState)
             }
-            .confirmationDialog("Leave this league?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
+            .sheet(isPresented: $showDeleteAccountSheet) {
+                DeleteAccountConfirmSheet()
+                    .pickemsEnvironment(appState)
+            }
+            // Prefer `.alert` over `.confirmationDialog` on Profile: on iPad,
+            // confirmationDialog presents as a popover and often anchors to the
+            // top of the screen when attached to NavigationStack/Form.
+            .alert("Leave this league?", isPresented: $showLeaveConfirm) {
                 Button("Leave League", role: .destructive) { leaveGroup() }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("You’ll lose access until you rejoin with the invite code.")
             }
-            .confirmationDialog("Delete this league permanently?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            .alert("Delete this league permanently?", isPresented: $showDeleteConfirm) {
                 Button("Delete League", role: .destructive) { deleteGroup() }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This permanently deletes the league, invite code, all members’ access, picks, standings, and season history. This cannot be undone.")
             }
-            .confirmationDialog(
+            .alert(
                 "Make \(memberToPromote?.displayName ?? "member") the commissioner?",
-                isPresented: $showTransferConfirm,
-                titleVisibility: .visible
+                isPresented: $showTransferConfirm
             ) {
                 Button("Transfer Commissioner", role: .destructive) {
                     if let member = memberToPromote { transferCommissioner(to: member) }
@@ -102,19 +110,23 @@ struct ProfileView: View {
             } message: {
                 Text("You become a regular member. Only one commissioner is allowed at a time.")
             }
-            .confirmationDialog("Sign out of Pickems?", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
+            .alert("Sign out of Pickems?", isPresented: $showSignOutConfirm) {
                 Button("Sign Out", role: .destructive) { signOut() }
                 Button("Cancel", role: .cancel) {}
             }
-            .confirmationDialog(
-                "Delete your Pickems account?",
-                isPresented: $showDeleteAccountConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("Delete Account", role: .destructive) { deleteAccount() }
+            .alert("Delete your Pickems account?", isPresented: $showDeleteAccountConfirm) {
+                Button("Continue", role: .destructive) { showDeleteAccountSheet = true }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This permanently deletes your profile, avatar, and league memberships. This cannot be undone.")
+                Text("This permanently deletes your profile, avatar, and league memberships. You’ll confirm your identity next. This cannot be undone.")
+            }
+            .alert("Something went wrong", isPresented: Binding(
+                get: { managementError != nil },
+                set: { if !$0 { managementError = nil } }
+            )) {
+                Button("OK", role: .cancel) { managementError = nil }
+            } message: {
+                Text(managementError ?? "")
             }
             .onChange(of: selectedPhoto) { _, item in
                 uploadAvatar(from: item)
@@ -401,13 +413,6 @@ struct ProfileView: View {
                     .listRowBackground(PickemsColors.cardBackground)
                 }
             }
-
-            if let managementError {
-                Text(managementError)
-                    .font(.caption)
-                    .foregroundStyle(theme.accent)
-                    .listRowBackground(PickemsColors.cardBackground)
-            }
         } header: {
             HStack {
                 Text("Leagues")
@@ -449,23 +454,14 @@ struct ProfileView: View {
             }
             .buttonStyle(.borderless)
             .listRowBackground(PickemsColors.cardBackground)
-            .disabled(isDeletingAccount)
 
             Button(role: .destructive) {
                 showDeleteAccountConfirm = true
             } label: {
-                if isDeletingAccount {
-                    HStack {
-                        ProgressView()
-                        Text("Deleting Account…")
-                    }
-                } else {
-                    Label("Delete Account", systemImage: "trash")
-                }
+                Label("Delete Account", systemImage: "trash")
             }
             .buttonStyle(.borderless)
             .listRowBackground(PickemsColors.cardBackground)
-            .disabled(isDeletingAccount)
         } footer: {
             Text("Deleting your account permanently removes your profile, avatar, and league memberships.")
         }
@@ -543,25 +539,9 @@ struct ProfileView: View {
     private func signOut() {
         do {
             try appState.authService.signOut()
+            appState.groupService.resetSession()
         } catch {
             managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
-        }
-    }
-
-    private func deleteAccount() {
-        Task {
-            isDeletingAccount = true
-            defer { isDeletingAccount = false }
-            do {
-                if let userId = appState.authService.currentUserId {
-                    try await appState.groupService.leaveAllGroupsForAccountDeletion(userId: userId)
-                }
-                try await appState.authService.deleteAccount()
-                PickemsHaptics.success()
-            } catch {
-                managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
-                PickemsHaptics.warning()
-            }
         }
     }
 }

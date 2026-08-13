@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// Prominently shows when picks lock. Pass the absolute `deadline` (typically
+/// Prominently shows when Pickems lock. Pass the absolute `deadline` (typically
 /// `week.pickDeadline`); past/open is derived via `PickDeadlineCalculator.isPast`.
 ///
-/// - Open: title “Picks lock at Sat 12:00 PM”, subtitle countdown
-/// - Past: title “Picks locked”, subtitle absolute lock time
+/// - Open: title “Pickems lock at Sat 12:00 PM”, subtitle countdown
+/// - Past: title “Pickems locked”, subtitle absolute lock time
 struct PickDeadlineBanner: View {
     let deadline: Date
     @Environment(\.themePalette) private var theme
@@ -36,7 +36,7 @@ struct PickDeadlineBanner: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(isPast ? "Picks locked" : "Picks lock at \(lockTime)")
+                Text(isPast ? "Pickems locked" : "Pickems lock at \(lockTime)")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(PickemsColors.textPrimary)
                 Text(isPast

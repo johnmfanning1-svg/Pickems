@@ -103,8 +103,13 @@ service cloud.firestore {
 
     function pickDeadlineOpen(groupId, weekId) {
       let week = weekData(groupId, weekId);
+      let group = get(/databases/$(database)/documents/groups/$(groupId)).data;
+      let lateOk = group.keys().hasAll(['rules'])
+        && group.rules.keys().hasAll(['allowLatePicks'])
+        && group.rules.allowLatePicks == true;
       return week.status == 'picking'
-        && (!week.keys().hasAll(['pickDeadline'])
+        && (lateOk
+            || !week.keys().hasAll(['pickDeadline'])
             || week.pickDeadline == null
             || request.time < week.pickDeadline);
     }

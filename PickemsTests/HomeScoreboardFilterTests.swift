@@ -39,7 +39,37 @@ struct HomeScoreboardFilterTests {
         #expect(!card.matches(.conference(id: "8")))
     }
 
+    @Test func myPicksAndGroupNeedTheFullScoreboardNotOtherGames() {
+        let slatePick = makeCard(id: "slate", isSlateGame: true, pickAbbr: "ALA")
+        let other = makeCard(id: "other", isSlateGame: false, pickAbbr: nil)
+        let all = [slatePick, other]
+        #expect(all.filter { $0.matches(.myPicks) }.map(\.id) == ["slate"])
+        #expect(all.filter { $0.matches(.groupSlate) }.map(\.id) == ["slate"])
+
+        // The previous Home layout fed filters "Other Games" (non-slate only),
+        // which made My Picks and Group look empty after making Pickems.
+        let otherGamesOnly = all.filter { !$0.isSlateGame }
+        #expect(otherGamesOnly.filter { $0.matches(.myPicks) }.isEmpty)
+        #expect(otherGamesOnly.filter { $0.matches(.groupSlate) }.isEmpty)
+    }
+
+    @Test func displayKeepsAllMyPicksAndGroupGames() {
+        let games = (0..<15).map { makeCard(id: "g\($0)", isSlateGame: true, pickAbbr: "ALA") }
+        #expect(HomeScoreboardDisplay.games(games, filter: .power4).count == HomeScoreboardDisplay.previewLimit)
+        #expect(HomeScoreboardDisplay.games(games, filter: .all).count == HomeScoreboardDisplay.previewLimit)
+        #expect(HomeScoreboardDisplay.games(games, filter: .myPicks).count == 15)
+        #expect(HomeScoreboardDisplay.games(games, filter: .groupSlate).count == 15)
+    }
+
+    @Test func myPicksMatchesWhenPickResultExistsWithoutAbbreviation() {
+        var card = makeCard(id: "pending", isSlateGame: true, pickAbbr: nil)
+        card.pickResult = .pending
+        #expect(card.hasUserPick)
+        #expect(card.matches(.myPicks))
+    }
+
     private func makeCard(
+        id: String = "evt-1",
         homeConferenceId: String? = "8",
         awayConferenceId: String? = "5",
         isTop25: Bool = false,
@@ -47,8 +77,8 @@ struct HomeScoreboardFilterTests {
         pickAbbr: String? = nil
     ) -> ESPNLiveGameCard {
         ESPNLiveGameCard(
-            id: "evt-1",
-            espnEventId: "evt-1",
+            id: id,
+            espnEventId: id,
             awayTeamName: "Away",
             awayTeamAbbreviation: "AWY",
             awayTeamLogoURL: nil,
@@ -103,5 +133,80 @@ struct PicksDraftSyncTests {
 
         #expect(vm.draftPicks == ["game-1": "team-a"])
         #expect(vm.confidenceGameId == "game-1")
+    }
+
+    @Test func syncDraftFromServerDropsBlankTeamIds() {
+        let vm = PicksViewModel()
+        vm.draftPicks = ["game-1": "team-a"]
+        vm.confidenceGameId = "game-1"
+
+        vm.syncDraftFromServer(["game-1": "", "game-2": "team-b"], confidenceGameId: "game-1")
+
+        #expect(vm.draftPicks == ["game-2": "team-b"])
+        #expect(vm.confidenceGameId == nil)
+    }
+
+    @Test func sanitizedPicksDropsBlankEntries() {
+        let cleaned = PickService.sanitizedPicks([
+            "game-1": "team-a",
+            "game-2": "",
+            "": "team-b",
+            "  ": "  ",
+        ])
+        #expect(cleaned == ["game-1": "team-a"])
+    }
+
+    @Test func syncDraftFromServerIgnoresStaleSnapshotWhileWritePending() {
+        let vm = PicksViewModel()
+        vm.draftPicks = ["game-1": "team-a"]
+        vm.markPendingWrite(["game-1": "team-a"])
+
+        vm.syncDraftFromServer([:], confidenceGameId: nil)
+
+        #expect(vm.draftPicks == ["game-1": "team-a"])
+    }
+
+    @Test func syncDraftFromServerAppliesEchoOfPendingWrite() {
+        let vm = PicksViewModel()
+        vm.draftPicks = ["game-1": "team-a"]
+        vm.markPendingWrite(["game-1": "team-a"])
+
+        vm.syncDraftFromServer(["game-1": "team-a"], confidenceGameId: nil)
+
+        #expect(vm.draftPicks == ["game-1": "team-a"])
+        vm.syncDraftFromServer([:], confidenceGameId: nil)
+        #expect(vm.draftPicks.isEmpty)
+    }
+
+    @Test func syncDraftFromServerForceAppliesEmptyOverPendingWrite() {
+        let vm = PicksViewModel()
+        vm.draftPicks = ["game-1": "team-a"]
+        vm.markPendingWrite(["game-1": "team-a"], inFlight: true)
+
+        vm.syncDraftFromServer([:], confidenceGameId: nil, force: true)
+
+        #expect(vm.draftPicks.isEmpty)
+        vm.syncDraftFromServer([:], confidenceGameId: nil)
+        #expect(vm.draftPicks.isEmpty)
+    }
+
+    @Test func resyncWhenVisibleAppliesEmptyWhenWriteNotInFlight() {
+        let vm = PicksViewModel()
+        vm.draftPicks = ["game-1": "team-a"]
+        vm.markPendingWrite(["game-1": "team-a"])
+
+        vm.resyncDraftIfIdle(from: [:], confidenceGameId: nil)
+
+        #expect(vm.draftPicks.isEmpty)
+    }
+
+    @Test func resyncWhenVisibleKeepsDraftWhileWriteInFlight() {
+        let vm = PicksViewModel()
+        vm.draftPicks = ["game-1": "team-a"]
+        vm.markPendingWrite(["game-1": "team-a"], inFlight: true)
+
+        vm.resyncDraftIfIdle(from: [:], confidenceGameId: nil)
+
+        #expect(vm.draftPicks == ["game-1": "team-a"])
     }
 }

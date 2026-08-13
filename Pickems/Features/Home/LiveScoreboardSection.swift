@@ -132,6 +132,11 @@ struct LiveScoreboardSection: View {
         return games.filter { $0.matches(scoreboardFilter.wrappedValue) }
     }
 
+    /// My Picks / Group must show the full slate. Broad filters stay capped as a preview.
+    private var displayedGames: [ESPNLiveGameCard] {
+        HomeScoreboardDisplay.games(filteredGames, filter: scoreboardFilter?.wrappedValue)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(title: title, subtitle: subtitle, help: help)
@@ -147,7 +152,7 @@ struct LiveScoreboardSection: View {
                     .padding(.horizontal)
                     .accessibilityLabel(emptyMessage)
             } else {
-                ForEach(filteredGames.prefix(8)) { card in
+                ForEach(displayedGames) { card in
                     LiveGameRow(card: card)
                         .padding(.horizontal)
                 }
@@ -196,7 +201,7 @@ struct LiveScoreboardSection: View {
         switch filter {
         case .power4: return "No Power 4 games this week."
         case .top25: return "No Top 25 games this week."
-        case .myPicks: return "No picks selected yet."
+        case .myPicks: return "No Pickems selected yet."
         case .groupSlate: return "No games on your group slate."
         case .conference(let id):
             let name = ESPNConferenceCatalog.conference(id: id)?.shortName ?? "conference"

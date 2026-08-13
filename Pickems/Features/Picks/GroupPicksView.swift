@@ -27,8 +27,8 @@ struct GroupPicksView: View {
     }
 
     private var selectionMode: SelectionMode {
-        week?.selectionMode
-            ?? appState.groupService.selectedGroup?.rules.selectionMode
+        appState.groupService.selectedGroup?.rules.selectionMode
+            ?? week?.selectionMode
             ?? .member
     }
 
@@ -43,12 +43,14 @@ struct GroupPicksView: View {
     }
 
     private var slateSize: Int {
-        max(
-            week?.slateSize
-                ?? appState.groupService.selectedGroup?.rules.slateSize
-                ?? 1,
+        let memberCount = max(
+            appState.groupService.selectedGroup?.memberCount ?? members.count,
             1
         )
+        if isNominatingPhase, let rules = appState.groupService.selectedGroup?.rules {
+            return rules.expectedSlateSize(memberCount: memberCount)
+        }
+        return max(slateGames.count, 1)
     }
 
     /// Materialized slate for spread picks. Do **not** fall back to nominations —
@@ -116,7 +118,7 @@ struct GroupPicksView: View {
             }
             .padding()
         }
-        .navigationTitle("Group Picks")
+        .navigationTitle("Group Pickems")
         .navigationBarTitleDisplayMode(.inline)
         .scrollContentBackground(.hidden)
         .pickemsScreenBackground()
@@ -164,7 +166,7 @@ struct GroupPicksView: View {
 
     private var progressTitle: String {
         if isNominatingPhase {
-            return "\(doneUserIds.count) of \(members.count) done nominating"
+            return "\(doneUserIds.count) of \(members.count) done making Selections"
         }
         return "\(doneUserIds.count) of \(members.count) submitted"
     }
@@ -179,14 +181,14 @@ struct GroupPicksView: View {
     private var progressSubtitle: String {
         if isNominatingPhase {
             if selectionMode == .member {
-                return "Each member nominates \(nominationsPerMember) game\(nominationsPerMember == 1 ? "" : "s"). Spread picks open when the slate fills."
+                return "Each member selects \(nominationsPerMember) game\(nominationsPerMember == 1 ? "" : "s"). Pickems open when the slate fills."
             }
-            return "Commissioner is building a \(slateSize)-game slate. Spread picks open when it’s ready."
+            return "Commissioner is building a \(slateSize)-game slate. Pickems open when it’s ready."
         }
         if slateGames.isEmpty {
             return "No slate games yet."
         }
-        return "Pick against the spread for every game on the slate."
+        return "Make a Pickem against the spread for every game on the slate."
     }
 
     // MARK: - Member section
@@ -273,7 +275,7 @@ struct GroupPicksView: View {
                     Button {
                         manageMember = member
                     } label: {
-                        Label("Manage Picks…", systemImage: "gavel")
+                        Label("Manage Pickems…", systemImage: "gavel")
                     }
                 }
             }
@@ -284,7 +286,7 @@ struct GroupPicksView: View {
                         Button {
                             manageMember = member
                         } label: {
-                            Label("Manage picks", systemImage: "slider.horizontal.3")
+                            Label("Manage Pickems", systemImage: "slider.horizontal.3")
                                 .font(.caption.weight(.semibold))
                         }
                         .buttonStyle(.plain)
@@ -304,58 +306,104 @@ struct GroupPicksView: View {
     private func memberBody(member: GroupMember, pick: UserPick?, done: Bool) -> some View {
         if isNominatingPhase {
             nominationBody(for: member)
-        } else if !picksVisibleToAll {
-            if let pick, canRevealPickDetails(for: member.id), !pick.picks.isEmpty {
-                ForEach(slateGames) { game in
-                    PickResultRow(game: game, pickedTeamId: pick.picks[game.id], showSpread: true)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                }
-            } else if canRevealPickDetails(for: member.id), done {
-                ownPickPendingState
-            } else if done {
-                Text("Picks hidden until the deadline")
+        } else if !picksVisibleToAll, !canRevealPickDetails(for: member.id) {
+            if done {
+                Text("Pickems hidden until the deadline")
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 12)
             } else {
-                emptyPicksState(title: "No picks yet", message: "\(member.displayName) hasn't submitted.")
+                emptyPicksState(title: "No Pickems yet", message: "\(member.displayName) hasn't submitted.")
             }
-        } else if let pick, !pick.picks.isEmpty {
-            ForEach(slateGames) { game in
-                PickResultRow(game: game, pickedTeamId: pick.picks[game.id], showSpread: true)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-            }
+        } else if canRevealPickDetails(for: member.id),
+                  done,
+                  pick == nil || pick?.picks.isEmpty == true,
+                  isRefreshingOwnPick || !ownPickLoadAttempted {
+            ownPickPendingState
         } else {
-            emptyPicksState(title: "No picks yet", message: "\(member.displayName) hasn't submitted.")
+            pickemsBody(pick: pick)
+        }
+    }
+
+    /// Slate Selections stay visible even when Pickems are cleared.
+    @ViewBuilder
+    private func pickemsBody(pick: UserPick?) -> some View {
+        if slateGames.isEmpty {
+            emptyPicksState(title: "No slate yet", message: "Selections will show here once the slate is built.")
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Selections stay on the slate. A dash means no Pickem yet.")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .padding(.horizontal, 10)
+                ForEach(slateGames) { game in
+                    PickResultRow(game: game, pickedTeamId: pick?.picks[game.id], showSpread: true)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                }
+            }
         }
     }
 
     @ViewBuilder
     private func nominationBody(for member: GroupMember) -> some View {
         let noms = nominations.filter { $0.submittedBy == member.id }
-        if noms.isEmpty {
-            emptyPicksState(
-                title: "No nominations yet",
-                message: "\(member.displayName) still needs to nominate \(nominationsPerMember) game\(nominationsPerMember == 1 ? "" : "s")."
-            )
-        } else {
-            ForEach(noms) { nom in
-                PickemsCard {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("\(nom.awayTeamAbbreviation ?? String(nom.awayTeamName.prefix(4))) @ \(nom.homeTeamAbbreviation ?? String(nom.homeTeamName.prefix(4)))")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(PickemsColors.textPrimary)
-                        Text(nominationSpreadLabel(nom))
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(theme.accent)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        let deadlinePassed = week?.isSelectionDeadlinePassed ?? true
+        let isOwn = member.id == currentUserId
+        let canRemove = !deadlinePassed && (
+            appState.isCommissioner
+            || (isOwn && !appState.pickService.didSubmitNominations)
+        )
+
+        VStack(alignment: .leading, spacing: 8) {
+            if isOwn, !deadlinePassed {
+                Text("This list is Selections (the games). Remove Selection frees a slot. Pickems (who covers) start after the slate opens.")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .padding(.horizontal, 6)
+            }
+            if isOwn, !deadlinePassed, appState.pickService.didSubmitNominations {
+                SecondaryButton("Edit Selections", icon: "pencil") {
+                    appState.picksViewModel.unlockSelectionsForEditing(appState: appState)
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, 6)
+            }
+
+            if noms.isEmpty {
+                emptyPicksState(
+                    title: "No Selections yet",
+                    message: "\(member.displayName) still needs to select \(nominationsPerMember) game\(nominationsPerMember == 1 ? "" : "s")."
+                )
+            } else {
+                ForEach(noms) { nom in
+                    PickemsCard {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(nom.awayTeamAbbreviation ?? String(nom.awayTeamName.prefix(4))) @ \(nom.homeTeamAbbreviation ?? String(nom.homeTeamName.prefix(4)))")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(PickemsColors.textPrimary)
+                                Text(nominationSpreadLabel(nom))
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(theme.accent)
+                            }
+                            Spacer(minLength: 8)
+                            if canRemove, let rules = appState.groupService.selectedGroup?.rules, let week {
+                                Button(role: .destructive) {
+                                    appState.picksViewModel.removeNomination(nom, rules: rules, appState: appState)
+                                } label: {
+                                    Label("Remove Selection", systemImage: "trash")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(theme.accent)
+                                }
+                                .accessibilityHint("Frees a slot so you can select a different game")
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, 4)
+                }
             }
         }
     }
@@ -376,14 +424,14 @@ struct GroupPicksView: View {
         VStack(spacing: 10) {
             if isRefreshingOwnPick || !ownPickLoadAttempted {
                 ProgressView()
-                Text("Loading your picks…")
+                Text("Loading your Pickems…")
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
             } else {
-                Text("Couldn't load your picks")
+                Text("Couldn't load your Pickems")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(PickemsColors.textPrimary)
-                Text("Try again to show your submitted picks.")
+                Text("Try again to show your submitted Pickems.")
                     .font(.caption)
                     .foregroundStyle(PickemsColors.textSecondary)
                 Button("Retry") {
@@ -462,6 +510,9 @@ struct GroupPicksView: View {
     }
 
     private func isDone(_ userId: String) -> Bool {
+        if isNominatingPhase, selectionMode == .commissioner, userId != commissionerId {
+            return true
+        }
         let total = expectedTotal(for: userId)
         if total == 0 { return false }
         if isNominatingPhase {
@@ -478,7 +529,7 @@ struct GroupPicksView: View {
 
     private func statusLabel(done: Bool) -> String {
         if isNominatingPhase {
-            return done ? "Nominated" : "Nominating"
+            return done ? "Selected" : "Selecting"
         }
         return done ? "Submitted" : "In progress"
     }

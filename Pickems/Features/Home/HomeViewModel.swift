@@ -35,18 +35,21 @@ final class HomeViewModel {
             let weekInfo = try await ESPNService.shared.currentWeek()
             cfbWeek = weekInfo
 
-            let slateIds = Set(appState.pickService.slateGames.map(\.espnEventId))
+            let slateGames = appState.pickService.slateGames
+            let slateIds = Set(slateGames.map(\.espnEventId))
             let userPicks = appState.pickService.userPick?.picks ?? [:]
+            let weekNumber = appState.groupService.currentWeek?.weekNumber ?? weekInfo.weekNumber
 
             let allCards = try await ESPNService.shared.liveGameCards(
-                week: weekInfo.weekNumber,
+                week: weekNumber,
+                seasonType: weekInfo.seasonType,
                 slateEventIds: slateIds,
                 userPicks: userPicks,
-                slateGames: appState.pickService.slateGames
+                slateGames: slateGames
             )
 
             liveGames = allCards
-            slateGames = allCards.filter(\.isSlateGame)
+            self.slateGames = allCards.filter(\.isSlateGame)
 
             newsItems = (try? await ESPNService.shared.fetchNews(limit: 6)) ?? []
         } catch {

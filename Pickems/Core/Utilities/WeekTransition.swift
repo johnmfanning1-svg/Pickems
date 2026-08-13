@@ -41,6 +41,7 @@ enum WeekTransition {
 
     /// Slate games/noms can change during selection, or during picking before the pick deadline.
     /// Past weeks already stamped with a fill-time `lockedAt` stay editable until `pickDeadline`.
+    /// Locked/scored weeks are never editable, even if `pickDeadline` is still in the future.
     static func isSlateEditable(_ week: WeekSummary, now: Date = Date()) -> Bool {
         switch week.status {
         case .selection:
@@ -51,6 +52,19 @@ enum WeekTransition {
             }
             return true
         case .locked, .scored:
+            return false
+        }
+    }
+
+    /// Spread Pickems can be edited while the week is picking and the pick deadline has not passed.
+    static func arePicksEditable(_ week: WeekSummary, now: Date = Date()) -> Bool {
+        switch week.status {
+        case .picking:
+            if let deadline = week.pickDeadline {
+                return now < deadline
+            }
+            return true
+        case .selection, .locked, .scored:
             return false
         }
     }

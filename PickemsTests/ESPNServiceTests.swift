@@ -53,12 +53,13 @@ struct ESPNServiceTests {
         #expect(items.contains(URLQueryItem(name: "week", value: "1")))
     }
 
-    @Test func currentWeekURLIncludesFBSGroupsAndLimit() throws {
-        let url = try #require(ESPNService.currentWeekURL(seasonType: 2))
+    @Test func currentWeekURLIncludesFBSGroupsAndLimitWithoutSeasonType() throws {
+        let url = try #require(ESPNService.currentWeekURL())
         let items = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
         #expect(items.contains(URLQueryItem(name: "groups", value: "80")))
         #expect(items.contains(URLQueryItem(name: "limit", value: "300")))
-        #expect(items.contains(URLQueryItem(name: "seasontype", value: "2")))
+        #expect(!items.contains(where: { $0.name == "seasontype" }))
+        #expect(!items.contains(where: { $0.name == "week" }))
     }
 
     @Test func curatedRank99MapsToNil() throws {
@@ -192,6 +193,79 @@ struct ESPNServiceTests {
             awayConferenceId: nil
         )
         #expect(negativeSpread.spreadDisplayLabel == "AWY -3.0")
+    }
+
+    @Test func parseKickoffDateHandlesNewsTimestamps() {
+        #expect(ESPNService.parseKickoffDate("2026-08-12T21:10:17Z") != nil)
+        #expect(ESPNService.parseKickoffDate("2026-08-12T21:10:17.123Z") != nil)
+    }
+
+    @Test func resolvedPickedTeamIdPrefersEventIdThenSlateId() {
+        let slate = makeSlate(id: "firestore-1", espnEventId: "401856766")
+        #expect(
+            ESPNService.resolvedPickedTeamId(
+                espnEventId: "401856766",
+                espnGameId: "401856766",
+                slateGame: slate,
+                userPicks: ["401856766": "home"]
+            ) == "home"
+        )
+        #expect(
+            ESPNService.resolvedPickedTeamId(
+                espnEventId: "401856766",
+                espnGameId: "401856766",
+                slateGame: slate,
+                userPicks: ["firestore-1": "away"]
+            ) == "away"
+        )
+        #expect(
+            ESPNService.resolvedPickedTeamId(
+                espnEventId: "401856766",
+                espnGameId: "other-id",
+                slateGame: nil,
+                userPicks: ["other-id": "home"]
+            ) == "home"
+        )
+        #expect(
+            ESPNService.resolvedPickedTeamId(
+                espnEventId: "401856766",
+                espnGameId: "401856766",
+                slateGame: slate,
+                userPicks: [:]
+            ) == nil
+        )
+    }
+
+    @Test func cardFromSlateMarksGroupAndMyPicks() {
+        let slate = makeSlate(id: "firestore-1", espnEventId: "401856766")
+        let card = ESPNService.card(from: slate, userPicks: ["firestore-1": "home"])
+        #expect(card.isSlateGame)
+        #expect(card.hasUserPick)
+        #expect(card.userPickTeamAbbreviation == "HOM")
+        #expect(card.matches(.groupSlate))
+        #expect(card.matches(.myPicks))
+    }
+
+    private func makeSlate(id: String, espnEventId: String) -> SlateGame {
+        SlateGame(
+            id: id,
+            espnEventId: espnEventId,
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: 7,
+            spreadTeamId: "home",
+            kickoff: Date(),
+            status: .scheduled,
+            homeScore: nil,
+            awayScore: nil,
+            winnerTeamId: nil
+        )
     }
 
     private func makeGame(homeRank: Int?, awayRank: Int?) -> ESPNGame {
