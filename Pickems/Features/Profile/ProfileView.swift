@@ -12,13 +12,10 @@ struct ProfileView: View {
     @State private var showJoinSheet = false
     @State private var showCreateWizard = false
     @State private var showLeaveConfirm = false
-    @State private var showDeleteConfirm = false
     @State private var showSignOutConfirm = false
     @State private var showDeleteAccountConfirm = false
     @State private var showDeleteAccountSheet = false
     @State private var showTeamPicker = false
-    @State private var showTransferConfirm = false
-    @State private var memberToPromote: GroupMember?
     @State private var managementError: String?
     @State private var presentedHelp: HelpTopic?
 
@@ -91,24 +88,6 @@ struct ProfileView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("You’ll lose access until you rejoin with the invite code.")
-            }
-            .alert("Delete this league permanently?", isPresented: $showDeleteConfirm) {
-                Button("Delete League", role: .destructive) { deleteGroup() }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This permanently deletes the league, invite code, all members’ access, picks, standings, and season history. This cannot be undone.")
-            }
-            .alert(
-                "Make \(memberToPromote?.displayName ?? "member") the commissioner?",
-                isPresented: $showTransferConfirm
-            ) {
-                Button("Transfer Commissioner", role: .destructive) {
-                    if let member = memberToPromote { transferCommissioner(to: member) }
-                    memberToPromote = nil
-                }
-                Button("Cancel", role: .cancel) { memberToPromote = nil }
-            } message: {
-                Text("You become a regular member. Only one commissioner is allowed at a time.")
             }
             .alert("Sign out of Pickems?", isPresented: $showSignOutConfirm) {
                 Button("Sign Out", role: .destructive) { signOut() }
@@ -248,7 +227,7 @@ struct ProfileView: View {
             .listRowBackground(PickemsColors.cardBackground)
 
             Toggle(isOn: selectionDeadlineToggle) {
-                Label("Selection deadlines", systemImage: "sportscourt")
+                Label("Selection deadlines", systemImage: "american.football.fill")
             }
             .listRowBackground(PickemsColors.cardBackground)
 
@@ -435,44 +414,14 @@ struct ProfileView: View {
             .buttonStyle(.borderless)
             .listRowBackground(PickemsColors.cardBackground)
 
-            if let group = appState.groupService.selectedGroup {
-                if appState.isCommissioner {
-                    let transferCandidates = appState.groupService.members
-                        .filter { $0.id != group.commissionerId }
-                        .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
-
-                    if !transferCandidates.isEmpty {
-                        Menu {
-                            ForEach(transferCandidates) { member in
-                                Button(member.displayName) {
-                                    memberToPromote = member
-                                    showTransferConfirm = true
-                                }
-                            }
-                        } label: {
-                            Label("Transfer Commissioner…", systemImage: "gavel")
-                                .foregroundStyle(theme.accent)
-                        }
-                        .listRowBackground(PickemsColors.cardBackground)
-                    }
-
-                    Button(role: .destructive) {
-                        showDeleteConfirm = true
-                    } label: {
-                        Label("Delete League", systemImage: "trash")
-                    }
-                    .buttonStyle(.borderless)
-                    .listRowBackground(PickemsColors.cardBackground)
-                    .accessibilityHint("Permanently delete this league and all of its data")
-                } else {
-                    Button(role: .destructive) {
-                        showLeaveConfirm = true
-                    } label: {
-                        Label("Leave League", systemImage: "rectangle.portrait.and.arrow.right")
-                    }
-                    .buttonStyle(.borderless)
-                    .listRowBackground(PickemsColors.cardBackground)
+            if appState.groupService.selectedGroup != nil, !appState.isCommissioner {
+                Button(role: .destructive) {
+                    showLeaveConfirm = true
+                } label: {
+                    Label("Leave League", systemImage: "rectangle.portrait.and.arrow.right")
                 }
+                .buttonStyle(.borderless)
+                .listRowBackground(PickemsColors.cardBackground)
             }
         } header: {
             HStack {
@@ -568,31 +517,6 @@ struct ProfileView: View {
                 PickemsHaptics.success()
             } catch {
                 managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
-            }
-        }
-    }
-
-    private func deleteGroup() {
-        guard let group = appState.groupService.selectedGroup else { return }
-        Task {
-            do {
-                try await appState.groupService.deleteGroup(groupId: group.id)
-                PickemsHaptics.success()
-            } catch {
-                managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
-            }
-        }
-    }
-
-    private func transferCommissioner(to member: GroupMember) {
-        guard let group = appState.groupService.selectedGroup else { return }
-        Task {
-            do {
-                try await appState.groupService.transferCommissioner(groupId: group.id, toUserId: member.id)
-                PickemsHaptics.success()
-            } catch {
-                managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
-                PickemsHaptics.warning()
             }
         }
     }

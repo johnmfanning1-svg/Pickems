@@ -311,15 +311,14 @@ final class PickService {
         memberIds _: [String]
     ) async throws {
         switch week.status {
-        case .locked, .scored:
-            throw PickError.cannotModifyLockedSlate
-        case .picking:
-            // Replacement after a slate game was removed while picking is still open.
-            if ScoringEngine.isPastDeadline(deadline: week.pickDeadline) {
-                throw PickError.deadlinePassed
-            }
+        case .locked, .scored, .picking:
+            // After lock-early or the Selection deadline, members cannot remake
+            // Selections. Commissioner fill uses `submitCommissionerGame`.
+            throw PickError.selectionClosed
         case .selection:
-            break
+            guard WeekTransition.canRemakeSelections(week) else {
+                throw PickError.selectionClosed
+            }
         }
         let existingNoms = nominations.contains { $0.espnEventId == nomination.espnEventId }
         let existingGames = slateGames.contains { $0.espnEventId == nomination.espnEventId }
@@ -413,36 +412,44 @@ final class PickService {
         isCommissioner: Bool,
         userId: String
     ) async throws {
-        if isCommissioner {
-            switch week.status {
-            case .locked, .scored:
+        if nomination.submittedBy != userId {
+            guard isCommissioner else { throw PickError.unauthorized }
+            guard WeekTransition.isSlateEditable(week) else {
                 throw PickError.cannotModifyLockedSlate
-            case .picking:
-                if ScoringEngine.isPastDeadline(deadline: week.pickDeadline) {
-                    throw PickError.cannotModifyLockedSlate
-                }
-            case .selection:
-                break
             }
         } else {
-            guard nomination.submittedBy == userId else {
-                throw PickError.unauthorized
-            }
-            guard week.status == .selection, !week.isSelectionDeadlinePassed else {
+            guard WeekTransition.canRemakeSelections(week) else {
                 throw PickError.selectionClosed
             }
         }
 
-        try await db.collection("groups").document(groupId)
-            .collection("weeks").document(weekId)
-            .collection("nominations").document(nomination.id)
-            .delete()
-
-        nominations.removeAll { $0.id == nomination.id }
-
         let weekRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
+
+        try await weekRef.collection("nominations").document(nomination.id).delete()
+        nominations.removeAll { $0.id == nomination.id }
         try await weekRef.updateData(["nominationCount": FieldValue.increment(Int64(-1))])
+
+        // Clearing a Selection must drop the slate game too, or remake hits
+        // duplicateGame and Pickems keeps showing the cleared game.
+        // Materialize keys games by espnEventId; also sweep any other doc id.
+        let eventId = nomination.espnEventId
+        var gameIds = Set(
+            slateGames
+                .filter { $0.espnEventId == eventId || $0.id == eventId }
+                .map(\.id)
+        )
+        gameIds.insert(eventId)
+        if let extra = try? await weekRef.collection("games")
+            .whereField("espnEventId", isEqualTo: eventId)
+            .getDocuments() {
+            for doc in extra.documents { gameIds.insert(doc.documentID) }
+        }
+        for gameId in gameIds {
+            try? await weekRef.collection("games").document(gameId).delete()
+        }
+        slateGames.removeAll { $0.espnEventId == eventId || $0.id == eventId || gameIds.contains($0.id) }
+        userPickEpoch += 1
 
         if nomination.submittedBy == userId {
             clearNominationsSubmitted(groupId: groupId, weekId: weekId, userId: userId)

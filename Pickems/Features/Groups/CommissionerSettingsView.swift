@@ -57,6 +57,7 @@ struct CommissionerSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                CommissionerWeekAdminSections()
                 leagueIdentitySection
                 membersSection
 
@@ -119,20 +120,10 @@ struct CommissionerSettingsView: View {
                 Section {
                     Toggle("List in Discover", isOn: $isPublic)
                         .listRowBackground(PickemsColors.cardBackground)
-                    NavigationLink {
-                        SubmissionStatusView(
-                            members: appState.groupService.members,
-                            submissions: appState.pickService.submissions,
-                            slateSize: appState.pickService.slateGames.count
-                        )
-                    } label: {
-                        Label("Submission chase", systemImage: "person.crop.circle.badge.clock")
-                    }
-                    .listRowBackground(PickemsColors.cardBackground)
                 } header: {
-                    Text("Visibility & Chase")
+                    Text("Visibility")
                 } footer: {
-                    Text("Public leagues appear in Discover. Submission chase shows who still needs to lock Pickems.")
+                    Text("Public leagues appear in Discover. Submission chase is under This Week when Pickems are open.")
                 }
 
                 Section {

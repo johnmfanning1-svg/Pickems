@@ -18,7 +18,7 @@ struct MainTabView: View {
                 .accessibilityHint("League info, leaderboards, members, and chat")
 
             SelectionsView()
-                .tabItem { Label("Selections", systemImage: "sportscourt.fill") }
+                .tabItem { Label("Selections", systemImage: "american.football.fill") }
                 .tag(AppTab.selections)
                 .accessibilityHint("Choose this week's games for your league")
 

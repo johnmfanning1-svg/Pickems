@@ -63,9 +63,10 @@ final class PicksViewModel {
     /// before the Selection deadline — same idea as Edit Pickems.
     func unlockSelectionsForEditing(appState: AppState) {
         guard let groupId = appState.groupService.selectedGroup?.id,
-              let weekId = appState.groupService.currentWeek?.id,
-              let userId = appState.currentUserId else { return }
-        appState.pickService.clearNominationsSubmitted(groupId: groupId, weekId: weekId, userId: userId)
+              let week = appState.groupService.currentWeek,
+              let userId = appState.currentUserId,
+              WeekTransition.canRemakeSelections(week) else { return }
+        appState.pickService.clearNominationsSubmitted(groupId: groupId, weekId: week.id, userId: userId)
         PickemsHaptics.lightImpact()
     }
 
@@ -164,12 +165,12 @@ final class PicksViewModel {
         }
     }
 
-    func browseGames(appState: AppState) async {
+    func browseGames(appState: AppState, present: Bool = true) async {
         await loadESPNGames(appState: appState)
         if espnGames.isEmpty, appState.pickService.errorMessage != nil {
             return
         }
-        showGameBrowse = true
+        if present { showGameBrowse = true }
     }
 
     func handleGameSelection(_ game: ESPNGame, appState: AppState) {
@@ -409,6 +410,12 @@ final class PicksViewModel {
                     isCommissioner: appState.isCommissioner,
                     userId: userId
                 )
+                let eventId = nomination.espnEventId
+                for game in appState.pickService.slateGames where game.espnEventId == eventId || game.id == eventId {
+                    draftPicks.removeValue(forKey: game.id)
+                    if confidenceGameId == game.id { confidenceGameId = nil }
+                }
+                draftPicks.removeValue(forKey: eventId)
             } catch {
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }

@@ -30,7 +30,7 @@ struct CommissionerManagePicksSheet: View {
                     if slateGames.isEmpty {
                         ContentUnavailableView(
                             "No Slate Games",
-                            systemImage: "sportscourt",
+                            systemImage: "american.football.fill",
                             description: Text("Add games to the slate before forcing Pickems.")
                         )
                     } else {

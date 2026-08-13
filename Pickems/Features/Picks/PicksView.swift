@@ -9,8 +9,6 @@ struct PicksView: View {
     var kind: PicksWorkspaceKind = .pickems
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
-    @State private var showSelectionDeadlineSheet = false
-    @State private var showPickDeadlineSheet = false
     @State private var showIncompletePickemsAlert = false
     @State private var incompletePickemsAlertText = ""
 
@@ -43,7 +41,7 @@ struct PicksView: View {
                         statusContent(for: week)
                     } else {
                         EmptyStateView(
-                            icon: "sportscourt.fill",
+                            icon: kind == .selections ? "american.football.fill" : "checkmark.circle.fill",
                             title: "No Active Week",
                             message: kind == .selections
                                 ? "Join a league to start making Selections."
@@ -94,12 +92,6 @@ struct PicksView: View {
                 }
                 .pickemsEnvironment(appState)
             }
-            .sheet(item: $viewModel.spreadEditGame) { game in
-                SpreadEditorSheet(game: game) { spread, spreadTeamId in
-                    viewModel.updateSpread(game, spread: spread, spreadTeamId: spreadTeamId, appState: appState)
-                }
-                .pickemsEnvironment(appState)
-            }
             .alert("Submit your Pickems?", isPresented: $viewModel.showConfirmSubmit) {
                 Button("Submit Pickems") {
                     if let week = appState.groupService.currentWeek {
@@ -122,40 +114,6 @@ struct PicksView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(incompletePickemsAlertText)
-            }
-            .sheet(isPresented: $showSelectionDeadlineSheet) {
-                SelectionDeadlineSheet(
-                    weekLabel: appState.groupService.currentWeek?.displayLabel ?? "This week",
-                    initialDeadline: appState.groupService.currentWeek?.selectionDeadline
-                ) { deadline in
-                    viewModel.setSelectionDeadline(deadline, appState: appState)
-                }
-                .pickemsEnvironment(appState)
-            }
-            .sheet(isPresented: $showPickDeadlineSheet) {
-                if let week = appState.groupService.currentWeek {
-                    PickDeadlineEditorSheet(
-                        weekLabel: week.displayLabel,
-                        weekStatus: week.status,
-                        initialDeadline: week.pickDeadline,
-                        isPastDeadline: PickDeadlineCalculator.isPast(week.pickDeadline)
-                    ) { deadline, reopen, unlock in
-                        viewModel.setPickDeadline(
-                            deadline,
-                            reopenWeek: reopen,
-                            unlockMemberPicks: unlock,
-                            appState: appState
-                        )
-                    }
-                    .pickemsEnvironment(appState)
-                }
-            }
-            .onChange(of: appState.pendingSelectionDeadlinePrompt) { _, pending in
-                if pending, kind == .selections, appState.isCommissioner,
-                   appState.groupService.currentWeek?.status == .selection {
-                    showSelectionDeadlineSheet = true
-                    appState.pendingSelectionDeadlinePrompt = false
-                }
             }
             .task(id: appState.groupService.selectedGroup?.id) {
                 await reloadPicks()
@@ -255,8 +213,8 @@ struct PicksView: View {
                 SelectionDeadlineBanner(deadline: deadline)
             } else if week.status == .selection, appState.isCommissioner {
                 ContextualTipBanner(
-                    icon: "bell.badge",
-                    message: "Set a Selection deadline so members finish before kickoff."
+                    icon: "gearshape.fill",
+                    message: "Set the Selection deadline and other weekly admin in Commissioner Settings."
                 )
                 .padding(.horizontal)
             }
@@ -338,21 +296,14 @@ struct PicksView: View {
             .padding(.horizontal)
 
             ForEach(appState.pickService.slateGames) { game in
-                VStack(spacing: 4) {
-                    GamePickRow(game: game, selectedTeamId: nil, onSelect: { _ in })
-                    HStack {
-                        Button("Edit Spread") { viewModel.spreadEditGame = game }
-                            .font(.caption).foregroundStyle(theme.accent)
-                        Spacer()
-                        Button(role: .destructive) {
-                            viewModel.removeCommissionerGame(game, week: week, appState: appState)
-                        } label: {
-                            Label("Remove Selection", systemImage: "trash").font(.caption)
-                        }
-                    }
-                    .padding(.horizontal, 24)
-                }
-                .padding(.horizontal)
+                GamePickRow(game: game, selectedTeamId: nil, onSelect: { _ in })
+                    .padding(.horizontal)
+            }
+            if WeekTransition.canRemakeSelections(week) {
+                Text("To edit spreads or remove a game, use Commissioner Settings.")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .padding(.horizontal)
             }
         }
     }
@@ -383,12 +334,12 @@ struct PicksView: View {
                 help: PickemsHelp.nominations
             )
 
-            if appState.isCommissioner {
-                picksCommissionerSelectionControls(
-                    week: week,
-                    uniqueGames: uniqueGames,
-                    deadlinePassed: deadlinePassed
+            if appState.isCommissioner, week.selectionDeadline == nil {
+                ContextualTipBanner(
+                    icon: "gearshape.fill",
+                    message: "Set a Selection deadline in Commissioner Settings so members finish before kickoff."
                 )
+                .padding(.horizontal)
             } else if let deadline = week.selectionDeadline {
                 ContextualTipBanner(
                     icon: "clock",
@@ -405,7 +356,7 @@ struct PicksView: View {
                 EmptyView()
             } else if atLimit {
                 nominationSubmitSection(userNoms: userNoms, perMember: perMember, week: week)
-            } else if !deadlinePassed {
+            } else if WeekTransition.canRemakeSelections(week) {
                 PrimaryButton(title: "Select Game", isLoading: viewModel.isLoadingGames) {
                     Task {
                         await viewModel.browseGames(appState: appState)
@@ -425,7 +376,9 @@ struct PicksView: View {
                             Text("by \(nom.submitterName)").font(.caption).foregroundStyle(PickemsColors.textSecondary)
                         }
                         Spacer()
-                        if !deadlinePassed, appState.isCommissioner || (nom.submittedBy == userId && !appState.pickService.didSubmitNominations) {
+                        if WeekTransition.canRemakeSelections(week),
+                           nom.submittedBy == userId,
+                           !appState.pickService.didSubmitNominations {
                             Button(role: .destructive) {
                                 viewModel.removeNomination(nom, rules: rules, appState: appState)
                             } label: {
@@ -440,68 +393,6 @@ struct PicksView: View {
                 .padding(.horizontal)
             }
         }
-    }
-
-    @ViewBuilder
-    private func picksCommissionerSelectionControls(
-        week: WeekSummary,
-        uniqueGames: Int,
-        deadlinePassed: Bool
-    ) -> some View {
-        let target = appState.groupService.selectedGroup?.rules.expectedSlateSize(
-            memberCount: max(appState.groupService.selectedGroup?.memberCount ?? 1, 1)
-        ) ?? max(week.slateSize, 1)
-        VStack(spacing: 8) {
-            if week.selectionDeadline == nil {
-                ContextualTipBanner(
-                    icon: "bell.badge",
-                    message: "Set a selection deadline so members finish early enough to make Pickems before kickoff."
-                )
-                PrimaryButton(title: "Set Selection Deadline") {
-                    showSelectionDeadlineSheet = true
-                }
-            } else {
-                SecondaryButton("Edit Selection Deadline", icon: "calendar") {
-                    showSelectionDeadlineSheet = true
-                }
-            }
-
-            if deadlinePassed {
-                ContextualTipBanner(
-                    icon: "gavel",
-                    message: uniqueGames < target
-                        ? "Deadline passed with \(uniqueGames) of \(target) games. Fill the rest or open with fewer."
-                        : "Deadline passed. Open the week when ready."
-                )
-                if uniqueGames < target {
-                    PrimaryButton(title: "Fill Remaining Games", isLoading: viewModel.isLoadingGames) {
-                        Task {
-                            await viewModel.browseGames(appState: appState)
-                        }
-                    }
-                }
-                SecondaryButton("Open With \(uniqueGames) Game\(uniqueGames == 1 ? "" : "s")", icon: "lock.open.fill") {
-                    viewModel.openWeekWithCurrentSlate(appState: appState)
-                }
-                .disabled(uniqueGames == 0)
-                if uniqueGames == 0 {
-                    Text("Add at least one Selection before opening the week.")
-                        .font(.caption)
-                        .foregroundStyle(PickemsColors.textSecondary)
-                }
-            } else {
-                SecondaryButton("Open Week Early", icon: "lock.fill") {
-                    viewModel.lockSlateEarly(appState: appState)
-                }
-                .disabled(uniqueGames == 0)
-                if uniqueGames == 0 {
-                    Text("Add at least one Selection before opening the week.")
-                        .font(.caption)
-                        .foregroundStyle(PickemsColors.textSecondary)
-                }
-            }
-        }
-        .padding(.horizontal)
     }
 
     private func nominationSpreadLabel(_ nom: Nomination) -> String {
@@ -529,8 +420,10 @@ struct PicksView: View {
                     .font(.caption)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                SecondaryButton("Edit Selections", icon: "pencil") {
-                    viewModel.unlockSelectionsForEditing(appState: appState)
+                if WeekTransition.canRemakeSelections(week) {
+                    SecondaryButton("Edit Selections", icon: "pencil") {
+                        viewModel.unlockSelectionsForEditing(appState: appState)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -583,61 +476,29 @@ struct PicksView: View {
                 .padding(.horizontal)
             }
 
-            if appState.isCommissioner {
-                SubmissionStatusView(
-                    members: appState.groupService.members,
-                    submissions: appState.pickService.submissions,
-                    slateSize: appState.pickService.slateGames.count
-                )
-
-                SecondaryButton(
-                    pastDeadline ? "Extend / Unlock Deadline" : "Set Pickems Deadline",
-                    icon: "calendar.badge.clock"
-                ) {
-                    showPickDeadlineSheet = true
-                }
-                .padding(.horizontal)
-            }
-
-            let slateEditable = WeekTransition.isSlateEditable(week)
             ForEach(appState.pickService.slateGames) { game in
-                VStack(spacing: 4) {
-                    GamePickRow(
-                        game: game,
-                        selectedTeamId: viewModel.draftPicks[game.id],
-                        isDisabled: appState.pickService.userPick?.isLocked == true || picksClosed,
-                        showConfidenceToggle: appState.groupService.selectedGroup?.rules.allowConfidencePick == true
-                            && appState.pickService.userPick?.isLocked != true
-                            && !picksClosed,
-                        isConfidence: viewModel.confidenceGameId == game.id,
-                        onConfidenceToggle: {
-                            viewModel.confidenceGameId = viewModel.confidenceGameId == game.id ? nil : game.id
-                            viewModel.saveDraft(appState: appState)
-                        }
-                    ) { teamId in
-                        if teamId.isEmpty {
-                            viewModel.draftPicks.removeValue(forKey: game.id)
-                            if viewModel.confidenceGameId == game.id {
-                                viewModel.confidenceGameId = nil
-                            }
-                        } else {
-                            viewModel.draftPicks[game.id] = teamId
-                        }
+                GamePickRow(
+                    game: game,
+                    selectedTeamId: viewModel.draftPicks[game.id],
+                    isDisabled: appState.pickService.userPick?.isLocked == true || picksClosed,
+                    showConfidenceToggle: appState.groupService.selectedGroup?.rules.allowConfidencePick == true
+                        && appState.pickService.userPick?.isLocked != true
+                        && !picksClosed,
+                    isConfidence: viewModel.confidenceGameId == game.id,
+                    onConfidenceToggle: {
+                        viewModel.confidenceGameId = viewModel.confidenceGameId == game.id ? nil : game.id
                         viewModel.saveDraft(appState: appState)
                     }
-                    if appState.isCommissioner && slateEditable {
-                        HStack {
-                            Button("Edit Spread") { viewModel.spreadEditGame = game }
-                                .font(.caption).foregroundStyle(theme.accent)
-                            Spacer()
-                            Button(role: .destructive) {
-                                viewModel.removeCommissionerGame(game, week: week, appState: appState)
-                            } label: {
-                                Label("Remove Selection", systemImage: "trash").font(.caption)
-                            }
+                ) { teamId in
+                    if teamId.isEmpty {
+                        viewModel.draftPicks.removeValue(forKey: game.id)
+                        if viewModel.confidenceGameId == game.id {
+                            viewModel.confidenceGameId = nil
                         }
-                        .padding(.horizontal, 24)
+                    } else {
+                        viewModel.draftPicks[game.id] = teamId
                     }
+                    viewModel.saveDraft(appState: appState)
                 }
                 .padding(.horizontal)
             }
@@ -699,13 +560,6 @@ struct PicksView: View {
                 color: week.status == .scored ? PickemsColors.success : PickemsColors.textSecondary
             )
             .padding(.horizontal)
-
-            if appState.isCommissioner, week.status == .locked {
-                SecondaryButton("Reopen Pickems", icon: "lock.open") {
-                    showPickDeadlineSheet = true
-                }
-                .padding(.horizontal)
-            }
 
             ForEach(appState.pickService.slateGames) { game in
                 GamePickRow(

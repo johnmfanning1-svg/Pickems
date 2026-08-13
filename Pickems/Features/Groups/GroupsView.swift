@@ -7,7 +7,6 @@ struct GroupsView: View {
     @State private var showCreateLeague = false
     @State private var manageExpanded = false
     @State private var showLeaveConfirm = false
-    @State private var showDeleteConfirm = false
     @State private var leagueActionError: String?
 
     var body: some View {
@@ -90,13 +89,21 @@ struct GroupsView: View {
             } message: {
                 Text("You’ll lose access until you rejoin with the invite code.")
             }
-            .alert("Delete this league permanently?", isPresented: $showDeleteConfirm) {
-                Button("Delete League", role: .destructive) { deleteSelectedLeague() }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This permanently deletes the league, invite code, members, picks, standings, and season history. This cannot be undone.")
+            .onChange(of: appState.pendingCommissionerSettings) { _, pending in
+                presentPendingCommissionerSettings(pending)
+            }
+            .onAppear {
+                presentPendingCommissionerSettings(appState.pendingCommissionerSettings)
             }
         }
+    }
+
+    private func presentPendingCommissionerSettings(_ pending: Bool) {
+        guard pending else { return }
+        if appState.isCommissioner, appState.groupService.selectedGroup != nil {
+            showCommissionerSettings = true
+        }
+        appState.pendingCommissionerSettings = false
     }
 
     private func leaveSelectedLeague() {
@@ -106,21 +113,6 @@ struct GroupsView: View {
         Task {
             do {
                 try await appState.groupService.leaveGroup(groupId: group.id, userId: userId)
-                PickemsHaptics.success()
-            } catch {
-                leagueActionError = UserFacingError.message(for: error, context: .write)
-                    ?? error.localizedDescription
-                PickemsHaptics.warning()
-            }
-        }
-    }
-
-    private func deleteSelectedLeague() {
-        guard let group = appState.groupService.selectedGroup else { return }
-        leagueActionError = nil
-        Task {
-            do {
-                try await appState.groupService.deleteGroup(groupId: group.id)
                 PickemsHaptics.success()
             } catch {
                 leagueActionError = UserFacingError.message(for: error, context: .write)
@@ -309,17 +301,17 @@ struct GroupsView: View {
                         if week.status == .selection, group.rules.selectionMode == .member {
                             Label(
                                 "\(uniqueGames)/\(targetSlate) games",
-                                systemImage: "sportscourt"
+                                systemImage: "american.football.fill"
                             )
                         } else if week.status == .selection {
                             Label(
                                 "\(liveSlateCount)/\(targetSlate) slate",
-                                systemImage: "sportscourt"
+                                systemImage: "american.football.fill"
                             )
                         } else {
                             Label(
                                 "\(liveSlateCount) on slate",
-                                systemImage: "sportscourt"
+                                systemImage: "american.football.fill"
                             )
                         }
                         Label(
@@ -461,15 +453,7 @@ struct GroupsView: View {
 
                     ShareAppButton(leagueName: group.name, label: "Invite via X")
 
-                    if appState.isCommissioner {
-                        manageRow(
-                            title: "Delete League",
-                            systemImage: "trash",
-                            hint: "Permanently delete this league and all of its data"
-                        ) {
-                            showDeleteConfirm = true
-                        }
-                    } else {
+                    if !appState.isCommissioner {
                         manageRow(
                             title: "Leave League",
                             systemImage: "rectangle.portrait.and.arrow.right",
@@ -593,9 +577,6 @@ struct LeaderboardView: View {
             .accessibilityLabel("Standings period")
 
             if !displayEntries.isEmpty {
-                let hasWins = displayEntries.contains {
-                    (showWeekly ? $0.weeklyWins : $0.seasonWins) > 0
-                }
                 ForEach(displayEntries) { entry in
                     VStack(spacing: 4) {
                         LeaderboardRow(
@@ -603,26 +584,6 @@ struct LeaderboardView: View {
                             showWeekly: showWeekly,
                             isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId
                         )
-                        if hasWins, entry.isTied, appState.isCommissioner,
-                           appState.groupService.selectedGroup?.rules.tieBreaker == .commissionerOverride {
-                            Button("Resolve Tie (Commissioner)") {
-                                PickemsHaptics.lightImpact()
-                                Task {
-                                    guard let groupId = appState.groupService.selectedGroup?.id else { return }
-                                    do {
-                                        try await appState.groupService.resolveTie(
-                                            groupId: groupId,
-                                            standingUserId: entry.id
-                                        )
-                                    } catch {
-                                        // Leaderboard refreshes from Firestore listener
-                                    }
-                                }
-                            }
-                            .font(.caption)
-                            .foregroundStyle(theme.accent)
-                            .accessibilityHint("Manually break a tie between players with the same record")
-                        }
                     }
                     .padding(.horizontal)
                 }

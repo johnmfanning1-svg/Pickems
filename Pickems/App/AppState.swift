@@ -27,8 +27,8 @@ final class AppState {
     var pendingInviteCode: String?
     var showJoinGroupSheet = false
     var showFavoriteTeamPicker = false
-    /// Set by selection-deadline push; Selections tab presents the setter sheet.
-    var pendingSelectionDeadlinePrompt = false
+    /// Set by selection-deadline push; Leagues tab opens Commissioner Settings.
+    var pendingCommissionerSettings = false
     /// League to select when a push/deep link includes `groupId`.
     var pendingDeepLinkGroupId: String?
     /// Set when Firebase failed to boot; RootView can show a non-crash error screen.
@@ -199,8 +199,8 @@ final class AppState {
             selectedTab = .leagues
         case .openSelectionDeadline(let groupId):
             selectDeepLinkGroup(groupId)
-            pendingSelectionDeadlinePrompt = true
-            selectedTab = .selections
+            pendingCommissionerSettings = true
+            selectedTab = .leagues
         }
     }
 

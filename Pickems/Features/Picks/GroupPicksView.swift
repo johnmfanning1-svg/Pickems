@@ -9,7 +9,6 @@ struct GroupPicksView: View {
     @State private var collapsedUserIds: Set<String> = []
     @State private var isRefreshingOwnPick = false
     @State private var ownPickLoadAttempted = false
-    @State private var manageMember: GroupMember?
 
     private var members: [GroupMember] {
         appState.groupService.members
@@ -122,18 +121,6 @@ struct GroupPicksView: View {
         }
         .onChange(of: appState.pickService.userPick) { _, newPick in
             appState.pickService.mergeOwnPickIntoAllPicks(newPick)
-        }
-        .sheet(item: $manageMember) { member in
-            if let week,
-               let groupId = appState.groupService.selectedGroup?.id {
-                CommissionerManagePicksSheet(
-                    member: member,
-                    week: week,
-                    groupId: groupId,
-                    slateGames: slateGames
-                )
-                .pickemsEnvironment(appState)
-            }
         }
     }
 
@@ -285,30 +272,8 @@ struct GroupPicksView: View {
             .buttonStyle(.plain)
             .accessibilityHint(isCollapsed ? "Show details" : "Hide details")
             .accessibilityAddTraits(.isButton)
-            .contextMenu {
-                if appState.isCommissioner, !isNominatingPhase {
-                    Button {
-                        manageMember = member
-                    } label: {
-                        Label("Manage Pickems…", systemImage: "gavel")
-                    }
-                }
-            }
-
             if !isCollapsed {
                 VStack(spacing: 8) {
-                    if appState.isCommissioner, !isNominatingPhase {
-                        Button {
-                            manageMember = member
-                        } label: {
-                            Label("Manage Pickems", systemImage: "slider.horizontal.3")
-                                .font(.caption.weight(.semibold))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(theme.accent)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                    }
                     memberBody(member: member, pick: pick, done: done)
                 }
                 .padding(.top, 8)
@@ -365,21 +330,18 @@ struct GroupPicksView: View {
     @ViewBuilder
     private func nominationBody(for member: GroupMember) -> some View {
         let noms = nominations.filter { $0.submittedBy == member.id }
-        let deadlinePassed = week?.isSelectionDeadlinePassed ?? true
+        let canRemake = week.map { WeekTransition.canRemakeSelections($0) } ?? false
         let isOwn = member.id == currentUserId
-        let canRemove = !deadlinePassed && (
-            appState.isCommissioner
-            || (isOwn && !appState.pickService.didSubmitNominations)
-        )
+        let canRemove = canRemake && isOwn && !appState.pickService.didSubmitNominations
 
         VStack(alignment: .leading, spacing: 8) {
-            if isOwn, !deadlinePassed {
+            if isOwn, canRemake {
                 Text("This list is Selections (the games). Remove Selection frees a slot. Pickems (who covers) start after the slate opens.")
                     .font(.caption)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .padding(.horizontal, 6)
             }
-            if isOwn, !deadlinePassed, appState.pickService.didSubmitNominations {
+            if isOwn, canRemake, appState.pickService.didSubmitNominations {
                 SecondaryButton("Edit Selections", icon: "pencil") {
                     appState.picksViewModel.unlockSelectionsForEditing(appState: appState)
                 }
@@ -404,7 +366,7 @@ struct GroupPicksView: View {
                                     .foregroundStyle(theme.accent)
                             }
                             Spacer(minLength: 8)
-                            if canRemove, let rules = appState.groupService.selectedGroup?.rules, let week {
+                            if canRemove, let rules = appState.groupService.selectedGroup?.rules {
                                 Button(role: .destructive) {
                                     appState.picksViewModel.removeNomination(nom, rules: rules, appState: appState)
                                 } label: {
