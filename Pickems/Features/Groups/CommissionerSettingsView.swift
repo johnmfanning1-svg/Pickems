@@ -22,6 +22,9 @@ struct CommissionerSettingsView: View {
     @State private var memberToPromote: GroupMember?
     @State private var showDeleteLeagueConfirm = false
     @State private var isWorkingMembers = false
+    @State private var showSelectionDeadlineSheet = false
+    @State private var showPickDeadlineSheet = false
+    @State private var showAdminGameBrowse = false
 
     @FocusState private var codeFieldFocused: Bool
 
@@ -57,7 +60,11 @@ struct CommissionerSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                CommissionerWeekAdminSections()
+                CommissionerWeekAdminSections(
+                    showSelectionDeadlineSheet: $showSelectionDeadlineSheet,
+                    showPickDeadlineSheet: $showPickDeadlineSheet,
+                    showAdminGameBrowse: $showAdminGameBrowse
+                )
                 leagueIdentitySection
                 membersSection
 
@@ -220,6 +227,78 @@ struct CommissionerSettingsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This permanently deletes the league, invite code, members, picks, standings, and season history for everyone. This cannot be undone.")
+            }
+            .sheet(isPresented: $showSelectionDeadlineSheet) {
+                SelectionDeadlineSheet(
+                    weekLabel: appState.groupService.currentWeek?.displayLabel ?? "This week",
+                    initialDeadline: appState.groupService.currentWeek?.selectionDeadline
+                ) { deadline in
+                    appState.picksViewModel.setSelectionDeadline(deadline, appState: appState)
+                }
+                .pickemsEnvironment(appState)
+            }
+            .sheet(isPresented: $showPickDeadlineSheet) {
+                if let week = appState.groupService.currentWeek {
+                    PickDeadlineEditorSheet(
+                        weekLabel: week.displayLabel,
+                        weekStatus: week.status,
+                        initialDeadline: week.pickDeadline,
+                        isPastDeadline: PickDeadlineCalculator.isPast(week.pickDeadline)
+                    ) { deadline, reopen, unlock in
+                        appState.picksViewModel.setPickDeadline(
+                            deadline,
+                            reopenWeek: reopen,
+                            unlockMemberPicks: unlock,
+                            appState: appState
+                        )
+                    }
+                    .pickemsEnvironment(appState)
+                } else {
+                    NavigationStack {
+                        ContentUnavailableView(
+                            "No Active Week",
+                            systemImage: "calendar",
+                            description: Text("Open Commissioner Settings again after a week is selected.")
+                        )
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Close") { showPickDeadlineSheet = false }
+                            }
+                        }
+                    }
+                    .pickemsEnvironment(appState)
+                }
+            }
+            .sheet(isPresented: $showAdminGameBrowse) {
+                GameBrowseView(
+                    games: appState.picksViewModel.espnGames,
+                    nominatedEventIds: Set(
+                        appState.pickService.nominations.map(\.espnEventId)
+                            + appState.pickService.slateGames.map(\.espnEventId)
+                    ),
+                    nominatorNamesByEventId: Dictionary(
+                        appState.pickService.nominations.map { ($0.espnEventId, $0.submitterName) },
+                        uniquingKeysWith: { first, _ in first }
+                    )
+                ) { game in
+                    appState.picksViewModel.handleGameSelection(game, appState: appState)
+                    showAdminGameBrowse = false
+                }
+                .pickemsEnvironment(appState)
+            }
+            .sheet(item: Binding(
+                get: { appState.picksViewModel.spreadEditGame },
+                set: { appState.picksViewModel.spreadEditGame = $0 }
+            )) { game in
+                SpreadEditorSheet(game: game) { spread, spreadTeamId in
+                    appState.picksViewModel.updateSpread(
+                        game,
+                        spread: spread,
+                        spreadTeamId: spreadTeamId,
+                        appState: appState
+                    )
+                }
+                .pickemsEnvironment(appState)
             }
         }
     }

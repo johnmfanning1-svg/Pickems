@@ -16,10 +16,9 @@ struct CommissionerManagePicksSheet: View {
     @State private var showClearConfirm = false
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Force Pickems for \(member.displayName)")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Force Pickems for \(member.displayName)")
                         .font(.headline)
                         .foregroundStyle(PickemsColors.textPrimary)
 
@@ -95,14 +94,16 @@ struct CommissionerManagePicksSheet: View {
             } message: {
                 Text("Their spread Pickems and submitted status for this week will be wiped. Slate Selections stay.")
             }
-            .onAppear {
-                if let existing = appState.pickService.allPicks.first(where: { $0.userId == member.id }) {
-                    draftPicks = existing.picks
-                } else if let own = appState.pickService.userPick, own.userId == member.id {
-                    draftPicks = own.picks
+            .task {
+                await appState.pickService.loadAllPicks(groupId: groupId, weekId: week.id)
+                if draftPicks.isEmpty {
+                    if let existing = appState.pickService.allPicks.first(where: { $0.userId == member.id }) {
+                        draftPicks = existing.picks
+                    } else if let own = appState.pickService.userPick, own.userId == member.id {
+                        draftPicks = own.picks
+                    }
                 }
             }
-        }
     }
 
     private func save(isLocked: Bool) {

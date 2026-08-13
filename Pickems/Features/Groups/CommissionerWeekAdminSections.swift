@@ -4,10 +4,9 @@ import SwiftUI
 struct CommissionerWeekAdminSections: View {
     @Environment(AppState.self) private var appState
 
-    @State private var showSelectionDeadlineSheet = false
-    @State private var showPickDeadlineSheet = false
-    @State private var showAdminGameBrowse = false
-    @State private var manageMember: GroupMember?
+    @Binding var showSelectionDeadlineSheet: Bool
+    @Binding var showPickDeadlineSheet: Bool
+    @Binding var showAdminGameBrowse: Bool
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var week: WeekSummary? { appState.groupService.currentWeek }
@@ -79,32 +78,6 @@ struct CommissionerWeekAdminSections: View {
         } footer: {
             Text("Deadlines, lock-early, and opening the slate live here — not on the Selections tab.")
         }
-        .sheet(isPresented: $showSelectionDeadlineSheet) {
-            SelectionDeadlineSheet(
-                weekLabel: week?.displayLabel ?? "This week",
-                initialDeadline: week?.selectionDeadline
-            ) { deadline in
-                picksVM.setSelectionDeadline(deadline, appState: appState)
-            }
-            .pickemsEnvironment(appState)
-        }
-        .sheet(isPresented: $showAdminGameBrowse) {
-            GameBrowseView(
-                games: picksVM.espnGames,
-                nominatedEventIds: Set(
-                    appState.pickService.nominations.map(\.espnEventId)
-                        + appState.pickService.slateGames.map(\.espnEventId)
-                ),
-                nominatorNamesByEventId: Dictionary(
-                    appState.pickService.nominations.map { ($0.espnEventId, $0.submitterName) },
-                    uniquingKeysWith: { first, _ in first }
-                )
-            ) { game in
-                picksVM.handleGameSelection(game, appState: appState)
-                showAdminGameBrowse = false
-            }
-            .pickemsEnvironment(appState)
-        }
     }
 
     @ViewBuilder
@@ -132,15 +105,6 @@ struct CommissionerWeekAdminSections: View {
             } footer: {
                 Text("Edit lines or remove a Selection. Members remake their own Selections on the Selections tab before the deadline.")
             }
-            .sheet(item: Binding(
-                get: { picksVM.spreadEditGame },
-                set: { picksVM.spreadEditGame = $0 }
-            )) { game in
-                SpreadEditorSheet(game: game) { spread, spreadTeamId in
-                    picksVM.updateSpread(game, spread: spread, spreadTeamId: spreadTeamId, appState: appState)
-                }
-                .pickemsEnvironment(appState)
-            }
         }
     }
 
@@ -166,45 +130,25 @@ struct CommissionerWeekAdminSections: View {
                 }
                 .listRowBackground(PickemsColors.cardBackground)
 
-                ForEach(appState.groupService.members) { member in
-                    Button {
-                        manageMember = member
-                    } label: {
-                        Label("Manage Pickems — \(member.displayName)", systemImage: "slider.horizontal.3")
+                if let groupId = appState.groupService.selectedGroup?.id {
+                    ForEach(appState.groupService.members) { member in
+                        NavigationLink {
+                            CommissionerManagePicksSheet(
+                                member: member,
+                                week: week,
+                                groupId: groupId,
+                                slateGames: appState.pickService.slateGames
+                            )
+                        } label: {
+                            Label("Manage Pickems — \(member.displayName)", systemImage: "slider.horizontal.3")
+                        }
+                        .listRowBackground(PickemsColors.cardBackground)
                     }
-                    .listRowBackground(PickemsColors.cardBackground)
                 }
             } header: {
                 Text("Pickems Admin")
             } footer: {
                 Text("Force or clear a member's Pickems, or change the Pickems deadline. This never removes Selections.")
-            }
-            .sheet(isPresented: $showPickDeadlineSheet) {
-                PickDeadlineEditorSheet(
-                    weekLabel: week.displayLabel,
-                    weekStatus: week.status,
-                    initialDeadline: week.pickDeadline,
-                    isPastDeadline: PickDeadlineCalculator.isPast(week.pickDeadline)
-                ) { deadline, reopen, unlock in
-                    picksVM.setPickDeadline(
-                        deadline,
-                        reopenWeek: reopen,
-                        unlockMemberPicks: unlock,
-                        appState: appState
-                    )
-                }
-                .pickemsEnvironment(appState)
-            }
-            .sheet(item: $manageMember) { member in
-                if let groupId = appState.groupService.selectedGroup?.id {
-                    CommissionerManagePicksSheet(
-                        member: member,
-                        week: week,
-                        groupId: groupId,
-                        slateGames: appState.pickService.slateGames
-                    )
-                    .pickemsEnvironment(appState)
-                }
             }
         }
     }
