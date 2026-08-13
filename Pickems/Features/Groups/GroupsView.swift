@@ -16,9 +16,9 @@ struct GroupsView: View {
                 VStack(spacing: 20) {
                     if appState.groupService.groups.isEmpty {
                         EmptyStateView(
-                            icon: "person.3.fill",
-                            title: "No Groups Yet",
-                            message: "Join or create a group to start competing.",
+                            icon: "trophy.fill",
+                            title: "No Leagues Yet",
+                            message: "Join or create a league to start competing.",
                             help: PickemsHelp.groupsOverview
                         )
                     } else {
@@ -49,7 +49,7 @@ struct GroupsView: View {
                 .padding(.vertical, 8)
             }
             .pickemsScreenBackground()
-            .navigationTitle("Groups")
+            .navigationTitle("Leagues")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 HelpToolbarItem(topic: PickemsHelp.groupsOverview)
@@ -344,25 +344,13 @@ struct GroupsView: View {
 
         return VStack(spacing: 12) {
             LazyVGrid(columns: columns, spacing: 12) {
-                GroupChatEntryButton(group: group)
-
                 NavigationLink {
-                    GroupPicksView()
+                    StatsView()
                 } label: {
-                    gridActionLabel("Group Pickems", systemImage: "list.bullet.clipboard")
+                    gridActionLabel("Stats", systemImage: "chart.line.uptrend.xyaxis")
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("See who has submitted and view group Pickems")
-
-                if let week = appState.groupService.currentWeek {
-                    NavigationLink {
-                        GroupSlateView(group: group, week: week)
-                    } label: {
-                        gridActionLabel(slateActionTitle(for: week), systemImage: slateActionIcon(for: week.status))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint(slateActionHint(for: week.status))
-                }
+                .accessibilityHint("View your pick performance stats")
 
                 NavigationLink {
                     MemberListView()
@@ -371,6 +359,16 @@ struct GroupsView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityHint("View league members and season records")
+
+                NavigationLink {
+                    RivalryView()
+                } label: {
+                    gridActionLabel("Rivalry", systemImage: "person.line.dotted.person.fill")
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Compare records against another member")
+
+                GroupChatEntryButton(group: group)
             }
 
             InviteShareButton(group: group)
@@ -391,43 +389,6 @@ struct GroupsView: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
             )
-    }
-
-    private func slateActionTitle(for week: WeekSummary) -> String {
-        switch week.status {
-        case .selection: return appState.isCommissioner ? "Build Slate" : "Make Selections"
-        case .picking:
-            if PickDeadlineCalculator.isPast(week.pickDeadline) {
-                return "View Pickems"
-            }
-            if appState.pickService.userPick?.isLocked == true {
-                return "Edit Pickems"
-            }
-            let pickCount = appState.pickService.userPick?.picks.count ?? 0
-            let slateCount = appState.pickService.slateGames.count
-            if pickCount == 0 { return "Make Pickems" }
-            if slateCount > 0, pickCount < slateCount { return "Finish Pickems" }
-            return "Submit Pickems"
-        case .locked, .scored: return "Live Pickems"
-        }
-    }
-
-    private func slateActionIcon(for status: WeekStatus) -> String {
-        switch status {
-        case .selection: return "plus.rectangle.on.rectangle"
-        case .picking: return "hand.tap"
-        case .locked, .scored: return "sportscourt.fill"
-        }
-    }
-
-    private func slateActionHint(for status: WeekStatus) -> String {
-        switch status {
-        case .selection: return appState.isCommissioner
-            ? "Build this week's slate"
-            : "Make Selections for this week's slate"
-        case .picking: return "Make your Pickems for this week"
-        case .locked, .scored: return "Monitor live slate scores and results"
-        }
     }
 
     // MARK: - Manage / secondary
@@ -472,22 +433,6 @@ struct GroupsView: View {
                         ) {
                             showCommissionerSettings = true
                         }
-                    }
-
-                    manageNavRow(
-                        title: "Stats",
-                        systemImage: "chart.line.uptrend.xyaxis",
-                        hint: "View your pick performance stats"
-                    ) {
-                        StatsView()
-                    }
-
-                    manageNavRow(
-                        title: "Rivalry",
-                        systemImage: "person.line.dotted.person.fill",
-                        hint: "Compare records against another member"
-                    ) {
-                        RivalryView()
                     }
 
                     manageNavRow(

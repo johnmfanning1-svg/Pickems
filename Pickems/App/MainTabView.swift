@@ -13,14 +13,19 @@ struct MainTabView: View {
                 .accessibilityHint("Scores, quick actions, and standings preview")
 
             GroupsView()
-                .tabItem { Label("Groups", systemImage: "person.3.fill") }
-                .tag(AppTab.groups)
-                .accessibilityHint("Your leagues, invites, and full leaderboard")
+                .tabItem { Label("Leagues", systemImage: "trophy.fill") }
+                .tag(AppTab.leagues)
+                .accessibilityHint("League info, leaderboards, members, and chat")
 
-            PicksView()
-                .tabItem { Label("Picks", systemImage: "checkmark.circle.fill") }
-                .tag(AppTab.picks)
-                .accessibilityHint("Make Selections and submit Pickems")
+            SelectionsView()
+                .tabItem { Label("Selections", systemImage: "sportscourt.fill") }
+                .tag(AppTab.selections)
+                .accessibilityHint("Choose this week's games for your league")
+
+            PickemsTabView()
+                .tabItem { Label("Pickems", systemImage: "checkmark.circle.fill") }
+                .tag(AppTab.pickems)
+                .accessibilityHint("Pick who covers the spread")
 
             ProfileView()
                 .tabItem { Label("Profile", systemImage: "person.fill") }
@@ -28,5 +33,21 @@ struct MainTabView: View {
                 .accessibilityHint("Display name, favorite team, and notification settings")
         }
         .tint(theme.accent)
+        .sheet(isPresented: $appState.showNotificationOnboarding) {
+            StayOnTimeSheet()
+                .pickemsEnvironment(appState)
+        }
+    }
+}
+
+struct SelectionsView: View {
+    var body: some View {
+        PicksView(kind: .selections)
+    }
+}
+
+struct PickemsTabView: View {
+    var body: some View {
+        PicksView(kind: .pickems)
     }
 }

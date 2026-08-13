@@ -1,6 +1,12 @@
 import SwiftUI
 
+enum PicksWorkspaceKind {
+    case selections
+    case pickems
+}
+
 struct PicksView: View {
+    var kind: PicksWorkspaceKind = .pickems
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
     @State private var showSelectionDeadlineSheet = false
@@ -39,12 +45,14 @@ struct PicksView: View {
                         EmptyStateView(
                             icon: "sportscourt.fill",
                             title: "No Active Week",
-                            message: "Join a group to start making Pickems.",
-                            help: PickemsHelp.picksOverview
+                            message: kind == .selections
+                                ? "Join a league to start making Selections."
+                                : "Join a league to start making Pickems.",
+                            help: kind == .selections ? PickemsHelp.nominations : PickemsHelp.picksOverview
                         )
                     }
 
-                    if appState.groupService.selectedGroup != nil {
+                    if kind == .pickems, appState.groupService.selectedGroup != nil {
                         seasonHistoryControl
                     }
 
@@ -58,10 +66,10 @@ struct PicksView: View {
                 .padding(.vertical)
             }
             .pickemsScreenBackground()
-            .navigationTitle("Picks")
+            .navigationTitle(kind == .selections ? "Selections" : "Pickems")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                HelpToolbarItem(topic: PickemsHelp.picksOverview)
+                HelpToolbarItem(topic: kind == .selections ? PickemsHelp.nominations : PickemsHelp.picksOverview)
             }
             .refreshable { await reloadPicks() }
             .sheet(isPresented: $viewModel.showGameBrowse) {
@@ -143,7 +151,7 @@ struct PicksView: View {
                 }
             }
             .onChange(of: appState.pendingSelectionDeadlinePrompt) { _, pending in
-                if pending, appState.isCommissioner,
+                if pending, kind == .selections, appState.isCommissioner,
                    appState.groupService.currentWeek?.status == .selection {
                     showSelectionDeadlineSheet = true
                     appState.pendingSelectionDeadlinePrompt = false
@@ -158,7 +166,7 @@ struct PicksView: View {
             }
             .syncPicksDraftFromServer()
             .onChange(of: appState.selectedTab) { _, tab in
-                if tab == .picks {
+                if tab == .selections || tab == .pickems {
                     viewModel.resyncWhenVisible(appState: appState)
                 }
             }
@@ -241,10 +249,51 @@ struct PicksView: View {
 
     @ViewBuilder
     private func statusContent(for week: WeekSummary) -> some View {
-        switch week.status {
-        case .selection: selectionPhase(week: week)
-        case .picking: pickingPhase(week: week)
-        case .locked, .scored: lockedPhase(week: week)
+        switch kind {
+        case .selections:
+            if let deadline = week.selectionDeadline {
+                SelectionDeadlineBanner(deadline: deadline)
+            } else if week.status == .selection, appState.isCommissioner {
+                ContextualTipBanner(
+                    icon: "bell.badge",
+                    message: "Set a Selection deadline so members finish before kickoff."
+                )
+                .padding(.horizontal)
+            }
+            if week.status == .selection {
+                selectionPhase(week: week)
+                GroupPicksView(embedded: true, forceNominatingDisplay: true)
+                    .padding(.top, 8)
+            } else {
+                ContextualTipBanner(
+                    icon: "lock.fill",
+                    message: "Selections are locked. Pickems are on the Pickems tab."
+                )
+                .padding(.horizontal)
+                GroupPicksView(embedded: true, forceNominatingDisplay: true)
+            }
+        case .pickems:
+            if WeekTransition.arePickemsOpen(week) {
+                if let deadline = week.pickDeadline {
+                    PickDeadlineBanner(deadline: deadline)
+                }
+                switch week.status {
+                case .picking: pickingPhase(week: week)
+                case .locked, .scored: lockedPhase(week: week)
+                case .selection: EmptyView()
+                }
+            } else {
+                ContextualTipBanner(
+                    icon: "lock.fill",
+                    message: "Pickems open when every Selection is in or the Selection deadline passes. Your commissioner can lock early."
+                )
+                .padding(.horizontal)
+                pickingPhase(week: week)
+                    .disabled(true)
+                    .opacity(0.45)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("Pickems locked until Selections are complete")
+            }
         }
     }
 
@@ -271,7 +320,7 @@ struct PicksView: View {
         let target = rules.expectedSlateSize(memberCount: memberCount)
         return VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
-                title: "Build Slate",
+                title: "Make Selections",
                 subtitle: "\(appState.pickService.slateGames.count) of \(target) games selected",
                 help: PickemsHelp.commissionerSlate
             )
@@ -670,7 +719,7 @@ struct PicksView: View {
             }
 
             NavigationLink { GroupPicksView() } label: {
-                Label("View Group Pickems", systemImage: "person.3")
+                Label("View League Pickems", systemImage: "person.3")
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .foregroundStyle(theme.accent)

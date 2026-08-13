@@ -75,10 +75,12 @@ struct ProductExpansionTests {
     }
 
     @Test func deepLinkParsesNewNotificationTypes() {
-        #expect(DeepLinkRouter.parseNotification(userInfo: ["type": "game_final"]) == .openLiveSlate)
-        #expect(DeepLinkRouter.parseNotification(userInfo: ["type": "took_the_lead"]) == .openLiveSlate)
-        #expect(DeepLinkRouter.parseNotification(userInfo: ["type": "season_closed"]) == .openGroups)
+        #expect(DeepLinkRouter.parseNotification(userInfo: ["type": "game_final"]) == .openLiveSlate(groupId: nil))
+        #expect(DeepLinkRouter.parseNotification(userInfo: ["type": "took_the_lead"]) == .openLiveSlate(groupId: nil))
+        #expect(DeepLinkRouter.parseNotification(userInfo: ["type": "season_closed"]) == .openLeagues(groupId: nil))
         #expect(DeepLinkRouter.parse(url: URL(string: "pickems://discover")!) == .openDiscover)
+        #expect(DeepLinkRouter.parse(url: URL(string: "pickems://selections")!) == .openSelections(groupId: nil))
+        #expect(DeepLinkRouter.parse(url: URL(string: "pickems://pickems")!) == .openPickems(groupId: nil))
     }
 
     private func makeFinal(id: String, home: Int, away: Int) -> SlateGame {

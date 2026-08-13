@@ -19,7 +19,7 @@ struct GroupChatEntryButton: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(accessibilityLabel)
-            .accessibilityHint("Open group chat")
+            .accessibilityHint("Open league chat")
             .task(id: group.id) {
                 await refreshBadge()
             }

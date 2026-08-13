@@ -70,7 +70,7 @@ struct ChatModerationTests {
 
     @Test func chatPushLandsOnGroupsRatherThanHome() {
         #expect(
-            DeepLinkRouter.parseNotification(userInfo: ["type": "chat_message"]) == .openGroups
+            DeepLinkRouter.parseNotification(userInfo: ["type": "chat_message"]) == .openLeagues(groupId: nil)
         )
     }
 

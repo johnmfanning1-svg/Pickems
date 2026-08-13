@@ -64,3 +64,53 @@ struct PickDeadlineBanner: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+/// Same visual language as `PickDeadlineBanner`, for the Selection deadline.
+struct SelectionDeadlineBanner: View {
+    let deadline: Date
+    @Environment(\.themePalette) private var theme
+
+    private var isPast: Bool {
+        PickDeadlineCalculator.isPast(deadline)
+    }
+
+    private var lockTime: String {
+        PickDeadlineCalculator.lockTimeLabel(for: deadline)
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: isPast ? "lock.fill" : "clock.fill")
+                .font(.title3)
+                .foregroundStyle(isPast ? theme.accent : PickemsColors.warning)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(isPast ? "Selections locked" : "Selections due \(lockTime)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textPrimary)
+                Text(isPast
+                    ? lockTime
+                    : PickDeadlineCalculator.countdownLabel(to: deadline))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(PickemsColors.textSecondary)
+            }
+
+            Spacer(minLength: 0)
+
+            HelpInfoButton(topic: PickemsHelp.selectionDeadline, size: .subheadline)
+        }
+        .padding()
+        .background(PickemsColors.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(
+                    (isPast ? theme.accent : PickemsColors.warning).opacity(0.2),
+                    lineWidth: 1
+                )
+        )
+        .padding(.horizontal)
+        .accessibilityElement(children: .combine)
+    }
+}

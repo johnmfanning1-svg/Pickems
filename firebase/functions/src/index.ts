@@ -95,15 +95,18 @@ export const onWeekCreated = onDocumentCreated(
 );
 
 /**
- * Nudge commissioners who haven't set a selection deadline, and notify when
- * the deadline passes while the week is still in selection.
+ * Nudge commissioners who haven't set a selection deadline, remind members
+ * before it hits, and open Pickems when the deadline passes.
  */
 export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => {
   const nowMs = Date.now();
+  const MS_PER_MIN = 60 * 1000;
+  const MS_PER_HOUR = 60 * MS_PER_MIN;
   const groups = await db.collection("groups").get();
 
   for (const groupDoc of groups.docs) {
     const commissionerId = groupDoc.data().commissionerId as string | undefined;
+    const memberIds = (groupDoc.data().memberIds as string[]) ?? [];
     if (!commissionerId) continue;
 
     const weeks = await groupDoc.ref
@@ -119,6 +122,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
       const weekId = weekDoc.id;
       const weekNum = week.weekNumber ?? "";
       const deadline = week.selectionDeadline as admin.firestore.Timestamp | undefined;
+      const payload = { groupId, weekId };
 
       if (!deadline && !week.selectionDeadlineNudgeSent) {
         await sendToUser(
@@ -126,9 +130,38 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
           "Set Selection deadline",
           `Week ${weekNum} needs a Selection deadline so members finish before kickoff.`,
           "set_selection_deadline",
-          { groupId, weekId }
+          payload
         );
         await weekDoc.ref.update({ selectionDeadlineNudgeSent: true });
+        continue;
+      }
+
+      if (deadline && deadline.toMillis() > nowMs) {
+        const msUntil = deadline.toMillis() - nowMs;
+        const in24hWindow = msUntil >= 23 * MS_PER_HOUR && msUntil <= 25 * MS_PER_HOUR;
+        const in1hWindow = msUntil >= 50 * MS_PER_MIN && msUntil <= 70 * MS_PER_MIN;
+        const need24h = in24hWindow && !week.selectionReminder24hSent;
+        const need1h = in1hWindow && !week.selectionReminder1hSent;
+        if (need24h || need1h) {
+          const pending = await membersMissingSelections(
+            weekDoc.ref,
+            memberIds,
+            week.selectionsPerMember as number | undefined
+          );
+          const hours = need1h ? "1 hour" : "24 hours";
+          await sendToUsers(
+            pending,
+            `Selections due in ${hours}`,
+            `Week ${weekNum}: finish Selections before the deadline.`,
+            "selection_deadline_reminder",
+            payload
+          );
+          await weekDoc.ref.update(
+            need1h
+              ? { selectionReminder1hSent: true }
+              : { selectionReminder24hSent: true }
+          );
+        }
         continue;
       }
 
@@ -137,18 +170,57 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
         deadline.toMillis() <= nowMs &&
         !week.selectionDeadlinePassedNotified
       ) {
-        await sendToUser(
-          commissionerId,
-          "Selection deadline passed",
-          `Week ${weekNum}: fill remaining games or open with fewer.`,
-          "selection_deadline_passed",
-          { groupId, weekId }
-        );
-        await weekDoc.ref.update({ selectionDeadlinePassedNotified: true });
+        await materializeNominations(groupId, weekId);
+        const gamesSnap = await weekDoc.ref.collection("games").get();
+        const kickoffs = gamesSnap.docs
+          .map((d) => d.data().kickoff as admin.firestore.Timestamp | undefined)
+          .filter((ts): ts is admin.firestore.Timestamp => !!ts)
+          .map((ts) => ts.toMillis());
+        const earliest = kickoffs.length ? Math.min(...kickoffs) : undefined;
+
+        if (earliest != null) {
+          await weekDoc.ref.update({
+            status: "picking",
+            selectionDeadlinePassedNotified: true,
+            pickDeadline: admin.firestore.Timestamp.fromMillis(earliest),
+          });
+          await sendToUsers(
+            memberIds,
+            "Pickems are open",
+            `Week ${weekNum}: the Selection deadline passed. Make your Pickems.`,
+            "pickems_open",
+            payload
+          );
+        } else {
+          await sendToUser(
+            commissionerId,
+            "Selection deadline passed",
+            `Week ${weekNum}: fill remaining games or open with fewer.`,
+            "selection_deadline_passed",
+            payload
+          );
+          await weekDoc.ref.update({ selectionDeadlinePassedNotified: true });
+        }
       }
     }
   }
 });
+
+async function membersMissingSelections(
+  weekRef: admin.firestore.DocumentReference,
+  memberIds: string[],
+  selectionsPerMember: number | undefined
+): Promise<string[]> {
+  const perMember = Math.max(selectionsPerMember ?? 1, 1);
+  const noms = await weekRef.collection("nominations").get();
+  const byUser: Record<string, number> = {};
+  for (const doc of noms.docs) {
+    const uid = doc.data().submittedBy as string | undefined;
+    if (!uid) continue;
+    byUser[uid] = (byUser[uid] ?? 0) + 1;
+  }
+  return memberIds.filter((id) => (byUser[id] ?? 0) < perMember);
+}
 
 /** Reminders 24h and 1h before pickDeadline for weeks still in picking. */
 export const deadlineReminders = onSchedule("every 15 minutes", async () => {

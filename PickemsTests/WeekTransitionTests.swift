@@ -6,7 +6,8 @@ struct WeekTransitionTests {
     private func week(
         status: WeekStatus,
         deadline: Date? = nil,
-        lockedAt: Date? = nil
+        lockedAt: Date? = nil,
+        selectionDeadline: Date? = nil
     ) -> WeekSummary {
         WeekSummary(
             id: "2026-W1",
@@ -18,7 +19,8 @@ struct WeekTransitionTests {
             selectionsPerMember: 1,
             lockedAt: lockedAt,
             pickDeadline: deadline,
-            nominationCount: 5
+            nominationCount: 5,
+            selectionDeadline: selectionDeadline
         )
     }
 
@@ -67,6 +69,26 @@ struct WeekTransitionTests {
     @Test func picksNotEditableAfterPickDeadline() {
         let deadline = Date().addingTimeInterval(-60)
         #expect(!WeekTransition.arePicksEditable(week(status: .picking, deadline: deadline)))
+    }
+
+    @Test func fillingSlateDoesNotAutoOpenPicking() {
+        #expect(!WeekTransition.opensPickingWhenSlateFills)
+    }
+
+    @Test func remakeSelectionsAllowedDuringSelectionBeforeDeadline() {
+        let future = Date().addingTimeInterval(7 * 24 * 3600)
+        #expect(WeekTransition.canRemakeSelections(week(status: .selection, selectionDeadline: future)))
+        #expect(WeekTransition.canRemakeSelections(week(status: .selection)))
+        #expect(WeekTransition.isSlateEditable(week(status: .selection, selectionDeadline: future)))
+    }
+
+    @Test func remakeSelectionsBlockedAfterDeadlineOrPicking() {
+        let past = Date().addingTimeInterval(-60)
+        #expect(!WeekTransition.canRemakeSelections(week(status: .selection, selectionDeadline: past)))
+        #expect(!WeekTransition.canRemakeSelections(week(status: .picking)))
+        #expect(!WeekTransition.arePickemsOpen(week(status: .selection)))
+        #expect(WeekTransition.arePickemsOpen(week(status: .picking)))
+        #expect(!WeekTransition.arePicksEditable(week(status: .selection)))
     }
 
     @Test func fillingSlateSetsDeadlineWithoutLockedAt() {

@@ -42,6 +42,9 @@ final class GroupService {
     /// When true, Picks is browsing a non-active week — don't snap back to ESPN current on sync.
     @ObservationIgnored
     private var weekSelectionPinned = false
+    /// Deep-link league id waiting for `loadGroups` to finish.
+    @ObservationIgnored
+    private var pendingGroupId: String?
 
     func loadGroups(for userId: String) {
         groupListener?.remove()
@@ -86,7 +89,11 @@ final class GroupService {
                         await self.backfillInviteCodeIndexes(for: userId)
                     }
                     let previousSelectedId = self.selectedGroup?.id
-                    if let selected = self.selectedGroup,
+                    if let pendingId = self.pendingGroupId,
+                       let pending = self.groups.first(where: { $0.id == pendingId }) {
+                        self.pendingGroupId = nil
+                        self.selectedGroup = pending
+                    } else if let selected = self.selectedGroup,
                        !self.groups.contains(where: { $0.id == selected.id }) {
                         self.selectedGroup = self.groups.first
                         self.clearWeekObservationIfNeeded()
@@ -108,12 +115,22 @@ final class GroupService {
     }
 
     func selectGroup(_ group: PickemGroup) {
+        pendingGroupId = nil
         selectedGroup = group
         weekSelectionPinned = false
         availableWeeks = []
         Task {
             await syncCurrentWeekFromESPN(groupId: group.id)
             await loadAvailableWeeks(groupId: group.id)
+        }
+    }
+
+    /// Select by id (push / deep link). If the league is not loaded yet, remember it.
+    func selectGroup(id: String) {
+        if let group = groups.first(where: { $0.id == id }) {
+            selectGroup(group)
+        } else {
+            pendingGroupId = id
         }
     }
 
@@ -555,6 +572,7 @@ final class GroupService {
         clearWeekObservationIfNeeded()
         groups = []
         selectedGroup = nil
+        pendingGroupId = nil
         seasonArchives = []
         careerRecords = []
         hasCompletedInitialGroupLoad = false

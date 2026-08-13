@@ -9,7 +9,7 @@ enum InviteShare {
 
         1. Download Pickems: \(AppConfig.appStoreURL)
         2. Sign in with Apple or email
-        3. Tap Join Group and enter the code above
+        3. Tap Join League and enter the code above
 
         Let's run it this CFB season!
         """

@@ -11,8 +11,8 @@ struct OnboardingView: View {
     @State private var showFavoriteTeamPicker = false
 
     enum OnboardingMode: String, CaseIterable {
-        case join = "Join Group"
-        case create = "Create Group"
+        case join = "Join League"
+        case create = "Create League"
     }
 
     var body: some View {
@@ -31,7 +31,7 @@ struct OnboardingView: View {
                             .foregroundStyle(PickemsColors.textPrimary)
                             .multilineTextAlignment(.center)
 
-                        Text("Join a league or start your own pick'em group.")
+                        Text("Join a league or start your own pick'em league.")
                             .font(.subheadline)
                             .foregroundStyle(PickemsColors.textSecondary)
                             .multilineTextAlignment(.center)
@@ -40,13 +40,15 @@ struct OnboardingView: View {
 
                     favoriteTeamSection
 
+                    stayOnTimeSection
+
                     Picker("Mode", selection: $mode) {
                         ForEach(OnboardingMode.allCases, id: \.self) { mode in
                             Text(mode.rawValue).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
-                    .accessibilityLabel("Join or create a group")
+                    .accessibilityLabel("Join or create a league")
 
                     if mode == .join {
                         joinSection
@@ -143,6 +145,30 @@ struct OnboardingView: View {
         }
     }
 
+    private var stayOnTimeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Stay on time")
+                .font(.headline)
+                .foregroundStyle(PickemsColors.textPrimary)
+            Text("Allow notifications for Selection and Pickems deadlines. You can change this later in Profile.")
+                .font(.subheadline)
+                .foregroundStyle(PickemsColors.textSecondary)
+            Button {
+                Task {
+                    await appState.notificationService.requestPermission()
+                    if let uid = appState.currentUserId {
+                        appState.authService.markNotificationOnboardingDismissed(for: uid)
+                    }
+                }
+            } label: {
+                Label("Allow notifications", systemImage: "bell.badge.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(theme.accent)
+        }
+    }
+
     private var joinSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -160,7 +186,7 @@ struct OnboardingView: View {
                 .accessibilityLabel("Invite code")
 
             PrimaryButton(
-                title: "Join Group",
+                title: "Join League",
                 isLoading: isWorking,
                 accessibilityHint: "Join a league using the invite code from your commissioner"
             ) {

@@ -39,13 +39,36 @@ enum WeekTransition {
         toPickingUpdates(rules: rules, kickoffs: kickoffs, setDeadline: true, lockSlate: true)
     }
 
+    /// Completing Selections never opens Pickems. Only the Selection deadline
+    /// (Cloud Function) or commissioner lock-early (`lockEarlyUpdates`) flips status.
+    static var opensPickingWhenSlateFills: Bool { false }
+
+    /// Members can add/remove Selections while the week is still in `.selection`
+    /// and the Selection deadline has not passed. After lock-early or deadline,
+    /// status is `.picking` and Selections are frozen.
+    static func canRemakeSelections(_ week: WeekSummary, now: Date = Date()) -> Bool {
+        guard week.status == .selection else { return false }
+        if let deadline = week.selectionDeadline {
+            return now < deadline
+        }
+        return true
+    }
+
+    /// Pickems are available only after the week leaves `.selection`.
+    static func arePickemsOpen(_ week: WeekSummary) -> Bool {
+        switch week.status {
+        case .picking, .locked, .scored: return true
+        case .selection: return false
+        }
+    }
+
     /// Slate games/noms can change during selection, or during picking before the pick deadline.
     /// Past weeks already stamped with a fill-time `lockedAt` stay editable until `pickDeadline`.
     /// Locked/scored weeks are never editable, even if `pickDeadline` is still in the future.
     static func isSlateEditable(_ week: WeekSummary, now: Date = Date()) -> Bool {
         switch week.status {
         case .selection:
-            return true
+            return canRemakeSelections(week, now: now)
         case .picking:
             if let deadline = week.pickDeadline {
                 return now < deadline

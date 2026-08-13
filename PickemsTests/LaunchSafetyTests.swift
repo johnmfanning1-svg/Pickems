@@ -26,10 +26,22 @@ struct LaunchSafetyTests {
     @Test func deepLinkNotificationParseIsNonThrowing() {
         #expect(DeepLinkRouter.parseNotification(userInfo: [:]) == nil)
         #expect(
-            DeepLinkRouter.parseNotification(userInfo: ["type": "week_scored"]) == .openPicks
+            DeepLinkRouter.parseNotification(userInfo: ["type": "week_scored"]) == .openPickems(groupId: nil)
         )
         #expect(
-            DeepLinkRouter.parseNotification(userInfo: ["type": "season_closed"]) == .openGroups
+            DeepLinkRouter.parseNotification(userInfo: ["type": "season_closed"]) == .openLeagues(groupId: nil)
+        )
+        #expect(
+            DeepLinkRouter.parseNotification(userInfo: [
+                "type": "selection_deadline_reminder",
+                "groupId": "g1",
+            ]) == .openSelections(groupId: "g1")
+        )
+        #expect(
+            DeepLinkRouter.parseNotification(userInfo: [
+                "type": "deadline_reminder",
+                "groupId": "g1",
+            ]) == .openPickems(groupId: "g1")
         )
         // Ensure malformed payloads never trap.
         let junk: [AnyHashable: Any] = [

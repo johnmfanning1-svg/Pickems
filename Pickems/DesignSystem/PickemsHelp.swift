@@ -23,7 +23,7 @@ enum PickemsHelp {
         message: "Your command center for the current CFB week. Scores refresh automatically on game days.",
         tips: [
             "Pull down to refresh scores and week data.",
-            "Tap Submit Pickems or Leaderboard for quick navigation.",
+            "Tap Make Selections or Make Pickems to jump to this week's action.",
             "Your slate games show Pickem results once games finish."
         ]
     )
@@ -53,7 +53,7 @@ enum PickemsHelp {
     static let standingsPreview = HelpTopic(
         id: "home.standings",
         title: "Standings Preview",
-        message: "Shows the top three players for the current week. Full rankings live on the Groups tab.",
+        message: "Shows the top three players for the current week. Full rankings live on the Leagues tab.",
         tips: ["Batting average is wins ÷ (wins + losses)."]
     )
 
@@ -61,31 +61,31 @@ enum PickemsHelp {
 
     static let picksOverview = HelpTopic(
         id: "picks.overview",
-        title: "Picks",
-        message: "Make your weekly Pickems against the slate your group selected.",
+        title: "Pickems",
+        message: "Make your weekly Pickems against the slate your league selected.",
         tips: [
             "Tap a team to select them against the spread.",
             "Submit before the deadline shown at the top.",
-            "Draft Pickems save automatically as you tap."
+            "Draft Pickems save automatically as you tap.",
+            "Pickems stay locked until Selections are done or the Selection deadline passes."
         ]
     )
 
     static let nominations = HelpTopic(
         id: "picks.nominations",
-        title: "Make Selections",
-        message: "Help build this week's slate by selecting games for the group.",
+        title: "Selections",
+        message: "Pick this week's games for your league. Already-selected games are greyed out with the member who chose them.",
         tips: [
             "Each member selects up to the league’s per-member limit.",
-            "Before the Selection deadline, tap Edit Selections, remove a game, then Select Game to replace it.",
-            "When everyone finishes (or the commissioner opens the week), Pickems begin.",
-            "After the Selection deadline, only the commissioner can add games or open a shorter slate."
+            "Clear a Selection before the deadline, then pick a replacement.",
+            "Pickems do not open just because the slate is full — wait for the deadline or a commissioner lock-early."
         ]
     )
 
     static let commissionerSlate = HelpTopic(
         id: "picks.commissionerSlate",
-        title: "Build Slate",
-        message: "As commissioner, you choose every game for the group this week.",
+        title: "Make Selections",
+        message: "As commissioner, you choose every game for the league this week.",
         tips: [
             "Browse ESPN games and tap to add them.",
             "Add games until you reach your games-per-week setting.",
@@ -121,7 +121,7 @@ enum PickemsHelp {
         title: "Pickems Deadline",
         message: "Pickems lock at the start time of the earliest game on this week’s slate — unless the commissioner sets a custom deadline.",
         tips: [
-            "Commissioners can extend or reopen the deadline from the Picks screen.",
+            "Commissioners can extend or reopen the deadline from the Pickems tab.",
             "After the deadline, Pickems cannot be changed unless the commissioner unlocks them."
         ]
     )
@@ -130,8 +130,8 @@ enum PickemsHelp {
 
     static let groupsOverview = HelpTopic(
         id: "groups.overview",
-        title: "Groups",
-        message: "Your private pick'em league. Switch between groups using the chips at the top.",
+        title: "Leagues",
+        message: "Your private pick'em league. Switch leagues using the chips at the top. Selections and Pickems live on their own tabs.",
         tips: [
             "Share your invite code so friends can join.",
             "Toggle between weekly and season standings."
@@ -175,17 +175,17 @@ enum PickemsHelp {
         tips: [
             "First and last name identify your account; username is what friends see in leagues.",
             "Usernames must be unique (letters, numbers, underscore).",
-            "Push alerts cover Pickems deadlines and scored weeks — change them anytime in iOS Settings."
+            "Push alerts cover Selection and Pickems deadlines — toggle each in Profile, or change iOS permission in Settings."
         ]
     )
 
     static let notifications = HelpTopic(
         id: "profile.notifications",
         title: "Notifications",
-        message: "Pickems can send push alerts for Pickems deadline reminders and when your week finishes scoring. Nothing else.",
+        message: "Turn Selection and Pickems deadline reminders on or off. Game-final and scored-week alerts still follow iOS permission.",
         tips: [
-            "Tap Allow notifications the first time to get the iOS permission prompt.",
-            "If alerts are Off, open Settings to re-enable them for Pickems.",
+            "Turning a toggle on asks for iOS permission if you have not allowed it yet.",
+            "If iOS blocked alerts, Open Settings to re-enable them for Pickems.",
             "You can turn system notifications off anytime in iOS Settings → Pickems → Notifications."
         ]
     )
@@ -194,16 +194,16 @@ enum PickemsHelp {
 
     static let createGroup = HelpTopic(
         id: "onboarding.create",
-        title: "Create a Group",
+        title: "Create a League",
         message: "Start a private league. You'll be the commissioner and can invite friends with your code.",
-        tips: ["You can configure slate size and rules after creating the group."]
+        tips: ["You can configure slate size and rules after creating the league."]
     )
 
     static let joinGroup = HelpTopic(
         id: "onboarding.join",
-        title: "Join a Group",
+        title: "Join a League",
         message: "Enter the 4–8 character invite code from your commissioner.",
-        tips: ["Codes are case-insensitive.", "Ask your commissioner to tap Invite Friends on the Groups tab."]
+        tips: ["Codes are case-insensitive.", "Ask your commissioner to tap Invite Friends on the Leagues tab."]
     )
 }
 
