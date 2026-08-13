@@ -73,9 +73,7 @@ struct HomeView: View {
                 ToolbarItem(placement: .principal) {
                     groupTitleMenu
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    HelpToolbarButton(topic: PickemsHelp.homeOverview)
-                }
+                HelpToolbarItem(topic: PickemsHelp.homeOverview)
             }
             .refreshable {
                 await viewModel.refresh(appState: appState)
@@ -86,17 +84,26 @@ struct HomeView: View {
                 WidgetSnapshotService.publish(from: appState)
                 LiveActivityController.sync(from: appState)
             }
+            .onAppear {
+                viewModel.startLiveUpdates(appState: appState)
+            }
+            .onChange(of: appState.selectedTab) { _, tab in
+                if tab == .home {
+                    viewModel.startLiveUpdates(appState: appState)
+                }
+            }
+            .onChange(of: appState.pickService.userPick) { _, _ in
+                Task { await viewModel.refresh(appState: appState) }
+            }
             .onChange(of: appState.pickService.slateGames) { _, _ in
                 coverMoment.observe(appState: appState)
                 WidgetSnapshotService.publish(from: appState)
                 LiveActivityController.sync(from: appState)
+                Task { await viewModel.refresh(appState: appState) }
             }
             .onChange(of: appState.groupService.standings) { _, _ in
                 WidgetSnapshotService.publish(from: appState)
                 LiveActivityController.sync(from: appState)
-            }
-            .onDisappear {
-                viewModel.stopLiveUpdates()
             }
             .sheet(isPresented: $coverMoment.isPresented) {
                 CoverMomentView(
@@ -249,24 +256,13 @@ struct HomeView: View {
 
     private var moreSections: some View {
         VStack(alignment: .leading, spacing: 24) {
-            if !viewModel.slateGames.isEmpty {
-                LiveScoreboardSection(
-                    games: viewModel.slateGames,
-                    title: "Your Slate",
-                    subtitle: "Games on your slate this week",
-                    help: PickemsHelp.liveScores
-                )
-            }
-
             if !viewModel.newsItems.isEmpty {
                 NewsFeedSection(items: viewModel.newsItems)
             }
 
             LiveScoreboardSection(
-                games: viewModel.slateGames.isEmpty
-                    ? viewModel.liveGames
-                    : viewModel.liveGames.filter { !$0.isSlateGame },
-                title: viewModel.slateGames.isEmpty ? "CFB This Week" : "Other Games",
+                games: viewModel.liveGames,
+                title: "CFB This Week",
                 subtitle: scoreboardSubtitle,
                 help: PickemsHelp.liveScores,
                 scoreboardFilter: $scoreboardFilter

@@ -59,9 +59,7 @@ struct PicksView: View {
             .navigationTitle("Picks")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    HelpToolbarButton(topic: PickemsHelp.picksOverview)
-                }
+                HelpToolbarItem(topic: PickemsHelp.picksOverview)
             }
             .refreshable { await reloadPicks() }
             .sheet(isPresented: $viewModel.showGameBrowse) {

@@ -82,11 +82,13 @@ struct HelpDetailView: View {
 struct HelpInfoButton: View {
     let topic: HelpTopic
     var size: Font = .callout
-    /// Optical glyph frame (~30pt). Toolbar uses `.center` so the icon sits balanced
-    /// in Liquid Glass without a blank 44pt square; Form headers keep `.trailing`.
+    /// Optical glyph frame for inline/section use. Toolbar uses `.center`.
     var alignment: Alignment = .trailing
     /// When set, parent presents help (required inside `Form` section headers — nested sheets/taps fail there).
     var presentedTopic: Binding<HelpTopic?>? = nil
+    /// Nav-bar usage: skip the 30pt frame and use a compact control so Liquid Glass
+    /// does not inflate the capsule around the glyph.
+    var isToolbar: Bool = false
     @Environment(\.themePalette) private var theme
 
     @State private var showHelp = false
@@ -100,21 +102,34 @@ struct HelpInfoButton: View {
                 showHelp = true
             }
         } label: {
-            Image(systemName: "info.circle")
-                .font(size)
-                .foregroundStyle(PickemsColors.textSecondary)
-                .symbolRenderingMode(.hierarchical)
-                .frame(width: 30, height: 30, alignment: alignment)
-                // Expand hit testing without growing the visible toolbar footprint.
-                .contentShape(Rectangle().inset(by: -7))
+            glyph
         }
         // `.borderless` is required for tappable buttons inside Form/List headers & rows.
         .buttonStyle(.borderless)
+        .controlSize(isToolbar ? .mini : .regular)
         .accessibilityLabel("Help")
         .accessibilityHint(topic.title)
         .sheet(isPresented: $showHelp) {
             HelpDetailView(topic: topic)
                 .environment(\.themePalette, theme)
+        }
+    }
+
+    @ViewBuilder
+    private var glyph: some View {
+        let icon = Image(systemName: "info.circle")
+            .font(isToolbar ? .subheadline : size)
+            .imageScale(isToolbar ? .small : .medium)
+            .foregroundStyle(PickemsColors.textSecondary)
+            .symbolRenderingMode(.hierarchical)
+
+        if isToolbar {
+            icon
+        } else {
+            icon
+                .frame(width: 30, height: 30, alignment: alignment)
+                // Expand hit testing without growing the visible toolbar footprint.
+                .contentShape(Rectangle().inset(by: -7))
         }
     }
 }
@@ -188,8 +203,20 @@ struct HelpToolbarButton: View {
     let topic: HelpTopic
 
     var body: some View {
-        // Compact glyph, centered so it reads balanced in the Liquid Glass capsule.
-        HelpInfoButton(topic: topic, size: .callout, alignment: .center)
+        HelpInfoButton(topic: topic, alignment: .center, isToolbar: true)
+    }
+}
+
+/// Trailing nav-bar help control. Hides the shared Liquid Glass background so the
+/// compact “i” is not wrapped in an oversized capsule.
+struct HelpToolbarItem: ToolbarContent {
+    let topic: HelpTopic
+
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            HelpToolbarButton(topic: topic)
+        }
+        .sharedBackgroundVisibility(.hidden)
     }
 }
 

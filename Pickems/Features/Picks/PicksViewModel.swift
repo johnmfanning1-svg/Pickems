@@ -126,7 +126,10 @@ final class PicksViewModel {
         defer { isLoadingGames = false }
         do {
             let weekInfo = try await ESPNService.shared.currentWeek()
-            espnGames = try await ESPNService.shared.fetchScoreboard(week: weekInfo.weekNumber)
+            espnGames = try await ESPNService.shared.fetchScoreboard(
+                week: weekInfo.weekNumber,
+                seasonType: weekInfo.seasonType
+            )
         } catch {
             espnGames = []
             UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
@@ -414,7 +417,11 @@ final class PicksViewModel {
     func bulkImportScheduled(week: WeekSummary, rules: GroupRules, appState: AppState) async {
         guard let group = appState.groupService.selectedGroup else { return }
         do {
-            let espn = try await ESPNService.shared.fetchScoreboard(week: week.weekNumber)
+            let weekInfo = try await ESPNService.shared.currentWeek()
+            let espn = try await ESPNService.shared.fetchScoreboard(
+                week: week.weekNumber,
+                seasonType: weekInfo.seasonType
+            )
             let scheduled = espn.filter { $0.status == .scheduled }.map { $0.toSlateGame() }
             try await appState.pickService.bulkImportGames(
                 groupId: group.id,
@@ -435,7 +442,8 @@ final class PicksViewModel {
         do {
             let weekInfo = try await ESPNService.shared.currentWeek()
             let cards = try await ESPNService.shared.liveGameCards(
-                week: weekInfo.weekNumber,
+                week: week.weekNumber,
+                seasonType: weekInfo.seasonType,
                 slateEventIds: slateIds,
                 userPicks: draftPicks,
                 slateGames: appState.pickService.slateGames

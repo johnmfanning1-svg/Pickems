@@ -52,9 +52,7 @@ struct GroupsView: View {
             .navigationTitle("Groups")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    HelpToolbarButton(topic: PickemsHelp.groupsOverview)
-                }
+                HelpToolbarItem(topic: PickemsHelp.groupsOverview)
             }
             .sheet(isPresented: $showCommissionerSettings) {
                 // Always emit a concrete root view + explicit environment.

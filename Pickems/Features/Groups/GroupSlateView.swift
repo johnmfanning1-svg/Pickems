@@ -40,9 +40,7 @@ struct GroupSlateView: View {
         .navigationTitle(navigationTitle(for: activeWeek.status))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                HelpToolbarButton(topic: helpTopic(for: activeWeek.status))
-            }
+            HelpToolbarItem(topic: helpTopic(for: activeWeek.status))
         }
         .sheet(isPresented: $viewModel.showGameBrowse) {
             GameBrowseView(

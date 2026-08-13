@@ -134,7 +134,7 @@ struct ESPNLiveGameCard: Identifiable, Equatable {
         case win, loss, push, pending
     }
 
-    var hasUserPick: Bool { userPickTeamAbbreviation != nil }
+    var hasUserPick: Bool { userPickTeamAbbreviation != nil || pickResult != nil }
 
     func matches(_ filter: HomeScoreboardFilter) -> Bool {
         switch filter {

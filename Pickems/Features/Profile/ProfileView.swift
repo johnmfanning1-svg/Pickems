@@ -52,10 +52,12 @@ struct ProfileView: View {
                         HelpInfoButton(
                             topic: PickemsHelp.profileOverview,
                             alignment: .center,
-                            presentedTopic: $presentedHelp
+                            presentedTopic: $presentedHelp,
+                            isToolbar: true
                         )
                     }
                 }
+                .sharedBackgroundVisibility(.hidden)
             }
             .sheet(item: $presentedHelp) { topic in
                 HelpDetailView(topic: topic)

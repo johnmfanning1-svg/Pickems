@@ -39,7 +39,37 @@ struct HomeScoreboardFilterTests {
         #expect(!card.matches(.conference(id: "8")))
     }
 
+    @Test func myPicksAndGroupNeedTheFullScoreboardNotOtherGames() {
+        let slatePick = makeCard(id: "slate", isSlateGame: true, pickAbbr: "ALA")
+        let other = makeCard(id: "other", isSlateGame: false, pickAbbr: nil)
+        let all = [slatePick, other]
+        #expect(all.filter { $0.matches(.myPicks) }.map(\.id) == ["slate"])
+        #expect(all.filter { $0.matches(.groupSlate) }.map(\.id) == ["slate"])
+
+        // The previous Home layout fed filters "Other Games" (non-slate only),
+        // which made My Picks and Group look empty after making Pickems.
+        let otherGamesOnly = all.filter { !$0.isSlateGame }
+        #expect(otherGamesOnly.filter { $0.matches(.myPicks) }.isEmpty)
+        #expect(otherGamesOnly.filter { $0.matches(.groupSlate) }.isEmpty)
+    }
+
+    @Test func displayKeepsAllMyPicksAndGroupGames() {
+        let games = (0..<15).map { makeCard(id: "g\($0)", isSlateGame: true, pickAbbr: "ALA") }
+        #expect(HomeScoreboardDisplay.games(games, filter: .power4).count == HomeScoreboardDisplay.previewLimit)
+        #expect(HomeScoreboardDisplay.games(games, filter: .all).count == HomeScoreboardDisplay.previewLimit)
+        #expect(HomeScoreboardDisplay.games(games, filter: .myPicks).count == 15)
+        #expect(HomeScoreboardDisplay.games(games, filter: .groupSlate).count == 15)
+    }
+
+    @Test func myPicksMatchesWhenPickResultExistsWithoutAbbreviation() {
+        var card = makeCard(id: "pending", isSlateGame: true, pickAbbr: nil)
+        card.pickResult = .pending
+        #expect(card.hasUserPick)
+        #expect(card.matches(.myPicks))
+    }
+
     private func makeCard(
+        id: String = "evt-1",
         homeConferenceId: String? = "8",
         awayConferenceId: String? = "5",
         isTop25: Bool = false,
@@ -47,8 +77,8 @@ struct HomeScoreboardFilterTests {
         pickAbbr: String? = nil
     ) -> ESPNLiveGameCard {
         ESPNLiveGameCard(
-            id: "evt-1",
-            espnEventId: "evt-1",
+            id: id,
+            espnEventId: id,
             awayTeamName: "Away",
             awayTeamAbbreviation: "AWY",
             awayTeamLogoURL: nil,
