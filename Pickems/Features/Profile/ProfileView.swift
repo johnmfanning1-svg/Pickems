@@ -237,18 +237,28 @@ struct ProfileView: View {
     private var notificationsSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 10) {
-                Label("Game & league alerts", systemImage: "bell.fill")
+                Text("Deadline reminders")
                     .font(.body.weight(.semibold))
                     .foregroundStyle(PickemsColors.textPrimary)
-
                 Text(notificationExplanation)
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-
-                notificationActionControls
             }
             .listRowBackground(PickemsColors.cardBackground)
+
+            Toggle(isOn: selectionDeadlineToggle) {
+                Label("Selection deadlines", systemImage: "sportscourt")
+            }
+            .listRowBackground(PickemsColors.cardBackground)
+
+            Toggle(isOn: pickemsDeadlineToggle) {
+                Label("Pickems deadlines", systemImage: "checkmark.circle")
+            }
+            .listRowBackground(PickemsColors.cardBackground)
+
+            notificationActionControls
+                .listRowBackground(PickemsColors.cardBackground)
         } header: {
             HStack {
                 Text("Notifications")
@@ -261,6 +271,45 @@ struct ProfileView: View {
             }
         } footer: {
             Text(notificationFooter)
+        }
+    }
+
+    private var selectionDeadlineToggle: Binding<Bool> {
+        Binding(
+            get: { appState.authService.currentUser?.wantsSelectionDeadlineAlerts ?? true },
+            set: { enabled in Task { await setDeadlinePref(selection: enabled, pickems: nil) } }
+        )
+    }
+
+    private var pickemsDeadlineToggle: Binding<Bool> {
+        Binding(
+            get: { appState.authService.currentUser?.wantsPickemsDeadlineAlerts ?? true },
+            set: { enabled in Task { await setDeadlinePref(selection: nil, pickems: enabled) } }
+        )
+    }
+
+    private func setDeadlinePref(selection: Bool?, pickems: Bool?) async {
+        let nextSelection = selection ?? (appState.authService.currentUser?.wantsSelectionDeadlineAlerts ?? true)
+        let nextPickems = pickems ?? (appState.authService.currentUser?.wantsPickemsDeadlineAlerts ?? true)
+        if selection == true || pickems == true {
+            await appState.notificationService.refreshAuthorizationStatus()
+            switch appState.notificationService.authorizationStatus {
+            case .notDetermined:
+                await appState.notificationService.requestPermission()
+            case .denied:
+                appState.notificationService.openSystemSettings()
+            default:
+                break
+            }
+        }
+        do {
+            try await appState.authService.updateNotificationPrefs(
+                selectionDeadlines: nextSelection,
+                pickemsDeadlines: nextPickems
+            )
+        } catch {
+            managementError = UserFacingError.message(for: error, context: .write)
+                ?? error.localizedDescription
         }
     }
 
@@ -311,7 +360,7 @@ struct ProfileView: View {
     }
 
     private var notificationExplanation: String {
-        "Pickems can alert you when pick deadlines are approaching and when your week is scored. We do not send marketing spam."
+        "Get a nudge before Selection and Pickems deadlines. Game-final and scored-week alerts still follow iOS permission."
     }
 
     private var notificationFooter: String {
@@ -345,10 +394,35 @@ struct ProfileView: View {
 
     private var leaguesSection: some View {
         Section {
+            if let group = appState.groupService.selectedGroup {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(group.name)
+                        .font(.headline)
+                        .foregroundStyle(PickemsColors.textPrimary)
+                    Text("Invite code \(group.inviteCode)")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
+                .listRowBackground(PickemsColors.cardBackground)
+
+                if appState.groupService.groups.count > 1 {
+                    Picker("Active league", selection: currentGroupSelection) {
+                        ForEach(appState.groupService.groups) { option in
+                            Text(option.name).tag(option.id)
+                        }
+                    }
+                    .listRowBackground(PickemsColors.cardBackground)
+                    .accessibilityHint("Switch which league is active")
+                }
+
+                InviteShareButton(group: group)
+                    .listRowBackground(PickemsColors.cardBackground)
+            }
+
             Button {
                 showJoinSheet = true
             } label: {
-                Label("Join Another League", systemImage: "person.badge.plus")
+                Label("Join a League", systemImage: "person.badge.plus")
             }
             .buttonStyle(.borderless)
             .listRowBackground(PickemsColors.cardBackground)
@@ -356,25 +430,12 @@ struct ProfileView: View {
             Button {
                 showCreateWizard = true
             } label: {
-                Label("Create New League", systemImage: "plus.circle")
+                Label("Create a League", systemImage: "plus.circle")
             }
             .buttonStyle(.borderless)
             .listRowBackground(PickemsColors.cardBackground)
 
-            if !appState.groupService.groups.isEmpty {
-                Picker("Current Group", selection: currentGroupSelection) {
-                    ForEach(appState.groupService.groups) { option in
-                        Text(option.name).tag(option.id)
-                    }
-                }
-                .listRowBackground(PickemsColors.cardBackground)
-                .accessibilityHint("Switch which league is active")
-            }
-
             if let group = appState.groupService.selectedGroup {
-                InviteShareButton(group: group)
-                    .listRowBackground(PickemsColors.cardBackground)
-
                 if appState.isCommissioner {
                     let transferCandidates = appState.groupService.members
                         .filter { $0.id != group.commissionerId }

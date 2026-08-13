@@ -84,7 +84,7 @@ struct CreateGroupWizardView: View {
                 .font(.subheadline)
                 .foregroundStyle(PickemsColors.textSecondary)
 
-            TextField("PPP Pickems", text: $groupName)
+            TextField("Saturday Watch Party", text: $groupName)
                 .textFieldStyle(.pickems)
 
             HelpInfoButton(topic: PickemsHelp.createGroup)

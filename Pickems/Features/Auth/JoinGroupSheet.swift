@@ -35,7 +35,7 @@ struct JoinGroupSheet: View {
                     }
                 }
             }
-            .navigationTitle("Join Group")
+            .navigationTitle("Join League")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

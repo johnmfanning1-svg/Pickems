@@ -77,6 +77,7 @@ extension AppState {
         selectedTab = .home
         CrashReport.setValue("false", forKey: "needs_onboarding")
         scheduleFavoriteTeamPrompt()
+        scheduleNotificationOnboarding()
     }
 
     func presentFavoriteTeamPromptIfNeeded() {

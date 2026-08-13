@@ -179,24 +179,13 @@ struct HomeView: View {
                     .padding(.horizontal)
             }
 
-            if let group = appState.groupService.selectedGroup {
+            if appState.groupService.selectedGroup != nil {
                 PickemsCard {
                     VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(group.name)
-                                    .font(.headline)
-                                if let week = appState.groupService.currentWeek {
-                                    Text(weekStatusLabel(week))
-                                        .font(.subheadline)
-                                        .foregroundStyle(PickemsColors.textSecondary)
-                                }
-                            }
-                            Spacer()
-                            if let week = appState.groupService.currentWeek {
-                                StatusBadge(text: weekStatusBadge(week.status), color: statusColor(week.status))
-                                    .pickemsPulse(enabled: week.status == .locked)
-                            }
+                        if let week = appState.groupService.currentWeek {
+                            Text(week.displayLabel)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(PickemsColors.textSecondary)
                         }
 
                         if let entry = myStanding {
@@ -216,10 +205,17 @@ struct HomeView: View {
                             }
                         }
 
-                        HStack(spacing: 10) {
-                            PrimaryButton(title: ctaTitle) {
-                                appState.selectedTab = .picks
+                        let cta = homeCTA
+                        if let tab = cta.destinationTab {
+                            PrimaryButton(title: cta.title) {
+                                appState.selectedTab = tab
                             }
+                        } else {
+                            Text(cta.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(PickemsColors.textSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
                         }
                     }
                 }
@@ -229,7 +225,7 @@ struct HomeView: View {
                     EmptyStateView(
                         icon: "person.3.fill",
                         title: "Join a league",
-                        message: "Create or join a group to start this week's pulse."
+                        message: "Create or join a league to start this week's pulse."
                     )
                     HStack(spacing: 12) {
                         Button {
@@ -373,7 +369,7 @@ struct HomeView: View {
         case .power4: return "Power 4 — live scores from ESPN"
         case .top25: return "Top 25 matchups"
         case .myPicks: return "Your Pickems this week"
-        case .groupSlate: return "Your group's slate"
+        case .groupSlate: return "Your league's slate"
         case .all: return "All FBS games this week"
         case .conference(let id):
             let name = ESPNConferenceCatalog.conference(id: id)?.shortName ?? "Conference"
@@ -381,65 +377,19 @@ struct HomeView: View {
         }
     }
 
-    private var ctaTitle: String {
-        guard let week = appState.groupService.currentWeek else { return "Open Picks" }
-        switch week.status {
-        case .selection:
-            return appState.isCommissioner ? "Build Slate" : "Make Selections"
-        case .picking:
-            if PickDeadlineCalculator.isPast(week.pickDeadline) {
-                return "View Pickems"
-            }
-            if appState.pickService.userPick?.isLocked == true {
-                return "Edit Pickems"
-            }
-            let pickCount = appState.pickService.userPick?.picks.count ?? 0
-            let slateCount = appState.pickService.slateGames.count
-            if pickCount == 0 { return "Make Pickems" }
-            if slateCount > 0, pickCount < slateCount { return "Finish Pickems" }
-            return "Submit Pickems"
-        case .locked: return "Watch Live"
-        case .scored: return "See Results"
-        }
-    }
-
-    private func weekStatusBadge(_ status: WeekStatus) -> String {
-        switch status {
-        case .selection: return "Selections"
-        case .picking: return "Pickems"
-        case .locked: return "Locked"
-        case .scored: return "Scored"
-        }
-    }
-
-    private func weekStatusLabel(_ week: WeekSummary) -> String {
-        switch week.status {
-        case .selection: return "Building this week's slate"
-        case .picking:
-            if PickDeadlineCalculator.isPast(week.pickDeadline) {
-                return "Pickems deadline has passed"
-            }
-            if appState.pickService.userPick?.isLocked == true {
-                return "Pickems submitted — edit until lock"
-            }
-            let pickCount = appState.pickService.userPick?.picks.count ?? 0
-            let slateCount = appState.pickService.slateGames.count
-            if pickCount == 0 { return "Make your Pickems" }
-            if slateCount > 0, pickCount < slateCount {
-                return "\(pickCount) of \(slateCount) Pickems made"
-            }
-            return "Submit your Pickems"
-        case .locked: return "Games in progress"
-        case .scored: return "Week complete"
-        }
-    }
-
-    private func statusColor(_ status: WeekStatus) -> Color {
-        switch status {
-        case .selection: return PickemsColors.warning
-        case .picking: return theme.accent
-        case .locked: return PickemsColors.textSecondary
-        case .scored: return PickemsColors.success
-        }
+    private var homeCTA: HomeCTA {
+        let week = appState.groupService.currentWeek
+        let userId = appState.currentUserId
+        let userNoms = appState.pickService.nominations.filter { $0.submittedBy == userId }.count
+        return HomeCTAResolver.resolve(
+            week: week,
+            isCommissioner: appState.isCommissioner,
+            didSubmitNominations: appState.pickService.didSubmitNominations,
+            userNominationCount: userNoms,
+            pickCount: appState.pickService.userPick?.picks.count ?? 0,
+            slateCount: appState.pickService.slateGames.count,
+            pickemsLocked: PickDeadlineCalculator.isPast(week?.pickDeadline),
+            picksSubmitted: appState.pickService.userPick?.isLocked == true
+        )
     }
 }

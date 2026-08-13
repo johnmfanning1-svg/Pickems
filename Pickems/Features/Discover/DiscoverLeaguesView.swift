@@ -106,7 +106,7 @@ struct DiscoverLeaguesView: View {
             do {
                 try await appState.joinGroup(inviteCode: league.inviteCode, markOnboarding: true)
                 PickemsHaptics.success()
-                appState.selectedTab = .groups
+                appState.selectedTab = .leagues
             } catch {
                 errorMessage = UserFacingError.message(for: error, context: .joinGroup)
                     ?? "Couldn't join that league. Try again."

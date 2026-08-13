@@ -94,6 +94,21 @@ struct ScoringEngineTests {
             slateSize: 9,
             selectionDeadline: past
         ))
+        // Completing the round does not imply Pickems are open — remake is still allowed.
+        #expect(ScoringEngine.isMemberNominationRoundComplete(
+            nominationsByUser: ["a": 1, "b": 1],
+            memberIds: ["a", "b"],
+            selectionsPerMember: 1,
+            uniqueNominationCount: 2,
+            slateSize: 2
+        ))
+        #expect(ScoringEngine.canSubmitNomination(
+            userNominationCount: 0,
+            selectionsPerMember: 1,
+            uniqueNominationCount: 1,
+            slateSize: 2,
+            selectionDeadline: future
+        ))
     }
 
     @Test func expectedSlateSizeIsEitherOr() {

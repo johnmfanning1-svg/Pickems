@@ -676,6 +676,28 @@ final class AuthService {
         UserDefaults.standard.set(true, forKey: Self.favoriteTeamPromptKey(for: userId))
     }
 
+    private static func notificationOnboardingKey(for userId: String) -> String {
+        "pickems.notifications.onboardingDismissed.\(userId)"
+    }
+
+    func hasDismissedNotificationOnboarding(for userId: String) -> Bool {
+        UserDefaults.standard.bool(forKey: Self.notificationOnboardingKey(for: userId))
+    }
+
+    func markNotificationOnboardingDismissed(for userId: String) {
+        UserDefaults.standard.set(true, forKey: Self.notificationOnboardingKey(for: userId))
+    }
+
+    func updateNotificationPrefs(selectionDeadlines: Bool, pickemsDeadlines: Bool) async throws {
+        guard let uid = currentUserId else { return }
+        try await db.user(uid).updateData([
+            "notifySelectionDeadlines": selectionDeadlines,
+            "notifyPickemsDeadlines": pickemsDeadlines,
+        ])
+        currentUser?.notifySelectionDeadlines = selectionDeadlines
+        currentUser?.notifyPickemsDeadlines = pickemsDeadlines
+    }
+
     func signOut() throws {
         authEpoch += 1
         let uid = currentUserId
@@ -757,6 +779,7 @@ final class AuthService {
             try? await db.user(uid).delete()
             UserDefaults.standard.removeObject(forKey: Self.onboardingKey(for: uid))
             UserDefaults.standard.removeObject(forKey: Self.favoriteTeamPromptKey(for: uid))
+            UserDefaults.standard.removeObject(forKey: Self.notificationOnboardingKey(for: uid))
 
             authEpoch += 1
             try await user.delete()

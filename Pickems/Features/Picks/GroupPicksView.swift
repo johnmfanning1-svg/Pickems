@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct GroupPicksView: View {
+    var embedded: Bool = false
+    var forceNominatingDisplay: Bool = false
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
     /// Collapse-by-exception keeps sections default-open without seeding from async data.
@@ -23,7 +25,7 @@ struct GroupPicksView: View {
 
     /// Building the slate (nominations / commissioner adds) — not spread-picking yet.
     private var isNominatingPhase: Bool {
-        week?.status == .selection
+        forceNominatingDisplay || week?.status == .selection
     }
 
     private var selectionMode: SelectionMode {
@@ -99,27 +101,19 @@ struct GroupPicksView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                progressCard
-
-                if sortedMembers.isEmpty {
-                    ContentUnavailableView(
-                        "No Members",
-                        systemImage: "person.3",
-                        description: Text("League members will appear here.")
-                    )
-                    .padding(.top, 24)
-                } else {
-                    ForEach(sortedMembers) { member in
-                        memberSection(member)
-                    }
+        Group {
+            if embedded {
+                innerList
+            } else {
+                ScrollView {
+                    innerList
                 }
             }
-            .padding()
         }
-        .navigationTitle("Group Pickems")
-        .navigationBarTitleDisplayMode(.inline)
+        .modifier(ConditionalNavTitle(
+            enabled: !embedded,
+            title: isNominatingPhase ? "League Selections" : "League Pickems"
+        ))
         .scrollContentBackground(.hidden)
         .pickemsScreenBackground()
         .task(id: "\(appState.groupService.selectedGroup?.id ?? "")-\(week?.id ?? "")") {
@@ -141,6 +135,27 @@ struct GroupPicksView: View {
                 .pickemsEnvironment(appState)
             }
         }
+    }
+
+    private var innerList: some View {
+        VStack(spacing: 12) {
+            progressCard
+
+            if sortedMembers.isEmpty {
+                ContentUnavailableView(
+                    "No Members",
+                    systemImage: "person.3",
+                    description: Text("League members will appear here.")
+                )
+                .padding(.top, 24)
+            } else {
+                ForEach(sortedMembers) { member in
+                    memberSection(member)
+                }
+            }
+        }
+        .padding(embedded ? 0 : 16)
+        .padding(.horizontal, embedded ? 16 : 0)
     }
 
     // MARK: - Progress
@@ -536,5 +551,20 @@ struct GroupPicksView: View {
 
     private func canRevealPickDetails(for userId: String) -> Bool {
         userId == currentUserId || appState.isCommissioner
+    }
+}
+
+private struct ConditionalNavTitle: ViewModifier {
+    let enabled: Bool
+    let title: String
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+        } else {
+            content
+        }
     }
 }

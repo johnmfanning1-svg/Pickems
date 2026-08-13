@@ -4,8 +4,9 @@ import FirebaseFirestore
 
 enum AppTab: Hashable {
     case home
-    case groups
-    case picks
+    case leagues
+    case selections
+    case pickems
     case profile
 }
 
@@ -26,10 +27,14 @@ final class AppState {
     var pendingInviteCode: String?
     var showJoinGroupSheet = false
     var showFavoriteTeamPicker = false
-    /// Set by selection-deadline push; slate/picks UI presents the setter sheet.
+    /// Set by selection-deadline push; Selections tab presents the setter sheet.
     var pendingSelectionDeadlinePrompt = false
+    /// League to select when a push/deep link includes `groupId`.
+    var pendingDeepLinkGroupId: String?
     /// Set when Firebase failed to boot; RootView can show a non-crash error screen.
     var firebaseBootFailed = false
+    /// In-app “Stay on time” prompt before the iOS notification permission sheet.
+    var showNotificationOnboarding = false
 
     /// Bumps on each `onAuthStateReady` so overlapping login callbacks cannot finish out of order.
     private var authReadyGeneration = 0
@@ -137,7 +142,7 @@ final class AppState {
 
         // Defer so RootView can leave onboarding and any auth sheets can dismiss first.
         scheduleFavoriteTeamPrompt()
-        await notificationService.requestPermissionIfNeeded()
+        scheduleNotificationOnboarding()
 
         guard generation == authReadyGeneration else {
             AppLog.info(AppLog.session, "onAuthStateReady superseded after notifications", metadata: [
@@ -148,11 +153,27 @@ final class AppState {
         }
 
         await notificationService.saveToken(for: userId)
-        processPendingInviteIfNeeded()
         CrashReport.breadcrumb("session.on_auth_ready_complete", metadata: [
             "gen": "\(generation)",
             "uid": AppEvents.shortUID(userId),
         ])
+    }
+
+    func scheduleNotificationOnboarding() {
+        Task { @MainActor in
+            await notificationService.refreshAuthorizationStatus()
+            guard notificationService.authorizationStatus == .notDetermined else {
+                if let userId = currentUserId {
+                    await notificationService.saveToken(for: userId)
+                }
+                return
+            }
+            guard let userId = currentUserId else { return }
+            guard !authService.hasDismissedNotificationOnboarding(for: userId) else { return }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !needsOnboarding else { return }
+            showNotificationOnboarding = true
+        }
     }
 
     func handleDeepLink(_ action: DeepLinkAction) {
@@ -163,16 +184,30 @@ final class AppState {
             if authService.isAuthenticated {
                 showJoinGroupSheet = true
             }
-        case .openPicks, .openLiveSlate:
-            selectedTab = .picks
-        case .openGroups, .openDiscover:
-            selectedTab = .groups
+        case .openPickems(let groupId), .openLiveSlate(let groupId):
+            selectDeepLinkGroup(groupId)
+            selectedTab = .pickems
+        case .openSelections(let groupId):
+            selectDeepLinkGroup(groupId)
+            selectedTab = .selections
+        case .openLeagues(let groupId):
+            selectDeepLinkGroup(groupId)
+            selectedTab = .leagues
         case .openHome:
             selectedTab = .home
-        case .openSelectionDeadline:
+        case .openDiscover:
+            selectedTab = .leagues
+        case .openSelectionDeadline(let groupId):
+            selectDeepLinkGroup(groupId)
             pendingSelectionDeadlinePrompt = true
-            selectedTab = .groups
+            selectedTab = .selections
         }
+    }
+
+    private func selectDeepLinkGroup(_ groupId: String?) {
+        pendingDeepLinkGroupId = groupId
+        guard let groupId else { return }
+        groupService.selectGroup(id: groupId)
     }
 
     func processPendingInviteIfNeeded() {

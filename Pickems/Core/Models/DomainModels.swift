@@ -15,6 +15,12 @@ struct UserProfile: Codable, Identifiable, Equatable {
     var favoriteTeamAbbreviation: String? = nil
     var favoriteTeamLogoURL: String? = nil
     var createdAt: Date
+    /// Opt-in deadline alerts. Nil (legacy docs) means on.
+    var notifySelectionDeadlines: Bool? = true
+    var notifyPickemsDeadlines: Bool? = true
+
+    var wantsSelectionDeadlineAlerts: Bool { notifySelectionDeadlines ?? true }
+    var wantsPickemsDeadlineAlerts: Bool { notifyPickemsDeadlines ?? true }
 
     var fullName: String? {
         let first = firstName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

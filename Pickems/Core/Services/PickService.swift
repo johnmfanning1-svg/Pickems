@@ -308,7 +308,7 @@ final class PickService {
         nomination: Nomination,
         rules: GroupRules,
         week: WeekSummary,
-        memberIds: [String]
+        memberIds _: [String]
     ) async throws {
         switch week.status {
         case .locked, .scored:
@@ -357,38 +357,9 @@ final class PickService {
 
         let weekRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
-
-        let updatedNoms = nominations
-        let newUnique = Set(updatedNoms.map(\.espnEventId)).count
-        let newCount = updatedNoms.count
-        var byUser: [String: Int] = [:]
-        for n in updatedNoms {
-            byUser[n.submittedBy, default: 0] += 1
-        }
-
-        let complete = ScoringEngine.isMemberNominationRoundComplete(
-            nominationsByUser: byUser,
-            memberIds: memberIds,
-            selectionsPerMember: perMember,
-            uniqueNominationCount: newUnique,
-            slateSize: slateSize
-        )
-
-        if complete {
-            try await materializeNominationsIfNeeded(groupId: groupId, weekId: weekId)
-            // Open picking + set deadline from kickoffs; do not lock the slate yet.
-            let kickoffs = await slateKickoffs(groupId: groupId, weekId: weekId, fallback: updatedNoms.map(\.kickoff))
-            try await transitionToPicking(
-                groupId: groupId,
-                weekId: weekId,
-                rules: rules,
-                kickoffs: kickoffs,
-                nominationCount: newCount,
-                lockSlate: false
-            )
-        } else {
-            try await weekRef.updateData(["nominationCount": newCount])
-        }
+        // Completing Selections does not open Pickems. Stay in `.selection` so
+        // members can clear and remake until the deadline or commissioner lock-early.
+        try await weekRef.updateData(["nominationCount": nominations.count])
     }
 
     /// Converts nominations into slate games when the games collection is empty.
@@ -529,18 +500,10 @@ final class PickService {
             slateGames.append(game)
         }
 
-        let newCount = slateGames.count
-        let allKickoffs = slateGames.map(\.kickoff)
-        if week.status == .selection, newCount >= slateSize {
-            // Open picking + set deadline from kickoffs; do not lock the slate yet.
-            try await transitionToPicking(
-                groupId: groupId,
-                weekId: weekId,
-                rules: rules,
-                kickoffs: allKickoffs,
-                nominationCount: week.selectionMode == .member ? nominations.count : nil,
-                lockSlate: false
-            )
+        if week.status == .selection {
+            try await db.week(groupId: groupId, weekId: weekId).updateData([
+                "nominationCount": week.selectionMode == .member ? nominations.count : slateGames.count
+            ])
         }
     }
 
@@ -612,7 +575,9 @@ final class PickService {
             switch week.status {
             case .locked, .scored:
                 throw PickError.deadlinePassed
-            case .picking, .selection:
+            case .selection:
+                throw PickError.pickemsNotOpen
+            case .picking:
                 if ScoringEngine.isPastDeadline(deadline: week.pickDeadline), !allowLatePicks {
                     throw PickError.deadlinePassed
                 }
@@ -932,19 +897,6 @@ final class PickService {
             try await gamesRef.document(game.id).setData(from: game)
             added.append(game)
         }
-
-        let newCount = existing.count + added.count
-        if newCount >= slateSize {
-            let allKickoffs = (existing + added).map(\.kickoff)
-            try await transitionToPicking(
-                groupId: groupId,
-                weekId: weekId,
-                rules: rules,
-                kickoffs: allKickoffs,
-                nominationCount: nil,
-                lockSlate: false
-            )
-        }
     }
 
     func loadWeekHistory(groupId: String, weekId: String, userId: String) async throws -> WeekHistoryEntry? {
@@ -970,6 +922,7 @@ final class PickService {
         case unauthorized
         case cannotModifyLockedSlate
         case selectionClosed
+        case pickemsNotOpen
 
         var errorDescription: String? {
             switch self {
@@ -981,6 +934,7 @@ final class PickService {
             case .unauthorized: return "You can't remove this Selection."
             case .cannotModifyLockedSlate: return "The slate is locked — games can't be removed."
             case .selectionClosed: return "Selections can't be changed after the Selection deadline."
+            case .pickemsNotOpen: return "Pickems open when every Selection is in or the Selection deadline passes. Your commissioner can lock early."
             }
         }
     }
