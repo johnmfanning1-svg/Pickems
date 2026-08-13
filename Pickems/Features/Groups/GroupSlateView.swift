@@ -8,11 +8,12 @@ struct GroupSlateView: View {
 
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
-    @State private var viewModel = PicksViewModel()
     @State private var showSelectionDeadlineSheet = false
     @State private var showPickDeadlineSheet = false
     @State private var showIncompletePickemsAlert = false
     @State private var incompletePickemsAlertText = ""
+
+    private var viewModel: PicksViewModel { appState.picksViewModel }
 
     private var activeWeek: WeekSummary {
         if let current = appState.groupService.currentWeek, current.id == week.id {
@@ -22,6 +23,7 @@ struct GroupSlateView: View {
     }
 
     var body: some View {
+        @Bindable var viewModel = appState.picksViewModel
         ScrollView {
             VStack(spacing: 16) {
                 SeasonWeekHeader(label: activeWeek.displayLabel)
@@ -128,9 +130,7 @@ struct GroupSlateView: View {
         .onChange(of: appState.groupService.currentWeek?.id) { _, _ in
             viewModel.refreshNominationSubmissionState(appState: appState)
         }
-        .onChange(of: appState.pickService.userPick?.picks) { _, newPicks in
-            viewModel.syncDraftFromServer(newPicks, confidenceGameId: appState.pickService.userPick?.confidenceGameId)
-        }
+        .syncPicksDraftFromServer()
     }
 
     // MARK: - Phase routing
@@ -293,7 +293,7 @@ struct GroupSlateView: View {
                                     .foregroundStyle(PickemsColors.textSecondary)
                             }
                             Spacer()
-                            if !deadlinePassed, appState.isCommissioner || (nom.submittedBy == userId && !viewModel.didSubmitNominations) {
+                            if !deadlinePassed, appState.isCommissioner || (nom.submittedBy == userId && !appState.pickService.didSubmitNominations) {
                                 Button(role: .destructive) {
                                     viewModel.removeNomination(nom, rules: rules, appState: appState)
                                 } label: {
@@ -396,7 +396,7 @@ struct GroupSlateView: View {
 
     @ViewBuilder
     private func nominationSubmitSection(userNoms: Int, perMember: Int, week: WeekSummary) -> some View {
-        if viewModel.didSubmitNominations {
+        if appState.pickService.didSubmitNominations {
             VStack(alignment: .leading, spacing: 8) {
                 StatusBadge(text: "Submitted", color: PickemsColors.success)
                 Text(SelectionPhaseCopy.submittedCaption(gameCount: userNoms, week: week))

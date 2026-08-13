@@ -15,6 +15,9 @@ final class AppState {
     let authService = AuthService()
     let groupService = GroupService()
     let pickService = PickService()
+    /// One draft for Picks tab and Groups > Group Slate / Group Pickems. Separate
+    /// view-model instances were why Group clears kept missing the Picks tab.
+    let picksViewModel = PicksViewModel()
     let chatService = ChatService()
     let notificationService = NotificationService()
     let appTheme = AppTheme()
@@ -180,6 +183,7 @@ final class AppState {
     func resetSession() {
         groupService.resetSession()
         pickService.resetSession()
+        picksViewModel.resetForSession()
         chatService.stopObserving()
     }
 }

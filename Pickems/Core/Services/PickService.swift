@@ -8,6 +8,11 @@ final class PickService {
     var nominations: [Nomination] = []
     var slateGames: [SlateGame] = []
     var userPick: UserPick?
+    /// Bumped when a local commissioner set/clear (or week reset) must beat a
+    /// pending Picks-tab draft, including empty wipes from Group Pickems.
+    private(set) var userPickEpoch = 0
+    /// Shared Selections "submitted" ack so Groups and the Picks tab cannot diverge.
+    private(set) var didSubmitNominations = false
     var allPicks: [UserPick] = []
     var submissions: [PickSubmission] = []
     var isLoading = false
@@ -24,6 +29,11 @@ final class PickService {
     private var pickListener: ListenerRegistration?
     @ObservationIgnored
     private var submissionsListener: ListenerRegistration?
+    @ObservationIgnored
+    private var observedUserId: String?
+    /// Invalidates in-flight `savePickDraft` local mirrors after a later clear/set.
+    @ObservationIgnored
+    private var userPickWriteGeneration = 0
 
     func observeWeek(groupId: String, weekId: String, userId: String) {
         nominationsListener?.remove()
@@ -32,9 +42,13 @@ final class PickService {
         submissionsListener?.remove()
         nominations = []
         slateGames = []
+        observedUserId = userId
+        userPickWriteGeneration += 1
         userPick = nil
+        userPickEpoch += 1
         allPicks = []
         submissions = []
+        refreshNominationSubmissionState(groupId: groupId, weekId: weekId, userId: userId)
 
         nominationsListener = db.week(groupId: groupId, weekId: weekId)
             .nominations
@@ -132,11 +146,47 @@ final class PickService {
         submissionsListener = nil
         nominations = []
         slateGames = []
+        observedUserId = nil
+        userPickWriteGeneration += 1
         userPick = nil
+        userPickEpoch += 1
         allPicks = []
         submissions = []
+        didSubmitNominations = false
         errorMessage = nil
         isLoading = false
+    }
+
+    // MARK: - Selections submitted acknowledgement (shared)
+
+    private func nominationsSubmittedKey(groupId: String, weekId: String, userId: String) -> String {
+        "pickems.nominationsSubmitted.\(groupId).\(weekId).\(userId)"
+    }
+
+    func refreshNominationSubmissionState(groupId: String?, weekId: String?, userId: String?) {
+        guard let groupId, let weekId, let userId else {
+            didSubmitNominations = false
+            return
+        }
+        didSubmitNominations = UserDefaults.standard.bool(
+            forKey: nominationsSubmittedKey(groupId: groupId, weekId: weekId, userId: userId)
+        )
+    }
+
+    func markNominationsSubmitted(groupId: String, weekId: String, userId: String) {
+        UserDefaults.standard.set(
+            true,
+            forKey: nominationsSubmittedKey(groupId: groupId, weekId: weekId, userId: userId)
+        )
+        didSubmitNominations = true
+    }
+
+    func clearNominationsSubmitted(groupId: String, weekId: String, userId: String) {
+        UserDefaults.standard.set(
+            false,
+            forKey: nominationsSubmittedKey(groupId: groupId, weekId: weekId, userId: userId)
+        )
+        didSubmitNominations = false
     }
 
     func loadAllPicks(groupId: String, weekId: String) async {
@@ -422,6 +472,10 @@ final class PickService {
         let weekRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
         try await weekRef.updateData(["nominationCount": FieldValue.increment(Int64(-1))])
+
+        if nomination.submittedBy == userId {
+            clearNominationsSubmitted(groupId: groupId, weekId: weekId, userId: userId)
+        }
     }
 
     func submitCommissionerGame(
@@ -589,7 +643,9 @@ final class PickService {
             isLocked: false,
             confidenceGameId: trimmedConfidence
         )
+        let generation = userPickWriteGeneration
         try await ref.setData(from: pick)
+        guard generation == userPickWriteGeneration else { return }
         userPick = pick
         mergeOwnPickIntoAllPicks(pick)
         try await syncSubmission(
@@ -635,7 +691,9 @@ final class PickService {
             isLocked: true,
             confidenceGameId: confidenceGameId.flatMap { cleaned.keys.contains($0) ? $0 : nil }
         )
+        let generation = userPickWriteGeneration
         try await ref.setData(from: pick)
+        guard generation == userPickWriteGeneration else { return }
         userPick = pick
         mergeOwnPickIntoAllPicks(pick)
         try await syncSubmission(
@@ -736,6 +794,9 @@ final class PickService {
             isLocked: isLocked,
             confidenceGameId: nil
         )
+        if userId == observedUserId {
+            userPickWriteGeneration += 1
+        }
         let pickRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
             .collection("picks").document(userId)
@@ -757,8 +818,9 @@ final class PickService {
         } else {
             allPicks.append(pick)
         }
-        if userPick?.userId == userId {
+        if userId == observedUserId {
             userPick = cleaned.isEmpty && !isLocked ? nil : pick
+            userPickEpoch += 1
         }
     }
 

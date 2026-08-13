@@ -177,4 +177,36 @@ struct PicksDraftSyncTests {
         vm.syncDraftFromServer([:], confidenceGameId: nil)
         #expect(vm.draftPicks.isEmpty)
     }
+
+    @Test func syncDraftFromServerForceAppliesEmptyOverPendingWrite() {
+        let vm = PicksViewModel()
+        vm.draftPicks = ["game-1": "team-a"]
+        vm.markPendingWrite(["game-1": "team-a"], inFlight: true)
+
+        vm.syncDraftFromServer([:], confidenceGameId: nil, force: true)
+
+        #expect(vm.draftPicks.isEmpty)
+        vm.syncDraftFromServer([:], confidenceGameId: nil)
+        #expect(vm.draftPicks.isEmpty)
+    }
+
+    @Test func resyncWhenVisibleAppliesEmptyWhenWriteNotInFlight() {
+        let vm = PicksViewModel()
+        vm.draftPicks = ["game-1": "team-a"]
+        vm.markPendingWrite(["game-1": "team-a"])
+
+        vm.resyncDraftIfIdle(from: [:], confidenceGameId: nil)
+
+        #expect(vm.draftPicks.isEmpty)
+    }
+
+    @Test func resyncWhenVisibleKeepsDraftWhileWriteInFlight() {
+        let vm = PicksViewModel()
+        vm.draftPicks = ["game-1": "team-a"]
+        vm.markPendingWrite(["game-1": "team-a"], inFlight: true)
+
+        vm.resyncDraftIfIdle(from: [:], confidenceGameId: nil)
+
+        #expect(vm.draftPicks == ["game-1": "team-a"])
+    }
 }

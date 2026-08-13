@@ -339,25 +339,55 @@ struct GroupPicksView: View {
     @ViewBuilder
     private func nominationBody(for member: GroupMember) -> some View {
         let noms = nominations.filter { $0.submittedBy == member.id }
-        if noms.isEmpty {
-            emptyPicksState(
-                title: "No Selections yet",
-                message: "\(member.displayName) still needs to select \(nominationsPerMember) game\(nominationsPerMember == 1 ? "" : "s")."
-            )
-        } else {
-            ForEach(noms) { nom in
-                PickemsCard {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("\(nom.awayTeamAbbreviation ?? String(nom.awayTeamName.prefix(4))) @ \(nom.homeTeamAbbreviation ?? String(nom.homeTeamName.prefix(4)))")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(PickemsColors.textPrimary)
-                        Text(nominationSpreadLabel(nom))
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(theme.accent)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        let deadlinePassed = week?.isSelectionDeadlinePassed ?? true
+        let isOwn = member.id == currentUserId
+        let canRemove = !deadlinePassed && (
+            appState.isCommissioner
+            || (isOwn && !appState.pickService.didSubmitNominations)
+        )
+
+        VStack(alignment: .leading, spacing: 8) {
+            if isOwn, !deadlinePassed, appState.pickService.didSubmitNominations {
+                SecondaryButton("Edit Selections", icon: "pencil") {
+                    appState.picksViewModel.unlockSelectionsForEditing(appState: appState)
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, 6)
+            }
+
+            if noms.isEmpty {
+                emptyPicksState(
+                    title: "No Selections yet",
+                    message: "\(member.displayName) still needs to select \(nominationsPerMember) game\(nominationsPerMember == 1 ? "" : "s")."
+                )
+            } else {
+                ForEach(noms) { nom in
+                    PickemsCard {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(nom.awayTeamAbbreviation ?? String(nom.awayTeamName.prefix(4))) @ \(nom.homeTeamAbbreviation ?? String(nom.homeTeamName.prefix(4)))")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(PickemsColors.textPrimary)
+                                Text(nominationSpreadLabel(nom))
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(theme.accent)
+                            }
+                            Spacer(minLength: 8)
+                            if canRemove, let rules = appState.groupService.selectedGroup?.rules, let week {
+                                Button(role: .destructive) {
+                                    appState.picksViewModel.removeNomination(nom, rules: rules, appState: appState)
+                                } label: {
+                                    Label("Remove", systemImage: "trash")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(theme.accent)
+                                }
+                                .accessibilityLabel("Remove Selection")
+                                .accessibilityHint("Frees a slot so you can select a different game")
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, 4)
+                }
             }
         }
     }

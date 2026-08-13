@@ -12,36 +12,42 @@ final class PicksViewModel {
     var showConfirmSubmit = false
     var showConfirmNominations = false
     var spreadEditGame: SlateGame?
-    /// Local acknowledgement that the member finished nominating their games this week.
-    var didSubmitNominations = false
 
     private var liveRefreshTask: Task<Void, Never>?
     private var saveDraftTask: Task<Void, Never>?
     /// Local Pickems waiting for a Firestore echo. Stale listener snapshots must not clobber this.
     private var pendingWritePicks: [String: String]?
+    /// True while `savePickDraft` / submit is on the network. Tab resync must not wipe that.
+    private var writeInFlight = false
+
+    func resetForSession() {
+        draftPicks = [:]
+        confidenceGameId = nil
+        resetPendingWrite()
+        stopLiveRefresh()
+        showGameBrowse = false
+        showConfirmSubmit = false
+        showConfirmNominations = false
+        spreadEditGame = nil
+        espnGames = []
+        livePickCards = [:]
+    }
 
     func loadWeek(appState: AppState) async {
         await appState.syncSelectedWeek()
         // Always mirror server — including empty clears from Group Picks / commissioner wipe.
+        resetPendingWrite()
         applyServerPicks(appState.pickService.userPick?.picks, confidenceGameId: appState.pickService.userPick?.confidenceGameId)
         refreshNominationSubmissionState(appState: appState)
     }
 
-    // MARK: - Nomination submission (local acknowledgement)
-
-    private func nominationsSubmittedKey(groupId: String, weekId: String, userId: String) -> String {
-        "pickems.nominationsSubmitted.\(groupId).\(weekId).\(userId)"
-    }
+    // MARK: - Nomination submission (shared on PickService)
 
     func refreshNominationSubmissionState(appState: AppState) {
-        guard let groupId = appState.groupService.selectedGroup?.id,
-              let weekId = appState.groupService.currentWeek?.id,
-              let userId = appState.currentUserId else {
-            didSubmitNominations = false
-            return
-        }
-        didSubmitNominations = UserDefaults.standard.bool(
-            forKey: nominationsSubmittedKey(groupId: groupId, weekId: weekId, userId: userId)
+        appState.pickService.refreshNominationSubmissionState(
+            groupId: appState.groupService.selectedGroup?.id,
+            weekId: appState.groupService.currentWeek?.id,
+            userId: appState.currentUserId
         )
     }
 
@@ -49,30 +55,18 @@ final class PicksViewModel {
         guard let groupId = appState.groupService.selectedGroup?.id,
               let weekId = appState.groupService.currentWeek?.id,
               let userId = appState.currentUserId else { return }
-        UserDefaults.standard.set(
-            true,
-            forKey: nominationsSubmittedKey(groupId: groupId, weekId: weekId, userId: userId)
-        )
-        didSubmitNominations = true
+        appState.pickService.markNominationsSubmitted(groupId: groupId, weekId: weekId, userId: userId)
         PickemsHaptics.success()
     }
 
     /// Re-opens submitted Selections so a member can remove a game and pick another
     /// before the Selection deadline — same idea as Edit Pickems.
     func unlockSelectionsForEditing(appState: AppState) {
-        clearNominationSubmission(appState: appState)
-        PickemsHaptics.lightImpact()
-    }
-
-    private func clearNominationSubmission(appState: AppState) {
         guard let groupId = appState.groupService.selectedGroup?.id,
               let weekId = appState.groupService.currentWeek?.id,
               let userId = appState.currentUserId else { return }
-        UserDefaults.standard.set(
-            false,
-            forKey: nominationsSubmittedKey(groupId: groupId, weekId: weekId, userId: userId)
-        )
-        didSubmitNominations = false
+        appState.pickService.clearNominationsSubmitted(groupId: groupId, weekId: weekId, userId: userId)
+        PickemsHaptics.lightImpact()
     }
 
     /// Re-opens a submitted pick for editing before the deadline by saving it back as a draft.
@@ -84,9 +78,19 @@ final class PicksViewModel {
     /// Mirrors Firestore picks into the local draft. Empty/nil clears stale Pickems so
     /// Group Picks clears and Picks-tab UI stay in sync. Blank team ids are dropped so
     /// tap-to-clear can be re-picked. In-flight local writes win until their echo arrives
-    /// so a stale empty snapshot cannot wipe a re-pick.
-    func syncDraftFromServer(_ picks: [String: String]?, confidenceGameId: String? = nil) {
+    /// so a stale empty snapshot cannot wipe a re-pick. `force` is for local writes that
+    /// already landed (commissioner clear, save) — those must beat a pending draft.
+    func syncDraftFromServer(
+        _ picks: [String: String]?,
+        confidenceGameId: String? = nil,
+        force: Bool = false
+    ) {
         let cleaned = PickService.sanitizedPicks(picks ?? [:])
+        if force {
+            resetPendingWrite()
+            applyServerPicks(cleaned, confidenceGameId: confidenceGameId)
+            return
+        }
         if let pending = pendingWritePicks {
             if cleaned == pending {
                 pendingWritePicks = nil
@@ -97,13 +101,30 @@ final class PicksViewModel {
         applyServerPicks(cleaned, confidenceGameId: confidenceGameId)
     }
 
+    /// Opening the Picks tab: server `userPick` wins unless a save is on the wire.
+    func resyncWhenVisible(appState: AppState) {
+        resyncDraftIfIdle(
+            from: appState.pickService.userPick?.picks,
+            confidenceGameId: appState.pickService.userPick?.confidenceGameId
+        )
+        refreshNominationSubmissionState(appState: appState)
+    }
+
+    func resyncDraftIfIdle(from picks: [String: String]?, confidenceGameId: String? = nil) {
+        if writeInFlight { return }
+        pendingWritePicks = nil
+        applyServerPicks(picks, confidenceGameId: confidenceGameId)
+    }
+
     /// Test seam: mark a local write that must not be overwritten by a stale snapshot.
-    func markPendingWrite(_ picks: [String: String]) {
+    func markPendingWrite(_ picks: [String: String], inFlight: Bool = false) {
         pendingWritePicks = PickService.sanitizedPicks(picks)
+        writeInFlight = inFlight
     }
 
     func resetPendingWrite() {
         pendingWritePicks = nil
+        writeInFlight = false
         saveDraftTask?.cancel()
         saveDraftTask = nil
     }
@@ -227,10 +248,14 @@ final class PicksViewModel {
         }
         let confidenceToSave = group.rules.allowConfidencePick ? confidenceGameId : nil
         pendingWritePicks = picks
+        writeInFlight = true
         let previous = saveDraftTask
         saveDraftTask = Task {
             _ = await previous?.value
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                if pendingWritePicks == picks { writeInFlight = false }
+                return
+            }
             do {
                 try await appState.pickService.savePickDraft(
                     groupId: group.id,
@@ -242,9 +267,13 @@ final class PicksViewModel {
                     week: week,
                     allowLatePicks: group.rules.allowLatePicks
                 )
+                if pendingWritePicks == picks {
+                    writeInFlight = false
+                }
             } catch {
                 if pendingWritePicks == picks {
                     pendingWritePicks = nil
+                    writeInFlight = false
                 }
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
@@ -257,9 +286,13 @@ final class PicksViewModel {
         let picks = PickService.sanitizedPicks(draftPicks)
         let confidence = group.rules.allowConfidencePick ? confidenceGameId : nil
         pendingWritePicks = picks
+        writeInFlight = true
         Task {
             _ = await saveDraftTask?.value
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                if pendingWritePicks == picks { writeInFlight = false }
+                return
+            }
             do {
                 try await appState.pickService.submitPicks(
                     groupId: group.id,
@@ -271,10 +304,14 @@ final class PicksViewModel {
                     confidenceGameId: confidence,
                     allowLatePicks: group.rules.allowLatePicks
                 )
+                if pendingWritePicks == picks {
+                    writeInFlight = false
+                }
                 PickemsHaptics.success()
             } catch {
                 if pendingWritePicks == picks {
                     pendingWritePicks = nil
+                    writeInFlight = false
                 }
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
@@ -372,11 +409,6 @@ final class PicksViewModel {
                     isCommissioner: appState.isCommissioner,
                     userId: userId
                 )
-                // Editing selections clears the "submitted" acknowledgement so the
-                // member can review and re-submit their final games.
-                if nomination.submittedBy == userId {
-                    clearNominationSubmission(appState: appState)
-                }
             } catch {
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
@@ -459,5 +491,36 @@ final class PicksViewModel {
         } catch {
             // Live refresh is best-effort during locked weeks.
         }
+    }
+}
+
+/// Keeps the shared Picks draft in sync with `PickService.userPick` from any screen.
+private struct PicksDraftSyncModifier: ViewModifier {
+    @Environment(AppState.self) private var appState
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: appState.pickService.userPick) { _, newPick in
+                appState.picksViewModel.syncDraftFromServer(
+                    newPick?.picks,
+                    confidenceGameId: newPick?.confidenceGameId
+                )
+            }
+            .onChange(of: appState.pickService.userPickEpoch) { _, _ in
+                appState.picksViewModel.syncDraftFromServer(
+                    appState.pickService.userPick?.picks,
+                    confidenceGameId: appState.pickService.userPick?.confidenceGameId,
+                    force: true
+                )
+            }
+            .onChange(of: appState.pickService.nominations) { _, _ in
+                appState.picksViewModel.refreshNominationSubmissionState(appState: appState)
+            }
+    }
+}
+
+extension View {
+    func syncPicksDraftFromServer() -> some View {
+        modifier(PicksDraftSyncModifier())
     }
 }
