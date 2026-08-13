@@ -125,4 +125,26 @@ struct PicksDraftSyncTests {
         ])
         #expect(cleaned == ["game-1": "team-a"])
     }
+
+    @Test func syncDraftFromServerIgnoresStaleSnapshotWhileWritePending() {
+        let vm = PicksViewModel()
+        vm.draftPicks = ["game-1": "team-a"]
+        vm.markPendingWrite(["game-1": "team-a"])
+
+        vm.syncDraftFromServer([:], confidenceGameId: nil)
+
+        #expect(vm.draftPicks == ["game-1": "team-a"])
+    }
+
+    @Test func syncDraftFromServerAppliesEchoOfPendingWrite() {
+        let vm = PicksViewModel()
+        vm.draftPicks = ["game-1": "team-a"]
+        vm.markPendingWrite(["game-1": "team-a"])
+
+        vm.syncDraftFromServer(["game-1": "team-a"], confidenceGameId: nil)
+
+        #expect(vm.draftPicks == ["game-1": "team-a"])
+        vm.syncDraftFromServer([:], confidenceGameId: nil)
+        #expect(vm.draftPicks.isEmpty)
+    }
 }

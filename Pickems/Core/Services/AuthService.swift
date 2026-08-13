@@ -773,6 +773,11 @@ final class AuthService {
             AppEvents.failure(.authDeleteAccountFailed, error: mapped, metadata: [
                 "uid": AppEvents.shortUID(uid),
             ])
+            // Profile/leagues may already be gone; don't leave a signed-in ghost session.
+            authEpoch += 1
+            try? auth.signOut()
+            applySignedOut()
+            authStateDetermined = true
             throw mapped
         }
     }

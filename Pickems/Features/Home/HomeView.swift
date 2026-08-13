@@ -187,7 +187,7 @@ struct HomeView: View {
                             }
                             Spacer()
                             if let week = appState.groupService.currentWeek {
-                                StatusBadge(text: week.status.rawValue.capitalized, color: statusColor(week.status))
+                                StatusBadge(text: weekStatusBadge(week.status), color: statusColor(week.status))
                                     .pickemsPulse(enabled: week.status == .locked)
                             }
                         }
@@ -404,6 +404,15 @@ struct HomeView: View {
             return "Submit Pickems"
         case .locked: return "Watch Live"
         case .scored: return "See Results"
+        }
+    }
+
+    private func weekStatusBadge(_ status: WeekStatus) -> String {
+        switch status {
+        case .selection: return "Selections"
+        case .picking: return "Pickems"
+        case .locked: return "Locked"
+        case .scored: return "Scored"
         }
     }
 

@@ -85,8 +85,8 @@ export const onWeekCreated = onDocumentCreated(
 
     await sendToUser(
       commissionerId,
-      "Set nomination deadline",
-      `Week ${data.weekNumber ?? ""} needs a nomination deadline so members finish before kickoff.`,
+      "Set Selection deadline",
+      `Week ${data.weekNumber ?? ""} needs a Selection deadline so members finish before kickoff.`,
       "set_selection_deadline",
       { groupId, weekId }
     );
@@ -123,8 +123,8 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
       if (!deadline && !week.selectionDeadlineNudgeSent) {
         await sendToUser(
           commissionerId,
-          "Set nomination deadline",
-          `Week ${weekNum} needs a nomination deadline so members finish before kickoff.`,
+          "Set Selection deadline",
+          `Week ${weekNum} needs a Selection deadline so members finish before kickoff.`,
           "set_selection_deadline",
           { groupId, weekId }
         );
@@ -139,7 +139,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
       ) {
         await sendToUser(
           commissionerId,
-          "Nomination deadline passed",
+          "Selection deadline passed",
           `Week ${weekNum}: fill remaining games or open with fewer.`,
           "selection_deadline_passed",
           { groupId, weekId }
@@ -191,8 +191,8 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
       if (need24h) {
         await sendToUsers(
           pending,
-          "Picks lock in 24 hours",
-          `Week ${weekNum} picks lock in 24 hours. Submit before the deadline.`,
+          "Pickems lock in 24 hours",
+          `Week ${weekNum} Pickems lock in 24 hours. Submit before the deadline.`,
           "deadline_reminder",
           data
         );
@@ -202,8 +202,8 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
       if (need1h) {
         await sendToUsers(
           pending,
-          "Picks lock in 1 hour",
-          `Week ${weekNum} picks lock in 1 hour. Submit before the deadline.`,
+          "Pickems lock in 1 hour",
+          `Week ${weekNum} Pickems lock in 1 hour. Submit before the deadline.`,
           "deadline_reminder",
           data
         );
@@ -244,7 +244,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
         });
         await sendToUsers(
           memberIds,
-          "Picks are locked",
+          "Pickems are locked",
           `Week ${week.weekNumber} is locked. Good luck.`,
           "deadline_locked",
           { groupId, weekId }

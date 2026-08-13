@@ -462,6 +462,9 @@ struct GroupPicksView: View {
     }
 
     private func isDone(_ userId: String) -> Bool {
+        if isNominatingPhase, selectionMode == .commissioner, userId != commissionerId {
+            return true
+        }
         let total = expectedTotal(for: userId)
         if total == 0 { return false }
         if isNominatingPhase {

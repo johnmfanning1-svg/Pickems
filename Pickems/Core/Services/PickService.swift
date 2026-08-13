@@ -30,6 +30,11 @@ final class PickService {
         gamesListener?.remove()
         pickListener?.remove()
         submissionsListener?.remove()
+        nominations = []
+        slateGames = []
+        userPick = nil
+        allPicks = []
+        submissions = []
 
         nominationsListener = db.week(groupId: groupId, weekId: weekId)
             .nominations
@@ -546,14 +551,15 @@ final class PickService {
         displayName: String,
         picks: [String: String],
         confidenceGameId: String? = nil,
-        week: WeekSummary? = nil
+        week: WeekSummary? = nil,
+        allowLatePicks: Bool = false
     ) async throws {
         if let week {
             switch week.status {
             case .locked, .scored:
                 throw PickError.deadlinePassed
             case .picking, .selection:
-                if ScoringEngine.isPastDeadline(deadline: week.pickDeadline) {
+                if ScoringEngine.isPastDeadline(deadline: week.pickDeadline), !allowLatePicks {
                     throw PickError.deadlinePassed
                 }
             }
@@ -584,7 +590,7 @@ final class PickService {
             confidenceGameId: trimmedConfidence
         )
         try await ref.setData(from: pick)
-        userPick = trimmed.isEmpty ? nil : pick
+        userPick = pick
         mergeOwnPickIntoAllPicks(pick)
         try await syncSubmission(
             groupId: groupId,

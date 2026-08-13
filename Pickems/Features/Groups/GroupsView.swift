@@ -351,7 +351,7 @@ struct GroupsView: View {
                     NavigationLink {
                         GroupSlateView(group: group, week: week)
                     } label: {
-                        gridActionLabel(slateActionTitle(for: week.status), systemImage: slateActionIcon(for: week.status))
+                        gridActionLabel(slateActionTitle(for: week), systemImage: slateActionIcon(for: week.status))
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint(slateActionHint(for: week.status))
@@ -386,10 +386,21 @@ struct GroupsView: View {
             )
     }
 
-    private func slateActionTitle(for status: WeekStatus) -> String {
-        switch status {
+    private func slateActionTitle(for week: WeekSummary) -> String {
+        switch week.status {
         case .selection: return appState.isCommissioner ? "Build Slate" : "Make Selections"
-        case .picking: return "Make Pickems"
+        case .picking:
+            if PickDeadlineCalculator.isPast(week.pickDeadline) {
+                return "View Pickems"
+            }
+            if appState.pickService.userPick?.isLocked == true {
+                return "Edit Pickems"
+            }
+            let pickCount = appState.pickService.userPick?.picks.count ?? 0
+            let slateCount = appState.pickService.slateGames.count
+            if pickCount == 0 { return "Make Pickems" }
+            if slateCount > 0, pickCount < slateCount { return "Finish Pickems" }
+            return "Submit Pickems"
         case .locked, .scored: return "Live Pickems"
         }
     }

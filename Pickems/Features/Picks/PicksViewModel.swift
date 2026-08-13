@@ -17,6 +17,8 @@ final class PicksViewModel {
 
     private var liveRefreshTask: Task<Void, Never>?
     private var saveDraftTask: Task<Void, Never>?
+    /// Local Pickems waiting for a Firestore echo. Stale listener snapshots must not clobber this.
+    private var pendingWritePicks: [String: String]?
 
     func loadWeek(appState: AppState) async {
         await appState.syncSelectedWeek()
@@ -74,9 +76,29 @@ final class PicksViewModel {
 
     /// Mirrors Firestore picks into the local draft. Empty/nil clears stale Pickems so
     /// Group Picks clears and Picks-tab UI stay in sync. Blank team ids are dropped so
-    /// tap-to-clear can be re-picked.
+    /// tap-to-clear can be re-picked. In-flight local writes win until their echo arrives
+    /// so a stale empty snapshot cannot wipe a re-pick.
     func syncDraftFromServer(_ picks: [String: String]?, confidenceGameId: String? = nil) {
-        applyServerPicks(picks, confidenceGameId: confidenceGameId)
+        let cleaned = PickService.sanitizedPicks(picks ?? [:])
+        if let pending = pendingWritePicks {
+            if cleaned == pending {
+                pendingWritePicks = nil
+                applyServerPicks(cleaned, confidenceGameId: confidenceGameId)
+            }
+            return
+        }
+        applyServerPicks(cleaned, confidenceGameId: confidenceGameId)
+    }
+
+    /// Test seam: mark a local write that must not be overwritten by a stale snapshot.
+    func markPendingWrite(_ picks: [String: String]) {
+        pendingWritePicks = PickService.sanitizedPicks(picks)
+    }
+
+    func resetPendingWrite() {
+        pendingWritePicks = nil
+        saveDraftTask?.cancel()
+        saveDraftTask = nil
     }
 
     private func applyServerPicks(_ picks: [String: String]?, confidenceGameId: String?) {
@@ -106,8 +128,17 @@ final class PicksViewModel {
             let weekInfo = try await ESPNService.shared.currentWeek()
             espnGames = try await ESPNService.shared.fetchScoreboard(week: weekInfo.weekNumber)
         } catch {
+            espnGames = []
             UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
         }
+    }
+
+    func browseGames(appState: AppState) async {
+        await loadESPNGames(appState: appState)
+        if espnGames.isEmpty, appState.pickService.errorMessage != nil {
+            return
+        }
+        showGameBrowse = true
     }
 
     func handleGameSelection(_ game: ESPNGame, appState: AppState) {
@@ -185,6 +216,7 @@ final class PicksViewModel {
             confidenceGameId = nil
         }
         let confidenceToSave = group.rules.allowConfidencePick ? confidenceGameId : nil
+        pendingWritePicks = picks
         let previous = saveDraftTask
         saveDraftTask = Task {
             _ = await previous?.value
@@ -197,9 +229,13 @@ final class PicksViewModel {
                     displayName: user.displayName,
                     picks: picks,
                     confidenceGameId: confidenceToSave,
-                    week: week
+                    week: week,
+                    allowLatePicks: group.rules.allowLatePicks
                 )
             } catch {
+                if pendingWritePicks == picks {
+                    pendingWritePicks = nil
+                }
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
         }
@@ -208,20 +244,28 @@ final class PicksViewModel {
     func submitPicks(week: WeekSummary, appState: AppState) {
         guard let group = appState.groupService.selectedGroup,
               let user = appState.authService.currentUser else { return }
+        let picks = PickService.sanitizedPicks(draftPicks)
+        let confidence = group.rules.allowConfidencePick ? confidenceGameId : nil
+        pendingWritePicks = picks
         Task {
+            _ = await saveDraftTask?.value
+            guard !Task.isCancelled else { return }
             do {
                 try await appState.pickService.submitPicks(
                     groupId: group.id,
                     weekId: week.id,
                     userId: user.id,
                     displayName: user.displayName,
-                    picks: draftPicks,
+                    picks: picks,
                     deadline: week.pickDeadline,
-                    confidenceGameId: group.rules.allowConfidencePick ? confidenceGameId : nil,
+                    confidenceGameId: confidence,
                     allowLatePicks: group.rules.allowLatePicks
                 )
                 PickemsHaptics.success()
             } catch {
+                if pendingWritePicks == picks {
+                    pendingWritePicks = nil
+                }
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
         }
@@ -238,7 +282,7 @@ final class PicksViewModel {
                     rules: group.rules
                 )
             } catch {
-                UserFacingError.apply(error, to: &appState.groupService.errorMessage, context: .write)
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
         }
     }
@@ -261,7 +305,7 @@ final class PicksViewModel {
                 )
                 PickemsHaptics.success()
             } catch {
-                UserFacingError.apply(error, to: &appState.groupService.errorMessage, context: .write)
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
         }
     }
@@ -298,7 +342,7 @@ final class PicksViewModel {
                 }
                 PickemsHaptics.success()
             } catch {
-                UserFacingError.apply(error, to: &appState.groupService.errorMessage, context: .write)
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
         }
     }

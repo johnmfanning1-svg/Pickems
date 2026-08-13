@@ -59,6 +59,11 @@ struct CommissionerManagePicksSheet: View {
                         save(isLocked: true)
                     }
                     .disabled(slateGames.isEmpty || draftPicks.count < slateGames.count || isWorking)
+                    if !slateGames.isEmpty, draftPicks.count < slateGames.count {
+                        Text("Pick a side for every game (\(draftPicks.count)/\(slateGames.count)) before saving.")
+                            .font(.caption)
+                            .foregroundStyle(PickemsColors.textSecondary)
+                    }
 
                     SecondaryButton("Save as Draft (not submitted)", icon: "pencil") {
                         save(isLocked: false)
