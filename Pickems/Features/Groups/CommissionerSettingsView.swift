@@ -70,7 +70,7 @@ struct CommissionerSettingsView: View {
 
                     if rules.selectionMode == .member {
                         Stepper(
-                            "Nominations per member: \(rules.selectionsPerMember)",
+                            "Selections per member: \(rules.selectionsPerMember)",
                             value: $rules.selectionsPerMember,
                             in: 1...10
                         )
@@ -83,12 +83,12 @@ struct CommissionerSettingsView: View {
                     sectionHeader("Slate Configuration", help: PickemsHelp.commissionerSettings)
                 } footer: {
                     Text(rules.selectionMode == .member
-                        ? "Each member nominates this many games. Weekly game target = members × nominations. You’ll set a nomination deadline each week."
+                        ? "Each member selects this many games. Weekly game target = members × Selections. You’ll set a Selection deadline each week."
                         : "You choose every game for the group each week.")
                 }
 
                 Section {
-                    LabeledContent("Pick deadline", value: "First game kickoff")
+                    LabeledContent("Pickems deadline", value: "First game kickoff")
                         .listRowBackground(PickemsColors.cardBackground)
 
                     Picker("Tie breaker", selection: $rules.tieBreaker) {
@@ -100,7 +100,7 @@ struct CommissionerSettingsView: View {
 
                     Toggle("Confidence pick (2x one game)", isOn: $rules.allowConfidencePick)
                         .listRowBackground(PickemsColors.cardBackground)
-                    Toggle("Allow late picks", isOn: $rules.allowLatePicks)
+                    Toggle("Allow late Pickems", isOn: $rules.allowLatePicks)
                         .listRowBackground(PickemsColors.cardBackground)
                     if rules.allowLatePicks {
                         Stepper(
@@ -113,7 +113,7 @@ struct CommissionerSettingsView: View {
                 } header: {
                     sectionHeader("Deadlines & Ties", help: PickemsHelp.pickDeadline)
                 } footer: {
-                    Text("Spread picks lock at the earliest kickoff on the slate. Changes apply to future weeks.")
+                    Text("Pickems lock at the earliest kickoff on the slate. Changes apply to future weeks.")
                 }
 
                 Section {
@@ -132,7 +132,7 @@ struct CommissionerSettingsView: View {
                 } header: {
                     Text("Visibility & Chase")
                 } footer: {
-                    Text("Public leagues appear in Discover. Submission chase shows who still needs to lock picks.")
+                    Text("Public leagues appear in Discover. Submission chase shows who still needs to lock Pickems.")
                 }
 
                 Section {
@@ -182,23 +182,21 @@ struct CommissionerSettingsView: View {
                         .disabled(isSaving)
                 }
             }
-            .confirmationDialog(
+            .alert(
                 "Close Season \(seasonYearToClose.pickemsYearString)?",
-                isPresented: $showCloseSeasonConfirm,
-                titleVisibility: .visible
+                isPresented: $showCloseSeasonConfirm
             ) {
                 Button("Close Season", role: .destructive) { closeSeason() }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This archives \(seasonYearToClose.pickemsYearString) standings and resets everyone’s season record. This cannot be undone.")
             }
-            .confirmationDialog(
+            .alert(
                 "Remove \(memberToRemove?.displayName ?? "member")?",
                 isPresented: Binding(
                     get: { memberToRemove != nil },
                     set: { if !$0 { memberToRemove = nil } }
-                ),
-                titleVisibility: .visible
+                )
             ) {
                 Button("Remove Member", role: .destructive) {
                     if let member = memberToRemove { removeMember(member) }
@@ -208,13 +206,12 @@ struct CommissionerSettingsView: View {
             } message: {
                 Text("They lose access to this league’s picks and standings. They can rejoin with the invite code.")
             }
-            .confirmationDialog(
+            .alert(
                 "Make \(memberToPromote?.displayName ?? "member") the commissioner?",
                 isPresented: Binding(
                     get: { memberToPromote != nil },
                     set: { if !$0 { memberToPromote = nil } }
-                ),
-                titleVisibility: .visible
+                )
             ) {
                 Button("Transfer Commissioner", role: .destructive) {
                     if let member = memberToPromote { transferCommissioner(to: member) }
@@ -224,10 +221,9 @@ struct CommissionerSettingsView: View {
             } message: {
                 Text("You become a regular member. Only one commissioner is allowed at a time.")
             }
-            .confirmationDialog(
+            .alert(
                 "Delete this league permanently?",
-                isPresented: $showDeleteLeagueConfirm,
-                titleVisibility: .visible
+                isPresented: $showDeleteLeagueConfirm
             ) {
                 Button("Delete League", role: .destructive) { deleteLeague() }
                 Button("Cancel", role: .cancel) {}

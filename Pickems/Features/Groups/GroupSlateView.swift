@@ -11,6 +11,7 @@ struct GroupSlateView: View {
     @State private var viewModel = PicksViewModel()
     @State private var showSelectionDeadlineSheet = false
     @State private var showPickDeadlineSheet = false
+    @State private var showIncompletePickemsAlert = false
 
     private var activeWeek: WeekSummary {
         if let current = appState.groupService.currentWeek, current.id == week.id {
@@ -67,21 +68,26 @@ struct GroupSlateView: View {
             }
             .pickemsEnvironment(appState)
         }
-        .confirmationDialog("Submit your picks?", isPresented: $viewModel.showConfirmSubmit, titleVisibility: .visible) {
-            Button("Submit Picks") {
+        .alert("Submit your Pickems?", isPresented: $viewModel.showConfirmSubmit) {
+            Button("Submit Pickems") {
                 viewModel.submitPicks(week: activeWeek, appState: appState)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("You can still edit your picks until lock.")
+            Text("You can still edit your Pickems until lock.")
         }
-        .confirmationDialog("Submit your nominations?", isPresented: $viewModel.showConfirmNominations, titleVisibility: .visible) {
-            Button("Submit Nominations") {
+        .alert("Submit your Selections?", isPresented: $viewModel.showConfirmNominations) {
+            Button("Submit Selections") {
                 viewModel.submitNominations(appState: appState)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("You can still swap your games until picks lock at the first kickoff.")
+            Text("You can still swap your games until Pickems lock at the first kickoff.")
+        }
+        .alert("Finish your Pickems", isPresented: $showIncompletePickemsAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(incompletePickemsAlertMessage)
         }
         .sheet(isPresented: $showSelectionDeadlineSheet) {
             SelectionDeadlineSheet(
@@ -168,7 +174,7 @@ struct GroupSlateView: View {
                 help: PickemsHelp.commissionerSlate
             )
 
-            PrimaryButton(title: "Nominate Game", isLoading: viewModel.isLoadingGames) {
+            PrimaryButton(title: "Add Game", isLoading: viewModel.isLoadingGames) {
                 Task {
                     await viewModel.loadESPNGames(appState: appState)
                     viewModel.showGameBrowse = true
@@ -230,7 +236,7 @@ struct GroupSlateView: View {
 
         return VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
-                title: "Nominate Games",
+                title: "Make Selections",
                 subtitle: "You: \(userNoms)/\(perMember) · Members done: \(membersDone)/\(max(memberIds.count, 1)) · Games: \(uniqueGames)/\(week.slateSize)",
                 help: PickemsHelp.nominations
             )
@@ -241,8 +247,8 @@ struct GroupSlateView: View {
                 ContextualTipBanner(
                     icon: "clock",
                     message: deadlinePassed
-                        ? "Nomination deadline passed. Waiting on your commissioner to open the week."
-                        : "Nominate by \(PickDeadlineCalculator.lockTimeLabel(for: deadline))."
+                        ? "Selection deadline passed. Waiting on your commissioner to open the week."
+                        : "Select by \(PickDeadlineCalculator.lockTimeLabel(for: deadline))."
                 )
                 .padding(.horizontal)
             }
@@ -252,7 +258,7 @@ struct GroupSlateView: View {
             } else if atLimit {
                 nominationSubmitSection(userNoms: userNoms, rules: rules, perMember: perMember)
             } else if canMemberNominate {
-                PrimaryButton(title: "Nominate Game", isLoading: viewModel.isLoadingGames) {
+                PrimaryButton(title: "Select Game", isLoading: viewModel.isLoadingGames) {
                     Task {
                         await viewModel.loadESPNGames(appState: appState)
                         viewModel.showGameBrowse = true
@@ -263,9 +269,9 @@ struct GroupSlateView: View {
 
             if appState.pickService.nominations.isEmpty {
                 ContentUnavailableView(
-                    "No Nominations Yet",
+                    "No Selections Yet",
                     systemImage: "plus.rectangle.on.rectangle",
-                    description: Text("Nominate a game to help build the slate.")
+                    description: Text("Select a game to help build the slate.")
                 )
                 .padding(.top, 16)
             } else {
@@ -307,16 +313,16 @@ struct GroupSlateView: View {
             if week.selectionDeadline == nil {
                 ContextualTipBanner(
                     icon: "bell.badge",
-                    message: "Set a nomination deadline so members finish early enough to pick before kickoff."
+                    message: "Set a selection deadline so members finish early enough to make Pickems before kickoff."
                 )
-                PrimaryButton(title: "Set Nomination Deadline") {
+                PrimaryButton(title: "Set Selection Deadline") {
                     showSelectionDeadlineSheet = true
                 }
             } else {
                 SecondaryButton(
                     week.isSelectionDeadlinePassed
                         ? "Update Deadline"
-                        : "Edit Nomination Deadline",
+                        : "Edit Selection Deadline",
                     icon: "calendar"
                 ) {
                     showSelectionDeadlineSheet = true
@@ -372,10 +378,10 @@ struct GroupSlateView: View {
         if viewModel.didSubmitNominations {
             PickemsCard {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("Nominations submitted", systemImage: "checkmark.seal.fill")
+                    Label("Selections submitted", systemImage: "checkmark.seal.fill")
                         .font(.headline)
                         .foregroundStyle(PickemsColors.success)
-                    Text("Your \(userNoms) game\(userNoms == 1 ? "" : "s") \(userNoms == 1 ? "is" : "are") in. You can still edit them until picks lock at the first kickoff.")
+                    Text("Your \(userNoms) game\(userNoms == 1 ? "" : "s") \(userNoms == 1 ? "is" : "are") in. You can still edit them until Pickems lock at the first kickoff.")
                         .font(.caption)
                         .foregroundStyle(PickemsColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -385,13 +391,13 @@ struct GroupSlateView: View {
             .padding(.horizontal)
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                Text("You've picked your \(perMember) game\(perMember == 1 ? "" : "s"). Submit to lock in your nominations.")
+                Text("You've selected your \(perMember) game\(perMember == 1 ? "" : "s"). Submit to lock in your Selections.")
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal)
 
-                PrimaryButton(title: "Submit Nominations") {
+                PrimaryButton(title: "Submit Selections") {
                     viewModel.showConfirmNominations = true
                 }
                 .padding(.horizontal)
@@ -407,8 +413,8 @@ struct GroupSlateView: View {
 
         return VStack(spacing: 16) {
             PickemsSectionHeader(
-                title: "Spread Picks",
-                subtitle: "Tap a team to pick against the spread",
+                title: "Spread Pickems",
+                subtitle: "Tap a team to choose a winner against the spread",
                 help: PickemsHelp.spreadPicks
             )
 
@@ -424,7 +430,7 @@ struct GroupSlateView: View {
                             .font(.caption)
                             .foregroundStyle(PickemsColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        SecondaryButton("Edit Picks", icon: "pencil") {
+                        SecondaryButton("Edit Pickems", icon: "pencil") {
                             viewModel.unlockPicksForEditing(appState: appState)
                         }
                     }
@@ -441,7 +447,7 @@ struct GroupSlateView: View {
                 )
 
                 SecondaryButton(
-                    pastDeadline ? "Extend / Unlock Deadline" : "Set Pick Deadline",
+                    pastDeadline ? "Extend / Unlock Deadline" : "Set Pickems Deadline",
                     icon: "calendar.badge.clock"
                 ) {
                     showPickDeadlineSheet = true
@@ -484,17 +490,10 @@ struct GroupSlateView: View {
                             viewModel.saveDraft(appState: appState)
                         }
                         if appState.isCommissioner && slateEditable {
-                            HStack {
-                                Button("Edit Spread") { viewModel.spreadEditGame = game }
-                                    .font(.caption).foregroundStyle(theme.accent)
-                                Spacer()
-                                Button(role: .destructive) {
-                                    viewModel.removeCommissionerGame(game, week: week, appState: appState)
-                                } label: {
-                                    Label("Remove", systemImage: "trash").font(.caption)
-                                }
-                            }
-                            .padding(.horizontal, 24)
+                            Button("Edit Spread") { viewModel.spreadEditGame = game }
+                                .font(.caption).foregroundStyle(theme.accent)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 24)
                         }
                     }
                     .padding(.horizontal)
@@ -502,11 +501,19 @@ struct GroupSlateView: View {
             }
 
             if appState.pickService.userPick?.isLocked != true, !slateGames.isEmpty {
-                PrimaryButton(title: groupPickingSubmitTitle(pastDeadline: pastDeadline, slateCount: slateGames.count)) {
-                    viewModel.showConfirmSubmit = true
+                VStack(alignment: .leading, spacing: 8) {
+                    PrimaryButton(title: groupPickingSubmitTitle(pastDeadline: pastDeadline, slateCount: slateGames.count)) {
+                        handlePickingSubmit()
+                    }
+                    .disabled(pastDeadline)
+
+                    if hasIncompletePickems, !pastDeadline {
+                        Text(incompletePickemsCaption)
+                            .font(.caption)
+                            .foregroundStyle(PickemsColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-                .disabled(pastDeadline || viewModel.draftPicks.isEmpty
-                          || viewModel.draftPicks.count < slateGames.count)
                 .padding(.horizontal)
             }
         }
@@ -515,9 +522,34 @@ struct GroupSlateView: View {
     private func groupPickingSubmitTitle(pastDeadline: Bool, slateCount: Int) -> String {
         if pastDeadline { return "Deadline Passed" }
         let count = viewModel.draftPicks.count
-        if count == 0 { return "Make Picks" }
-        if count < slateCount { return "Finish Picks (\(count)/\(slateCount))" }
-        return "Submit Picks"
+        if count == 0 { return "Make Pickems" }
+        if count < slateCount { return "Finish Pickems (\(count)/\(slateCount))" }
+        return "Submit Pickems"
+    }
+
+    private var hasIncompletePickems: Bool {
+        let slate = appState.pickService.slateGames.count
+        return slate > 0 && viewModel.draftPicks.count < slate
+    }
+
+    private var incompletePickemsCaption: String {
+        let count = viewModel.draftPicks.count
+        let slate = appState.pickService.slateGames.count
+        return "You've picked \(count) of \(slate) games. Finish your Pickems to submit."
+    }
+
+    private var incompletePickemsAlertMessage: String {
+        let count = viewModel.draftPicks.count
+        let slate = appState.pickService.slateGames.count
+        return "You've picked \(count) of \(slate) games."
+    }
+
+    private func handlePickingSubmit() {
+        if hasIncompletePickems {
+            showIncompletePickemsAlert = true
+        } else {
+            viewModel.showConfirmSubmit = true
+        }
     }
 
     // MARK: - Monitor (locked / scored)
@@ -540,7 +572,7 @@ struct GroupSlateView: View {
             .padding(.horizontal)
 
             if appState.isCommissioner, week.status == .locked {
-                SecondaryButton("Reopen Picks", icon: "lock.open") {
+                SecondaryButton("Reopen Pickems", icon: "lock.open") {
                     showPickDeadlineSheet = true
                 }
                 .padding(.horizontal)
@@ -577,7 +609,7 @@ struct GroupSlateView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     PickemsSectionHeader(
                         title: "Group Results",
-                        subtitle: "Picks with spreads",
+                        subtitle: "Pickems with spreads",
                         help: PickemsHelp.spreadPicks
                     )
 
@@ -630,7 +662,7 @@ struct GroupSlateView: View {
                         )
                     }
                 } else {
-                    Text("No picks submitted")
+                    Text("No Pickems submitted")
                         .font(.caption)
                         .foregroundStyle(PickemsColors.textSecondary)
                 }
@@ -644,8 +676,8 @@ struct GroupSlateView: View {
     private func navigationTitle(for status: WeekStatus) -> String {
         switch status {
         case .selection: return "Build Slate"
-        case .picking: return "Make Picks"
-        case .locked, .scored: return "Live Picks"
+        case .picking: return "Make Pickems"
+        case .locked, .scored: return "Live Pickems"
         }
     }
 

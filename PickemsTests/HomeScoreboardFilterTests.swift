@@ -104,4 +104,25 @@ struct PicksDraftSyncTests {
         #expect(vm.draftPicks == ["game-1": "team-a"])
         #expect(vm.confidenceGameId == "game-1")
     }
+
+    @Test func syncDraftFromServerDropsBlankTeamIds() {
+        let vm = PicksViewModel()
+        vm.draftPicks = ["game-1": "team-a"]
+        vm.confidenceGameId = "game-1"
+
+        vm.syncDraftFromServer(["game-1": "", "game-2": "team-b"], confidenceGameId: "game-1")
+
+        #expect(vm.draftPicks == ["game-2": "team-b"])
+        #expect(vm.confidenceGameId == nil)
+    }
+
+    @Test func sanitizedPicksDropsBlankEntries() {
+        let cleaned = PickService.sanitizedPicks([
+            "game-1": "team-a",
+            "game-2": "",
+            "": "team-b",
+            "  ": "  ",
+        ])
+        #expect(cleaned == ["game-1": "team-a"])
+    }
 }

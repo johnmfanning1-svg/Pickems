@@ -24,7 +24,7 @@ struct SelectionDeadlineSheet: View {
             Form {
                 Section {
                     DatePicker(
-                        "Nomination deadline",
+                        "Selection deadline",
                         selection: $deadline,
                         in: Date()...,
                         displayedComponents: [.date, .hourAndMinute]
@@ -37,12 +37,12 @@ struct SelectionDeadlineSheet: View {
                         HelpInfoButton(topic: PickemsHelp.selectionDeadline)
                     }
                 } footer: {
-                    Text("Members can nominate until this time. Afterward you can fill remaining games or open the week with fewer.")
+                    Text("Members can make Selections until this time. Afterward you can fill remaining games or open the week with fewer.")
                 }
             }
             .scrollContentBackground(.hidden)
             .pickemsScreenBackground()
-            .navigationTitle("Nomination Deadline")
+            .navigationTitle("Selection Deadline")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

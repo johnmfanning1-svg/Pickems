@@ -16,12 +16,12 @@ final class PicksViewModel {
     var didSubmitNominations = false
 
     private var liveRefreshTask: Task<Void, Never>?
+    private var saveDraftTask: Task<Void, Never>?
 
     func loadWeek(appState: AppState) async {
         await appState.syncSelectedWeek()
         // Always mirror server — including empty clears from Group Picks / commissioner wipe.
-        draftPicks = appState.pickService.userPick?.picks ?? [:]
-        confidenceGameId = appState.pickService.userPick?.confidenceGameId
+        applyServerPicks(appState.pickService.userPick?.picks, confidenceGameId: appState.pickService.userPick?.confidenceGameId)
         refreshNominationSubmissionState(appState: appState)
     }
 
@@ -72,11 +72,21 @@ final class PicksViewModel {
         PickemsHaptics.lightImpact()
     }
 
-    /// Mirrors Firestore picks into the local draft. Empty/nil clears stale selections so
-    /// Group Picks clears and Picks-tab UI stay in sync.
+    /// Mirrors Firestore picks into the local draft. Empty/nil clears stale Pickems so
+    /// Group Picks clears and Picks-tab UI stay in sync. Blank team ids are dropped so
+    /// tap-to-clear can be re-picked.
     func syncDraftFromServer(_ picks: [String: String]?, confidenceGameId: String? = nil) {
-        draftPicks = picks ?? [:]
-        self.confidenceGameId = confidenceGameId
+        applyServerPicks(picks, confidenceGameId: confidenceGameId)
+    }
+
+    private func applyServerPicks(_ picks: [String: String]?, confidenceGameId: String?) {
+        let cleaned = PickService.sanitizedPicks(picks ?? [:])
+        draftPicks = cleaned
+        if let confidenceGameId, cleaned.keys.contains(confidenceGameId) {
+            self.confidenceGameId = confidenceGameId
+        } else {
+            self.confidenceGameId = nil
+        }
     }
 
     func startLiveRefresh(week: WeekSummary, appState: AppState) {
@@ -111,8 +121,10 @@ final class PicksViewModel {
                 let selectionMode = week.selectionMode
                 let commissionerFill =
                     appState.isCommissioner
-                    && selectionMode == .member
-                    && week.isSelectionDeadlinePassed
+                    && (
+                        (selectionMode == .member && week.isSelectionDeadlinePassed)
+                        || week.status == .picking
+                    )
 
                 if selectionMode == .commissioner || commissionerFill {
                     try await appState.pickService.submitCommissionerGame(
@@ -161,15 +173,31 @@ final class PicksViewModel {
         guard let group = appState.groupService.selectedGroup,
               let week = appState.groupService.currentWeek,
               let user = appState.authService.currentUser else { return }
-        Task {
+        let gameIds = Set(appState.pickService.slateGames.map(\.id))
+        var picks = PickService.sanitizedPicks(draftPicks)
+        if !gameIds.isEmpty {
+            picks = picks.filter { gameIds.contains($0.key) }
+        }
+        if picks != draftPicks {
+            draftPicks = picks
+        }
+        if let cid = confidenceGameId, !picks.keys.contains(cid) {
+            confidenceGameId = nil
+        }
+        let confidenceToSave = group.rules.allowConfidencePick ? confidenceGameId : nil
+        let previous = saveDraftTask
+        saveDraftTask = Task {
+            _ = await previous?.value
+            guard !Task.isCancelled else { return }
             do {
                 try await appState.pickService.savePickDraft(
                     groupId: group.id,
                     weekId: week.id,
                     userId: user.id,
                     displayName: user.displayName,
-                    picks: draftPicks,
-                    confidenceGameId: group.rules.allowConfidencePick ? confidenceGameId : nil
+                    picks: picks,
+                    confidenceGameId: confidenceToSave,
+                    week: week
                 )
             } catch {
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
@@ -286,6 +314,7 @@ final class PicksViewModel {
                     weekId: week.id,
                     nomination: nomination,
                     rules: rules,
+                    week: week,
                     isCommissioner: appState.isCommissioner,
                     userId: userId
                 )
@@ -310,6 +339,10 @@ final class PicksViewModel {
                     gameId: game.id,
                     week: week
                 )
+                draftPicks.removeValue(forKey: game.id)
+                if confidenceGameId == game.id {
+                    confidenceGameId = nil
+                }
             } catch {
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }

@@ -9,7 +9,7 @@ enum SelectionMode: String, Codable, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .commissioner: return "Commissioner Selects"
-        case .member: return "Members Nominate"
+        case .member: return "Members Select"
         }
     }
 }

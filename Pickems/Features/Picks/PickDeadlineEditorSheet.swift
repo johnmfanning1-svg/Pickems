@@ -41,7 +41,7 @@ struct PickDeadlineEditorSheet: View {
             Form {
                 Section {
                     DatePicker(
-                        "Pick deadline",
+                        "Pickems deadline",
                         selection: $deadline,
                         in: Date()...,
                         displayedComponents: [.date, .hourAndMinute]
@@ -49,7 +49,7 @@ struct PickDeadlineEditorSheet: View {
                     .listRowBackground(PickemsColors.cardBackground)
 
                     if isPastDeadline || needsReopen {
-                        Toggle("Unlock submitted picks", isOn: $unlockMemberPicks)
+                        Toggle("Unlock submitted Pickems", isOn: $unlockMemberPicks)
                             .listRowBackground(PickemsColors.cardBackground)
                     }
                 } header: {
@@ -64,7 +64,7 @@ struct PickDeadlineEditorSheet: View {
             }
             .scrollContentBackground(.hidden)
             .pickemsScreenBackground()
-            .navigationTitle(needsReopen ? "Reopen Picks" : "Pick Deadline")
+            .navigationTitle(needsReopen ? "Reopen Pickems" : "Pickems Deadline")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -84,7 +84,7 @@ struct PickDeadlineEditorSheet: View {
 
     private var footerText: String {
         if needsReopen {
-            return "Moves this week back to picking with your new deadline. Optionally unlocks member submissions so they can edit again."
+            return "Moves this week back to Pickems with your new deadline. Optionally unlocks member submissions so they can edit again."
         }
         if isPastDeadline {
             return "Extends the lock time so members can submit or edit again. Turn on Unlock to clear submitted locks."

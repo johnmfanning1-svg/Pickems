@@ -689,8 +689,55 @@ final class AuthService {
         CrashReport.setUserID(nil)
     }
 
+    /// Whether the signed-in user can reauthenticate with email/password.
+    var hasPasswordProvider: Bool {
+        auth.currentUser?.providerData.contains { $0.providerID == "password" } ?? false
+    }
+
+    /// Whether the signed-in user can reauthenticate with Sign in with Apple.
+    var hasAppleProvider: Bool {
+        auth.currentUser?.providerData.contains { $0.providerID == "apple.com" } ?? false
+    }
+
+    /// Firebase requires a recent login before `User.delete()`. Call before `deleteAccount()`.
+    func reauthenticateWithPassword(_ password: String) async throws {
+        guard let user = auth.currentUser else { throw AuthError.notSignedIn }
+        guard let email = user.email, !email.isEmpty else {
+            throw AuthError.firebaseError(detail: "No email on this account. Confirm with Sign in with Apple instead.")
+        }
+        let trimmed = password.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw AuthError.passwordRequired }
+        let credential = EmailAuthProvider.credential(withEmail: email, password: trimmed)
+        do {
+            try await user.reauthenticate(with: credential)
+        } catch {
+            throw Self.mapEmailPasswordError(error as NSError)
+        }
+    }
+
+    /// Reauthenticate with Apple before account deletion (Guideline 5.1.1(v) + Firebase recent-login).
+    func reauthenticateWithApple(authorization: ASAuthorization) async throws {
+        guard let user = auth.currentUser else { throw AuthError.notSignedIn }
+        guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let tokenData = appleIDCredential.identityToken,
+              let idToken = String(data: tokenData, encoding: .utf8),
+              let nonce = currentNonce else {
+            throw AuthError.invalidCredential
+        }
+        let credential = OAuthProvider.appleCredential(
+            withIDToken: idToken,
+            rawNonce: nonce,
+            fullName: nil
+        )
+        do {
+            try await user.reauthenticate(with: credential)
+        } catch {
+            throw AuthError.firebaseError(detail: error.localizedDescription)
+        }
+    }
+
     /// Permanently deletes the signed-in user's Auth account and profile data (Guideline 5.1.1(v)).
-    /// Caller should leave/dissolve leagues first.
+    /// Caller must reauthenticate first, then leave/dissolve leagues, then call this.
     func deleteAccount() async throws {
         guard let user = auth.currentUser else {
             throw AuthError.notSignedIn
@@ -1003,7 +1050,7 @@ final class AuthService {
             case .notSignedIn:
                 return "You need to be signed in to delete your account."
             case .requiresRecentLogin:
-                return "For security, sign out, sign back in, then delete your account."
+                return "For security, confirm your password or Sign in with Apple, then try deleting again."
             case .firebaseError(let detail):
                 return "Sign-in error: \(detail)"
             }

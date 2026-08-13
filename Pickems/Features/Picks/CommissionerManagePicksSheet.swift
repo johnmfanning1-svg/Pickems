@@ -19,11 +19,11 @@ struct CommissionerManagePicksSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Force picks for \(member.displayName)")
+                    Text("Force Pickems for \(member.displayName)")
                         .font(.headline)
                         .foregroundStyle(PickemsColors.textPrimary)
 
-                    Text("Choose a side for each slate game, or clear their picks entirely.")
+                    Text("Choose a side for each slate game, or clear their Pickems entirely.")
                         .font(.subheadline)
                         .foregroundStyle(PickemsColors.textSecondary)
 
@@ -31,7 +31,7 @@ struct CommissionerManagePicksSheet: View {
                         ContentUnavailableView(
                             "No Slate Games",
                             systemImage: "sportscourt",
-                            description: Text("Add games to the slate before forcing picks.")
+                            description: Text("Add games to the slate before forcing Pickems.")
                         )
                     } else {
                         ForEach(slateGames) { game in
@@ -55,7 +55,7 @@ struct CommissionerManagePicksSheet: View {
                             .foregroundStyle(PickemsColors.warning)
                     }
 
-                    PrimaryButton(title: "Save Forced Picks", isLoading: isWorking) {
+                    PrimaryButton(title: "Save Forced Pickems", isLoading: isWorking) {
                         save(isLocked: true)
                     }
                     .disabled(slateGames.isEmpty || draftPicks.count < slateGames.count || isWorking)
@@ -65,7 +65,7 @@ struct CommissionerManagePicksSheet: View {
                     }
                     .disabled(slateGames.isEmpty || draftPicks.isEmpty || isWorking)
 
-                    Button("Clear All Picks", role: .destructive) {
+                    Button("Clear All Pickems", role: .destructive) {
                         showClearConfirm = true
                     }
                     .disabled(isWorking)
@@ -74,22 +74,21 @@ struct CommissionerManagePicksSheet: View {
                 .padding()
             }
             .pickemsScreenBackground()
-            .navigationTitle("Manage Picks")
+            .navigationTitle("Manage Pickems")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
                 }
             }
-            .confirmationDialog(
-                "Clear picks for \(member.displayName)?",
-                isPresented: $showClearConfirm,
-                titleVisibility: .visible
+            .alert(
+                "Clear Pickems for \(member.displayName)?",
+                isPresented: $showClearConfirm
             ) {
-                Button("Clear Picks", role: .destructive) { clearPicks() }
+                Button("Clear Pickems", role: .destructive) { clearPicks() }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Their picks and submitted status for this week will be wiped.")
+                Text("Their Pickems and submitted status for this week will be wiped.")
             }
             .onAppear {
                 if let existing = appState.pickService.allPicks.first(where: { $0.userId == member.id }) {

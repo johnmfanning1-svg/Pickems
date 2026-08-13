@@ -116,7 +116,7 @@ struct GroupPicksView: View {
             }
             .padding()
         }
-        .navigationTitle("Group Picks")
+        .navigationTitle("Group Pickems")
         .navigationBarTitleDisplayMode(.inline)
         .scrollContentBackground(.hidden)
         .pickemsScreenBackground()
@@ -164,7 +164,7 @@ struct GroupPicksView: View {
 
     private var progressTitle: String {
         if isNominatingPhase {
-            return "\(doneUserIds.count) of \(members.count) done nominating"
+            return "\(doneUserIds.count) of \(members.count) done making Selections"
         }
         return "\(doneUserIds.count) of \(members.count) submitted"
     }
@@ -179,14 +179,14 @@ struct GroupPicksView: View {
     private var progressSubtitle: String {
         if isNominatingPhase {
             if selectionMode == .member {
-                return "Each member nominates \(nominationsPerMember) game\(nominationsPerMember == 1 ? "" : "s"). Spread picks open when the slate fills."
+                return "Each member selects \(nominationsPerMember) game\(nominationsPerMember == 1 ? "" : "s"). Pickems open when the slate fills."
             }
-            return "Commissioner is building a \(slateSize)-game slate. Spread picks open when it’s ready."
+            return "Commissioner is building a \(slateSize)-game slate. Pickems open when it’s ready."
         }
         if slateGames.isEmpty {
             return "No slate games yet."
         }
-        return "Pick against the spread for every game on the slate."
+        return "Make a Pickem against the spread for every game on the slate."
     }
 
     // MARK: - Member section
@@ -273,7 +273,7 @@ struct GroupPicksView: View {
                     Button {
                         manageMember = member
                     } label: {
-                        Label("Manage Picks…", systemImage: "gavel")
+                        Label("Manage Pickems…", systemImage: "gavel")
                     }
                 }
             }
@@ -284,7 +284,7 @@ struct GroupPicksView: View {
                         Button {
                             manageMember = member
                         } label: {
-                            Label("Manage picks", systemImage: "slider.horizontal.3")
+                            Label("Manage Pickems", systemImage: "slider.horizontal.3")
                                 .font(.caption.weight(.semibold))
                         }
                         .buttonStyle(.plain)
@@ -314,14 +314,14 @@ struct GroupPicksView: View {
             } else if canRevealPickDetails(for: member.id), done {
                 ownPickPendingState
             } else if done {
-                Text("Picks hidden until the deadline")
+                Text("Pickems hidden until the deadline")
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 12)
             } else {
-                emptyPicksState(title: "No picks yet", message: "\(member.displayName) hasn't submitted.")
+                emptyPicksState(title: "No Pickems yet", message: "\(member.displayName) hasn't submitted.")
             }
         } else if let pick, !pick.picks.isEmpty {
             ForEach(slateGames) { game in
@@ -330,7 +330,7 @@ struct GroupPicksView: View {
                     .padding(.vertical, 6)
             }
         } else {
-            emptyPicksState(title: "No picks yet", message: "\(member.displayName) hasn't submitted.")
+            emptyPicksState(title: "No Pickems yet", message: "\(member.displayName) hasn't submitted.")
         }
     }
 
@@ -339,8 +339,8 @@ struct GroupPicksView: View {
         let noms = nominations.filter { $0.submittedBy == member.id }
         if noms.isEmpty {
             emptyPicksState(
-                title: "No nominations yet",
-                message: "\(member.displayName) still needs to nominate \(nominationsPerMember) game\(nominationsPerMember == 1 ? "" : "s")."
+                title: "No Selections yet",
+                message: "\(member.displayName) still needs to select \(nominationsPerMember) game\(nominationsPerMember == 1 ? "" : "s")."
             )
         } else {
             ForEach(noms) { nom in
@@ -376,14 +376,14 @@ struct GroupPicksView: View {
         VStack(spacing: 10) {
             if isRefreshingOwnPick || !ownPickLoadAttempted {
                 ProgressView()
-                Text("Loading your picks…")
+                Text("Loading your Pickems…")
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
             } else {
-                Text("Couldn't load your picks")
+                Text("Couldn't load your Pickems")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(PickemsColors.textPrimary)
-                Text("Try again to show your submitted picks.")
+                Text("Try again to show your submitted Pickems.")
                     .font(.caption)
                     .foregroundStyle(PickemsColors.textSecondary)
                 Button("Retry") {
@@ -478,7 +478,7 @@ struct GroupPicksView: View {
 
     private func statusLabel(done: Bool) -> String {
         if isNominatingPhase {
-            return done ? "Nominated" : "Nominating"
+            return done ? "Selected" : "Selecting"
         }
         return done ? "Submitted" : "In progress"
     }

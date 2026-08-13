@@ -77,6 +77,23 @@ struct ScoringEngineTests {
             slateSize: 12,
             selectionDeadline: past
         ))
+        // After removing a selection, a replacement is allowed while under the per-member
+        // cap, under slate size, and before the selection deadline.
+        let future = Date().addingTimeInterval(7 * 24 * 3600)
+        #expect(ScoringEngine.canSubmitNomination(
+            userNominationCount: 2,
+            selectionsPerMember: 3,
+            uniqueNominationCount: 8,
+            slateSize: 9,
+            selectionDeadline: future
+        ))
+        #expect(!ScoringEngine.canSubmitNomination(
+            userNominationCount: 2,
+            selectionsPerMember: 3,
+            uniqueNominationCount: 8,
+            slateSize: 9,
+            selectionDeadline: past
+        ))
     }
 
     @Test func expectedSlateSizeIsEitherOr() {

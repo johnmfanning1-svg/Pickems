@@ -253,7 +253,7 @@ struct HomeView: View {
                 LiveScoreboardSection(
                     games: viewModel.slateGames,
                     title: "Your Slate",
-                    subtitle: "Games you picked this week",
+                    subtitle: "Games on your slate this week",
                     help: PickemsHelp.liveScores
                 )
             }
@@ -376,7 +376,7 @@ struct HomeView: View {
         switch scoreboardFilter {
         case .power4: return "Power 4 — live scores from ESPN"
         case .top25: return "Top 25 matchups"
-        case .myPicks: return "Games you've picked"
+        case .myPicks: return "Your Pickems this week"
         case .groupSlate: return "Your group's slate"
         case .all: return "All FBS games this week"
         case .conference(let id):
@@ -388,19 +388,20 @@ struct HomeView: View {
     private var ctaTitle: String {
         guard let week = appState.groupService.currentWeek else { return "Open Picks" }
         switch week.status {
-        case .selection: return "Build Slate"
+        case .selection:
+            return appState.isCommissioner ? "Build Slate" : "Make Selections"
         case .picking:
             if PickDeadlineCalculator.isPast(week.pickDeadline) {
-                return "View Picks"
+                return "View Pickems"
             }
             if appState.pickService.userPick?.isLocked == true {
-                return "Edit Picks"
+                return "Edit Pickems"
             }
             let pickCount = appState.pickService.userPick?.picks.count ?? 0
             let slateCount = appState.pickService.slateGames.count
-            if pickCount == 0 { return "Make Picks" }
-            if slateCount > 0, pickCount < slateCount { return "Finish Picks" }
-            return "Submit Picks"
+            if pickCount == 0 { return "Make Pickems" }
+            if slateCount > 0, pickCount < slateCount { return "Finish Pickems" }
+            return "Submit Pickems"
         case .locked: return "Watch Live"
         case .scored: return "See Results"
         }
@@ -411,18 +412,18 @@ struct HomeView: View {
         case .selection: return "Building this week's slate"
         case .picking:
             if PickDeadlineCalculator.isPast(week.pickDeadline) {
-                return "Pick deadline has passed"
+                return "Pickems deadline has passed"
             }
             if appState.pickService.userPick?.isLocked == true {
-                return "Picks submitted — edit until lock"
+                return "Pickems submitted — edit until lock"
             }
             let pickCount = appState.pickService.userPick?.picks.count ?? 0
             let slateCount = appState.pickService.slateGames.count
-            if pickCount == 0 { return "Make your spread picks" }
+            if pickCount == 0 { return "Make your Pickems" }
             if slateCount > 0, pickCount < slateCount {
-                return "\(pickCount) of \(slateCount) picks made"
+                return "\(pickCount) of \(slateCount) Pickems made"
             }
-            return "Submit your spread picks"
+            return "Submit your Pickems"
         case .locked: return "Games in progress"
         case .scored: return "Week complete"
         }

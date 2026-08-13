@@ -86,13 +86,13 @@ struct GroupsView: View {
             .task(id: appState.groupService.selectedGroup?.id) {
                 await appState.syncSelectedWeek()
             }
-            .confirmationDialog("Leave this league?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
+            .alert("Leave this league?", isPresented: $showLeaveConfirm) {
                 Button("Leave League", role: .destructive) { leaveSelectedLeague() }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("You’ll lose access until you rejoin with the invite code.")
             }
-            .confirmationDialog("Delete this league permanently?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            .alert("Delete this league permanently?", isPresented: $showDeleteConfirm) {
                 Button("Delete League", role: .destructive) { deleteSelectedLeague() }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -221,9 +221,9 @@ struct GroupsView: View {
             case .selection:
                 parts.append(week.selectionMode.displayName)
             case .picking:
-                parts.append("Picking open")
+                parts.append("Pickems open")
             case .locked:
-                parts.append("Picks locked")
+                parts.append("Pickems locked")
             case .scored:
                 parts.append("Scored")
             }
@@ -273,7 +273,7 @@ struct GroupsView: View {
             let statusCaption: String = {
                 if week.status == .selection {
                     if week.selectionMode == .member {
-                        return "\(membersDone) of \(group.memberCount) done nominating"
+                        return "\(membersDone) of \(group.memberCount) done making Selections"
                     }
                     return "\(liveSlateCount)/\(week.slateSize) slate"
                 }
@@ -342,10 +342,10 @@ struct GroupsView: View {
                 NavigationLink {
                     GroupPicksView()
                 } label: {
-                    gridActionLabel("Group Picks", systemImage: "list.bullet.clipboard")
+                    gridActionLabel("Group Pickems", systemImage: "list.bullet.clipboard")
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("See who has submitted and view group picks")
+                .accessibilityHint("See who has submitted and view group Pickems")
 
                 if let week = appState.groupService.currentWeek {
                     NavigationLink {
@@ -388,9 +388,9 @@ struct GroupsView: View {
 
     private func slateActionTitle(for status: WeekStatus) -> String {
         switch status {
-        case .selection: return "Build Slate"
-        case .picking: return "Make Picks"
-        case .locked, .scored: return "Live Picks"
+        case .selection: return appState.isCommissioner ? "Build Slate" : "Make Selections"
+        case .picking: return "Make Pickems"
+        case .locked, .scored: return "Live Pickems"
         }
     }
 
@@ -404,8 +404,10 @@ struct GroupsView: View {
 
     private func slateActionHint(for status: WeekStatus) -> String {
         switch status {
-        case .selection: return "Nominate or build this week's slate"
-        case .picking: return "Make your spread picks for this week"
+        case .selection: return appState.isCommissioner
+            ? "Build this week's slate"
+            : "Make Selections for this week's slate"
+        case .picking: return "Make your Pickems for this week"
         case .locked, .scored: return "Monitor live slate scores and results"
         }
     }
@@ -615,7 +617,7 @@ struct LeaderboardView: View {
         VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
                 title: "Leaderboard",
-                subtitle: showWeekly ? "This week's spread record" : "Season standings",
+                subtitle: showWeekly ? "This week's Pickem record" : "Season standings",
                 help: PickemsHelp.leaderboard
             )
 

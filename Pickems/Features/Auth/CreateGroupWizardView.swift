@@ -103,7 +103,7 @@ struct CreateGroupWizardView: View {
                 }
                 if rules.selectionMode == .member {
                     Stepper(
-                        "Nominations per member: \(rules.selectionsPerMember)",
+                        "Selections per member: \(rules.selectionsPerMember)",
                         value: $rules.selectionsPerMember,
                         in: 1...10
                     )
@@ -114,7 +114,7 @@ struct CreateGroupWizardView: View {
                 Text("Selection")
             } footer: {
                 Text(rules.selectionMode == .member
-                    ? "Each member nominates this many games. The weekly slate size is members × nominations."
+                    ? "Each member selects this many games. The weekly slate size is members × Selections."
                     : "You choose every game for the group each week.")
             }
             Section {
@@ -126,7 +126,7 @@ struct CreateGroupWizardView: View {
             } header: {
                 Text("Deadlines & Ties")
             } footer: {
-                Text("Spread picks lock at the earliest game kickoff on the slate. You’ll set a nomination deadline each week.")
+                Text("Pickems lock at the earliest game kickoff on the slate. You’ll set a Selection deadline each week.")
             }
         }
         .scrollContentBackground(.hidden)
@@ -151,11 +151,11 @@ struct CreateGroupWizardView: View {
                         .font(.headline)
                     Text(rules.selectionMode.displayName)
                     if rules.selectionMode == .member {
-                        Text("\(rules.selectionsPerMember) nomination\(rules.selectionsPerMember == 1 ? "" : "s") per member")
+                        Text("\(rules.selectionsPerMember) Selection\(rules.selectionsPerMember == 1 ? "" : "s") per member")
                     } else {
                         Text("\(rules.slateSize) games per week")
                     }
-                    Text("Picks lock at first kickoff")
+                    Text("Pickems lock at first kickoff")
                     Text("Tie-breaker: \(rules.tieBreaker.displayName)")
                 }
                 .foregroundStyle(PickemsColors.textPrimary)

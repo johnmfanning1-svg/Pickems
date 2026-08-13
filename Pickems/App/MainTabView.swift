@@ -20,7 +20,7 @@ struct MainTabView: View {
             PicksView()
                 .tabItem { Label("Picks", systemImage: "checkmark.circle.fill") }
                 .tag(AppTab.picks)
-                .accessibilityHint("Nominate games and submit spread picks")
+                .accessibilityHint("Make Selections and submit Pickems")
 
             ProfileView()
                 .tabItem { Label("Profile", systemImage: "person.fill") }

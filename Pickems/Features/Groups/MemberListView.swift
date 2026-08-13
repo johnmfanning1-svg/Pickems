@@ -104,13 +104,12 @@ struct MemberListView: View {
         .scrollContentBackground(.hidden)
         .background(PickemsColors.background)
         .disabled(isWorking)
-        .confirmationDialog(
+        .alert(
             "Remove \(memberToRemove?.displayName ?? "member")?",
             isPresented: Binding(
                 get: { memberToRemove != nil },
                 set: { if !$0 { memberToRemove = nil } }
-            ),
-            titleVisibility: .visible
+            )
         ) {
             Button("Remove Member", role: .destructive) {
                 if let member = memberToRemove { performRemove(member) }
@@ -120,13 +119,12 @@ struct MemberListView: View {
         } message: {
             Text("They lose access to this league’s picks and standings. They can rejoin later with the invite code.")
         }
-        .confirmationDialog(
+        .alert(
             "Make \(memberToPromote?.displayName ?? "member") the commissioner?",
             isPresented: Binding(
                 get: { memberToPromote != nil },
                 set: { if !$0 { memberToPromote = nil } }
-            ),
-            titleVisibility: .visible
+            )
         ) {
             Button("Transfer Commissioner", role: .destructive) {
                 if let member = memberToPromote { performTransfer(to: member) }
@@ -136,13 +134,13 @@ struct MemberListView: View {
         } message: {
             Text("You will become a regular member. Only one commissioner is allowed at a time.")
         }
-        .confirmationDialog("Leave this league?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
+        .alert("Leave this league?", isPresented: $showLeaveConfirm) {
             Button("Leave League", role: .destructive) { performLeave() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("You’ll lose access to this league until you rejoin with the invite code.")
         }
-        .confirmationDialog("Delete this league permanently?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+        .alert("Delete this league permanently?", isPresented: $showDeleteConfirm) {
             Button("Delete League", role: .destructive) { performDelete() }
             Button("Cancel", role: .cancel) {}
         } message: {
