@@ -7,6 +7,7 @@ struct CommissionerWeekAdminSections: View {
     @Binding var showSelectionDeadlineSheet: Bool
     @Binding var showPickDeadlineSheet: Bool
     @Binding var showAdminGameBrowse: Bool
+    @State private var showReopenSelectionsConfirm = false
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var week: WeekSummary? { appState.groupService.currentWeek }
@@ -67,6 +68,11 @@ struct CommissionerWeekAdminSections: View {
                         .disabled(uniqueGames == 0)
                         .listRowBackground(PickemsColors.cardBackground)
                     }
+                } else if WeekTransition.canReopenSelections(week) {
+                    Button("Reopen Selections") {
+                        showReopenSelectionsConfirm = true
+                    }
+                    .listRowBackground(PickemsColors.cardBackground)
                 }
             } else {
                 Text("No active week.")
@@ -76,7 +82,15 @@ struct CommissionerWeekAdminSections: View {
         } header: {
             Text("This Week")
         } footer: {
-            Text("Deadlines, lock-early, and opening the slate live here — not on the Selections tab.")
+            Text("Deadlines, lock-early, opening the slate, and reopening Selections live here — not on the Selections tab.")
+        }
+        .alert("Reopen Selections?", isPresented: $showReopenSelectionsConfirm) {
+            Button("Reopen Selections") {
+                picksVM.reopenSelections(appState: appState)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Members can add and remove Selections again. Pickems close until you open the week.")
         }
     }
 

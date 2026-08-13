@@ -91,6 +91,24 @@ struct WeekTransitionTests {
         #expect(!WeekTransition.arePicksEditable(week(status: .selection)))
     }
 
+    @Test func reopenSelectionsAllowedWhilePickingOrLocked() {
+        #expect(WeekTransition.canReopenSelections(week(status: .picking)))
+        #expect(WeekTransition.canReopenSelections(week(status: .locked)))
+        #expect(!WeekTransition.canReopenSelections(week(status: .selection)))
+        #expect(!WeekTransition.canReopenSelections(week(status: .scored)))
+    }
+
+    @Test func toSelectionUpdatesClearsLockAndSetsSelection() {
+        let updates = WeekTransition.toSelectionUpdates()
+        #expect(updates["status"] as? String == WeekStatus.selection.rawValue)
+        #expect(updates["lockedAt"] != nil)
+    }
+
+    @Test func remakeSelectionsWorksAfterReopenClearsDeadline() {
+        #expect(WeekTransition.canRemakeSelections(week(status: .selection)))
+        #expect(!WeekTransition.arePickemsOpen(week(status: .selection)))
+    }
+
     @Test func fillingSlateSetsDeadlineWithoutLockedAt() {
         let kickoff = Date().addingTimeInterval(21 * 24 * 3600)
         let updates = WeekTransition.toPickingUpdates(

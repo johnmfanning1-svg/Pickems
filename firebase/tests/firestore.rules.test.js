@@ -391,6 +391,48 @@ describe("existing invariants (regression)", () => {
     );
   });
 
+  it("lets the commissioner reopen Selections after lock-early", async () => {
+    await seed();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const week = doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID);
+
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID),
+        {
+          status: "picking",
+          lockedAt: new Date(),
+          selectionDeadline: new Date(Date.now() - 60 * 1000),
+          selectionDeadlineSetAt: new Date(),
+          selectionDeadlineSetBy: COMMISH,
+          selectionDeadlinePassedNotified: true,
+        },
+        { merge: true }
+      );
+    });
+
+    await assertSucceeds(
+      updateDoc(week, {
+        status: "selection",
+        lockedAt: deleteField(),
+      })
+    );
+    await assertSucceeds(
+      updateDoc(week, {
+        selectionDeadline: deleteField(),
+        selectionDeadlineSetAt: deleteField(),
+        selectionDeadlineSetBy: deleteField(),
+        selectionDeadlinePassedNotified: deleteField(),
+      })
+    );
+    await assertFails(
+      updateDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID), {
+        status: "selection",
+      })
+    );
+  });
+
   it("keeps submissions readable by members and picks unforgeable by others", async () => {
     await seed();
     const memberDb = testEnv.authenticatedContext(MEMBER).firestore();

@@ -514,6 +514,26 @@ final class PickService {
         }
     }
 
+    /// Drops materialized slate games after Reopen Selections so remake cannot
+    /// hit `duplicateGame` on leftover games. Nominations stay and rematerialize
+    /// the next time the commissioner opens the week.
+    func clearSlateGamesForSelectionReopen(groupId: String, weekId: String) async throws {
+        let weekRef = db.collection("groups").document(groupId)
+            .collection("weeks").document(weekId)
+        let snap = try await weekRef.collection("games").getDocuments()
+        guard !snap.documents.isEmpty else {
+            slateGames = []
+            return
+        }
+        let batch = db.batch()
+        for doc in snap.documents {
+            batch.deleteDocument(doc.reference)
+        }
+        try await batch.commit()
+        slateGames = []
+        userPickEpoch += 1
+    }
+
     /// Opens picking with whatever unique games/nominations exist (may be under slateSize).
     func openWeekWithCurrentSlate(
         groupId: String,

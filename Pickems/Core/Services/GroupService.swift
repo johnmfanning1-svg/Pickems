@@ -283,6 +283,45 @@ final class GroupService {
         }
     }
 
+    /// Commissioner returns the week to `.selection` so members can remake Selections.
+    func reopenWeekForSelections(groupId: String, weekId: String) async throws {
+        guard let group = groups.first(where: { $0.id == groupId }) ?? selectedGroup,
+              group.id == groupId else {
+            throw GroupError.groupNotFound
+        }
+        guard group.commissionerId == Auth.auth().currentUser?.uid else {
+            throw GroupError.notCommissioner
+        }
+
+        try await db.week(groupId: groupId, weekId: weekId).updateData(
+            WeekTransition.toSelectionUpdates()
+        )
+        // Drop a passed (or any) Selection deadline so `canRemakeSelections` and
+        // nomination rules open again, and reset the CF bookkeeping flag so a
+        // newly set deadline can auto-open Pickems later.
+        try await db.week(groupId: groupId, weekId: weekId).updateData([
+            "selectionDeadline": FieldValue.delete(),
+            "selectionDeadlineSetAt": FieldValue.delete(),
+            "selectionDeadlineSetBy": FieldValue.delete(),
+            "selectionDeadlinePassedNotified": FieldValue.delete(),
+        ])
+        if var week = currentWeek, week.id == weekId {
+            week.status = .selection
+            week.lockedAt = nil
+            week.selectionDeadline = nil
+            week.selectionDeadlineSetAt = nil
+            week.selectionDeadlineSetBy = nil
+            currentWeek = week
+        }
+        if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
+            availableWeeks[idx].status = .selection
+            availableWeeks[idx].lockedAt = nil
+            availableWeeks[idx].selectionDeadline = nil
+            availableWeeks[idx].selectionDeadlineSetAt = nil
+            availableWeeks[idx].selectionDeadlineSetBy = nil
+        }
+    }
+
     /// Commissioner reopens a locked week for picking with a new deadline.
     func reopenWeekForPicking(
         groupId: String,

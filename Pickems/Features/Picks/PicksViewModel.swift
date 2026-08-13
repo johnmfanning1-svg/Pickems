@@ -339,6 +339,27 @@ final class PicksViewModel {
         lockSlateEarly(appState: appState)
     }
 
+    func reopenSelections(appState: AppState) {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek,
+              WeekTransition.canReopenSelections(week) else { return }
+        Task {
+            do {
+                try await appState.groupService.reopenWeekForSelections(
+                    groupId: group.id,
+                    weekId: week.id
+                )
+                try await appState.pickService.clearSlateGamesForSelectionReopen(
+                    groupId: group.id,
+                    weekId: week.id
+                )
+                PickemsHaptics.success()
+            } catch {
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
+            }
+        }
+    }
+
     func setSelectionDeadline(_ deadline: Date, appState: AppState) {
         guard let group = appState.groupService.selectedGroup,
               let week = appState.groupService.currentWeek,

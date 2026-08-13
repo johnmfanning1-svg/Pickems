@@ -39,6 +39,24 @@ enum WeekTransition {
         toPickingUpdates(rules: rules, kickoffs: kickoffs, setDeadline: true, lockSlate: true)
     }
 
+    /// Commissioner returns a week to the Selection phase so members can remake.
+    /// Clears the lock-early stamp. Caller also clears a passed Selection deadline
+    /// so remake is allowed and the scheduled job cannot immediately re-open Pickems.
+    static func toSelectionUpdates() -> [String: Any] {
+        [
+            "status": WeekStatus.selection.rawValue,
+            "lockedAt": FieldValue.delete(),
+        ]
+    }
+
+    /// Reopen Selections while Pickems have opened but the week is not scored.
+    static func canReopenSelections(_ week: WeekSummary) -> Bool {
+        switch week.status {
+        case .picking, .locked: return true
+        case .selection, .scored: return false
+        }
+    }
+
     /// Completing Selections never opens Pickems. Only the Selection deadline
     /// (Cloud Function) or commissioner lock-early (`lockEarlyUpdates`) flips status.
     static var opensPickingWhenSlateFills: Bool { false }

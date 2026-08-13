@@ -75,9 +75,12 @@ service cloud.firestore {
         || changed.hasOnly(['status', 'lockedAt'])
         || changed.hasOnly(['status', 'lockedAt', 'pickDeadline'])
         || changed.hasOnly(['status', 'nominationCount', 'pickDeadline', 'lockedAt'])
+        // Reopen Selections: status-only when lockedAt was never stamped.
+        || changed.hasOnly(['status'])
         // Extend / repair pick deadline without changing week status.
         || changed.hasOnly(['pickDeadline'])
         || changed.hasOnly(['selectionDeadline', 'selectionDeadlineSetAt', 'selectionDeadlineSetBy'])
+        || changed.hasOnly(['selectionDeadline', 'selectionDeadlineSetAt', 'selectionDeadlineSetBy', 'selectionDeadlinePassedNotified'])
         || (changed.hasOnly(['slateSize', 'selectionMode', 'selectionsPerMember'])
             && resource.data.status == 'selection');
     }

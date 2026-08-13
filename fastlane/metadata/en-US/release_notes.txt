@@ -1,9 +1,9 @@
-What's new in 2.5.3 (253)
+What's new in 3.0.2
 
-• Home "CFB This Week" shows games again (ESPN minute-precision kickoff fix)
-• Scoreboard defaults to Power 4, with filters for Top 25, My Picks, Group slate, and conferences
-• Clearing picks in Group Picks now clears the Picks tab too
-• Make / Finish / Submit CTA matches how many picks you've made
-• Tap a selected team again to clear that pick
+• Selections and Pickems are now separate tabs, so building the slate and picking the spread stay clear
+• Commissioner tools live in Commissioner Settings — deadlines, lock-early, and Manage Pickems
+• Clearing a Selection removes it from Pickems and lets you remake it before the deadline
+• Locked weeks can no longer be cleared, so you never get stuck unable to remake
+• Home scoreboard, CFB news, and team themes for a more complete Saturday
 
 Thanks for the TestFlight feedback.

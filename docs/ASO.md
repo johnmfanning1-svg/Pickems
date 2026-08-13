@@ -1,6 +1,6 @@
 # Pickems ASO — App Store Optimization
 
-**Release:** 2.3.0 (build 230)  
+**Release:** 3.0.2 (build 302)  
 **Bundle:** `FannypackInc.Pickems` · **Apple ID:** `6785697079`  
 **Locale:** en-US (primary)  
 **Source of truth for Connect upload:** `fastlane/metadata/en-US/`
@@ -11,20 +11,20 @@
 
 | Field | Limit | Value | Count |
 |--|--|--|--|
-| Name | 30 | `Pickems` | 7 |
-| Subtitle | 30 | `CFB pick'em with your crew` | 26 |
-| Keywords | 100 | see below | 90 |
-| Promotional text | 170 | see `fastlane/metadata/en-US/promotional_text.txt` | ≤170 |
+| Name | 30 | `CFB Pickems` | 11 |
+| Subtitle | 30 | `College football pick'em` | 24 |
+| Keywords | 100 | see below | 92 |
+| Promotional text | 170 | see `fastlane/metadata/en-US/promotional_text.txt` | 129 |
 | Description | 4000 | see `fastlane/metadata/en-US/description.txt` | ≤4000 |
 | What's New | 4000 | see `fastlane/metadata/en-US/release_notes.txt` | ≤4000 |
 
 **Keywords (exact string, no trailing comma):**
 
 ```
-pickem,pick em,college football,cfb,spread,against the spread,ats,league,commissioner,bowl
+pickem,pick em,against the spread,ats,live scores,commissioner,bowl,fbs,ncaaf,league,playoff
 ```
 
-90 / 100 characters. Commas separate terms; spaces appear only inside multi-word phrases (`pick em`, `college football`, `against the spread`). Do not repeat the app name (`Pickems`) or subtitle words already indexed (`CFB`, `pick'em`, `crew`).
+92 / 100 characters. Do not repeat the app name (`CFB`, `Pickems`) or subtitle (`College football`, `pick'em`).
 
 ---
 
@@ -33,15 +33,14 @@ pickem,pick em,college football,cfb,spread,against the spread,ats,league,commiss
 | Term | Why |
 |--|--|
 | `pickem` / `pick em` | Primary category query; covers both spellings users type |
-| `college football` / `cfb` | Sport + common abbreviation; subtitle already carries CFB once for subtitle indexing |
-| `spread` / `against the spread` / `ats` | Differentiator vs straight win/loss pick'em apps |
-| `league` | Group/league discovery intent |
-| `commissioner` | Power-user / organizer search (commissioner tools) |
-| `bowl` | Bowl season / postseason intent without burning chars on “bowl season” |
+| Name + subtitle | Indexes `CFB`, `Pickems`, `college football`, `pick'em` |
+| `against the spread` / `ats` | Differentiator vs straight win/loss pick'em apps |
+| `live scores` | Scoreboard / Saturday intent from Home |
+| `league` / `commissioner` | Private-league and organizer search |
+| `bowl` / `playoff` | Postseason intent |
+| `fbs` / `ncaaf` | Sport abbreviations people type instead of CFB |
 
-**Lead description paragraph** carries natural phrases (college football pick'em, against the spread, nominate games, standings) so search relevance is not keyword-field-only.
-
-**Not used (save for A/B or next locale):** `dynasty`, `widget`, `live activity`, `smack talk`, `nomination` — either covered by description or low volume relative to char cost.
+**Lead description paragraph** stays under 170 characters so the store preview ends on a full sentence.
 
 ---
 
