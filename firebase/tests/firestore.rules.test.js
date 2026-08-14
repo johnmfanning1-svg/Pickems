@@ -426,9 +426,19 @@ describe("existing invariants (regression)", () => {
         selectionDeadlinePassedNotified: deleteField(),
       })
     );
+
+    // Status is already `selection`; a no-op member write would pass `hasOnly`
+    // on an empty diff. Put the week back in picking so this is a real reopen.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID), {
+        status: "picking",
+        lockedAt: new Date(),
+      });
+    });
     await assertFails(
       updateDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID), {
         status: "selection",
+        lockedAt: deleteField(),
       })
     );
   });
@@ -460,8 +470,11 @@ describe("audit hardening (inviteCodes, member fields, pick delete, group create
   it("allows invite code get but denies listing all codes", async () => {
     await seed();
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), "inviteCodes", "ABC123"), { groupId: GROUP_ID });
-      await setDoc(doc(ctx.firestore(), "inviteCodes", "XYZ999"), { groupId: "other" });
+      // Reuse one client: a second ctx.firestore() after a write throws
+      // "Firestore has already been started".
+      const db = ctx.firestore();
+      await setDoc(doc(db, "inviteCodes", "ABC123"), { groupId: GROUP_ID });
+      await setDoc(doc(db, "inviteCodes", "XYZ999"), { groupId: "other" });
     });
     const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
     await assertSucceeds(getDoc(doc(memberDb, "inviteCodes", "ABC123")));
