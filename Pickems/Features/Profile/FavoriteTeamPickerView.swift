@@ -86,7 +86,12 @@ struct FavoriteTeamPickerView: View {
             .pickemsScreenBackground()
             .navigationTitle(isOnboardingPrompt ? "Pick Your Team" : "Favorite Team")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Search teams")
+            .safeAreaInset(edge: .top) {
+                PickemsSearchField(text: $searchText, prompt: "Search teams")
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                    .background(PickemsColors.background)
+            }
             .toolbar {
                 if isOnboardingPrompt {
                     ToolbarItem(placement: .cancellationAction) {

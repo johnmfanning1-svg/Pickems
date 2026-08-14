@@ -49,10 +49,7 @@ struct CommissionerWeekAdminSections: View {
                     if week.isSelectionDeadlinePassed {
                         if uniqueGames < target {
                             Button("Fill Remaining Games") {
-                                Task {
-                                    await picksVM.browseGames(appState: appState, present: false)
-                                    showAdminGameBrowse = !picksVM.espnGames.isEmpty
-                                }
+                                showAdminGameBrowse = true
                             }
                             .listRowBackground(PickemsColors.cardBackground)
                         }

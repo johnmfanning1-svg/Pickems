@@ -21,13 +21,32 @@ struct GameBrowseView: View {
     @State private var searchText = ""
     @State private var filter: GameBrowseFilter = .all
     @State private var slateFilter: GameSlateFilter = .all
+    @State private var loadedGames: [ESPNGame]
+    @State private var loading: Bool
+    @State private var loadError: String?
+
+    init(
+        games: [ESPNGame],
+        nominatedEventIds: Set<String> = [],
+        nominatorNamesByEventId: [String: String] = [:],
+        onSelect: @escaping (ESPNGame) -> Void
+    ) {
+        self.games = games
+        self.nominatedEventIds = nominatedEventIds
+        self.nominatorNamesByEventId = nominatorNamesByEventId
+        self.onSelect = onSelect
+        _loadedGames = State(initialValue: games)
+        _loading = State(initialValue: games.isEmpty)
+    }
 
     private var favoriteTeamId: String? {
         appState.authService.currentUser?.favoriteTeamId
     }
 
+    private var board: [ESPNGame] { loadedGames }
+
     private var filteredGames: [ESPNGame] {
-        let base = games
+        let base = board
             .filter { matchesSearch($0) }
             .filter { matchesFilter($0) }
             .filter { matchesSlateFilter($0) }
@@ -43,12 +62,14 @@ struct GameBrowseView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                VStack(spacing: 8) {
+                VStack(spacing: 14) {
                     filterBar
                     slateFilterBar
+                    PickemsSearchField(text: $searchText, prompt: "Search teams")
                 }
                 .padding(.horizontal)
-                .padding(.top, 8)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
 
                 if let fav = filteredGames.first(where: isFavoriteGame) {
                     HStack {
@@ -60,7 +81,7 @@ struct GameBrowseView: View {
                         Spacer()
                     }
                     .padding(.horizontal)
-                    .padding(.top, 8)
+                    .padding(.bottom, 8)
                 }
 
                 List(filteredGames) { game in
@@ -83,12 +104,16 @@ struct GameBrowseView: View {
                     .listRowBackground(PickemsColors.cardBackground)
                 }
                 .scrollContentBackground(.hidden)
+                .contentMargins(.bottom, 24, for: .scrollContent)
                 .overlay {
-                    if filteredGames.isEmpty {
+                    if loading, board.isEmpty {
+                        ProgressView("Loading games…")
+                            .tint(theme.accent)
+                    } else if filteredGames.isEmpty {
                         ContentUnavailableView(
                             "No Games Found",
                             systemImage: "magnifyingglass",
-                            description: Text(emptyMessage)
+                            description: Text(loadError ?? emptyMessage)
                         )
                     }
                 }
@@ -96,18 +121,39 @@ struct GameBrowseView: View {
             .background(PickemsColors.background)
             .navigationTitle("Select Game")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Search teams")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Text("\(filteredGames.count) of \(games.count)")
+                    Text(loading && board.isEmpty ? "Loading" : "\(filteredGames.count) of \(board.count)")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(PickemsColors.textSecondary)
                 }
             }
+            .task { await refreshBoard() }
         }
+    }
+
+    private func refreshBoard() async {
+        loading = loadedGames.isEmpty && games.isEmpty
+        do {
+            let weekInfo = try await ESPNService.shared.currentWeek()
+            let fetched = try await ESPNService.shared.fetchScoreboard(
+                week: weekInfo.weekNumber,
+                seasonType: weekInfo.seasonType
+            )
+            loadedGames = fetched
+            loadError = nil
+            appState.picksViewModel.espnGames = fetched
+        } catch is CancellationError {
+            return
+        } catch {
+            if board.isEmpty {
+                loadError = "Couldn't load this week's games. Close and try again."
+            }
+        }
+        loading = false
     }
 
     private func isFavoriteGame(_ game: ESPNGame) -> Bool {
@@ -125,13 +171,14 @@ struct GameBrowseView: View {
                         Text(option.rawValue)
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
+                            .padding(.vertical, 8)
                             .background(filter == option ? theme.accent : PickemsColors.cardBackground)
                             .foregroundStyle(filter == option ? theme.onAccent : PickemsColors.textPrimary)
                             .clipShape(Capsule())
                     }
                 }
             }
+            .padding(.vertical, 2)
         }
     }
 
@@ -165,7 +212,7 @@ struct GameBrowseView: View {
             Text(title)
                 .font(.caption.weight(.semibold))
                 .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .padding(.vertical, 8)
                 .background(selected ? theme.accent : PickemsColors.cardBackground)
                 .foregroundStyle(selected ? theme.onAccent : PickemsColors.textPrimary)
                 .clipShape(Capsule())

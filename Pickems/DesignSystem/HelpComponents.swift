@@ -112,6 +112,7 @@ struct HelpInfoButton: View {
         .sheet(isPresented: $showHelp) {
             HelpDetailView(topic: topic)
                 .environment(\.themePalette, theme)
+                .pickemsSheetChrome()
         }
     }
 

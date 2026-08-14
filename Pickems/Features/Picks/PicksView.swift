@@ -283,10 +283,8 @@ struct PicksView: View {
                 help: PickemsHelp.commissionerSlate
             )
 
-            PrimaryButton(title: "Add Game", isLoading: viewModel.isLoadingGames) {
-                Task {
-                    await viewModel.browseGames(appState: appState)
-                }
+            PrimaryButton(title: "Add Game") {
+                viewModel.showGameBrowse = true
             }
             .padding(.horizontal)
 
@@ -334,33 +332,13 @@ struct PicksView: View {
                 help: PickemsHelp.nominations
             )
 
-            if appState.isCommissioner, week.selectionDeadline == nil {
-                ContextualTipBanner(
-                    icon: "gearshape.fill",
-                    message: "Set a Selection deadline in Commissioner Settings so members finish before kickoff."
-                )
-                .padding(.horizontal)
-            } else if let deadline = week.selectionDeadline {
-                ContextualTipBanner(
-                    icon: "clock",
-                    message: SelectionPhaseCopy.memberDeadlineBanner(
-                        hasSelections: userNoms > 0,
-                        deadline: deadline,
-                        deadlinePassed: deadlinePassed
-                    )
-                )
-                .padding(.horizontal)
-            }
-
             if deadlinePassed, !appState.isCommissioner {
                 EmptyView()
             } else if atLimit {
                 nominationSubmitSection(userNoms: userNoms, perMember: perMember, week: week)
             } else if WeekTransition.canRemakeSelections(week) {
-                PrimaryButton(title: "Select Game", isLoading: viewModel.isLoadingGames) {
-                    Task {
-                        await viewModel.browseGames(appState: appState)
-                    }
+                PrimaryButton(title: "Select Game") {
+                    viewModel.showGameBrowse = true
                 }
                 .padding(.horizontal)
             }

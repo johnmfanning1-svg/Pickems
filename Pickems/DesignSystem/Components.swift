@@ -50,6 +50,37 @@ struct InitialsAvatar: View {
     }
 }
 
+struct PickemsSearchField: View {
+    @Binding var text: String
+    var prompt: String = "Search"
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(PickemsColors.textSecondary)
+                .accessibilityHidden(true)
+            TextField(prompt, text: $text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .foregroundStyle(PickemsColors.textPrimary)
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(PickemsColors.cardBackground)
+        .clipShape(Capsule())
+        .accessibilityElement(children: .contain)
+    }
+}
+
 struct SeasonWeekHeader: View {
     let label: String
 
