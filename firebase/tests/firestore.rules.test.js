@@ -426,9 +426,19 @@ describe("existing invariants (regression)", () => {
         selectionDeadlinePassedNotified: deleteField(),
       })
     );
+
+    // Status is already `selection`; a no-op member write would pass `hasOnly`
+    // on an empty diff. Put the week back in picking so this is a real reopen.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID), {
+        status: "picking",
+        lockedAt: new Date(),
+      });
+    });
     await assertFails(
       updateDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID), {
         status: "selection",
+        lockedAt: deleteField(),
       })
     );
   });
