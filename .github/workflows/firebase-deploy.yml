@@ -39,10 +39,10 @@ jobs:
           npm test --prefix firebase/functions
 
       - name: Unit-test Firestore rules (G0)
-        run: |
-          npm ci --prefix firebase/tests
-          npx -y firebase-tools@latest emulators:exec --only firestore --project pickems-rules-test "npm --prefix tests test"
         working-directory: firebase
+        run: |
+          npm ci --prefix tests
+          npx -y firebase-tools@latest emulators:exec --only firestore --project pickems-rules-test "npm --prefix tests test"
 
   deploy:
     needs: test
