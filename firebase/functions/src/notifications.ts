@@ -1,45 +1,8 @@
 import * as admin from "firebase-admin";
+import { shouldSendDeadlinePush, type DeadlinePushType } from "./deadlinePushPrefs";
 
-export type PushType =
-  | "week_scored"
-  | "deadline_reminder"
-  | "deadline_locked"
-  | "deadline_passed"
-  | "set_selection_deadline"
-  | "selection_deadline_passed"
-  | "selection_deadline_reminder"
-  | "pickems_open"
-  | "game_final"
-  | "took_the_lead"
-  | "season_closed"
-  | "chat_message";
-
-const SELECTION_DEADLINE_TYPES: PushType[] = [
-  "set_selection_deadline",
-  "selection_deadline_passed",
-  "selection_deadline_reminder",
-];
-
-const PICKEMS_DEADLINE_TYPES: PushType[] = [
-  "deadline_reminder",
-  "deadline_locked",
-  "deadline_passed",
-  "pickems_open",
-];
-
-/** Missing prefs default to on so existing users keep receiving deadline alerts. */
-export function shouldSendDeadlinePush(
-  data: admin.firestore.DocumentData | undefined,
-  type: PushType
-): boolean {
-  if (SELECTION_DEADLINE_TYPES.includes(type)) {
-    return data?.notifySelectionDeadlines !== false;
-  }
-  if (PICKEMS_DEADLINE_TYPES.includes(type)) {
-    return data?.notifyPickemsDeadlines !== false;
-  }
-  return true;
-}
+export type PushType = DeadlinePushType;
+export { shouldSendDeadlinePush };
 
 export async function sendToUser(
   userId: string,

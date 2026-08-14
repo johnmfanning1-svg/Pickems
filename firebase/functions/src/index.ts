@@ -2,7 +2,13 @@ import * as admin from "firebase-admin";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onDocumentUpdated, onDocumentCreated } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions";
-import { fetchScoreboard, parseEventScores } from "./espn";
+import {
+  fetchScoreboard,
+  parseEventScores,
+  nextGameStatus,
+  slateGameNeedsWrite,
+  type EspnEvent,
+} from "./espn";
 import { sendToUser, sendToUsers } from "./notifications";
 import {
   SlateGameDoc,
@@ -12,6 +18,7 @@ import {
   scorePicks,
   rankEntries,
   computeWeekAwards,
+  applyLatePickPenalty,
 } from "./scoring";
 import { materializeNominations } from "./materialize";
 
@@ -285,24 +292,59 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
   }
 });
 
+async function loadScoreboardEvents(
+  weekNumbers: Iterable<number>
+): Promise<Map<string, EspnEvent>> {
+  const weeks = [...new Set(weekNumbers)].filter((n) => Number.isFinite(n) && n > 0);
+  const fetches =
+    weeks.length === 0
+      ? [fetchScoreboard({ seasonType: 2 })]
+      : weeks.map((week) => fetchScoreboard({ week, seasonType: 2 }));
+  const pages = await Promise.all(
+    fetches.map((promise) =>
+      promise.catch((err) => {
+        logger.error("ESPN fetch failed", err);
+        return [] as EspnEvent[];
+      })
+    )
+  );
+  const eventById = new Map<string, EspnEvent>();
+  for (const events of pages) {
+    for (const event of events) {
+      eventById.set(event.id, event);
+    }
+  }
+  return eventById;
+}
+
 /** Lock weeks past deadline; score finals from ESPN. */
 export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
   const now = Date.now();
   const groups = await db.collection("groups").get();
-  const events = await fetchScoreboard().catch((err) => {
-    logger.error("ESPN fetch failed", err);
-    return [] as Awaited<ReturnType<typeof fetchScoreboard>>;
-  });
-  const eventById = new Map(events.map((e) => [e.id, e]));
+  const activeWeeksByGroup: Array<{
+    groupDoc: admin.firestore.QueryDocumentSnapshot;
+    memberIds: string[];
+    weeks: admin.firestore.QuerySnapshot;
+  }> = [];
+  const weekNumbers = new Set<number>();
 
   for (const groupDoc of groups.docs) {
-    const groupId = groupDoc.id;
     const memberIds = (groupDoc.data().memberIds as string[]) ?? [];
-
-    const activeWeeks = await groupDoc.ref
+    const weeks = await groupDoc.ref
       .collection("weeks")
       .where("status", "in", ["picking", "locked"])
       .get();
+    for (const weekDoc of weeks.docs) {
+      const number = weekDoc.data().weekNumber;
+      if (typeof number === "number") weekNumbers.add(number);
+    }
+    activeWeeksByGroup.push({ groupDoc, memberIds, weeks });
+  }
+
+  const eventById = await loadScoreboardEvents(weekNumbers);
+
+  for (const { groupDoc, memberIds, weeks: activeWeeks } of activeWeeksByGroup) {
+    const groupId = groupDoc.id;
 
     for (const weekDoc of activeWeeks.docs) {
       const week = weekDoc.data();
@@ -347,19 +389,18 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
         }
 
         const prevStatus = game.status;
-        let nextStatus = game.status;
-        if (parsed.completed) nextStatus = "final";
-        else if (parsed.inProgress) nextStatus = "inProgress";
-
-        const patch: Partial<SlateGameDoc> = {
-          status: nextStatus,
-          homeScore: parsed.homeScore,
-          awayScore: parsed.awayScore,
-        };
-        if (nextStatus === "final") {
+        const nextStatus = nextGameStatus(game.status, parsed);
+        const patch: Partial<SlateGameDoc> = { status: nextStatus };
+        if (parsed.homeScore != null) patch.homeScore = parsed.homeScore;
+        if (parsed.awayScore != null) patch.awayScore = parsed.awayScore;
+        if (
+          nextStatus === "final" &&
+          parsed.homeScore != null &&
+          parsed.awayScore != null
+        ) {
           patch.winnerTeamId = coveredTeamId(game, parsed.homeScore, parsed.awayScore);
         }
-        if (prevStatus !== nextStatus || game.homeScore !== parsed.homeScore) {
+        if (slateGameNeedsWrite(game, nextStatus, parsed)) {
           await gameDoc.ref.update(patch);
           if (prevStatus !== "final" && nextStatus === "final") {
             anyFinalizedThisPass = true;
@@ -419,10 +460,12 @@ async function refreshLiveStandings(
   weekNumber: number,
   games: SlateGameDoc[]
 ): Promise<void> {
-  const [membersSnap, picksSnap, standingsSnap] = await Promise.all([
+  const [membersSnap, picksSnap, standingsSnap, groupSnap, weekSnap] = await Promise.all([
     db.collection("groups").doc(groupId).collection("members").get(),
     db.collection("groups").doc(groupId).collection("weeks").doc(weekId).collection("picks").get(),
     db.collection("groups").doc(groupId).collection("standings").doc("current").get(),
+    db.collection("groups").doc(groupId).get(),
+    db.collection("groups").doc(groupId).collection("weeks").doc(weekId).get(),
   ]);
 
   const previousRanks = new Map<string, number>();
@@ -431,10 +474,23 @@ async function refreshLiveStandings(
 
   const members = membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc));
   const picks = picksSnap.docs.map((d) => ({ ...(d.data() as PickDoc), userId: d.id }));
+  const rules = (groupSnap.data()?.rules ?? {}) as {
+    allowLatePicks?: boolean;
+    latePickPenaltyWins?: number;
+  };
+  const deadline = weekSnap.data()?.pickDeadline;
 
   const entries = members.map((member) => {
     const pick = picks.find((p) => p.userId === member.id);
-    const scored = scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId);
+    const scored = applyLatePickPenalty(
+      scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId),
+      {
+        allowLatePicks: rules.allowLatePicks === true,
+        latePickPenaltyWins: rules.latePickPenaltyWins,
+        submittedAt: pick?.submittedAt,
+        deadline,
+      }
+    );
     return {
       id: member.id,
       displayName: member.displayName,
@@ -480,57 +536,87 @@ async function scoreWeek(
   games: SlateGameDoc[],
   memberIds: string[]
 ): Promise<void> {
-  const membersSnap = await db.collection("groups").doc(groupId).collection("members").get();
-  const picksSnap = await db
-    .collection("groups")
-    .doc(groupId)
-    .collection("weeks")
-    .doc(weekId)
-    .collection("picks")
-    .get();
+  const groupRef = db.collection("groups").doc(groupId);
+  const weekRef = groupRef.collection("weeks").doc(weekId);
+  const membersCol = groupRef.collection("members");
+  const picksCol = weekRef.collection("picks");
+  const standingsRef = groupRef.collection("standings").doc("current");
 
-  const members = membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc));
-  const picks = picksSnap.docs.map((d) => ({ ...(d.data() as PickDoc), userId: d.id }));
-  const awards = computeWeekAwards(picks, games);
+  let awards: ReturnType<typeof computeWeekAwards> = {};
+  let skipped = false;
 
-  const batch = db.batch();
-  const weeklyEntries = [];
+  await db.runTransaction(async (tx) => {
+    const weekSnap = await tx.get(weekRef);
+    const week = weekSnap.data();
+    const status = week?.status as string | undefined;
+    if (status === "scored") {
+      skipped = true;
+      return;
+    }
+    if (status !== "locked" && status !== "picking") {
+      skipped = true;
+      return;
+    }
 
-  for (const member of members) {
-    const pick = picks.find((p) => p.userId === member.id);
-    const scored = scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId);
-    const seasonWins = (member.seasonWins ?? 0) + scored.wins;
-    const seasonLosses = (member.seasonLosses ?? 0) + scored.losses;
-    batch.update(db.collection("groups").doc(groupId).collection("members").doc(member.id), {
-      seasonWins,
-      seasonLosses,
+    const [groupSnap, membersSnap, picksSnap] = await Promise.all([
+      tx.get(groupRef),
+      tx.get(membersCol),
+      tx.get(picksCol),
+    ]);
+    const rules = (groupSnap.data()?.rules ?? {}) as {
+      allowLatePicks?: boolean;
+      latePickPenaltyWins?: number;
+    };
+    const deadline = week?.pickDeadline;
+
+    const members = membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc));
+    const picks = picksSnap.docs.map((d) => ({ ...(d.data() as PickDoc), userId: d.id }));
+    awards = computeWeekAwards(picks, games);
+
+    const weeklyEntries = [];
+    for (const member of members) {
+      const pick = picks.find((p) => p.userId === member.id);
+      const scored = applyLatePickPenalty(
+        scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId),
+        {
+          allowLatePicks: rules.allowLatePicks === true,
+          latePickPenaltyWins: rules.latePickPenaltyWins,
+          submittedAt: pick?.submittedAt,
+          deadline,
+        }
+      );
+      const seasonWins = (member.seasonWins ?? 0) + scored.wins;
+      const seasonLosses = (member.seasonLosses ?? 0) + scored.losses;
+      tx.update(membersCol.doc(member.id), { seasonWins, seasonLosses });
+      weeklyEntries.push({
+        id: member.id,
+        displayName: member.displayName,
+        avatarColorHex: member.avatarColorHex ?? "#DC2626",
+        weeklyWins: scored.wins,
+        weeklyLosses: scored.losses,
+        seasonWins,
+        seasonLosses,
+      });
+    }
+
+    const ranked = rankEntries(weeklyEntries);
+    tx.set(standingsRef, {
+      groupId,
+      weekNumber,
+      entries: ranked,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-    weeklyEntries.push({
-      id: member.id,
-      displayName: member.displayName,
-      avatarColorHex: member.avatarColorHex ?? "#DC2626",
-      weeklyWins: scored.wins,
-      weeklyLosses: scored.losses,
-      seasonWins,
-      seasonLosses,
+    tx.update(weekRef, {
+      status: "scored",
+      awards,
+      scoredAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+  });
+
+  if (skipped) {
+    logger.info(`Skipped scoring week ${weekId} for group ${groupId} — already scored or not active`);
+    return;
   }
-
-  const ranked = rankEntries(weeklyEntries);
-  batch.set(db.collection("groups").doc(groupId).collection("standings").doc("current"), {
-    groupId,
-    weekNumber,
-    entries: ranked,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-
-  batch.update(db.collection("groups").doc(groupId).collection("weeks").doc(weekId), {
-    status: "scored",
-    awards,
-    scoredAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-
-  await batch.commit();
   logger.info(`Scored week ${weekId} for group ${groupId}`, awards);
   void memberIds;
 }

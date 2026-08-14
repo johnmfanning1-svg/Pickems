@@ -1,6 +1,17 @@
 default_platform(:ios)
 
 platform :ios do
+  desc "Run PickemsTests (unit). Does not run UITests."
+  lane :tests do
+    scan(
+      project: "Pickems.xcodeproj",
+      scheme: "Pickems",
+      device: ENV["SCAN_DEVICE"] || "iPhone 16",
+      skip_package_dependencies_resolution: false,
+      result_bundle: true
+    )
+  end
+
   desc "Upload App Store metadata only (no binary, no screenshots)"
   lane :metadata do
     deliver(

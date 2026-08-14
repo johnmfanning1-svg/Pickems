@@ -29,6 +29,37 @@ export interface PickDoc {
   picks: Record<string, string>;
   isLocked?: boolean;
   confidenceGameId?: string | null;
+  submittedAt?: unknown;
+}
+
+export function toMillis(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "object" && typeof (value as { toMillis?: unknown }).toMillis === "function") {
+    const ms = (value as { toMillis: () => number }).toMillis();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  return null;
+}
+
+export function applyLatePickPenalty(
+  scored: { wins: number; losses: number; pushes: number },
+  options: {
+    allowLatePicks?: boolean;
+    latePickPenaltyWins?: number;
+    submittedAt?: unknown;
+    deadline?: unknown;
+  }
+): { wins: number; losses: number; pushes: number } {
+  if (!options.allowLatePicks) return scored;
+  const penalty = Math.max(0, options.latePickPenaltyWins ?? 0);
+  if (penalty === 0) return scored;
+  const submittedAtMs = toMillis(options.submittedAt);
+  const deadlineMs = toMillis(options.deadline);
+  if (submittedAtMs == null || deadlineMs == null) return scored;
+  if (submittedAtMs <= deadlineMs) return scored;
+  return { ...scored, wins: Math.max(0, scored.wins - penalty) };
 }
 
 export function coveredTeamId(

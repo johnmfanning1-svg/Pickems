@@ -16,7 +16,10 @@ enum ScoringEngine {
     static func scorePicks(
         picks: [String: String],
         games: [SlateGame],
-        confidenceGameId: String? = nil
+        confidenceGameId: String? = nil,
+        submittedAt: Date? = nil,
+        deadline: Date? = nil,
+        latePenaltyWins: Int = 0
     ) -> (wins: Int, losses: Int, pushes: Int) {
         var wins = 0
         var losses = 0
@@ -29,8 +32,15 @@ enum ScoringEngine {
             switch isPickCorrect(pickedTeamId: pickedTeamId, game: game) {
             case .some(true): wins += weight
             case .some(false): losses += weight
-            case .none: pushes += 1
+            case .none:
+                if game.status == .final { pushes += 1 }
             }
+        }
+        if latePenaltyWins > 0,
+           let submittedAt,
+           let deadline,
+           submittedAt > deadline {
+            wins = max(0, wins - latePenaltyWins)
         }
         return (wins, losses, pushes)
     }

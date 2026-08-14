@@ -118,7 +118,7 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && (request.auth.uid == userId || isSuperAdmin());
       allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
     }
 
