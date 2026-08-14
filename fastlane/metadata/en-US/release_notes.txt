@@ -1,9 +1,9 @@
-What's new in 3.0.2
+What's new in 3.0
 
-• Selections and Pickems are now separate tabs, so building the slate and picking the spread stay clear
-• Commissioner tools live in Commissioner Settings — deadlines, lock-early, and Manage Pickems
+• Selections and Pickems are now separate tabs, so building the slate and picking against the spread stay clear
+• Commissioner tools live in Commissioner Settings — deadlines, lock-early, Reopen Selections, and Manage Pickems
 • Clearing a Selection removes it from Pickems and lets you remake it before the deadline
-• Locked weeks can no longer be cleared, so you never get stuck unable to remake
+• Edit spreads without losing the slate, and weekly admin stays in Settings instead of bouncing you out
 • Home scoreboard, CFB news, and team themes for a more complete Saturday
 
-Thanks for the TestFlight feedback.
+Thanks for playing with us.
