@@ -351,7 +351,9 @@ final class PicksViewModel {
                 )
                 try await appState.pickService.clearSlateGamesForSelectionReopen(
                     groupId: group.id,
-                    weekId: week.id
+                    weekId: week.id,
+                    commissionerUserId: appState.currentUserId ?? group.commissionerId,
+                    commissionerName: appState.authService.currentUser?.displayName ?? "Commissioner"
                 )
                 PickemsHaptics.success()
             } catch {
@@ -471,7 +473,7 @@ final class PicksViewModel {
                 try await appState.pickService.updateGameSpread(
                     groupId: group.id,
                     weekId: week.id,
-                    gameId: game.id,
+                    game: game,
                     spread: spread,
                     spreadTeamId: spreadTeamId
                 )

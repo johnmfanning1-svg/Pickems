@@ -7,6 +7,11 @@ import FirebaseFirestore
 final class PickService {
     var nominations: [Nomination] = []
     var slateGames: [SlateGame] = []
+    /// Games plus any nominations not already on the slate — used while `.selection`
+    /// after Reopen, when commissioner-mode games may have been copied to noms.
+    var displaySlateGames: [SlateGame] {
+        SlateGameDecoding.mergedSlate(games: slateGames, nominations: nominations)
+    }
     var userPick: UserPick?
     /// Bumped when a local commissioner set/clear (or week reset) must beat a
     /// pending Picks-tab draft, including empty wipes from Group Pickems.
@@ -20,7 +25,7 @@ final class PickService {
 
     /// Lazy so constructing `AppState` cannot touch Firestore before Firebase configure.
     @ObservationIgnored
-    @ObservationIgnored private lazy var db = Firestore.firestore()
+    private lazy var db = Firestore.firestore()
     @ObservationIgnored
     private var nominationsListener: ListenerRegistration?
     @ObservationIgnored
@@ -82,7 +87,9 @@ final class PickService {
                         ], recordNonFatal: false)
                         return
                     }
-                    self.slateGames = snapshot?.documents.compactMap { try? $0.data(as: SlateGame.self) } ?? []
+                    self.slateGames = snapshot?.documents.compactMap { doc in
+                        SlateGame.fromDocument(id: doc.documentID, data: doc.data())
+                    } ?? []
                 }
             }
 
@@ -361,17 +368,25 @@ final class PickService {
         try await weekRef.updateData(["nominationCount": nominations.count])
     }
 
-    /// Converts nominations into slate games when the games collection is empty.
+    /// Copies nominations into `games` for any event that is not already on the slate.
+    /// Does not overwrite existing game docs (spread edits stay).
     func materializeNominationsIfNeeded(groupId: String, weekId: String) async throws {
         let weekRef = db.collection("groups").document(groupId).collection("weeks").document(weekId)
         let gamesSnap = try await weekRef.collection("games").getDocuments()
-        guard gamesSnap.documents.isEmpty else { return }
+        var seenEventIds = Set<String>()
+        for doc in gamesSnap.documents {
+            seenEventIds.insert(doc.documentID)
+            if let game = SlateGame.fromDocument(id: doc.documentID, data: doc.data()) {
+                seenEventIds.insert(game.espnEventId)
+                seenEventIds.insert(game.id)
+            }
+        }
 
         let nomsSnap = try await weekRef.collection("nominations").getDocuments()
         let nominations = nomsSnap.documents.compactMap { try? $0.data(as: Nomination.self) }
-        var seenEventIds = Set<String>()
+        var seenFromNoms = Set<String>()
         for nom in nominations {
-            if seenEventIds.contains(nom.espnEventId) {
+            if !seenFromNoms.insert(nom.espnEventId).inserted {
                 AppLog.notice(AppLog.picks, "materializeNominations skipped duplicate espnEventId", metadata: [
                     "espnEventId": nom.espnEventId,
                     "groupId": groupId,
@@ -379,27 +394,13 @@ final class PickService {
                 ])
                 continue
             }
+            if seenEventIds.contains(nom.espnEventId) { continue }
             seenEventIds.insert(nom.espnEventId)
-            let game = SlateGame(
-                id: nom.espnEventId,
-                espnEventId: nom.espnEventId,
-                homeTeamId: nom.homeTeamId ?? "home",
-                homeTeamName: nom.homeTeamName,
-                homeTeamAbbreviation: nom.homeTeamAbbreviation ?? String(nom.homeTeamName.prefix(4)).uppercased(),
-                homeTeamLogoURL: nom.homeTeamLogoURL,
-                awayTeamId: nom.awayTeamId ?? "away",
-                awayTeamName: nom.awayTeamName,
-                awayTeamAbbreviation: nom.awayTeamAbbreviation ?? String(nom.awayTeamName.prefix(4)).uppercased(),
-                awayTeamLogoURL: nom.awayTeamLogoURL,
-                spread: abs(nom.spread),
-                spreadTeamId: nom.spreadTeamId,
-                kickoff: nom.kickoff,
-                status: .scheduled,
-                homeScore: nil,
-                awayScore: nil,
-                winnerTeamId: nil
-            )
+            let game = nom.asSlateGame()
             try await weekRef.collection("games").document(game.id).setData(from: game)
+            if !slateGames.contains(where: { $0.espnEventId == game.espnEventId || $0.id == game.id }) {
+                slateGames.append(game)
+            }
         }
     }
 
@@ -517,16 +518,75 @@ final class PickService {
     /// Drops materialized slate games after Reopen Selections so remake cannot
     /// hit `duplicateGame` on leftover games. Nominations stay and rematerialize
     /// the next time the commissioner opens the week.
-    func clearSlateGamesForSelectionReopen(groupId: String, weekId: String) async throws {
+    ///
+    /// Commissioner-mode slates often have games and no nominations. Those games
+    /// are copied to nominations first, then **kept** so Settings / Selections
+    /// do not go empty. Member-mode (nominations already exist) still deletes games.
+    func clearSlateGamesForSelectionReopen(
+        groupId: String,
+        weekId: String,
+        commissionerUserId: String,
+        commissionerName: String
+    ) async throws {
         let weekRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
-        let snap = try await weekRef.collection("games").getDocuments()
-        guard !snap.documents.isEmpty else {
-            slateGames = []
-            return
+        let gamesSnap = try await weekRef.collection("games").getDocuments()
+        let nomsSnap = try await weekRef.collection("nominations").getDocuments()
+        let existingNomEventIds = Set(nomsSnap.documents.compactMap { doc -> String? in
+            SlateGameDecoding.stringValue(doc.data()["espnEventId"])
+        })
+
+        var copied = 0
+        for doc in gamesSnap.documents {
+            guard let game = SlateGame.fromDocument(id: doc.documentID, data: doc.data()) else { continue }
+            let eventId = game.espnEventId
+            guard !eventId.isEmpty, !existingNomEventIds.contains(eventId) else { continue }
+            let ref = weekRef.collection("nominations").document()
+            var nom = Nomination(
+                id: ref.documentID,
+                submittedBy: commissionerUserId,
+                submitterName: commissionerName,
+                espnEventId: eventId,
+                spread: game.spread,
+                spreadTeamId: game.spreadTeamId,
+                homeTeamId: game.homeTeamId,
+                homeTeamName: game.homeTeamName,
+                homeTeamAbbreviation: game.homeTeamAbbreviation,
+                homeTeamLogoURL: game.homeTeamLogoURL,
+                awayTeamId: game.awayTeamId,
+                awayTeamName: game.awayTeamName,
+                awayTeamAbbreviation: game.awayTeamAbbreviation,
+                awayTeamLogoURL: game.awayTeamLogoURL,
+                kickoff: game.kickoff,
+                createdAt: Date()
+            )
+            nom.id = ref.documentID
+            do {
+                try await ref.setData(from: nom)
+                if !nominations.contains(where: { $0.espnEventId == eventId }) {
+                    nominations.append(nom)
+                }
+                copied += 1
+            } catch {
+                AppLog.notice(AppLog.picks, "reopen copied nomination failed", metadata: [
+                    "espnEventId": eventId,
+                    "error": error.localizedDescription
+                ])
+            }
         }
+        if copied > 0 {
+            try? await weekRef.updateData([
+                "nominationCount": FieldValue.increment(Int64(copied))
+            ])
+        }
+
+        // Member remake needs leftover games gone. Commissioner-mode (no noms
+        // before this pass) keeps the game docs so the slate stays visible.
+        let hadNominationsBeforeCopy = !existingNomEventIds.isEmpty
+        guard hadNominationsBeforeCopy, !gamesSnap.documents.isEmpty else { return }
+
         let batch = db.batch()
-        for doc in snap.documents {
+        for doc in gamesSnap.documents {
             batch.deleteDocument(doc.reference)
         }
         try await batch.commit()
@@ -565,7 +625,7 @@ final class PickService {
             .collection("games")
             .getDocuments()
         let fromGames = gamesSnap?.documents.compactMap { doc -> Date? in
-            (try? doc.data(as: SlateGame.self))?.kickoff
+            SlateGame.fromDocument(id: doc.documentID, data: doc.data())?.kickoff
         } ?? []
         return fromGames.isEmpty ? fallback : fromGames
     }
@@ -886,17 +946,64 @@ final class PickService {
     func updateGameSpread(
         groupId: String,
         weekId: String,
-        gameId: String,
+        game: SlateGame,
         spread: Double,
         spreadTeamId: String
     ) async throws {
-        try await db.collection("groups").document(groupId)
+        let weekRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
-            .collection("games").document(gameId)
-            .updateData([
-                "spread": spread,
-                "spreadTeamId": spreadTeamId
-            ])
+        let gamesRef = weekRef.collection("games")
+        let patch: [String: Any] = [
+            "spread": spread,
+            "spreadTeamId": spreadTeamId
+        ]
+
+        var wroteGame = false
+        if let gameRef = try await existingGameDocument(in: gamesRef, game: game) {
+            try await gameRef.updateData(patch)
+            wroteGame = true
+        }
+
+        let nomSnap = try await weekRef.collection("nominations")
+            .whereField("espnEventId", isEqualTo: game.espnEventId)
+            .getDocuments()
+        var wroteNomination = false
+        for doc in nomSnap.documents {
+            try await doc.reference.updateData(patch)
+            wroteNomination = true
+        }
+
+        for index in nominations.indices where nominations[index].espnEventId == game.espnEventId {
+            nominations[index].spread = spread
+            nominations[index].spreadTeamId = spreadTeamId
+        }
+        if let index = slateGames.firstIndex(where: {
+            $0.id == game.id || $0.espnEventId == game.espnEventId
+        }) {
+            slateGames[index].spread = spread
+            slateGames[index].spreadTeamId = spreadTeamId
+        }
+
+        guard wroteGame || wroteNomination else {
+            throw PickError.slateGameNotFound
+        }
+    }
+
+    /// Resolves the live game document. Never creates a new doc.
+    private func existingGameDocument(
+        in gamesRef: CollectionReference,
+        game: SlateGame
+    ) async throws -> DocumentReference? {
+        var seen = Set<String>()
+        for candidate in [game.id, game.espnEventId] where seen.insert(candidate).inserted && !candidate.isEmpty {
+            let snap = try await gamesRef.document(candidate).getDocument()
+            if snap.exists { return snap.reference }
+        }
+        let query = try await gamesRef
+            .whereField("espnEventId", isEqualTo: game.espnEventId)
+            .limit(to: 1)
+            .getDocuments()
+        return query.documents.first?.reference
     }
 
     func bulkImportGames(
@@ -911,9 +1018,11 @@ final class PickService {
             .collection("weeks").document(weekId)
             .collection("games")
         let existingSnap = try await gamesRef.getDocuments()
-        let existing = existingSnap.documents.compactMap { try? $0.data(as: SlateGame.self) }
-        let existingIds = Set(existing.map(\.espnEventId))
-        let remaining = slateSize - existing.count
+        let existing = existingSnap.documents.compactMap { doc in
+            SlateGame.fromDocument(id: doc.documentID, data: doc.data())
+        }
+        let existingIds = Set(existing.map(\.espnEventId) + existingSnap.documents.map(\.documentID))
+        let remaining = slateSize - existingSnap.documents.count
         guard remaining > 0 else { throw PickError.slateFull }
 
         var added: [SlateGame] = []
@@ -932,7 +1041,9 @@ final class PickService {
         guard let week = try? weekDoc.data(as: WeekSummary.self) else { return nil }
 
         let gamesSnap = try await weekRef.collection("games").getDocuments()
-        let games = gamesSnap.documents.compactMap { try? $0.data(as: SlateGame.self) }
+        let games = gamesSnap.documents.compactMap { doc in
+            SlateGame.fromDocument(id: doc.documentID, data: doc.data())
+        }
 
         let pickDoc = try await weekRef.collection("picks").document(userId).getDocument()
         let pick = try? pickDoc.data(as: UserPick.self)
@@ -950,6 +1061,7 @@ final class PickService {
         case cannotModifyLockedSlate
         case selectionClosed
         case pickemsNotOpen
+        case slateGameNotFound
 
         var errorDescription: String? {
             switch self {
@@ -962,6 +1074,7 @@ final class PickService {
             case .cannotModifyLockedSlate: return "The slate is locked — games can't be removed."
             case .selectionClosed: return "Selections can't be changed after the Selection deadline."
             case .pickemsNotOpen: return "Pickems open when every Selection is in or the Selection deadline passes. Your commissioner can lock early."
+            case .slateGameNotFound: return "Couldn't find that game to update the spread. Pull to refresh and try again."
             }
         }
     }

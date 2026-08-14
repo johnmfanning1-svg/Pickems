@@ -96,8 +96,8 @@ struct CommissionerWeekAdminSections: View {
 
     @ViewBuilder
     private var slateSection: some View {
-        let games = appState.pickService.slateGames
-        if !games.isEmpty, let week, WeekTransition.isSlateEditable(week) {
+        let games = appState.pickService.displaySlateGames
+        if !games.isEmpty, let week, WeekTransition.isSlateEditable(week) || week.status == .selection {
             Section {
                 ForEach(games) { game in
                     VStack(alignment: .leading, spacing: 6) {
@@ -107,7 +107,7 @@ struct CommissionerWeekAdminSections: View {
                             Button("Edit Spread") { picksVM.spreadEditGame = game }
                             Spacer()
                             Button("Remove Selection", role: .destructive) {
-                                picksVM.removeCommissionerGame(game, week: week, appState: appState)
+                                removeSlateItem(game, week: week)
                             }
                         }
                         .font(.caption)
@@ -119,6 +119,17 @@ struct CommissionerWeekAdminSections: View {
             } footer: {
                 Text("Edit lines or remove a Selection. Members remake their own Selections on the Selections tab before the deadline.")
             }
+        }
+    }
+
+    private func removeSlateItem(_ game: SlateGame, week: WeekSummary) {
+        if let live = appState.pickService.slateGames.first(where: {
+            $0.id == game.id || $0.espnEventId == game.espnEventId
+        }) {
+            picksVM.removeCommissionerGame(live, week: week, appState: appState)
+        } else if let nom = appState.pickService.nominations.first(where: { $0.espnEventId == game.espnEventId }) {
+            let rules = appState.groupService.selectedGroup?.rules ?? .default
+            picksVM.removeNomination(nom, rules: rules, appState: appState)
         }
     }
 

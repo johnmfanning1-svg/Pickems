@@ -495,6 +495,34 @@ describe("audit hardening (inviteCodes, member fields, pick delete, group create
     );
   });
 
+  it("lets the commissioner change only spread fields on a slate game", async () => {
+    await seed();
+    const gamePath = ["groups", GROUP_ID, "weeks", WEEK_ID, "games", "401671749"];
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), ...gamePath), {
+        id: "401671749",
+        espnEventId: "401671749",
+        homeTeamId: "333",
+        homeTeamName: "Alabama",
+        awayTeamId: "61",
+        awayTeamName: "Georgia",
+        spread: 3.5,
+        spreadTeamId: "333",
+        status: "scheduled",
+      });
+    });
+
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const game = doc(commishDb, ...gamePath);
+
+    await assertSucceeds(updateDoc(game, { spread: 7, spreadTeamId: "61" }));
+    await assertFails(updateDoc(game, { spread: 7, homeTeamName: "Bama" }));
+    await assertFails(
+      updateDoc(doc(memberDb, ...gamePath), { spread: 10, spreadTeamId: "333" })
+    );
+  });
+
   it("rejects group create that spoofs commissioner or extra members", async () => {
     const outsiderDb = testEnv.authenticatedContext(OUTSIDER).firestore();
     await assertFails(

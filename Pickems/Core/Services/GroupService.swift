@@ -682,7 +682,9 @@ final class GroupService {
             let gamesSnap = try await db.collection("groups").document(groupId)
                 .collection("weeks").document(week.id)
                 .collection("games").getDocuments()
-            let games = gamesSnap.documents.compactMap { try? $0.data(as: SlateGame.self) }
+            let games = gamesSnap.documents.compactMap { doc in
+                SlateGame.fromDocument(id: doc.documentID, data: doc.data())
+            }
             guard let pick = try? pickSnap.data(as: UserPick.self) else { continue }
 
             var wins = 0

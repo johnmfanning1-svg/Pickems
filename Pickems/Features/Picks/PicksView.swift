@@ -279,7 +279,7 @@ struct PicksView: View {
         return VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
                 title: "Make Selections",
-                subtitle: "\(appState.pickService.slateGames.count) of \(target) games selected",
+                subtitle: "\(appState.pickService.displaySlateGames.count) of \(target) games selected",
                 help: PickemsHelp.commissionerSlate
             )
 
@@ -295,7 +295,7 @@ struct PicksView: View {
             }
             .padding(.horizontal)
 
-            ForEach(appState.pickService.slateGames) { game in
+            ForEach(appState.pickService.displaySlateGames) { game in
                 GamePickRow(game: game, selectedTeamId: nil, onSelect: { _ in })
                     .padding(.horizontal)
             }
@@ -454,10 +454,6 @@ struct PicksView: View {
 
         return VStack(spacing: 16) {
             PickemsSectionHeader(title: "Spread Pickems", subtitle: "Tap a team to pick. Tap again to clear that Pickem — the Selection stays on the slate.", help: PickemsHelp.spreadPicks)
-
-            if let deadline = week.pickDeadline {
-                PickDeadlineBanner(deadline: deadline)
-            }
 
             if appState.pickService.userPick?.isLocked == true {
                 VStack(alignment: .leading, spacing: 8) {
