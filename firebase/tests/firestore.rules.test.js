@@ -473,9 +473,12 @@ describe("audit hardening (inviteCodes, member fields, pick delete, group create
       await setDoc(doc(ctx.firestore(), "inviteCodes", "ABC123"), { groupId: GROUP_ID });
       await setDoc(doc(ctx.firestore(), "inviteCodes", "XYZ999"), { groupId: "other" });
     });
-    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
-    await assertSucceeds(getDoc(doc(memberDb, "inviteCodes", "ABC123")));
-    await assertFails(getDocs(collection(memberDb, "inviteCodes")));
+    const reader = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertSucceeds(getDoc(doc(reader, "inviteCodes", "ABC123")));
+    // A second context: reusing `reader` after getDoc can throw
+    // "Firestore has already been started" instead of PERMISSION_DENIED.
+    const lister = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertFails(getDocs(collection(lister, "inviteCodes")));
   });
 
   it("blocks a member from rewriting their own seasonWins", async () => {
