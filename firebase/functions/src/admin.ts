@@ -9,6 +9,7 @@ import {
   scorePicks,
   rankEntries,
   computeWeekAwards,
+  applyLatePickPenalty,
 } from "./scoring";
 
 /**
@@ -182,8 +183,10 @@ export const adminSetWeekStatus = onCall(async (request) => {
   if (status === "locked" && before.lockedAt == null) {
     patch.lockedAt = admin.firestore.FieldValue.serverTimestamp();
   }
-  // A forced re-open should be able to fire the reminder again.
+  // A forced re-open should be able to fire the 24h / 1h reminders again.
   if (status === "picking") {
+    patch.deadlineReminder24hSent = false;
+    patch.deadlineReminder1hSent = false;
     patch.deadlineReminderSent = false;
   }
 
@@ -484,8 +487,8 @@ export const adminAuditWeekIds = onCall(async (request) => {
  * Recompute a week's results and the affected members' season records.
  *
  * Season totals are re-summed from every scored week rather than incremented,
- * so re-running this is idempotent — unlike `lockAndScoreWeeks`, which adds a
- * week's result to the running total exactly once.
+ * so re-running this is idempotent. `lockAndScoreWeeks` now claims the week
+ * inside a transaction and skips if status is already `scored`.
  */
 export const adminRescoreWeek = onCall(async (request) => {
   const actor = requireSuperAdmin(request);
@@ -498,11 +501,20 @@ export const adminRescoreWeek = onCall(async (request) => {
   const groupRef = db().collection("groups").doc(groupId);
   const seasonYear = typeof week.seasonYear === "number" ? week.seasonYear : null;
 
-  const [membersSnap, allWeeksSnap] = await Promise.all([
+  const [membersSnap, allWeeksSnap, groupSnap] = await Promise.all([
     groupRef.collection("members").get(),
     groupRef.collection("weeks").get(),
+    groupRef.get(),
   ]);
   const members = membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc));
+  const rules = (groupSnap.data()?.rules ?? {}) as {
+    allowLatePicks?: boolean;
+    latePickPenaltyWins?: number;
+  };
+  const lateOptions = {
+    allowLatePicks: rules.allowLatePicks === true,
+    latePickPenaltyWins: rules.latePickPenaltyWins,
+  };
 
   // Weeks that count toward the season record: same season, already scored.
   const seasonWeeks = allWeeksSnap.docs.filter((d) => {
@@ -527,7 +539,11 @@ export const adminRescoreWeek = onCall(async (request) => {
       targetPicks = picks;
     }
     for (const pick of picks) {
-      const scored = scorePicks(pick.picks ?? {}, games, pick.confidenceGameId);
+      const scored = applyLatePickPenalty(scorePicks(pick.picks ?? {}, games, pick.confidenceGameId), {
+        ...lateOptions,
+        submittedAt: pick.submittedAt,
+        deadline: weekDoc.data().pickDeadline,
+      });
       const running = seasonTotals.get(pick.userId) ?? { wins: 0, losses: 0 };
       seasonTotals.set(pick.userId, {
         wins: running.wins + scored.wins,
@@ -540,7 +556,14 @@ export const adminRescoreWeek = onCall(async (request) => {
   const batch = db().batch();
   const entries = members.map((member) => {
     const pick = targetPicks.find((p) => p.userId === member.id);
-    const scored = scorePicks(pick?.picks ?? {}, targetGames, pick?.confidenceGameId);
+    const scored = applyLatePickPenalty(
+      scorePicks(pick?.picks ?? {}, targetGames, pick?.confidenceGameId),
+      {
+        ...lateOptions,
+        submittedAt: pick?.submittedAt,
+        deadline: week.pickDeadline,
+      }
+    );
     const season = seasonTotals.get(member.id) ?? { wins: 0, losses: 0 };
     batch.update(groupRef.collection("members").doc(member.id), {
       seasonWins: season.wins,
@@ -565,6 +588,7 @@ export const adminRescoreWeek = onCall(async (request) => {
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   batch.update(weekSnap.ref, {
+    status: "scored",
     awards,
     scoredAt: admin.firestore.FieldValue.serverTimestamp(),
   });

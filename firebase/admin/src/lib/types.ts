@@ -89,6 +89,8 @@ export interface WeekDoc {
   selectionDeadlinePassedNotified?: boolean;
   awards?: WeekAwards | null;
   deadlineReminderSent?: boolean;
+  deadlineReminder24hSent?: boolean;
+  deadlineReminder1hSent?: boolean;
   scoredAt?: Timestamp | null;
 }
 

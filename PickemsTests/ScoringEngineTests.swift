@@ -260,6 +260,45 @@ struct ScoringEngineTests {
         #expect(ScoringEngine.isPickCorrect(pickedTeamId: "home", game: game) == false)
     }
 
+    @Test func latePickPenaltySubtractsWinsAfterDeadline() {
+        let game = SlateGame(
+            id: "1",
+            espnEventId: "1",
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: 7,
+            spreadTeamId: "home",
+            kickoff: Date(),
+            status: .final,
+            homeScore: 28,
+            awayScore: 17,
+            winnerTeamId: "home"
+        )
+        let deadline = Date(timeIntervalSince1970: 1_000)
+        let late = ScoringEngine.scorePicks(
+            picks: ["1": "home"],
+            games: [game],
+            submittedAt: Date(timeIntervalSince1970: 2_000),
+            deadline: deadline,
+            latePenaltyWins: 1
+        )
+        let onTime = ScoringEngine.scorePicks(
+            picks: ["1": "home"],
+            games: [game],
+            submittedAt: Date(timeIntervalSince1970: 500),
+            deadline: deadline,
+            latePenaltyWins: 1
+        )
+        #expect(late.wins == 0)
+        #expect(onTime.wins == 1)
+    }
+
     @Test func threeWayHeadToHeadBreaksTieGroup() {
         let game = SlateGame(
             id: "g1",

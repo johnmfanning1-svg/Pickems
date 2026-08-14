@@ -557,3 +557,19 @@ describe("audit hardening (inviteCodes, member fields, pick delete, group create
     );
   });
 });
+
+describe("user profile reads", () => {
+  it("lets a user read their own doc and blocks other signed-in users", async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "users", MEMBER), {
+        displayName: MEMBER,
+        fcmToken: "secret-token",
+      });
+    });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER).firestore();
+    await assertSucceeds(getDoc(doc(memberDb, "users", MEMBER)));
+    await assertFails(getDoc(doc(outsiderDb, "users", MEMBER)));
+    await assertSucceeds(getDoc(doc(adminCtx().firestore(), "users", MEMBER)));
+  });
+});
