@@ -467,26 +467,18 @@ describe("existing invariants (regression)", () => {
 });
 
 describe("audit hardening (inviteCodes, member fields, pick delete, group create)", () => {
-  it("allows a signed-in user to get an invite code by exact id", async () => {
+  it("allows invite code get but denies listing all codes", async () => {
     await seed();
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), "inviteCodes", "ABC123"), { groupId: GROUP_ID });
+      // Reuse one client: a second ctx.firestore() after a write throws
+      // "Firestore has already been started".
+      const db = ctx.firestore();
+      await setDoc(doc(db, "inviteCodes", "ABC123"), { groupId: GROUP_ID });
+      await setDoc(doc(db, "inviteCodes", "XYZ999"), { groupId: "other" });
     });
-    const reader = testEnv.authenticatedContext(MEMBER).firestore();
-    await assertSucceeds(getDoc(doc(reader, "inviteCodes", "ABC123")));
-  });
-
-  it("denies listing the inviteCodes collection", async () => {
-    await seed();
-    await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), "inviteCodes", "ABC123"), { groupId: GROUP_ID });
-      await setDoc(doc(ctx.firestore(), "inviteCodes", "XYZ999"), { groupId: "other" });
-    });
-    // Use a different uid than the get test: rules-unit-testing caches one
-    // Firestore client per uid, and getDoc then getDocs on that client throws
-    // "Firestore has already been started" instead of PERMISSION_DENIED.
-    const lister = testEnv.authenticatedContext(OUTSIDER).firestore();
-    await assertFails(getDocs(collection(lister, "inviteCodes")));
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertSucceeds(getDoc(doc(memberDb, "inviteCodes", "ABC123")));
+    await assertFails(getDocs(collection(memberDb, "inviteCodes")));
   });
 
   it("blocks a member from rewriting their own seasonWins", async () => {
