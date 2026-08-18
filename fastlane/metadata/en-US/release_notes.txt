@@ -1,9 +1,7 @@
-What's new in 3.0
+What's new in 3.1
 
-• Selections and Pickems are now separate tabs, so building the slate and picking against the spread stay clear
-• Commissioner tools live in Commissioner Settings — deadlines, lock-early, Reopen Selections, and Manage Pickems
-• Clearing a Selection removes it from Pickems and lets you remake it before the deadline
-• Edit spreads without losing the slate, and weekly admin stays in Settings instead of bouncing you out
-• Home scoreboard, CFB news, and team themes for a more complete Saturday
+• Week 0 is the eight Saturday openers; Week 1 is the rest of ESPN's opening week
+• Browse future weeks on Selections; Pickems stays on the current week
+• More stable week switching and Home scores
 
 Thanks for playing with us.
