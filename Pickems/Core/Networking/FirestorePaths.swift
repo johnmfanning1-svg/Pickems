@@ -36,6 +36,7 @@ enum FirestoreField {
     static let lastReadChatAt = "lastReadChatAt"
     static let chatMuted = "chatMuted"
     static let chatEnabled = "chatEnabled"
+    static let minimumBuild = "minimumBuild"
 }
 
 extension Firestore {

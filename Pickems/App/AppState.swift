@@ -20,6 +20,7 @@ final class AppState {
     /// view-model instances were why Group clears kept missing the Picks tab.
     let picksViewModel = PicksViewModel()
     let chatService = ChatService()
+    let liveConfig = LiveAppConfigService()
     let notificationService = NotificationService()
     let appTheme = AppTheme()
 
@@ -47,6 +48,7 @@ final class AppState {
         firebaseBootFailed = !ok
         guard ok else { return }
         authService.start()
+        liveConfig.start()
         notificationService.start()
         appTheme.sync(from: authService.currentUser)
     }

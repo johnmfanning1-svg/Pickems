@@ -9,7 +9,12 @@ struct RootView: View {
             if appState.firebaseBootFailed {
                 bootFailureView
             } else {
-                destinationContent
+                let config = appState.liveConfig
+                if config.requiresUpdate {
+                    ForceUpdateView()
+                } else {
+                    destinationContent
+                }
             }
         }
         .preferredColorScheme(.dark)

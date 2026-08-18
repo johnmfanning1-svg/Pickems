@@ -62,14 +62,14 @@ struct PickemsApp: App {
                         }
                     }
                     .sheet(isPresented: Binding(
-                        get: { appState.showJoinGroupSheet },
+                        get: { appState.showJoinGroupSheet && !appState.liveConfig.requiresUpdate },
                         set: { appState.showJoinGroupSheet = $0 }
                     )) {
                         JoinGroupSheet(initialCode: appState.pendingInviteCode ?? "")
                             .pickemsEnvironment(appState)
                     }
                     .sheet(isPresented: Binding(
-                        get: { appState.showFavoriteTeamPicker },
+                        get: { appState.showFavoriteTeamPicker && !appState.liveConfig.requiresUpdate },
                         set: { appState.showFavoriteTeamPicker = $0 }
                     )) {
                         FavoriteTeamPickerView(isOnboardingPrompt: true)
