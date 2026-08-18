@@ -11,7 +11,7 @@ struct GroupSlateView: View {
         PicksView(kind: week.status == .selection ? .selections : .pickems)
             .onAppear {
                 appState.groupService.selectGroup(group)
-                appState.groupService.selectWeek(weekId: week.id)
+                Task { await appState.groupService.selectWeek(weekId: week.id) }
             }
     }
 }

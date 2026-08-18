@@ -51,6 +51,7 @@ enum WeekTransition {
 
     /// Reopen Selections while Pickems have opened but the week is not scored.
     static func canReopenSelections(_ week: WeekSummary) -> Bool {
+        if week.skipsSelection { return false }
         switch week.status {
         case .picking, .locked: return true
         case .selection, .scored: return false
@@ -65,6 +66,7 @@ enum WeekTransition {
     /// and the Selection deadline has not passed. After lock-early or deadline,
     /// status is `.picking` and Selections are frozen.
     static func canRemakeSelections(_ week: WeekSummary, now: Date = Date()) -> Bool {
+        guard !week.skipsSelection else { return false }
         guard week.status == .selection else { return false }
         if let deadline = week.selectionDeadline {
             return now < deadline

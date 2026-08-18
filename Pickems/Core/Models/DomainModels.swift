@@ -103,9 +103,19 @@ struct WeekSummary: Codable, Identifiable, Equatable {
     var selectionDeadlineSetAt: Date? = nil
     var selectionDeadlineSetBy: String? = nil
     var awards: WeekAwards? = nil
+    /// `"fixedBoard"` for auto-slated weeks (Week 0). Nil on nomination-built weeks.
+    var slateSource: String? = nil
 
     var displayLabel: String {
         "Season \(seasonYear.pickemsYearString) | Week \(weekNumber)"
+    }
+
+    var skipsSelection: Bool {
+        CFBWeekCalendar.isFixedSlate(weekNumber: weekNumber, slateSource: slateSource)
+    }
+
+    var espnScoreboardWeek: Int {
+        CFBWeekCalendar.espnScoreboardWeek(weekNumber)
     }
 
     /// True when a selection deadline is set and has passed.
@@ -139,6 +149,8 @@ struct SlateGame: Codable, Identifiable, Equatable {
     var homeScore: Int?
     var awayScore: Int?
     var winnerTeamId: String?
+    var broadcastLabel: String? = nil
+    var isNeutralSite: Bool = false
 
     enum GameStatus: String, Codable {
         case scheduled
@@ -159,6 +171,27 @@ struct SlateGame: Codable, Identifiable, Equatable {
         let adjusted = margin + (spreadTeamId == homeTeamId ? -spreadMagnitude : spreadMagnitude)
         if adjusted == 0 { return nil }
         return adjusted > 0 ? homeTeamId : awayTeamId
+    }
+
+    var matchupSeparator: String { isNeutralSite ? "vs" : "@" }
+
+    var kickoffMetaLine: String {
+        GameKickoffLine.make(kickoff: kickoff, broadcastLabel: broadcastLabel, includeDate: true)
+    }
+}
+
+enum GameKickoffLine {
+    static func make(kickoff: Date, broadcastLabel: String?, includeDate: Bool) -> String {
+        let time = includeDate
+            ? kickoff.formatted(date: .abbreviated, time: .shortened)
+            : kickoff.formatted(date: .omitted, time: .shortened)
+        if let broadcastLabel {
+            let trimmed = broadcastLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, trimmed.uppercased() != "TBD" {
+                return "\(time) · \(trimmed)"
+            }
+        }
+        return time
     }
 }
 

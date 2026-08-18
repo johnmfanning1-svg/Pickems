@@ -154,11 +154,16 @@ final class PicksViewModel {
         isLoadingGames = true
         defer { isLoadingGames = false }
         do {
-            let weekInfo = try await ESPNService.shared.currentWeek()
-            espnGames = try await ESPNService.shared.fetchScoreboard(
-                week: weekInfo.weekNumber,
-                seasonType: weekInfo.seasonType
-            )
+            if let week = appState.groupService.currentWeek {
+                espnGames = try await ESPNService.shared.fetchScoreboard(for: week)
+            } else {
+                let weekInfo = try await ESPNService.shared.currentWeek()
+                let app = CFBWeekCalendar.resolve(espn: weekInfo)
+                espnGames = try await ESPNService.shared.fetchScoreboard(
+                    week: app.espnWeekNumber,
+                    seasonType: weekInfo.seasonType
+                ).matching(seasonYear: app.seasonYear, appWeekNumber: app.weekNumber)
+            }
         } catch {
             espnGames = []
             UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
@@ -486,11 +491,7 @@ final class PicksViewModel {
     func bulkImportScheduled(week: WeekSummary, rules: GroupRules, appState: AppState) async {
         guard let group = appState.groupService.selectedGroup else { return }
         do {
-            let weekInfo = try await ESPNService.shared.currentWeek()
-            let espn = try await ESPNService.shared.fetchScoreboard(
-                week: week.weekNumber,
-                seasonType: weekInfo.seasonType
-            )
+            let espn = try await ESPNService.shared.fetchScoreboard(for: week)
             let scheduled = espn.filter { $0.status == .scheduled }.map { $0.toSlateGame() }
             try await appState.pickService.bulkImportGames(
                 groupId: group.id,
@@ -509,10 +510,8 @@ final class PicksViewModel {
         let slateIds = Set(appState.pickService.slateGames.map(\.espnEventId))
         guard !slateIds.isEmpty else { return }
         do {
-            let weekInfo = try await ESPNService.shared.currentWeek()
             let cards = try await ESPNService.shared.liveGameCards(
-                week: week.weekNumber,
-                seasonType: weekInfo.seasonType,
+                for: week,
                 slateEventIds: slateIds,
                 userPicks: draftPicks,
                 slateGames: appState.pickService.slateGames

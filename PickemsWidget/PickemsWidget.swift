@@ -45,8 +45,6 @@ struct PickemsWidgetProvider: TimelineProvider {
             if let loaded = PickemsAppGroup.load() {
                 var copy = loaded
                 copy.seasonKickoffAt = kickoff
-                // ESPN regular season starts at Week 1 — never surface Week 0.
-                copy.weekNumber = max(1, copy.weekNumber)
                 copy.seasonYear = CFBSeasonCalendar.seasonYear(containing: kickoff)
                 return copy
             }

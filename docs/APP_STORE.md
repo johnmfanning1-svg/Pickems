@@ -46,7 +46,7 @@ Feedback-driven release covering all eleven workstreams:
 | **DUP-GUARD** | Commissioner cannot add a game already on the slate or in nominations |
 | **GROUP-PICKS** | Collapsible per-member sections (default open) with remaining-picks counts; spreads on rows |
 | **ESPN-SLATE** | FBS-only scoreboard (`groups=80`); rank + conference decode; spreads hardened |
-| **WEEK-NUM** | Preseason/widget copy uses Kickoff (not “Week 0”); first playable slate is Week 1 |
+| **WEEK-NUM** | Preseason/widget copy uses Kickoff until Aug 29; first playable slate is Week 0 (Saturday openers), then Week 1 (Sep 3–7) |
 | **CHAT** | Firestore group chat with report, block, delete-own, and terms (Guideline 1.2) |
 | **ADMIN** | Super-user web admin (Hosting) for ops — not required for App Review path |
 | **ASO** | Subtitle/keywords/description + pickems.app SEO landing; fastlane metadata |

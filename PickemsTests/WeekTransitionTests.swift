@@ -98,6 +98,17 @@ struct WeekTransitionTests {
         #expect(!WeekTransition.canReopenSelections(week(status: .scored)))
     }
 
+    @Test func fixedSlateCannotReopenOrRemakeSelections() {
+        var fixed = week(status: .picking)
+        fixed.weekNumber = 0
+        fixed.id = "2026-W0"
+        fixed.slateSource = CFBWeekCalendar.weekZeroSlateSource
+        #expect(fixed.skipsSelection)
+        #expect(!WeekTransition.canReopenSelections(fixed))
+        #expect(!WeekTransition.canRemakeSelections(fixed))
+        #expect(WeekTransition.arePickemsOpen(fixed))
+    }
+
     @Test func toSelectionUpdatesClearsLockAndSetsSelection() {
         let updates = WeekTransition.toSelectionUpdates()
         #expect(updates["status"] as? String == WeekStatus.selection.rawValue)

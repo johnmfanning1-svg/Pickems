@@ -9,7 +9,7 @@ struct PickResultRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(game.awayTeamAbbreviation) @ \(game.homeTeamAbbreviation)")
+                Text("\(game.awayTeamAbbreviation) \(game.matchupSeparator) \(game.homeTeamAbbreviation)")
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textPrimary)
                 if showSpread {

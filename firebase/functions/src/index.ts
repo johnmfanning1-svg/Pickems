@@ -9,6 +9,7 @@ import {
   slateGameNeedsWrite,
   type EspnEvent,
 } from "./espn";
+import { espnScoreboardWeek } from "./cfbWeekCalendar";
 import { sendToUser, sendToUsers } from "./notifications";
 import {
   SlateGameDoc,
@@ -35,6 +36,7 @@ export {
   adminTransferCommissioner,
   adminAuditWeekIds,
   adminRescoreWeek,
+  adminMigrateWeek0Split,
 } from "./admin";
 
 // Group chat — push fan-out plus the report counter clients cannot write.
@@ -295,7 +297,8 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
 async function loadScoreboardEvents(
   weekNumbers: Iterable<number>
 ): Promise<Map<string, EspnEvent>> {
-  const weeks = [...new Set(weekNumbers)].filter((n) => Number.isFinite(n) && n > 0);
+  const weeks = [...new Set([...weekNumbers].map((n) => espnScoreboardWeek(n)))]
+    .filter((n) => Number.isFinite(n) && n > 0);
   const fetches =
     weeks.length === 0
       ? [fetchScoreboard({ seasonType: 2 })]

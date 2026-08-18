@@ -75,7 +75,7 @@ struct GameBrowseView: View {
                     HStack {
                         Image(systemName: "star.fill")
                             .foregroundStyle(theme.accent)
-                        Text("Your team is on the board — \(fav.awayTeamAbbreviation) @ \(fav.homeTeamAbbreviation)")
+                        Text("Your team is on the board — \(fav.awayTeamAbbreviation) \(fav.matchupSeparator) \(fav.homeTeamAbbreviation)")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(PickemsColors.textSecondary)
                         Spacer()
@@ -138,11 +138,17 @@ struct GameBrowseView: View {
     private func refreshBoard() async {
         loading = loadedGames.isEmpty && games.isEmpty
         do {
-            let weekInfo = try await ESPNService.shared.currentWeek()
-            let fetched = try await ESPNService.shared.fetchScoreboard(
-                week: weekInfo.weekNumber,
-                seasonType: weekInfo.seasonType
-            )
+            let fetched: [ESPNGame]
+            if let week = appState.groupService.currentWeek {
+                fetched = try await ESPNService.shared.fetchScoreboard(for: week)
+            } else {
+                let weekInfo = try await ESPNService.shared.currentWeek()
+                let app = CFBWeekCalendar.resolve(espn: weekInfo)
+                fetched = try await ESPNService.shared.fetchScoreboard(
+                    week: app.espnWeekNumber,
+                    seasonType: weekInfo.seasonType
+                ).matching(seasonYear: app.seasonYear, appWeekNumber: app.weekNumber)
+            }
             loadedGames = fetched
             loadError = nil
             appState.picksViewModel.espnGames = fetched
@@ -281,7 +287,7 @@ struct GameBrowseRow: View {
                 rowContent
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(
-                        "\(game.awayTeamAbbreviation) at \(game.homeTeamAbbreviation), already selected by \(nominatorName ?? "another member")"
+                        "\(game.awayTeamAbbreviation) \(game.isNeutralSite ? "versus" : "at") \(game.homeTeamAbbreviation), already selected by \(nominatorName ?? "another member")"
                     )
                     .accessibilityRemoveTraits(.isButton)
             } else {
@@ -302,18 +308,20 @@ struct GameBrowseRow: View {
                 HStack(spacing: 12) {
                     teamBadge(
                         abbr: game.awayTeamAbbreviation,
-                        logo: game.awayTeamLogoURL
+                        logo: game.awayTeamLogoURL,
+                        caption: "Away"
                     )
 
                     VStack(spacing: 2) {
-                        Text("@")
+                        Text(game.matchupSeparator)
                             .font(.caption)
                             .foregroundStyle(PickemsColors.textSecondary)
                     }
 
                     teamBadge(
                         abbr: game.homeTeamAbbreviation,
-                        logo: game.homeTeamLogoURL
+                        logo: game.homeTeamLogoURL,
+                        caption: "Home"
                     )
                 }
 
@@ -345,7 +353,7 @@ struct GameBrowseRow: View {
                     statusLabel
                 }
 
-                Text(game.kickoff.formatted(date: .abbreviated, time: .shortened))
+                Text(game.kickoffMetaLine)
                     .font(.caption2)
                     .foregroundStyle(PickemsColors.textSecondary)
             }
@@ -388,8 +396,8 @@ struct GameBrowseRow: View {
         }
     }
 
-    private func teamBadge(abbr: String, logo: String?) -> some View {
-        VStack(spacing: 4) {
+    private func teamBadge(abbr: String, logo: String?, caption: String) -> some View {
+        VStack(spacing: 2) {
             if let logo, let url = URL(string: logo) {
                 AsyncImage(url: url) { image in
                     image.resizable().scaledToFit()
@@ -402,6 +410,9 @@ struct GameBrowseRow: View {
                     .font(.headline)
                     .foregroundStyle(PickemsColors.textPrimary)
             }
+            Text(caption)
+                .font(.caption2)
+                .foregroundStyle(PickemsColors.textSecondary)
         }
         .frame(width: 44)
     }

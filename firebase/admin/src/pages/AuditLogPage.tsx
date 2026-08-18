@@ -18,6 +18,7 @@ const KNOWN_ACTIONS = [
   "adminTransferCommissioner",
   "adminAuditWeekIds",
   "adminRescoreWeek",
+  "adminMigrateWeek0Split",
   "adminRenameGroup",
   "adminSetGroupVisibility",
   "adminUpdateGroupRules",

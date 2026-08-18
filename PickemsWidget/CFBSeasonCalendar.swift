@@ -9,7 +9,7 @@ enum CFBSeasonCalendar {
         let components: DateComponents
         switch year {
         case 2026:
-            components = DateComponents(year: 2026, month: 8, day: 27, hour: 0, minute: 0)
+            components = DateComponents(year: 2026, month: 8, day: 29, hour: 0, minute: 0)
         case 2025:
             components = DateComponents(year: 2025, month: 8, day: 23, hour: 0, minute: 0)
         default:

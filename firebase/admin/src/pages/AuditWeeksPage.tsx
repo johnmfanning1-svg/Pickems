@@ -11,7 +11,7 @@ import { useConfirm } from "@/components/useConfirm";
 import { useGroups } from "@/hooks/queries";
 import { useAction } from "@/hooks/useAction";
 import { writeAudit } from "@/lib/audit";
-import { adminAuditWeekIds, adminRematerializeNominations, describeError } from "@/lib/callables";
+import { adminAuditWeekIds, adminMigrateWeek0Split, adminRematerializeNominations, describeError } from "@/lib/callables";
 import { db } from "@/lib/firebase";
 import type { WeekAuditRow } from "@/lib/types";
 
@@ -46,6 +46,20 @@ export function AuditWeeksPage() {
   const [groupsScanned, setGroupsScanned] = useState(0);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [splitRows, setSplitRows] = useState<
+    Array<{
+      groupId: string;
+      groupName: string | null;
+      skipped: boolean;
+      skipReason?: string;
+      weekZeroGames: number;
+      movedNominations: number;
+      movedPickDocs: number;
+      deletedWeekOneGames: number;
+      clearedSubmissions: number;
+      weekOnePickDeadline: string | null;
+    }> | null
+  >(null);
 
   const scan = useCallback(async (groupId: string, seasonYear: string) => {
     setScanning(true);
@@ -119,6 +133,38 @@ export function AuditWeeksPage() {
       });
       await scan(groupFilter, seasonFilter);
       return "Slate rebuilt.";
+    });
+  }
+
+  async function runWeek0Split(dryRun: boolean) {
+    if (!(await confirm({
+      title: dryRun ? "Dry-run the Week 0 split?" : "Apply the Week 0 split?",
+      body: dryRun
+        ? "Reads every 2026-W1 doc and reports what would move onto 2026-W0. No writes."
+        : (
+          <>
+            Creates <code className="font-mono">2026-W0</code> with the eight Aug 29 games,
+            moves Saturday nominations/picks off <code className="font-mono">2026-W1</code>,
+            and recomputes Week 1 pick deadlines. This cannot be undone from the portal.
+          </>
+        ),
+      confirmLabel: dryRun ? "Dry run" : "Apply split",
+      requireText: dryRun ? undefined : "SPLIT",
+      tone: dryRun ? "primary" : "danger",
+    }))) {
+      return;
+    }
+    await action.run(`week0-split:${dryRun ? "dry" : "apply"}`, async () => {
+      const result = await adminMigrateWeek0Split({
+        dryRun,
+        ...(groupFilter ? { groupId: groupFilter } : {}),
+      });
+      setSplitRows(result.groups);
+      const migrated = result.groups.filter((g) => !g.skipped).length;
+      const skipped = result.groups.length - migrated;
+      return dryRun
+        ? `Dry run: ${migrated} group(s) would migrate, ${skipped} skipped.`
+        : `Applied: ${migrated} group(s) migrated, ${skipped} skipped.`;
     });
   }
 
@@ -247,6 +293,55 @@ export function AuditWeeksPage() {
           {action.message}
         </Banner>
       ) : null}
+
+      <Card
+        title="2026 Week 0 split"
+        description="ESPN Week 1 is 99 games. This carves Saturday Aug 29 into 2026-W0 and leaves Sep 3–7 on 2026-W1."
+      >
+        <div className="flex flex-wrap gap-3">
+          <Button variant="secondary" onClick={() => void runWeek0Split(true)}>
+            Dry run
+          </Button>
+          <Button variant="danger" onClick={() => void runWeek0Split(false)}>
+            Apply split
+          </Button>
+        </div>
+        {splitRows != null ? (
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="py-2 pr-4">League</th>
+                  <th className="py-2 pr-4">Result</th>
+                  <th className="py-2 pr-4">W0 games</th>
+                  <th className="py-2 pr-4">Noms moved</th>
+                  <th className="py-2 pr-4">W1 games removed</th>
+                  <th className="py-2">W1 deadline</th>
+                </tr>
+              </thead>
+              <tbody>
+                {splitRows.map((row) => (
+                  <tr key={row.groupId} className="border-t border-ink-600">
+                    <td className="py-2 pr-4">
+                      <div className="font-medium text-slate-100">{row.groupName ?? row.groupId}</div>
+                      <div className="font-mono text-xs text-slate-500">{row.groupId}</div>
+                    </td>
+                    <td className="py-2 pr-4 text-slate-300">
+                      {row.skipped ? row.skipReason ?? "skipped" : "migrated"}
+                    </td>
+                    <td className="py-2 pr-4">{row.weekZeroGames}</td>
+                    <td className="py-2 pr-4">{row.movedNominations}</td>
+                    <td className="py-2 pr-4">{row.deletedWeekOneGames}</td>
+                    <td className="py-2 font-mono text-xs text-slate-400">
+                      {row.weekOnePickDeadline ?? "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </Card>
 
       <Card title="Scope">
         <div className="flex flex-wrap items-end gap-3">

@@ -30,7 +30,7 @@ Entitlements:
 
 - Prefer the **Pickems** scheme (iPhone + **PickemsWidget**). Do **not** select **PickemsWatch** as the run destination or add it to the active scheme for iOS UAT — Watch embed objects in the project are orphaned / incomplete; building Watch can block an otherwise good iPhone + widget build.
 - Widget empty App Group: Home Screen shows “Open Pickems” (no demo “Saturday Crew” standings). Placeholder/demo data is only for WidgetKit `placeholder` / `context.isPreview`.
-- **Preseason:** before season kickoff (2026: Thu Aug 27 ET), the widget shows a countdown to college football kickoff — never “Week 0”. The first playable slate is **Week 1**. After kickoff it shows **current-week** group standings (open the Home tab once so App Group data stays fresh).
+- **Preseason:** before season kickoff (2026: Sat Aug 29 ET), the widget shows a countdown to college football kickoff. The first playable slate is **Week 0** (the eight Saturday openers). After kickoff it shows **current-week** group standings (open the Home tab once so App Group data stays fresh).
 
 ## Live Activities
 

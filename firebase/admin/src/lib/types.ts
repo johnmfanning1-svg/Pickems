@@ -92,6 +92,7 @@ export interface WeekDoc {
   deadlineReminder24hSent?: boolean;
   deadlineReminder1hSent?: boolean;
   scoredAt?: Timestamp | null;
+  slateSource?: string | null;
 }
 
 export interface SlateGameDoc {
@@ -112,6 +113,8 @@ export interface SlateGameDoc {
   homeScore?: number | null;
   awayScore?: number | null;
   winnerTeamId?: string | null;
+  broadcastLabel?: string | null;
+  isNeutralSite?: boolean;
 }
 
 export interface NominationDoc {

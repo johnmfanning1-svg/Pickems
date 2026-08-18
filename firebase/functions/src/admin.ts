@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import { onCall, CallableRequest, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { materializeNominations } from "./materialize";
+import { migrateAllGroupsWeek0Split } from "./week0Split";
 import {
   SlateGameDoc,
   MemberDoc,
@@ -603,4 +604,22 @@ export const adminRescoreWeek = onCall(async (request) => {
   );
 
   return { groupId, weekId, awards, entries: ranked, weeksSummed: seasonWeeks.length };
+});
+
+export const adminMigrateWeek0Split = onCall(async (request) => {
+  const actor = requireSuperAdmin(request);
+  const data = (request.data ?? {}) as { dryRun?: boolean; groupId?: string };
+  const dryRun = data.dryRun !== false;
+  const groupId = typeof data.groupId === "string" && data.groupId.trim() ? data.groupId.trim() : undefined;
+
+  const result = await migrateAllGroupsWeek0Split({ dryRun, groupId });
+
+  await writeAudit(actor, "adminMigrateWeek0Split", "groups/*/weeks", null, {
+    dryRun: result.dryRun,
+    groupId: groupId ?? null,
+    groups: result.groups.length,
+    migrated: result.groups.filter((g) => !g.skipped).length,
+  });
+
+  return result;
 });

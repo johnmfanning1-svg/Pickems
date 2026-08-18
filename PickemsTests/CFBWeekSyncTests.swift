@@ -72,6 +72,47 @@ struct CFBWeekSyncTests {
             year: 2026, month: 8, day: 1, hour: 12
         ))!
 
-        #expect(CFBWeekSync.fallbackWeekId(defaults: defaults, on: beforeKickoff) == "2026-W1")
+        #expect(CFBWeekSync.fallbackWeekId(defaults: defaults, on: beforeKickoff) == "2026-W0")
+    }
+
+    @Test func fallbackOverridesStaleWeek1CacheDuringWeekZeroWindow() {
+        let suite = "pickems.tests.cfbWeekSync.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("2026-W1", forKey: CFBWeekSync.lastKnownWeekIdKey)
+
+        var eastern = Calendar(identifier: .gregorian)
+        eastern.timeZone = TimeZone(identifier: "America/New_York")!
+        let duringWindow = eastern.date(from: DateComponents(
+            year: 2026, month: 8, day: 18, hour: 12
+        ))!
+
+        #expect(CFBWeekSync.fallbackWeekId(defaults: defaults, on: duringWindow) == "2026-W0")
+    }
+
+    @Test func parseWeekIdReadsYearAndNumber() {
+        #expect(CFBWeekSync.parseWeekId("2026-W0")?.seasonYear == 2026)
+        #expect(CFBWeekSync.parseWeekId("2026-W0")?.weekNumber == 0)
+        #expect(CFBWeekSync.parseWeekId("2026-W15")?.weekNumber == 15)
+        #expect(CFBWeekSync.parseWeekId("nope") == nil)
+    }
+
+    @Test func makeWeekSummaryHonorsRequestedWeekOneDuringWeekZeroWindow() {
+        var eastern = Calendar(identifier: .gregorian)
+        eastern.timeZone = TimeZone(identifier: "America/New_York")!
+        let duringWindow = eastern.date(from: DateComponents(
+            year: 2026, month: 8, day: 18, hour: 12
+        ))!
+        let info = CFBWeekInfo(seasonYear: 2026, weekNumber: 1, seasonType: 2, label: "")
+        let week = CFBWeekSync.makeWeekSummary(
+            id: "2026-W1",
+            info: info,
+            rules: .default,
+            memberCount: 3,
+            now: duringWindow
+        )
+        #expect(week.weekNumber == 1)
+        #expect(week.status == .selection)
+        #expect(week.skipsSelection == false)
     }
 }

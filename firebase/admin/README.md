@@ -94,7 +94,7 @@ Grant the first admin from a machine with a service-account key (see
 | `/groups/:id/weeks` | status transitions, `pickDeadline`, re-materialize, spreads, delete | `adminSetWeekStatus`, `adminRematerializeNominations` |
 | `/groups/:id/weeks/:weekId/picks` | members × slate grid, edit picks, lock/unlock, rescore | `adminUpsertPick`, `adminRescoreWeek` |
 | `/config` | `appConfig/live` flags + super-admin roles | `appConfig`, `setAdminRole` |
-| `/audit/weeks` | Risk R1 tool — misaligned, duplicate, orphan weeks | `adminAuditWeekIds` |
+| `/audit/weeks` | Risk R1 tool — misaligned, duplicate, orphan weeks; 2026 Week 0 split | `adminAuditWeekIds`, `adminMigrateWeek0Split` |
 | `/audit/log` | append-only admin action log | `adminAudit` |
 | `/moderation` | messages with `reportCount > 0` | `messages` collection group + `reports` |
 

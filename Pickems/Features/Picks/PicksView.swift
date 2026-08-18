@@ -27,11 +27,12 @@ struct PicksView: View {
                         picksGroupPicker
                     }
 
-                    if !appState.groupService.availableWeeks.isEmpty {
+                    if !displayedWeeks.isEmpty {
                         PicksWeekTabBar(
-                            weeks: appState.groupService.availableWeeks,
+                            weeks: displayedWeeks,
                             selectedWeekId: appState.groupService.currentWeek?.id,
-                            activeWeekId: activeESPNWeekId
+                            activeWeekId: activeESPNWeekId,
+                            dateRangeLabel: { appState.groupService.dateRangeLabel(for: $0.id) }
                         ) { week in
                             selectWeek(week)
                         }
@@ -123,9 +124,15 @@ struct PicksView: View {
                 viewModel.refreshNominationSubmissionState(appState: appState)
             }
             .syncPicksDraftFromServer()
-            .onChange(of: appState.selectedTab) { _, tab in
-                if tab == .selections || tab == .pickems {
-                    viewModel.resyncWhenVisible(appState: appState)
+            .onChange(of: appState.selectedTab) { oldTab, tab in
+                if kind == .selections, oldTab == .selections, tab != .selections {
+                    Task { await returnToActiveWeek() }
+                    return
+                }
+                guard isThisWorkspace(tab) else { return }
+                viewModel.resyncWhenVisible(appState: appState)
+                Task {
+                    await returnToActiveWeek()
                 }
             }
         }
@@ -169,19 +176,46 @@ struct PicksView: View {
         .accessibilityHint("Review your Pickems across the season")
     }
 
+    private var displayedWeeks: [WeekSummary] {
+        let weeks = appState.groupService.availableWeeks
+        if kind == .pickems {
+            return weeks.filter { !appState.groupService.isFutureWeek($0) }
+        }
+        return weeks
+    }
+
     private var activeESPNWeekId: String? {
         appState.groupService.cfbWeek.map { CFBWeekSync.weekId(for: $0) }
             ?? appState.groupService.currentWeek?.id
     }
 
+    private func isThisWorkspace(_ tab: AppTab) -> Bool {
+        (kind == .selections && tab == .selections) || (kind == .pickems && tab == .pickems)
+    }
+
+    private func returnToActiveWeek() async {
+        viewModel.stopLiveRefresh()
+        viewModel.resetPendingWrite()
+        viewModel.draftPicks = [:]
+        viewModel.confidenceGameId = nil
+        await appState.groupService.jumpToActiveWeek()
+        reobservePicks(weekId: appState.groupService.currentWeek?.id)
+        viewModel.resyncWhenVisible(appState: appState)
+    }
+
     private func selectWeek(_ week: WeekSummary) {
+        if kind == .pickems, appState.groupService.isFutureWeek(week) {
+            return
+        }
         PickemsHaptics.selection()
         viewModel.stopLiveRefresh()
         viewModel.resetPendingWrite()
         viewModel.draftPicks = [:]
         viewModel.confidenceGameId = nil
-        appState.groupService.selectWeek(weekId: week.id)
-        reobservePicks(weekId: week.id)
+        Task {
+            await appState.groupService.selectWeek(weekId: week.id)
+            reobservePicks(weekId: week.id)
+        }
     }
 
     private func reobservePicks(weekId: String?) {
@@ -209,7 +243,17 @@ struct PicksView: View {
     private func statusContent(for week: WeekSummary) -> some View {
         switch kind {
         case .selections:
-            if let deadline = week.selectionDeadline {
+            if week.skipsSelection {
+                EmptyStateView(
+                    icon: "checkmark.circle.fill",
+                    title: "Slate is set",
+                    message: "Week 0 is the eight Saturday openers. Head to Pickems to make your picks."
+                )
+                PrimaryButton(title: "Make Pickems") {
+                    appState.selectedTab = .pickems
+                }
+                .padding(.horizontal)
+            } else if let deadline = week.selectionDeadline {
                 SelectionDeadlineBanner(deadline: deadline)
             } else if week.status == .selection, appState.isCommissioner {
                 ContextualTipBanner(
@@ -218,7 +262,9 @@ struct PicksView: View {
                 )
                 .padding(.horizontal)
             }
-            if week.status == .selection {
+            if week.skipsSelection {
+                EmptyView()
+            } else if week.status == .selection {
                 selectionPhase(week: week)
                 GroupPicksView(embedded: true, forceNominatingDisplay: true)
                     .padding(.top, 8)
@@ -450,7 +496,7 @@ struct PicksView: View {
                 .padding(.horizontal)
             }
 
-            ForEach(appState.pickService.slateGames) { game in
+            ForEach(appState.pickService.slateGames.sortedByKickoff) { game in
                 GamePickRow(
                     game: game,
                     selectedTeamId: viewModel.draftPicks[game.id],
@@ -535,7 +581,7 @@ struct PicksView: View {
             )
             .padding(.horizontal)
 
-            ForEach(appState.pickService.slateGames) { game in
+            ForEach(appState.pickService.slateGames.sortedByKickoff) { game in
                 GamePickRow(
                     game: game,
                     selectedTeamId: viewModel.draftPicks[game.id],
@@ -571,6 +617,7 @@ private struct PicksWeekTabBar: View {
     let weeks: [WeekSummary]
     let selectedWeekId: String?
     let activeWeekId: String?
+    let dateRangeLabel: (WeekSummary) -> String?
     let onSelect: (WeekSummary) -> Void
 
     var body: some View {
@@ -607,6 +654,11 @@ private struct PicksWeekTabBar: View {
             VStack(spacing: 2) {
                 Text("Week \(week.weekNumber)")
                     .font(.subheadline.weight(.semibold))
+                if let range = dateRangeLabel(week), !range.isEmpty {
+                    Text(range)
+                        .font(.caption2.weight(.medium))
+                        .opacity(isSelected ? 0.9 : 0.7)
+                }
                 if isActive {
                     Text("Current")
                         .font(.caption2.weight(.medium))
@@ -627,9 +679,16 @@ private struct PicksWeekTabBar: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Week \(week.weekNumber)")
+        .accessibilityLabel(accessibilityLabel(for: week))
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-        .accessibilityHint(isActive ? "Current week" : "View Pickems for this week")
+        .accessibilityHint(isActive ? "Current week" : "View this week")
+    }
+
+    private func accessibilityLabel(for week: WeekSummary) -> String {
+        if let range = dateRangeLabel(week), !range.isEmpty {
+            return "Week \(week.weekNumber), \(range)"
+        }
+        return "Week \(week.weekNumber)"
     }
 
     private func scrollToSelected(_ proxy: ScrollViewProxy) {

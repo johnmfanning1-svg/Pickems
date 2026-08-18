@@ -15,9 +15,9 @@ struct GamePickRow: View {
         PickemsCard {
             VStack(spacing: 12) {
                 HStack {
-                    teamButton(teamId: game.awayTeamId, name: game.awayTeamAbbreviation, logo: game.awayTeamLogoURL)
+                    teamButton(teamId: game.awayTeamId, name: game.awayTeamAbbreviation, logo: game.awayTeamLogoURL, caption: "Away")
                     VStack(spacing: 2) {
-                        Text("@")
+                        Text(game.matchupSeparator)
                             .foregroundStyle(PickemsColors.textSecondary)
                         if let live = liveCard, live.status != .scheduled {
                             Text(live.statusDetail)
@@ -25,16 +25,21 @@ struct GamePickRow: View {
                                 .foregroundStyle(live.status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
                         }
                     }
-                    teamButton(teamId: game.homeTeamId, name: game.homeTeamAbbreviation, logo: game.homeTeamLogoURL)
+                    teamButton(teamId: game.homeTeamId, name: game.homeTeamAbbreviation, logo: game.homeTeamLogoURL, caption: "Home")
                 }
 
-                HStack {
+                ZStack {
                     Text("Spread: \(game.spreadLabel(for: game.spreadTeamId)) \(spreadTeamAbbreviation)")
                         .font(.caption)
                         .foregroundStyle(PickemsColors.textSecondary)
-                    Spacer()
+                        .frame(maxWidth: .infinity)
+                        .multilineTextAlignment(.center)
+
                     if let result = liveCard?.pickResult {
-                        pickResultBadge(result)
+                        HStack {
+                            Spacer()
+                            pickResultBadge(result)
+                        }
                     }
                 }
 
@@ -52,7 +57,7 @@ struct GamePickRow: View {
                     .disabled(isDisabled)
                 }
 
-                Text(game.kickoff.formatted(date: .abbreviated, time: .shortened))
+                Text(game.kickoffMetaLine)
                     .font(.caption2)
                     .foregroundStyle(PickemsColors.textSecondary)
             }
@@ -92,7 +97,7 @@ struct GamePickRow: View {
         return selectedTeamId
     }
 
-    private func teamButton(teamId: String, name: String, logo: String?) -> some View {
+    private func teamButton(teamId: String, name: String, logo: String?, caption: String) -> some View {
         let isSelected = resolvedSelectedTeamId == teamId
         return Button {
             guard !isDisabled else { return }
@@ -100,7 +105,7 @@ struct GamePickRow: View {
             // Tap again to clear the Pickem only — never the slate Selection.
             onSelect(isSelected ? "" : teamId)
         } label: {
-            VStack {
+            VStack(spacing: 2) {
                 if let logo, let url = URL(string: logo) {
                     AsyncImage(url: url) { image in
                         image.resizable().scaledToFit()
@@ -111,6 +116,9 @@ struct GamePickRow: View {
                 }
                 Text(name)
                     .font(.subheadline.weight(.semibold))
+                Text(caption)
+                    .font(.caption2)
+                    .foregroundStyle(PickemsColors.textSecondary)
             }
             .frame(maxWidth: .infinity)
             .padding(8)
@@ -122,7 +130,7 @@ struct GamePickRow: View {
         }
         .disabled(isDisabled)
         .foregroundStyle(PickemsColors.textPrimary)
-        .accessibilityLabel(name)
+        .accessibilityLabel("\(caption) \(name)")
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         .accessibilityHint(
             isDisabled

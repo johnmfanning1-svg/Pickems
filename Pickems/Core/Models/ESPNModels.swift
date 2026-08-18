@@ -24,8 +24,16 @@ struct ESPNGame: Identifiable, Equatable {
     /// ESPN competitor.team.conferenceId
     let homeConferenceId: String?
     let awayConferenceId: String?
+    var broadcastLabel: String? = nil
+    var isNeutralSite: Bool = false
 
     var isTop25: Bool { homeCuratedRank != nil || awayCuratedRank != nil }
+
+    var matchupSeparator: String { isNeutralSite ? "vs" : "@" }
+
+    var kickoffMetaLine: String {
+        GameKickoffLine.make(kickoff: kickoff, broadcastLabel: broadcastLabel, includeDate: true)
+    }
 }
 
 struct ESPNScoreboardResponse: Decodable {
@@ -53,6 +61,23 @@ struct ESPNScoreboardResponse: Decodable {
         let competitors: [ESPNCompetitor]?
         let status: ESPNStatus?
         let odds: [ESPNOdds]?
+        let broadcasts: [ESPNBroadcast]?
+        let geoBroadcasts: [ESPNGeoBroadcast]?
+        let neutralSite: Bool?
+    }
+
+    struct ESPNBroadcast: Decodable {
+        let market: String?
+        let names: [String]?
+    }
+
+    struct ESPNGeoBroadcast: Decodable {
+        struct ESPNGeoMedia: Decodable {
+            let shortName: String?
+            let name: String?
+        }
+
+        let media: ESPNGeoMedia?
     }
 
     struct ESPNCompetitor: Decodable {
@@ -127,6 +152,8 @@ struct ESPNLiveGameCard: Identifiable, Equatable {
     let isTop25: Bool
     let homeConferenceId: String?
     let awayConferenceId: String?
+    var broadcastLabel: String? = nil
+    var isNeutralSite: Bool = false
     var userPickTeamAbbreviation: String?
     var pickResult: PickResult?
 
@@ -179,7 +206,9 @@ extension ESPNGame {
             status: status,
             homeScore: homeScore,
             awayScore: awayScore,
-            winnerTeamId: nil
+            winnerTeamId: nil,
+            broadcastLabel: broadcastLabel,
+            isNeutralSite: isNeutralSite
         )
     }
 

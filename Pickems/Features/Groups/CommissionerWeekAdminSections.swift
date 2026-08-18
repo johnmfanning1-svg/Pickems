@@ -34,7 +34,7 @@ struct CommissionerWeekAdminSections: View {
                 LabeledContent("Status", value: week.status.rawValue.capitalized)
                     .listRowBackground(PickemsColors.cardBackground)
 
-                if week.status == .selection {
+                if week.status == .selection, !week.skipsSelection {
                     if week.selectionDeadline == nil {
                         Button("Set Selection Deadline") { showSelectionDeadlineSheet = true }
                             .listRowBackground(PickemsColors.cardBackground)
@@ -98,13 +98,15 @@ struct CommissionerWeekAdminSections: View {
             Section {
                 ForEach(games) { game in
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("\(game.awayTeamName) @ \(game.homeTeamName)")
+                        Text("\(game.awayTeamName) \(game.matchupSeparator) \(game.homeTeamName)")
                             .foregroundStyle(PickemsColors.textPrimary)
                         HStack {
                             Button("Edit Spread") { picksVM.spreadEditGame = game }
-                            Spacer()
-                            Button("Remove Selection", role: .destructive) {
-                                removeSlateItem(game, week: week)
+                            if !week.skipsSelection {
+                                Spacer()
+                                Button("Remove Selection", role: .destructive) {
+                                    removeSlateItem(game, week: week)
+                                }
                             }
                         }
                         .font(.caption)

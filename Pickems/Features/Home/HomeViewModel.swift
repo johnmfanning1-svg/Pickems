@@ -38,15 +38,26 @@ final class HomeViewModel {
             let slateGames = appState.pickService.slateGames
             let slateIds = Set(slateGames.map(\.espnEventId))
             let userPicks = appState.pickService.userPick?.picks ?? [:]
-            let weekNumber = appState.groupService.currentWeek?.weekNumber ?? weekInfo.weekNumber
+            let seasonYear = appState.groupService.currentWeek?.seasonYear ?? weekInfo.seasonYear
 
-            let allCards = try await ESPNService.shared.liveGameCards(
-                week: weekNumber,
-                seasonType: weekInfo.seasonType,
-                slateEventIds: slateIds,
-                userPicks: userPicks,
-                slateGames: slateGames
-            )
+            let allCards: [ESPNLiveGameCard]
+            if let week = appState.groupService.currentWeek {
+                allCards = try await ESPNService.shared.liveGameCards(
+                    for: week,
+                    slateEventIds: slateIds,
+                    userPicks: userPicks,
+                    slateGames: slateGames
+                )
+            } else {
+                let appWeek = CFBWeekCalendar.resolve(espn: weekInfo)
+                allCards = try await ESPNService.shared.liveGameCards(
+                    week: appWeek.espnWeekNumber,
+                    seasonType: weekInfo.seasonType,
+                    slateEventIds: slateIds,
+                    userPicks: userPicks,
+                    slateGames: slateGames
+                ).matching(seasonYear: seasonYear, appWeekNumber: appWeek.weekNumber)
+            }
 
             liveGames = allCards
             self.slateGames = allCards.filter(\.isSlateGame)

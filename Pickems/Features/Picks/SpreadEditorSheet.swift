@@ -20,7 +20,7 @@ struct SpreadEditorSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    Text("\(game.awayTeamAbbreviation) @ \(game.homeTeamAbbreviation)")
+                    Text("\(game.awayTeamAbbreviation) \(game.matchupSeparator) \(game.homeTeamAbbreviation)")
                         .font(.headline)
                 }
 

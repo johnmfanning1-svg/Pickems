@@ -64,6 +64,25 @@ export const adminRescoreWeek = callable<
   { groupId: string; weekId: string; weeksSummed: number; entries: unknown[] }
 >("adminRescoreWeek");
 
+export const adminMigrateWeek0Split = callable<
+  { dryRun?: boolean; groupId?: string },
+  {
+    dryRun: boolean;
+    groups: Array<{
+      groupId: string;
+      groupName: string | null;
+      skipped: boolean;
+      skipReason?: string;
+      weekZeroGames: number;
+      movedNominations: number;
+      movedPickDocs: number;
+      deletedWeekOneGames: number;
+      clearedSubmissions: number;
+      weekOnePickDeadline: string | null;
+    }>;
+  }
+>("adminMigrateWeek0Split");
+
 /**
  * Turns Firebase's error surface into something an operator can act on.
  * `permission-denied` from a callable means the claim is stale far more often

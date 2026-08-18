@@ -87,9 +87,11 @@ final class PickService {
                         ], recordNonFatal: false)
                         return
                     }
-                    self.slateGames = snapshot?.documents.compactMap { doc in
-                        SlateGame.fromDocument(id: doc.documentID, data: doc.data())
-                    } ?? []
+                    self.slateGames = SlateGameDecoding.sortedByKickoff(
+                        snapshot?.documents.compactMap { doc in
+                            SlateGame.fromDocument(id: doc.documentID, data: doc.data())
+                        } ?? []
+                    )
                 }
             }
 

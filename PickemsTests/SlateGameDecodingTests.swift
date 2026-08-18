@@ -130,6 +130,71 @@ struct SlateGameDecodingTests {
         #expect(merged[1].spread == 6.5)
     }
 
+    @Test func sortedByKickoffPutsEarliestGameFirst() {
+        func game(_ id: String, kickoff: Date) -> SlateGame {
+            SlateGame(
+                id: id,
+                espnEventId: id,
+                homeTeamId: "h",
+                homeTeamName: "Home",
+                homeTeamAbbreviation: "HOM",
+                homeTeamLogoURL: nil,
+                awayTeamId: "a",
+                awayTeamName: "Away",
+                awayTeamAbbreviation: "AWY",
+                awayTeamLogoURL: nil,
+                spread: 3,
+                spreadTeamId: "h",
+                kickoff: kickoff,
+                status: .scheduled,
+                homeScore: nil,
+                awayScore: nil,
+                winnerTeamId: nil
+            )
+        }
+        let late = Date(timeIntervalSince1970: 1_777_200_000)
+        let early = Date(timeIntervalSince1970: 1_777_000_000)
+        let sorted = [game("late", kickoff: late), game("early", kickoff: early)].sortedByKickoff
+        #expect(sorted.map(\.id) == ["early", "late"])
+    }
+
+    @Test func missingBroadcastFieldsDefaultSafely() {
+        let game = SlateGameDecoding.make(
+            documentId: "401856766",
+            data: [
+                "espnEventId": "401856766",
+                "homeTeamName": "TCU",
+                "awayTeamName": "North Carolina",
+                "spread": 7.5,
+                "spreadTeamId": "2628",
+                "homeTeamId": "2628",
+                "awayTeamId": "153",
+            ],
+            kickoff: Date()
+        )
+        #expect(game?.broadcastLabel == nil)
+        #expect(game?.isNeutralSite == false)
+        #expect(game?.matchupSeparator == "@")
+    }
+
+    @Test func broadcastAndNeutralSiteDecode() {
+        let game = SlateGameDecoding.make(
+            documentId: "401856766",
+            data: [
+                "espnEventId": "401856766",
+                "homeTeamName": "TCU",
+                "awayTeamName": "North Carolina",
+                "broadcastLabel": "ESPN",
+                "isNeutralSite": true,
+            ],
+            kickoff: Date()
+        )
+        #expect(game?.broadcastLabel == "ESPN")
+        #expect(game?.isNeutralSite == true)
+        #expect(game?.matchupSeparator == "vs")
+        #expect(game?.kickoffMetaLine.contains("ESPN") == true)
+    }
+
     @Test func mergedSlateUsesNominationsWhenGamesEmpty() {
         let nom = Nomination(
             id: "n1",

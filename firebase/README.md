@@ -75,6 +75,7 @@ Composite index builds are async and queries fail until the index reports
 | `adminRemoveMember` | drop a uid from `memberIds` and delete its member/pick/submission/career docs |
 | `adminTransferCommissioner` | set `commissionerId` and fix both member roles |
 | `adminAuditWeekIds` | Risk R1 tool — misaligned, duplicate, and orphan week docs |
+| `adminMigrateWeek0Split` | 2026 Week 0 split — dry-run or apply (`dryRun`, optional `groupId`) |
 | `adminRescoreWeek` | recompute a week and re-sum season records |
 
 Scoring always routes through `functions/src/scoring.ts` (`scorePicks`,

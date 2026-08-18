@@ -136,6 +136,27 @@ struct ESPNServiceTests {
         #expect(teamId == "away")
     }
 
+    @Test func parseBroadcastLabelPrefersNationalName() {
+        let broadcasts = [
+            ESPNScoreboardResponse.ESPNBroadcast(market: "local", names: ["TBD"]),
+            ESPNScoreboardResponse.ESPNBroadcast(market: "national", names: ["ESPN"]),
+        ]
+        #expect(ESPNService.parseBroadcastLabel(broadcasts: broadcasts, geoBroadcasts: nil) == "ESPN")
+        #expect(ESPNService.parseBroadcastLabel(broadcasts: nil, geoBroadcasts: nil) == nil)
+        let geo = [
+            ESPNScoreboardResponse.ESPNGeoBroadcast(
+                media: .init(shortName: "NBC", name: nil)
+            )
+        ]
+        #expect(ESPNService.parseBroadcastLabel(broadcasts: nil, geoBroadcasts: geo) == "NBC")
+        #expect(
+            ESPNService.parseBroadcastLabel(
+                broadcasts: [ESPNScoreboardResponse.ESPNBroadcast(market: "national", names: ["TBD"])],
+                geoBroadcasts: geo
+            ) == "NBC"
+        )
+    }
+
     @Test func conferenceCatalogResolvesKnownIds() {
         #expect(ESPNConferenceCatalog.conference(id: "8")?.shortName == "SEC")
         #expect(ESPNConferenceCatalog.conference(id: "5")?.shortName == "B1G")

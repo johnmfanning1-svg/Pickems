@@ -81,4 +81,22 @@ struct HomeCTATests {
         )
         #expect(cta == .editSelections)
     }
+
+    @Test func fixedSlateNeverSaysMakeSelections() {
+        var fixed = week(status: .selection)
+        fixed.weekNumber = 0
+        fixed.slateSource = CFBWeekCalendar.weekZeroSlateSource
+        let cta = HomeCTAResolver.resolve(
+            week: fixed,
+            isCommissioner: false,
+            didSubmitNominations: false,
+            userNominationCount: 0,
+            pickCount: 0,
+            slateCount: 8,
+            pickemsLocked: false,
+            picksSubmitted: false
+        )
+        #expect(cta == .makePickems)
+        #expect(cta.destinationTab == .pickems)
+    }
 }

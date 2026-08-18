@@ -53,6 +53,20 @@ enum HomeCTAResolver {
         picksSubmitted: Bool
     ) -> HomeCTA {
         guard let week else { return .makeSelections }
+        if week.skipsSelection {
+            switch week.status {
+            case .selection, .picking:
+                if pickemsLocked { return .viewPickems }
+                if picksSubmitted { return .editPickems }
+                if pickCount == 0 { return .makePickems }
+                if slateCount > 0, pickCount < slateCount { return .finishPickems }
+                return .submitPickems
+            case .locked:
+                return .watchLive
+            case .scored:
+                return .seeResults
+            }
+        }
         switch week.status {
         case .selection:
             if week.selectionMode == .commissioner, !isCommissioner {

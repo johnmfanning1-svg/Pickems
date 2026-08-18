@@ -6,6 +6,7 @@ actor ESPNService {
     private var scoreboardCache: [String: CachedScoreboard] = [:]
     private var weekCache: CFBWeekInfo?
     private var weekCacheTime: Date?
+    private var seasonWeeksCache: (year: Int, weeks: [CFBSeasonWeek], fetchedAt: Date)?
     private let browseCacheTTL: TimeInterval = 15 * 60
     private let liveCacheTTL: TimeInterval = 60
 
@@ -42,7 +43,37 @@ actor ESPNService {
         weekCache = info
         weekCacheTime = Date()
         CFBWeekSync.persistLastKnownWeek(info)
+        cacheSeasonWeeks(year: season, from: decoded)
         return info
+    }
+
+    func seasonWeeks(year: Int) async -> [CFBSeasonWeek] {
+        if let cached = seasonWeeksCache,
+           cached.year == year,
+           Date().timeIntervalSince(cached.fetchedAt) < browseCacheTTL {
+            return cached.weeks
+        }
+        if weekCache == nil || weekCache?.seasonYear != year {
+            _ = try? await currentWeek(forceRefresh: true)
+        }
+        if let cached = seasonWeeksCache, cached.year == year {
+            return cached.weeks
+        }
+        return CFBWeekCalendar.fallbackSeasonWeeks(seasonYear: year)
+    }
+
+    private func cacheSeasonWeeks(year: Int, from decoded: ESPNScoreboardMetaResponse) {
+        let regular = decoded.leagues?
+            .flatMap { $0.calendar ?? [] }
+            .first(where: { $0.value == "2" || ($0.label ?? "").localizedCaseInsensitiveContains("regular") })
+        let espnWeeks = (regular?.entries ?? []).compactMap { entry -> ESPNCalendarWeek? in
+            guard let number = Int(entry.value ?? "") else { return nil }
+            return ESPNCalendarWeek(espnWeekNumber: number, detail: entry.detail ?? "Week \(number)")
+        }
+        let weeks = espnWeeks.isEmpty
+            ? CFBWeekCalendar.fallbackSeasonWeeks(seasonYear: year)
+            : CFBWeekCalendar.appSeasonWeeks(seasonYear: year, espnWeeks: espnWeeks)
+        seasonWeeksCache = (year, weeks, Date())
     }
 
     func fetchScoreboard(week: Int, seasonType: Int = 2, live: Bool = false) async throws -> [ESPNGame] {
@@ -65,6 +96,15 @@ actor ESPNService {
         let games = (decoded.events ?? []).compactMap { parseEvent($0) }
         scoreboardCache[cacheKey] = CachedScoreboard(games: games, fetchedAt: Date())
         return games
+    }
+
+    func fetchScoreboard(for week: WeekSummary, seasonType: Int = 2, live: Bool = false) async throws -> [ESPNGame] {
+        let games = try await fetchScoreboard(
+            week: week.espnScoreboardWeek,
+            seasonType: seasonType,
+            live: live
+        )
+        return games.matching(seasonYear: week.seasonYear, appWeekNumber: week.weekNumber)
     }
 
     func fetchGame(eventId: String) async throws -> ESPNGame? {
@@ -142,6 +182,8 @@ actor ESPNService {
                 isTop25: game.isTop25,
                 homeConferenceId: game.homeConferenceId,
                 awayConferenceId: game.awayConferenceId,
+                broadcastLabel: game.broadcastLabel,
+                isNeutralSite: game.isNeutralSite,
                 userPickTeamAbbreviation: pickAbbr,
                 pickResult: result
             )
@@ -154,6 +196,22 @@ actor ESPNService {
         }
 
         return cards.sorted { $0.kickoff < $1.kickoff }
+    }
+
+    func liveGameCards(
+        for week: WeekSummary,
+        slateEventIds: Set<String> = [],
+        userPicks: [String: String] = [:],
+        slateGames: [SlateGame] = []
+    ) async throws -> [ESPNLiveGameCard] {
+        let cards = try await liveGameCards(
+            week: week.espnScoreboardWeek,
+            seasonType: 2,
+            slateEventIds: slateEventIds,
+            userPicks: userPicks,
+            slateGames: slateGames
+        )
+        return cards.matching(seasonYear: week.seasonYear, appWeekNumber: week.weekNumber)
     }
 
     /// Picks are stored under `SlateGame.id`, which is usually the ESPN event id but
@@ -231,6 +289,8 @@ actor ESPNService {
             isTop25: false,
             homeConferenceId: nil,
             awayConferenceId: nil,
+            broadcastLabel: slate.broadcastLabel,
+            isNeutralSite: slate.isNeutralSite,
             userPickTeamAbbreviation: pickAbbr,
             pickResult: pickResult
         )
@@ -314,7 +374,12 @@ actor ESPNService {
             homeCuratedRank: Self.normalizedCuratedRank(home.curatedRank),
             awayCuratedRank: Self.normalizedCuratedRank(away.curatedRank),
             homeConferenceId: home.team.conferenceId,
-            awayConferenceId: away.team.conferenceId
+            awayConferenceId: away.team.conferenceId,
+            broadcastLabel: Self.parseBroadcastLabel(
+                broadcasts: competition.broadcasts,
+                geoBroadcasts: competition.geoBroadcasts
+            ),
+            isNeutralSite: competition.neutralSite == true
         )
     }
 
@@ -353,6 +418,25 @@ actor ESPNService {
         }
 
         return homeId
+    }
+
+    /// National `broadcasts.names[0]`, else first geo short name. Hides empty / TBD.
+    static func parseBroadcastLabel(
+        broadcasts: [ESPNScoreboardResponse.ESPNBroadcast]?,
+        geoBroadcasts: [ESPNScoreboardResponse.ESPNGeoBroadcast]?
+    ) -> String? {
+        let national = broadcasts?.first(where: { ($0.market ?? "").caseInsensitiveCompare("national") == .orderedSame })
+        let named = national?.names?.first ?? broadcasts?.first?.names?.first
+        if let cleaned = cleanedBroadcast(named) { return cleaned }
+        let geo = geoBroadcasts?.first?.media?.shortName ?? geoBroadcasts?.first?.media?.name
+        return cleanedBroadcast(geo)
+    }
+
+    private static func cleanedBroadcast(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.uppercased() != "TBD" else { return nil }
+        return trimmed
     }
 
     static let scoreboardBaseURL = "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard"
@@ -427,6 +511,7 @@ actor ESPNService {
 private struct ESPNScoreboardMetaResponse: Decodable {
     let season: ESPNSeason?
     let week: ESPNWeek?
+    let leagues: [ESPNLeague]?
 
     struct ESPNSeason: Decodable {
         let year: Int
@@ -435,5 +520,20 @@ private struct ESPNScoreboardMetaResponse: Decodable {
 
     struct ESPNWeek: Decodable {
         let number: Int
+    }
+
+    struct ESPNLeague: Decodable {
+        let calendar: [ESPNCalendarBlock]?
+    }
+
+    struct ESPNCalendarBlock: Decodable {
+        let label: String?
+        let value: String?
+        let entries: [ESPNCalendarEntry]?
+    }
+
+    struct ESPNCalendarEntry: Decodable {
+        let detail: String?
+        let value: String?
     }
 }

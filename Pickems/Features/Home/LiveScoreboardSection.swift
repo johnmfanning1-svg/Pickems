@@ -10,18 +10,26 @@ struct LiveGameRow: View {
                 teamColumn(
                     name: card.awayTeamAbbreviation,
                     logo: card.awayTeamLogoURL,
-                    score: card.awayScore
+                    score: card.awayScore,
+                    caption: "Away"
                 )
 
                 VStack(spacing: 4) {
                     if card.status == .scheduled {
-                        Text(card.kickoff.formatted(date: .omitted, time: .shortened))
+                        Text(GameKickoffLine.make(
+                            kickoff: card.kickoff,
+                            broadcastLabel: card.broadcastLabel,
+                            includeDate: false
+                        ))
                             .font(.caption.weight(.semibold))
                     } else {
                         Text(card.statusDetail)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(card.status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
                     }
+                    Text(card.isNeutralSite ? "vs" : "@")
+                        .font(.caption2)
+                        .foregroundStyle(PickemsColors.textSecondary)
                     if let spread = card.spreadLabel {
                         Text(spread)
                             .font(.caption2)
@@ -41,7 +49,8 @@ struct LiveGameRow: View {
                 teamColumn(
                     name: card.homeTeamAbbreviation,
                     logo: card.homeTeamLogoURL,
-                    score: card.homeScore
+                    score: card.homeScore,
+                    caption: "Home"
                 )
             }
         }
@@ -95,8 +104,8 @@ struct LiveGameRow: View {
         }
     }
 
-    private func teamColumn(name: String, logo: String?, score: Int?) -> some View {
-        VStack(spacing: 4) {
+    private func teamColumn(name: String, logo: String?, score: Int?, caption: String) -> some View {
+        VStack(spacing: 2) {
             if let logo, let url = URL(string: logo) {
                 AsyncImage(url: url) { image in
                     image.resizable().scaledToFit()
@@ -107,6 +116,9 @@ struct LiveGameRow: View {
             } else {
                 Text(name).font(.headline)
             }
+            Text(caption)
+                .font(.caption2)
+                .foregroundStyle(PickemsColors.textSecondary)
             if let score {
                 Text("\(score)")
                     .font(.title3.bold())

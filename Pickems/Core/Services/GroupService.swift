@@ -13,6 +13,7 @@ final class GroupService {
     var currentWeek: WeekSummary?
     /// Weeks available for the selected group (Picks tab week bar). Ascending by season/week.
     var availableWeeks: [WeekSummary] = []
+    var seasonDateRangeByWeekId: [String: String] = [:]
     var cfbWeek: CFBWeekInfo?
     var seasonArchives: [SeasonArchive] = []
     var careerRecords: [CareerRecord] = []
@@ -119,6 +120,7 @@ final class GroupService {
         selectedGroup = group
         weekSelectionPinned = false
         availableWeeks = []
+        seasonDateRangeByWeekId = [:]
         Task {
             await syncCurrentWeekFromESPN(groupId: group.id)
             await loadAvailableWeeks(groupId: group.id)
@@ -134,8 +136,29 @@ final class GroupService {
         }
     }
 
+    /// True when `week` is after the calendar's current Pickems week (e.g. W1 during Week 0).
+    func isFutureWeek(_ week: WeekSummary) -> Bool {
+        guard let cfb = cfbWeek else { return false }
+        let active = CFBWeekCalendar.resolve(espn: cfb)
+        if week.seasonYear != active.seasonYear {
+            return week.seasonYear > active.seasonYear
+        }
+        return week.weekNumber > active.weekNumber
+    }
+
+    /// Unpin any browsed week and re-attach to the calendar's current week.
+    func jumpToActiveWeek() async {
+        weekSelectionPinned = false
+        guard let groupId = selectedGroup?.id else { return }
+        await syncCurrentWeekFromESPN(groupId: groupId)
+    }
+
+    func dateRangeLabel(for weekId: String) -> String? {
+        seasonDateRangeByWeekId[weekId]
+    }
+
     /// Switch the observed week for the selected group (Picks week tabs). Defaults stay on the active ESPN week.
-    func selectWeek(weekId: String) {
+    func selectWeek(weekId: String) async {
         guard let groupId = selectedGroup?.id else { return }
         let activeWeekId = cfbWeek.map { CFBWeekSync.weekId(for: $0) }
         weekSelectionPinned = activeWeekId.map { $0 != weekId } ?? (observedWeekId != weekId)
@@ -143,20 +166,50 @@ final class GroupService {
         if let known = availableWeeks.first(where: { $0.id == weekId }) {
             currentWeek = known
         }
+        let rules = selectedGroup?.rules ?? .default
+        await ensureWeekDocumentExists(
+            groupId: groupId,
+            weekId: weekId,
+            info: weekInfo(forWeekId: weekId),
+            rules: rules
+        )
         if observedGroupId == groupId, observedWeekId == weekId, weekListener != nil {
             return
         }
         observeGroupDetails(groupId: groupId, weekId: weekId)
     }
 
-    /// Loads weeks for the horizontal Picks tab bar. Ensures the active/current week is included.
+    /// Loads weeks for the horizontal Picks tab bar, filling future ESPN weeks that are not minted yet.
     func loadAvailableWeeks(groupId: String) async {
         do {
             var weeks = try await fetchPastWeeks(groupId: groupId, limit: 20)
             if let current = currentWeek, !weeks.contains(where: { $0.id == current.id }) {
                 weeks.append(current)
             }
-            availableWeeks = Self.sortedWeeksAscending(weeks)
+            let year = currentWeek?.seasonYear
+                ?? cfbWeek?.seasonYear
+                ?? CFBSeasonCalendar.seasonYear()
+            let calendarWeeks = await ESPNService.shared.seasonWeeks(year: year)
+            seasonDateRangeByWeekId = Dictionary(
+                uniqueKeysWithValues: calendarWeeks.map { ($0.id, $0.dateRangeLabel) }
+            )
+            let rules = selectedGroup?.rules ?? .default
+            let memberCount = max(selectedGroup?.memberIds.count ?? members.count, 1)
+            var byId = Dictionary(uniqueKeysWithValues: weeks.map { ($0.id, $0) })
+            for slot in calendarWeeks where byId[slot.id] == nil {
+                byId[slot.id] = CFBWeekSync.makeWeekSummary(
+                    id: slot.id,
+                    info: CFBWeekInfo(
+                        seasonYear: slot.seasonYear,
+                        weekNumber: slot.espnWeekNumber,
+                        seasonType: cfbWeek?.seasonType ?? 2,
+                        label: slot.dateRangeLabel
+                    ),
+                    rules: rules,
+                    memberCount: memberCount
+                )
+            }
+            availableWeeks = Self.sortedWeeksAscending(Array(byId.values))
         } catch {
             if let current = currentWeek {
                 availableWeeks = [current]
@@ -179,8 +232,8 @@ final class GroupService {
             return
         }
 
-        let weekId = CFBWeekSync.weekId(for: weekInfo)
         cfbWeek = weekInfo
+        let weekId = await resolvedWeekIdToObserve(groupId: groupId, espn: weekInfo)
 
         // Already listening to this week — never remount (remounts clear/jitter Home).
         if observedGroupId == groupId, observedWeekId == weekId {
@@ -199,6 +252,47 @@ final class GroupService {
 
         await ensureWeekDocumentExists(groupId: groupId, weekId: weekId, info: weekInfo, rules: rules)
         observeGroupDetails(groupId: groupId, weekId: weekId)
+    }
+
+    /// Week 0 is minted for new/empty groups. In-progress 2026-W1 groups stay on W1 until
+    /// the admin migration creates 2026-W0 so every member flips together.
+    private func resolvedWeekIdToObserve(groupId: String, espn: CFBWeekInfo) async -> String {
+        let app = CFBWeekCalendar.resolve(espn: espn)
+        guard app.weekNumber == 0 else { return app.id }
+
+        let weeks = db.collection("groups").document(groupId).collection("weeks")
+        if let w0 = try? await weeks.document(app.id).getDocument(), w0.exists {
+            return app.id
+        }
+
+        let w1Id = "\(app.seasonYear)-W1"
+        if let w1 = try? await weeks.document(w1Id).getDocument(), w1.exists,
+           weekDocumentHasUserActivity(w1) {
+            return w1Id
+        }
+        return app.id
+    }
+
+    private func weekDocumentHasUserActivity(_ snapshot: DocumentSnapshot) -> Bool {
+        guard let week = try? snapshot.data(as: WeekSummary.self) else { return false }
+        if week.nominationCount > 0 { return true }
+        if week.status != .selection { return true }
+        if week.selectionDeadline != nil { return true }
+        if week.pickDeadline != nil { return true }
+        if week.lockedAt != nil { return true }
+        return false
+    }
+
+    private func weekInfo(forWeekId weekId: String) -> CFBWeekInfo {
+        let parsed = CFBWeekSync.parseWeekId(weekId)
+        let year = parsed?.seasonYear ?? cfbWeek?.seasonYear ?? CFBSeasonCalendar.seasonYear()
+        let appWeek = parsed?.weekNumber ?? 0
+        return CFBWeekInfo(
+            seasonYear: year,
+            weekNumber: CFBWeekCalendar.espnScoreboardWeek(appWeek),
+            seasonType: cfbWeek?.seasonType ?? 2,
+            label: "Season \(year) | Week \(appWeek)"
+        )
     }
 
     private static func sortedWeeksAscending(_ weeks: [WeekSummary]) -> [WeekSummary] {
@@ -230,17 +324,82 @@ final class GroupService {
                 )
                 try await weekRef.setData(from: week)
                 // Seed local state immediately so Home doesn't flash an empty week card.
-                if currentWeek?.id != week.id {
-                    currentWeek = week
-                }
+                publishCurrentWeekIfUnpinned(week)
+                await seedFixedSlateIfNeeded(groupId: groupId, weekId: weekId, week: week)
             } else {
-                if currentWeek?.id != weekId, let existing = try? snapshot.data(as: WeekSummary.self) {
-                    currentWeek = existing
+                let existing = try? snapshot.data(as: WeekSummary.self)
+                if let existing {
+                    publishCurrentWeekIfUnpinned(existing)
+                    await seedFixedSlateIfNeeded(groupId: groupId, weekId: weekId, week: existing)
                 }
                 await reconcileSelectionWeekSnapshot(groupId: groupId, rules: rules)
             }
         } catch {
             UserFacingError.apply(error, to: &errorMessage)
+        }
+    }
+
+    /// Keep a pinned Picks/Selections week (including future W1 during Week 0) from
+    /// being overwritten when we seed the calendar's active week document.
+    private func publishCurrentWeekIfUnpinned(_ week: WeekSummary) {
+        if weekSelectionPinned, let current = currentWeek, current.id != week.id {
+            return
+        }
+        if currentWeek?.id != week.id {
+            currentWeek = week
+        }
+    }
+
+    /// Writes ESPN's Saturday openers onto a fixed-slate Week 0. Idempotent merge.
+    private func seedFixedSlateIfNeeded(groupId: String, weekId: String, week: WeekSummary) async {
+        guard week.skipsSelection else { return }
+        do {
+            let games = try await ESPNService.shared.fetchScoreboard(for: week)
+            guard !games.isEmpty else { return }
+            let weekRef = db.collection("groups").document(groupId)
+                .collection("weeks").document(weekId)
+            let gamesRef = weekRef.collection("games")
+            let existingSnap = try await gamesRef.getDocuments()
+            let existingIds = Set(existingSnap.documents.map(\.documentID))
+            var kickoffs: [Date] = existingSnap.documents.compactMap { doc in
+                SlateGame.fromDocument(id: doc.documentID, data: doc.data())?.kickoff
+            }
+            for game in games {
+                let slate = game.toSlateGame()
+                if !existingIds.contains(slate.espnEventId) {
+                    try await gamesRef.document(slate.espnEventId).setData(from: slate)
+                }
+                kickoffs.append(slate.kickoff)
+            }
+            var updates: [String: Any] = [
+                "slateSize": games.count,
+                "slateSource": CFBWeekCalendar.weekZeroSlateSource,
+            ]
+            if week.status == .selection {
+                updates["status"] = WeekStatus.picking.rawValue
+            }
+            if week.pickDeadline == nil, let deadline = kickoffs.min() {
+                updates["pickDeadline"] = Timestamp(date: deadline)
+            }
+            if week.lockedAt == nil {
+                updates["lockedAt"] = Timestamp(date: Date())
+            }
+            try await weekRef.updateData(updates)
+            if currentWeek?.id == weekId {
+                currentWeek?.slateSize = games.count
+                currentWeek?.slateSource = CFBWeekCalendar.weekZeroSlateSource
+                if week.status == .selection {
+                    currentWeek?.status = .picking
+                }
+                if currentWeek?.pickDeadline == nil {
+                    currentWeek?.pickDeadline = kickoffs.min()
+                }
+                if currentWeek?.lockedAt == nil {
+                    currentWeek?.lockedAt = Date()
+                }
+            }
+        } catch {
+            AppLog.error(AppLog.network, "week 0 slate seed failed", error: error)
         }
     }
 
@@ -871,7 +1030,7 @@ final class GroupService {
     /// whenever membership or rules change so UI and nomination limits don't keep the
     /// old commissioner default of 12.
     func reconcileSelectionWeekSnapshot(groupId: String, rules: GroupRules) async {
-        guard var week = currentWeek, week.status == .selection else { return }
+        guard var week = currentWeek, week.status == .selection, !week.skipsSelection else { return }
         let memberCount = max(selectedGroup?.memberIds.count ?? members.count, 1)
         let expected = rules.expectedSlateSize(memberCount: memberCount)
         guard week.slateSize != expected
@@ -1159,6 +1318,7 @@ final class GroupService {
         weekSelectionPinned = false
         currentWeek = nil
         availableWeeks = []
+        seasonDateRangeByWeekId = [:]
         cfbWeek = nil
         standings = nil
         members = []

@@ -14,9 +14,18 @@ export interface EspnCompetitor {
 
 export interface EspnEvent {
   id: string;
+  date?: string;
   competitions?: Array<{
     competitors?: EspnCompetitor[];
     status?: { type?: { completed?: boolean; state?: string } };
+    odds?: Array<{
+      spread?: number;
+      homeTeamOdds?: { favorite?: boolean };
+      awayTeamOdds?: { favorite?: boolean };
+    }>;
+    broadcasts?: Array<{ market?: string; names?: string[] }>;
+    geoBroadcasts?: Array<{ media?: { shortName?: string; name?: string } }>;
+    neutralSite?: boolean;
   }>;
 }
 

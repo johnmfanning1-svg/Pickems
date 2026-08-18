@@ -48,6 +48,16 @@ enum SlateGameDecoding {
         }
     }
 
+    static func boolValue(_ value: Any?) -> Bool {
+        switch value {
+        case let b as Bool: return b
+        case let n as NSNumber: return n.boolValue
+        case let s as String:
+            return s == "true" || s == "1"
+        default: return false
+        }
+    }
+
     /// Games first (real slate docs), then nominations that are not already on the slate.
     static func mergedSlate(games: [SlateGame], nominations: [Nomination]) -> [SlateGame] {
         var seen = Set<String>()
@@ -63,7 +73,14 @@ enum SlateGameDecoding {
                 result.append(nom.asSlateGame())
             }
         }
-        return result
+        return sortedByKickoff(result)
+    }
+
+    static func sortedByKickoff(_ games: [SlateGame]) -> [SlateGame] {
+        games.sorted { lhs, rhs in
+            if lhs.kickoff != rhs.kickoff { return lhs.kickoff < rhs.kickoff }
+            return lhs.id < rhs.id
+        }
     }
 
     static func make(documentId: String, data: [String: Any], kickoff: Date) -> SlateGame? {
@@ -97,7 +114,9 @@ enum SlateGameDecoding {
             status: SlateGame.GameStatus(rawValue: statusRaw) ?? .scheduled,
             homeScore: intValue(data["homeScore"]),
             awayScore: intValue(data["awayScore"]),
-            winnerTeamId: stringValue(data["winnerTeamId"])
+            winnerTeamId: stringValue(data["winnerTeamId"]),
+            broadcastLabel: stringValue(data["broadcastLabel"]),
+            isNeutralSite: boolValue(data["isNeutralSite"])
         )
     }
 }
@@ -136,7 +155,15 @@ extension Nomination {
             status: .scheduled,
             homeScore: nil,
             awayScore: nil,
-            winnerTeamId: nil
+            winnerTeamId: nil,
+            broadcastLabel: nil,
+            isNeutralSite: false
         )
+    }
+}
+
+extension Array where Element == SlateGame {
+    var sortedByKickoff: [SlateGame] {
+        SlateGameDecoding.sortedByKickoff(self)
     }
 }
