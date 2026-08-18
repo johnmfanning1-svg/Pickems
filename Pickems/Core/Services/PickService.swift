@@ -36,11 +36,19 @@ final class PickService {
     private var submissionsListener: ListenerRegistration?
     @ObservationIgnored
     private var observedUserId: String?
+    @ObservationIgnored
+    private var observedGroupId: String?
+    /// Week the live pick listeners are attached to. Views hide stale lists when this lags `currentWeek`.
+    private(set) var observedWeekId: String?
     /// Invalidates in-flight `savePickDraft` local mirrors after a later clear/set.
     @ObservationIgnored
     private var userPickWriteGeneration = 0
 
     func observeWeek(groupId: String, weekId: String, userId: String) {
+        if observedGroupId == groupId, observedWeekId == weekId, observedUserId == userId,
+           gamesListener != nil {
+            return
+        }
         nominationsListener?.remove()
         gamesListener?.remove()
         pickListener?.remove()
@@ -48,6 +56,8 @@ final class PickService {
         nominations = []
         slateGames = []
         observedUserId = userId
+        observedGroupId = groupId
+        observedWeekId = weekId
         userPickWriteGeneration += 1
         userPick = nil
         userPickEpoch += 1
@@ -60,6 +70,7 @@ final class PickService {
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
                     guard let self else { return }
+                    guard self.observedWeekId == weekId else { return }
                     if let error {
                         UserFacingError.apply(error, to: &self.errorMessage, context: .listener)
                         AppEvents.failure(.picksListenerError, error: error, metadata: [
@@ -78,6 +89,7 @@ final class PickService {
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
                     guard let self else { return }
+                    guard self.observedWeekId == weekId else { return }
                     if let error {
                         UserFacingError.apply(error, to: &self.errorMessage, context: .listener)
                         AppEvents.failure(.picksListenerError, error: error, metadata: [
@@ -100,6 +112,7 @@ final class PickService {
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
                     guard let self else { return }
+                    guard self.observedWeekId == weekId else { return }
                     if let error {
                         UserFacingError.apply(error, to: &self.errorMessage, context: .listener)
                         AppEvents.failure(.picksListenerError, error: error, metadata: [
@@ -128,6 +141,7 @@ final class PickService {
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
                     guard let self else { return }
+                    guard self.observedWeekId == weekId else { return }
                     if let error {
                         UserFacingError.apply(error, to: &self.errorMessage, context: .listener)
                         AppEvents.failure(.picksListenerError, error: error, metadata: [
@@ -156,6 +170,8 @@ final class PickService {
         nominations = []
         slateGames = []
         observedUserId = nil
+        observedGroupId = nil
+        observedWeekId = nil
         userPickWriteGeneration += 1
         userPick = nil
         userPickEpoch += 1

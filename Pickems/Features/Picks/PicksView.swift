@@ -30,7 +30,7 @@ struct PicksView: View {
                     if !displayedWeeks.isEmpty {
                         PicksWeekTabBar(
                             weeks: displayedWeeks,
-                            selectedWeekId: appState.groupService.currentWeek?.id,
+                            selectedWeekId: workspaceWeek?.id,
                             activeWeekId: activeESPNWeekId,
                             dateRangeLabel: { appState.groupService.dateRangeLabel(for: $0.id) }
                         ) { week in
@@ -38,7 +38,7 @@ struct PicksView: View {
                         }
                     }
 
-                    if let week = appState.groupService.currentWeek {
+                    if let week = workspaceWeek {
                         statusContent(for: week)
                     } else {
                         EmptyStateView(
@@ -126,14 +126,12 @@ struct PicksView: View {
             .syncPicksDraftFromServer()
             .onChange(of: appState.selectedTab) { oldTab, tab in
                 if kind == .selections, oldTab == .selections, tab != .selections {
-                    Task { await returnToActiveWeek() }
+                    snapToActiveWeek()
                     return
                 }
                 guard isThisWorkspace(tab) else { return }
                 viewModel.resyncWhenVisible(appState: appState)
-                Task {
-                    await returnToActiveWeek()
-                }
+                snapToActiveWeek()
             }
         }
     }
@@ -184,6 +182,16 @@ struct PicksView: View {
         return weeks
     }
 
+    private var workspaceWeek: WeekSummary? {
+        PicksDisplayedWeek.resolve(
+            current: appState.groupService.currentWeek,
+            hideFuture: kind == .pickems,
+            available: appState.groupService.availableWeeks,
+            activeWeekId: activeESPNWeekId,
+            isFuture: { appState.groupService.isFutureWeek($0) }
+        )
+    }
+
     private var activeESPNWeekId: String? {
         appState.groupService.cfbWeek.map { CFBWeekSync.weekId(for: $0) }
             ?? appState.groupService.currentWeek?.id
@@ -193,14 +201,20 @@ struct PicksView: View {
         (kind == .selections && tab == .selections) || (kind == .pickems && tab == .pickems)
     }
 
-    private func returnToActiveWeek() async {
+    private func picksMatchWeek(_ week: WeekSummary) -> Bool {
+        appState.pickService.observedWeekId == week.id
+    }
+
+    /// Unpin and re-observe on this turn so the next frame isn't the browsed week.
+    private func snapToActiveWeek() {
         viewModel.stopLiveRefresh()
         viewModel.resetPendingWrite()
         viewModel.draftPicks = [:]
         viewModel.confidenceGameId = nil
-        await appState.groupService.jumpToActiveWeek()
+        appState.groupService.unpinToActiveWeekLocally()
         reobservePicks(weekId: appState.groupService.currentWeek?.id)
         viewModel.resyncWhenVisible(appState: appState)
+        Task { await appState.groupService.jumpToActiveWeek() }
     }
 
     private func selectWeek(_ week: WeekSummary) {
@@ -264,6 +278,11 @@ struct PicksView: View {
             }
             if week.skipsSelection {
                 EmptyView()
+            } else if !picksMatchWeek(week) {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+                    .accessibilityLabel("Loading this week's Selections")
             } else if week.status == .selection {
                 selectionPhase(week: week)
                 GroupPicksView(embedded: true, forceNominatingDisplay: true)
@@ -281,22 +300,20 @@ struct PicksView: View {
                 if let deadline = week.pickDeadline {
                     PickDeadlineBanner(deadline: deadline)
                 }
-                switch week.status {
-                case .picking: pickingPhase(week: week)
-                case .locked, .scored: lockedPhase(week: week)
-                case .selection: EmptyView()
-                }
+                pickemsGames(for: week)
             } else {
                 ContextualTipBanner(
                     icon: "lock.fill",
                     message: "Pickems open when every Selection is in or the Selection deadline passes. Your commissioner can lock early."
                 )
                 .padding(.horizontal)
-                pickingPhase(week: week)
-                    .disabled(true)
-                    .opacity(0.45)
-                    .accessibilityElement(children: .contain)
-                    .accessibilityLabel("Pickems locked until Selections are complete")
+                if picksMatchWeek(week) {
+                    pickingPhase(week: week)
+                        .disabled(true)
+                        .opacity(0.45)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityLabel("Pickems locked until Selections are complete")
+                }
             }
         }
     }
@@ -468,6 +485,22 @@ struct PicksView: View {
                 }
             }
             .padding(.horizontal)
+        }
+    }
+
+    @ViewBuilder
+    private func pickemsGames(for week: WeekSummary) -> some View {
+        if picksMatchWeek(week) {
+            switch week.status {
+            case .picking: pickingPhase(week: week)
+            case .locked, .scored: lockedPhase(week: week)
+            case .selection: EmptyView()
+            }
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
+                .accessibilityLabel("Loading this week's Pickems")
         }
     }
 

@@ -7,6 +7,10 @@ enum UserFacingError {
     /// User-visible message. Returns `nil` when the failure is expected noise
     /// (e.g. listing private picks before the deadline) and should not be shown.
     static func message(for error: Error, context: Context = .generic) -> String? {
+        // SwiftUI `.task` / live-refresh restarts cancel in-flight ESPN calls. The
+        // system copy is just "cancelled" — never show that as a Home banner.
+        if isCancellation(error) { return nil }
+
         if isPermissionDenied(error) {
             switch context {
             case .privatePicks:
@@ -46,6 +50,17 @@ enum UserFacingError {
         case privatePicks
         case joinGroup
         case write
+    }
+
+    static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled {
+            return true
+        }
+        let raw = nsError.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return raw == "cancelled" || raw == "canceled"
     }
 
     static func isPermissionDenied(_ error: Error) -> Bool {

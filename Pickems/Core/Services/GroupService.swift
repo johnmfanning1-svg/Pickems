@@ -146,9 +146,20 @@ final class GroupService {
         return week.weekNumber > active.weekNumber
     }
 
+    /// Drop a pinned browse immediately so Selections/Pickems don't paint the old week for a frame.
+    func unpinToActiveWeekLocally() {
+        weekSelectionPinned = false
+        guard let activeId = cfbWeek.map({ CFBWeekSync.weekId(for: $0) }) else { return }
+        if let known = availableWeeks.first(where: { $0.id == activeId }), currentWeek?.id != known.id {
+            currentWeek = known
+        }
+        guard let groupId = selectedGroup?.id else { return }
+        observeGroupDetails(groupId: groupId, weekId: activeId)
+    }
+
     /// Unpin any browsed week and re-attach to the calendar's current week.
     func jumpToActiveWeek() async {
-        weekSelectionPinned = false
+        unpinToActiveWeekLocally()
         guard let groupId = selectedGroup?.id else { return }
         await syncCurrentWeekFromESPN(groupId: groupId)
     }
@@ -166,6 +177,12 @@ final class GroupService {
         if let known = availableWeeks.first(where: { $0.id == weekId }) {
             currentWeek = known
         }
+        // Attach the new week observer before any await. Leaving the previous week's
+        // listener live during `ensureWeekDocumentExists` lets a stale snapshot
+        // overwrite `currentWeek` (Week 1 → Week 0 "Slate is set" → Week 1).
+        if !(observedGroupId == groupId && observedWeekId == weekId && weekListener != nil) {
+            observeGroupDetails(groupId: groupId, weekId: weekId)
+        }
         let rules = selectedGroup?.rules ?? .default
         await ensureWeekDocumentExists(
             groupId: groupId,
@@ -173,10 +190,6 @@ final class GroupService {
             info: weekInfo(forWeekId: weekId),
             rules: rules
         )
-        if observedGroupId == groupId, observedWeekId == weekId, weekListener != nil {
-            return
-        }
-        observeGroupDetails(groupId: groupId, weekId: weekId)
     }
 
     /// Loads weeks for the horizontal Picks tab bar, filling future ESPN weeks that are not minted yet.
@@ -1256,6 +1269,9 @@ final class GroupService {
             .collection("weeks").document(weekId)
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
+                    guard let self else { return }
+                    // `remove()` does not cancel an already-queued MainActor hop.
+                    guard self.observedWeekId == weekId, self.observedGroupId == groupId else { return }
                     if let error {
                         AppEvents.failure(.weekListenerError, error: error, metadata: [
                             "listener": "week",
@@ -1267,7 +1283,11 @@ final class GroupService {
                     }
                     guard let snapshot, snapshot.exists else { return }
                     do {
-                        self?.currentWeek = try snapshot.data(as: WeekSummary.self)
+                        let week = try snapshot.data(as: WeekSummary.self)
+                        if self.weekSelectionPinned, let current = self.currentWeek, current.id != week.id {
+                            return
+                        }
+                        self.currentWeek = week
                     } catch {
                         AppLog.error(AppLog.firestore, "week decode failed", error: error, metadata: [
                             "group_id": groupId,

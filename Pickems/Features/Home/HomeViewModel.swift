@@ -11,6 +11,7 @@ final class HomeViewModel {
     var newsItems: [ESPNNewsItem] = []
 
     private var refreshTask: Task<Void, Never>?
+    private var refreshGeneration = 0
 
     func startLiveUpdates(appState: AppState) {
         refreshTask = LiveScoreRefresh.start(existing: refreshTask) {
@@ -23,16 +24,19 @@ final class HomeViewModel {
     }
 
     func refresh(appState: AppState) async {
+        refreshGeneration += 1
+        let generation = refreshGeneration
         isLoading = liveGames.isEmpty
-        errorMessage = nil
 
         if let groupId = appState.groupService.selectedGroup?.id,
            appState.groupService.cfbWeek == nil {
             await appState.groupService.syncCurrentWeekFromESPN(groupId: groupId)
+            guard generation == refreshGeneration else { return }
         }
 
         do {
             let weekInfo = try await ESPNService.shared.currentWeek()
+            guard generation == refreshGeneration else { return }
             cfbWeek = weekInfo
 
             let slateGames = appState.pickService.slateGames
@@ -59,15 +63,21 @@ final class HomeViewModel {
                 ).matching(seasonYear: seasonYear, appWeekNumber: appWeek.weekNumber)
             }
 
+            guard generation == refreshGeneration else { return }
             liveGames = allCards
             self.slateGames = allCards.filter(\.isSlateGame)
 
             newsItems = (try? await ESPNService.shared.fetchNews(limit: 6)) ?? []
+            errorMessage = nil
         } catch {
-            errorMessage = UserFacingError.message(for: error)
-            AppLog.error(AppLog.network, "home refresh failed", error: error)
+            if generation == refreshGeneration, !UserFacingError.isCancellation(error) {
+                errorMessage = UserFacingError.message(for: error)
+                AppLog.error(AppLog.network, "home refresh failed", error: error)
+            }
         }
 
-        isLoading = false
+        if generation == refreshGeneration {
+            isLoading = false
+        }
     }
 }
