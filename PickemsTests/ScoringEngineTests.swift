@@ -52,6 +52,49 @@ struct ScoringEngineTests {
         #expect(ScoringEngine.isPickCorrect(pickedTeamId: "home", game: game) == nil)
     }
 
+    @Test func boardStatusLiveCoveringAndTrailing() {
+        let live = boardGame(status: .inProgress, homeScore: 21, awayScore: 10)
+        #expect(ScoringEngine.pickBoardStatus(pickedTeamId: "home", game: live) == .covering)
+        #expect(ScoringEngine.pickBoardStatus(pickedTeamId: "away", game: live) == .trailing)
+        #expect(ScoringEngine.pickBoardStatus(pickedTeamId: nil, game: live) == .none)
+    }
+
+    @Test func boardStatusFinalWonLostAndPush() {
+        let final = boardGame(status: .final, homeScore: 28, awayScore: 17)
+        #expect(ScoringEngine.pickBoardStatus(pickedTeamId: "home", game: final) == .won)
+        #expect(ScoringEngine.pickBoardStatus(pickedTeamId: "away", game: final) == .lost)
+        let push = boardGame(status: .final, homeScore: 24, awayScore: 17)
+        #expect(ScoringEngine.pickBoardStatus(pickedTeamId: "home", game: push) == .push)
+        let scheduled = boardGame(status: .scheduled, homeScore: nil, awayScore: nil)
+        #expect(ScoringEngine.pickBoardStatus(pickedTeamId: "home", game: scheduled) == .pending)
+    }
+
+    private func boardGame(
+        status: SlateGame.GameStatus,
+        homeScore: Int?,
+        awayScore: Int?
+    ) -> SlateGame {
+        SlateGame(
+            id: "1",
+            espnEventId: "1",
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: 7,
+            spreadTeamId: "home",
+            kickoff: Date(),
+            status: status,
+            homeScore: homeScore,
+            awayScore: awayScore,
+            winnerTeamId: status == .final ? "home" : nil
+        )
+    }
+
     @Test func slateCompletionRules() {
         #expect(ScoringEngine.isSlateComplete(nominationCount: 12, slateSize: 12))
         #expect(!ScoringEngine.isSlateComplete(nominationCount: 11, slateSize: 12))

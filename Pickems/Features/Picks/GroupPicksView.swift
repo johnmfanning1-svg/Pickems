@@ -9,6 +9,7 @@ struct GroupPicksView: View {
     @State private var collapsedUserIds: Set<String> = []
     @State private var isRefreshingOwnPick = false
     @State private var ownPickLoadAttempted = false
+    @State private var isRefreshing = false
 
     private var members: [GroupMember] {
         appState.groupService.members
@@ -115,13 +116,23 @@ struct GroupPicksView: View {
         ))
         .scrollContentBackground(.hidden)
         .pickemsScreenBackground()
-        .task(id: "\(appState.groupService.selectedGroup?.id ?? "")-\(week?.id ?? "")") {
+        .task(id: "\(appState.groupService.selectedGroup?.id ?? "")-\(week?.id ?? "")-\(week?.status.rawValue ?? "")") {
             await appState.syncSelectedWeek()
             await refreshAllPicks()
+            if showsPickemsBoard, let week {
+                appState.picksViewModel.startLiveRefresh(week: week, appState: appState)
+            }
         }
         .onChange(of: appState.pickService.userPick) { _, newPick in
             appState.pickService.mergeOwnPickIntoAllPicks(newPick)
         }
+        .modifier(OptionalTabRefresh(
+            enabled: !embedded,
+            isRefreshing: $isRefreshing
+        ) {
+            await appState.refreshLeagueData()
+            await refreshAllPicks()
+        })
     }
 
     private var innerList: some View {
@@ -135,6 +146,14 @@ struct GroupPicksView: View {
                     description: Text("League members will appear here.")
                 )
                 .padding(.top, 24)
+            } else if showsPickemsBoard {
+                LeaguePickemsBoard(
+                    members: sortedMembers,
+                    games: slateGames.sortedByKickoff,
+                    picksByUserId: picksByUserId,
+                    liveCards: appState.picksViewModel.livePickCards,
+                    currentUserId: currentUserId
+                )
             } else {
                 ForEach(sortedMembers) { member in
                     memberSection(member)
@@ -198,7 +217,14 @@ struct GroupPicksView: View {
         if slateGames.isEmpty {
             return "No slate games yet."
         }
+        if showsPickemsBoard {
+            return "Games as rows, members as columns. Colors update as games go."
+        }
         return "Make a Pickem against the spread for every game on the slate."
+    }
+
+    private var showsPickemsBoard: Bool {
+        !isNominatingPhase && picksVisibleToAll && !slateGames.isEmpty
     }
 
     // MARK: - Member section
@@ -543,6 +569,20 @@ struct GroupPicksView: View {
 
     private func canRevealPickDetails(for userId: String) -> Bool {
         userId == currentUserId || appState.isCommissioner
+    }
+}
+
+private struct OptionalTabRefresh: ViewModifier {
+    let enabled: Bool
+    @Binding var isRefreshing: Bool
+    let action: () async -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.pickemsRefreshable(isRefreshing: $isRefreshing, action: action)
+        } else {
+            content
+        }
     }
 }
 

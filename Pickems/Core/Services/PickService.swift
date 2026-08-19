@@ -222,7 +222,7 @@ final class PickService {
         do {
             let snapshot = try await db.collection("groups").document(groupId)
                 .collection("weeks").document(weekId)
-                .collection("picks").getDocuments()
+                .collection("picks").getDocuments(source: .server)
             allPicks = snapshot.documents.compactMap { try? $0.data(as: UserPick.self) }
             // Ensure own pick stays present even if the list snapshot raced ahead of a write.
             mergeOwnPickIntoAllPicks(userPick)
@@ -250,6 +250,40 @@ final class PickService {
             }
             UserFacingError.apply(error, to: &errorMessage)
         }
+    }
+
+    /// One-shot server fetch for pull-to-refresh. Does not tear down live listeners.
+    func refreshFromServer(groupId: String, weekId: String, userId: String) async {
+        isLoading = true
+        defer { isLoading = false }
+        let weekRef = db.collection("groups").document(groupId)
+            .collection("weeks").document(weekId)
+        do {
+            async let nomsSnap = weekRef.collection("nominations").getDocuments(source: .server)
+            async let gamesSnap = weekRef.collection("games").getDocuments(source: .server)
+            async let pickSnap = weekRef.collection("picks").document(userId).getDocument(source: .server)
+            async let subsSnap = weekRef.collection("submissions").getDocuments(source: .server)
+            let (nominationsSnap, gamesSnapshot, ownPickSnap, submissionsSnap) = try await (
+                nomsSnap, gamesSnap, pickSnap, subsSnap
+            )
+            guard observedWeekId == weekId, observedGroupId == groupId else { return }
+            nominations = nominationsSnap.documents.compactMap { try? $0.data(as: Nomination.self) }
+            slateGames = SlateGameDecoding.sortedByKickoff(
+                gamesSnapshot.documents.compactMap { doc in
+                    SlateGame.fromDocument(id: doc.documentID, data: doc.data())
+                }
+            )
+            if ownPickSnap.exists, let pick = try? ownPickSnap.data(as: UserPick.self) {
+                userPick = pick
+                mergeOwnPickIntoAllPicks(pick)
+            }
+            submissions = submissionsSnap.documents.compactMap { try? $0.data(as: PickSubmission.self) }
+            refreshNominationSubmissionState(groupId: groupId, weekId: weekId, userId: userId)
+            errorMessage = nil
+        } catch {
+            UserFacingError.apply(error, to: &errorMessage)
+        }
+        await loadAllPicks(groupId: groupId, weekId: weekId)
     }
 
     /// Upserts the signed-in member's pick into `allPicks` without wiping other entries.

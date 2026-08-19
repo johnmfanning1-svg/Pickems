@@ -1,6 +1,7 @@
-What's new in 3.1.6
+What's new in 3.1.7
 
-• Commissioners can remove, replace, or add Selections for any member
-• Selections tab lists games by person (collapsible), not a duplicate full-slate list
+• After Pickems lock, compare everyone's picks on a games-by-row board
+• Yellow trailing, blue covering, green won, red lost
+• Pull to refresh on every tab, with a loading banner until data arrives
 
 Thanks for playing with us.

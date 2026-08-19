@@ -8,6 +8,7 @@ struct GroupsView: View {
     @State private var manageExpanded = false
     @State private var showLeaveConfirm = false
     @State private var leagueActionError: String?
+    @State private var isRefreshing = false
 
     var body: some View {
         NavigationStack {
@@ -52,6 +53,9 @@ struct GroupsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 HelpToolbarItem(topic: PickemsHelp.groupsOverview)
+            }
+            .pickemsRefreshable(isRefreshing: $isRefreshing) {
+                await appState.refreshLeagueData()
             }
             .sheet(isPresented: $showCommissionerSettings) {
                 // Always emit a concrete root view + explicit environment.

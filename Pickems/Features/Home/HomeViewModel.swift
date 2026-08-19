@@ -23,10 +23,10 @@ final class HomeViewModel {
         LiveScoreRefresh.stop(&refreshTask)
     }
 
-    func refresh(appState: AppState) async {
+    func refresh(appState: AppState, showLoading: Bool? = nil) async {
         refreshGeneration += 1
         let generation = refreshGeneration
-        isLoading = liveGames.isEmpty
+        isLoading = showLoading ?? liveGames.isEmpty
 
         if let groupId = appState.groupService.selectedGroup?.id,
            appState.groupService.cfbWeek == nil {

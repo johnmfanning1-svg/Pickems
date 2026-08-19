@@ -227,3 +227,44 @@ struct EmptyStateView: View {
         .frame(maxWidth: .infinity)
     }
 }
+
+/// Shown while a tab's pull-to-refresh is waiting on a server round-trip.
+struct RefreshingBanner: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .tint(PickemsColors.textPrimary)
+            Text("Refreshing…")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PickemsColors.textPrimary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(PickemsColors.cardBackground)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Refreshing")
+        .accessibilityAddTraits(.updatesFrequently)
+    }
+}
+
+extension View {
+    /// Pull-to-refresh that keeps a visible pending banner until `action` finishes.
+    func pickemsRefreshable(
+        isRefreshing: Binding<Bool>,
+        action: @escaping () async -> Void
+    ) -> some View {
+        safeAreaInset(edge: .top) {
+            if isRefreshing.wrappedValue {
+                RefreshingBanner()
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isRefreshing.wrappedValue)
+        .refreshable {
+            isRefreshing.wrappedValue = true
+            await action()
+            isRefreshing.wrappedValue = false
+        }
+    }
+}
+

@@ -1,5 +1,27 @@
 import Foundation
 
+nonisolated enum PickBoardStatus: Equatable, Sendable {
+    case none
+    case pending
+    case covering
+    case trailing
+    case won
+    case lost
+    case push
+
+    var label: String {
+        switch self {
+        case .none: return "No pick"
+        case .pending: return "Pending"
+        case .covering: return "Covering"
+        case .trailing: return "Trailing"
+        case .won: return "Won"
+        case .lost: return "Lost"
+        case .push: return "Push"
+        }
+    }
+}
+
 enum ScoringEngine {
     static func isPickCorrect(pickedTeamId: String, game: SlateGame) -> Bool? {
         guard game.status == .final,
@@ -11,6 +33,34 @@ enum ScoringEngine {
             return nil
         }
         return pickedTeamId == coveredTeamId
+    }
+
+    /// Mid-week board cell: live covering/trailing vs final won/lost.
+    static func pickBoardStatus(
+        pickedTeamId: String?,
+        game: SlateGame,
+        homeScore: Int? = nil,
+        awayScore: Int? = nil,
+        status: SlateGame.GameStatus? = nil
+    ) -> PickBoardStatus {
+        guard let pickedTeamId, !pickedTeamId.isEmpty else { return .none }
+        let resolvedStatus = status ?? game.status
+        let home = homeScore ?? game.homeScore
+        let away = awayScore ?? game.awayScore
+        guard let home, let away, resolvedStatus != .scheduled else { return .pending }
+        let covered = game.coveredTeamId(homeScore: home, awayScore: away)
+        if covered == nil {
+            return resolvedStatus == .final ? .push : .pending
+        }
+        let isCovering = covered == pickedTeamId
+        switch resolvedStatus {
+        case .final:
+            return isCovering ? .won : .lost
+        case .inProgress:
+            return isCovering ? .covering : .trailing
+        case .scheduled:
+            return .pending
+        }
     }
 
     static func scorePicks(

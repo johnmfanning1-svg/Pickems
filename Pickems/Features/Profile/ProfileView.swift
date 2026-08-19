@@ -18,6 +18,7 @@ struct ProfileView: View {
     @State private var showTeamPicker = false
     @State private var managementError: String?
     @State private var presentedHelp: HelpTopic?
+    @State private var isRefreshing = false
 
     var body: some View {
         NavigationStack {
@@ -33,6 +34,11 @@ struct ProfileView: View {
             }
             .scrollContentBackground(.hidden)
             .pickemsScreenBackground()
+            .pickemsRefreshable(isRefreshing: $isRefreshing) {
+                await appState.authService.refreshSession()
+                await appState.refreshLeagueData()
+                await appState.notificationService.refreshAuthorizationStatus()
+            }
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

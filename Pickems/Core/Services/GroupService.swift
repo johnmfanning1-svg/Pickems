@@ -1328,6 +1328,71 @@ final class GroupService {
         }
     }
 
+    /// One-shot server fetch for pull-to-refresh. Listeners stay attached.
+    func refreshFromServer() async {
+        guard let groupId = selectedGroup?.id else { return }
+        do {
+            let groupSnap = try await db.collection("groups").document(groupId)
+                .getDocument(source: .server)
+            if let group = try? groupSnap.data(as: PickemGroup.self) {
+                selectedGroup = group
+                if let idx = groups.firstIndex(where: { $0.id == group.id }) {
+                    groups[idx] = group
+                }
+            }
+        } catch {
+            UserFacingError.apply(error, to: &errorMessage)
+        }
+
+        if let info = try? await ESPNService.shared.currentWeek() {
+            cfbWeek = info
+        }
+
+        let weekId = currentWeek?.id ?? observedWeekId
+        if let weekId {
+            do {
+                let weekSnap = try await db.collection("groups").document(groupId)
+                    .collection("weeks").document(weekId)
+                    .getDocument(source: .server)
+                if weekSnap.exists, let week = try? weekSnap.data(as: WeekSummary.self) {
+                    if !(weekSelectionPinned && currentWeek?.id != week.id) {
+                        currentWeek = week
+                    }
+                }
+            } catch {
+                UserFacingError.apply(error, to: &errorMessage)
+            }
+
+            do {
+                let standingsSnap = try await db.collection("groups").document(groupId)
+                    .collection("standings").document("current")
+                    .getDocument(source: .server)
+                if standingsSnap.exists {
+                    standings = try? standingsSnap.data(as: GroupStandings.self)
+                }
+            } catch {
+                AppLog.error(AppLog.firestore, "standings refresh failed", error: error, metadata: [
+                    "group_id": groupId,
+                ])
+            }
+        }
+
+        do {
+            let membersSnapshot = try await db.collection("groups").document(groupId)
+                .collection("members")
+                .getDocuments(source: .server)
+            var loaded = membersSnapshot.documents.compactMap { try? $0.data(as: GroupMember.self) }
+            loaded = await hydrateMemberAvatars(loaded)
+            members = loaded
+        } catch {
+            AppLog.error(AppLog.firestore, "members refresh failed", error: error, metadata: [
+                "group_id": groupId,
+            ])
+        }
+
+        await loadAvailableWeeks(groupId: groupId)
+    }
+
     private func clearWeekObservationIfNeeded() {
         weekListener?.remove()
         standingsListener?.remove()

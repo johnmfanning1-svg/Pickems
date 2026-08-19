@@ -34,6 +34,17 @@ extension AppState {
         pickService.observeWeek(groupId: group.id, weekId: week.id, userId: userId)
     }
 
+    /// Pull-to-refresh: hit the server for the selected league, week, and Pickems.
+    func refreshLeagueData() async {
+        await groupService.refreshFromServer()
+        guard let group = groupService.selectedGroup,
+              let week = groupService.currentWeek,
+              let userId = currentUserId else { return }
+        pickService.observeWeek(groupId: group.id, weekId: week.id, userId: userId)
+        await pickService.refreshFromServer(groupId: group.id, weekId: week.id, userId: userId)
+        picksViewModel.resyncWhenVisible(appState: self)
+    }
+
     func joinGroup(inviteCode: String, markOnboarding: Bool = true) async throws {
         guard let user = authService.currentUser else {
             let error = GroupService.GroupError.signInRequired

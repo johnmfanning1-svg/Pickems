@@ -10,6 +10,7 @@ struct HomeView: View {
     @State private var showJoinSheet = false
     @State private var showCreateWizard = false
     @State private var scoreboardFilter: HomeScoreboardFilter = .power4
+    @State private var isRefreshing = false
 
     var body: some View {
         NavigationStack {
@@ -75,8 +76,11 @@ struct HomeView: View {
                 }
                 HelpToolbarItem(topic: PickemsHelp.homeOverview)
             }
-            .refreshable {
-                await viewModel.refresh(appState: appState)
+            .pickemsRefreshable(isRefreshing: $isRefreshing) {
+                await appState.refreshLeagueData()
+                await viewModel.refresh(appState: appState, showLoading: true)
+                WidgetSnapshotService.publish(from: appState)
+                LiveActivityController.sync(from: appState)
             }
             .task(id: appState.groupService.selectedGroup?.id) {
                 await appState.syncSelectedWeek()
@@ -256,13 +260,21 @@ struct HomeView: View {
                 NewsFeedSection(items: viewModel.newsItems)
             }
 
-            LiveScoreboardSection(
-                games: viewModel.liveGames,
-                title: "CFB This Week",
-                subtitle: scoreboardSubtitle,
-                help: PickemsHelp.liveScores,
-                scoreboardFilter: $scoreboardFilter
-            )
+            if viewModel.isLoading && viewModel.liveGames.isEmpty {
+                ProgressView("Loading scores…")
+                    .tint(theme.accent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+                    .accessibilityLabel("Loading scores")
+            } else {
+                LiveScoreboardSection(
+                    games: viewModel.liveGames,
+                    title: "CFB This Week",
+                    subtitle: scoreboardSubtitle,
+                    help: PickemsHelp.liveScores,
+                    scoreboardFilter: $scoreboardFilter
+                )
+            }
 
             if appState.groupService.standings != nil {
                 let topEntries = appState.rankedStandings(weekly: true).prefix(3)

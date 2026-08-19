@@ -11,6 +11,10 @@ enum PickemsColors {
     static let textSecondary = Color(white: 0.65)
     static let success = Color(red: 0.20, green: 0.78, blue: 0.35)
     static let warning = Color(red: 0.95, green: 0.75, blue: 0.20)
+    /// Live pick currently covering the spread.
+    static let covering = Color(red: 0.22, green: 0.48, blue: 0.92)
+    /// Final loss / brand red already used as `accent`.
+    static let lost = defaultAccent
 
     static let avatarPalette: [Color] = [
         Color(red: 0.86, green: 0.15, blue: 0.15),

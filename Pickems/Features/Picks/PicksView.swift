@@ -11,6 +11,7 @@ struct PicksView: View {
     @Environment(\.themePalette) private var theme
     @State private var showIncompletePickemsAlert = false
     @State private var incompletePickemsAlertText = ""
+    @State private var isRefreshing = false
 
     private var viewModel: PicksViewModel { appState.picksViewModel }
 
@@ -70,7 +71,9 @@ struct PicksView: View {
             .toolbar {
                 HelpToolbarItem(topic: kind == .selections ? PickemsHelp.nominations : PickemsHelp.picksOverview)
             }
-            .refreshable { await reloadPicks() }
+            .pickemsRefreshable(isRefreshing: $isRefreshing) {
+                await reloadPicks()
+            }
             .sheet(isPresented: $viewModel.showGameBrowse, onDismiss: {
                 viewModel.selectionBrowseIntent = .own
             }) {
@@ -253,10 +256,8 @@ struct PicksView: View {
     }
 
     private func reloadPicks() async {
+        await appState.refreshLeagueData()
         await viewModel.loadWeek(appState: appState)
-        if let groupId = appState.groupService.selectedGroup?.id {
-            await appState.groupService.loadAvailableWeeks(groupId: groupId)
-        }
     }
 
     // MARK: - Phase content
