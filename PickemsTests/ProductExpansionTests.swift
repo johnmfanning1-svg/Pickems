@@ -81,6 +81,10 @@ struct ProductExpansionTests {
         #expect(DeepLinkRouter.parse(url: URL(string: "pickems://discover")!) == .openDiscover)
         #expect(DeepLinkRouter.parse(url: URL(string: "pickems://selections")!) == .openSelections(groupId: nil))
         #expect(DeepLinkRouter.parse(url: URL(string: "pickems://pickems")!) == .openPickems(groupId: nil))
+        #expect(
+            DeepLinkRouter.parse(url: URL(string: "https://pickems-fb.web.app/join?code=ncaaf1")!)
+                == .joinGroup(inviteCode: "NCAAF1")
+        )
     }
 
     private func makeFinal(id: String, home: Int, away: Int) -> SlateGame {

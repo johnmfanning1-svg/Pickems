@@ -11,6 +11,8 @@
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:pickems.app</string>
+		<string>applinks:pickems-fb.web.app</string>
+		<string>applinks:pickems-fb.firebaseapp.com</string>
 	</array>
 	<key>com.apple.security.application-groups</key>
 	<array>

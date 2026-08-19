@@ -9,7 +9,11 @@ enum AppConfig {
     static let xRedirectURI = "pickems://x-callback"
 
     /// App promotion link appended to shared posts.
-    static let appPromoURL = "https://pickems.app"
+    static let appPromoURL = "https://pickems-fb.web.app"
+
+    /// Hosted invite links (Universal Links). Must match Associated Domains.
+    static let inviteWebHost = "pickems-fb.web.app"
+    static var inviteJoinBaseURL: String { "https://\(inviteWebHost)" }
 
     /// App Store product page (Apple ID 6785697079).
     static let appStoreURL = "https://apps.apple.com/app/id6785697079"

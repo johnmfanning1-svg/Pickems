@@ -571,6 +571,88 @@ describe("audit hardening (inviteCodes, member fields, pick delete, group create
   });
 });
 
+describe("commissioner nomination management", () => {
+  function nomination(submittedBy, id = "nom1") {
+    return {
+      id,
+      submittedBy,
+      submitterName: submittedBy,
+      espnEventId: "401000001",
+      spread: 3.5,
+      spreadTeamId: "333",
+      homeTeamId: "333",
+      homeTeamName: "Alabama",
+      awayTeamId: "61",
+      awayTeamName: "Georgia",
+      kickoff: new Date(),
+      createdAt: new Date(),
+    };
+  }
+
+  async function putWeekInSelection({ deadlineOffsetMs = 60 * 60 * 1000 } = {}) {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID), {
+        status: "selection",
+        selectionDeadline: new Date(Date.now() + deadlineOffsetMs),
+      });
+    });
+  }
+
+  it("lets the commissioner create a nomination for another member", async () => {
+    await putWeekInSelection();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertSucceeds(
+      setDoc(
+        doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "for-member"),
+        nomination(MEMBER, "for-member")
+      )
+    );
+  });
+
+  it("blocks a member from creating a nomination as someone else", async () => {
+    await putWeekInSelection();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertFails(
+      setDoc(
+        doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "spoof"),
+        nomination(OTHER_MEMBER, "spoof")
+      )
+    );
+  });
+
+  it("lets the commissioner add a nomination after the member deadline", async () => {
+    await putWeekInSelection({ deadlineOffsetMs: -60 * 1000 });
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertFails(
+      setDoc(
+        doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "late-own"),
+        nomination(MEMBER, "late-own")
+      )
+    );
+    await assertSucceeds(
+      setDoc(
+        doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "late-for-member"),
+        nomination(MEMBER, "late-for-member")
+      )
+    );
+  });
+
+  it("lets the commissioner replace or delete another member's nomination", async () => {
+    await putWeekInSelection();
+    const path = ["groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "n1"];
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), ...path), nomination(MEMBER, "n1"));
+    });
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertSucceeds(
+      updateDoc(doc(commishDb, ...path), { espnEventId: "401000002", spread: 7 })
+    );
+    await assertSucceeds(deleteDoc(doc(commishDb, ...path)));
+  });
+});
+
 describe("user profile reads", () => {
   it("lets a user read their own doc and blocks other signed-in users", async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {

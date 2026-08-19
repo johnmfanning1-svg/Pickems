@@ -18,6 +18,17 @@ struct AppStoreComplianceTests {
         #expect(!message.localizedCaseInsensitiveContains("TestFlight"))
         #expect(message.contains(AppConfig.appStoreURL))
         #expect(message.contains("ABC123"))
+        #expect(message.contains("https://pickems-fb.web.app/join?code=ABC123"))
+        #expect(InviteShare.universalURL(for: group)?.absoluteString == "https://pickems-fb.web.app/join?code=ABC123")
+    }
+
+    @Test func inviteUniversalLinksParseOnFirebaseHosting() {
+        let url = URL(string: "https://pickems-fb.web.app/join?code=abc123")!
+        #expect(DeepLinkRouter.parse(url: url) == .joinGroup(inviteCode: "ABC123"))
+        let firebaseapp = URL(string: "https://pickems-fb.firebaseapp.com/join?code=xyz789")!
+        #expect(DeepLinkRouter.parse(url: firebaseapp) == .joinGroup(inviteCode: "XYZ789"))
+        let customScheme = URL(string: "pickems://join?code=abc123")!
+        #expect(DeepLinkRouter.parse(url: customScheme) == .joinGroup(inviteCode: "ABC123"))
     }
 
     @Test func legalURLsAreHTTPS() {

@@ -2,14 +2,18 @@ import SwiftUI
 
 enum InviteShare {
     static func message(for group: PickemGroup) -> String {
-        """
+        let link = universalURL(for: group)?.absoluteString
+            ?? "\(AppConfig.inviteJoinBaseURL)/join?code=\(group.inviteCode)"
+        return """
         Join \(group.name) on Pickems!
+
+        \(link)
 
         Invite code: \(group.inviteCode)
 
         1. Download Pickems: \(AppConfig.appStoreURL)
         2. Sign in with Apple or email
-        3. Tap Join League and enter the code above
+        3. Tap the link above, or tap Join League and enter the code
 
         Let's run it this CFB season!
         """
@@ -20,7 +24,7 @@ enum InviteShare {
     }
 
     static func universalURL(for group: PickemGroup) -> URL? {
-        URL(string: "https://pickems.app/join?code=\(group.inviteCode)")
+        URL(string: "\(AppConfig.inviteJoinBaseURL)/join?code=\(group.inviteCode)")
     }
 }
 

@@ -203,7 +203,9 @@ final class PickService {
             true,
             forKey: nominationsSubmittedKey(groupId: groupId, weekId: weekId, userId: userId)
         )
-        didSubmitNominations = true
+        if userId == Auth.auth().currentUser?.uid {
+            didSubmitNominations = true
+        }
     }
 
     func clearNominationsSubmitted(groupId: String, weekId: String, userId: String) {
@@ -211,7 +213,9 @@ final class PickService {
             false,
             forKey: nominationsSubmittedKey(groupId: groupId, weekId: weekId, userId: userId)
         )
-        didSubmitNominations = false
+        if userId == Auth.auth().currentUser?.uid {
+            didSubmitNominations = false
+        }
     }
 
     func loadAllPicks(groupId: String, weekId: String) async {
@@ -333,7 +337,8 @@ final class PickService {
         nomination: Nomination,
         rules: GroupRules,
         week: WeekSummary,
-        memberIds _: [String]
+        memberIds _: [String],
+        isCommissioner: Bool = false
     ) async throws {
         switch week.status {
         case .locked, .scored, .picking:
@@ -341,8 +346,8 @@ final class PickService {
             // Selections. Commissioner fill uses `submitCommissionerGame`.
             throw PickError.selectionClosed
         case .selection:
-            guard WeekTransition.canRemakeSelections(week) else {
-                throw PickError.selectionClosed
+            if !WeekTransition.canRemakeSelections(week) {
+                guard isCommissioner else { throw PickError.selectionClosed }
             }
         }
         let existingNoms = nominations.contains { $0.espnEventId == nomination.espnEventId }
@@ -365,7 +370,7 @@ final class PickService {
             selectionsPerMember: perMember,
             uniqueNominationCount: uniqueCount,
             slateSize: slateSize,
-            selectionDeadline: week.selectionDeadline
+            selectionDeadline: isCommissioner ? nil : week.selectionDeadline
         ) else {
             throw PickError.nominationLimitReached
         }
@@ -433,11 +438,13 @@ final class PickService {
     ) async throws {
         if nomination.submittedBy != userId {
             guard isCommissioner else { throw PickError.unauthorized }
-            guard WeekTransition.isSlateEditable(week) else {
+            guard WeekTransition.commissionerCanManageSelections(week)
+                    || WeekTransition.isSlateEditable(week) else {
                 throw PickError.cannotModifyLockedSlate
             }
         } else {
-            guard WeekTransition.canRemakeSelections(week) else {
+            guard WeekTransition.canRemakeSelections(week)
+                    || (isCommissioner && WeekTransition.commissionerCanManageSelections(week)) else {
                 throw PickError.selectionClosed
             }
         }
@@ -451,8 +458,72 @@ final class PickService {
 
         // Clearing a Selection must drop the slate game too, or remake hits
         // duplicateGame and Pickems keeps showing the cleared game.
-        // Materialize keys games by espnEventId; also sweep any other doc id.
-        let eventId = nomination.espnEventId
+        try await deleteSlateGames(matchingEventId: nomination.espnEventId, weekRef: weekRef)
+        userPickEpoch += 1
+
+        clearNominationsSubmitted(groupId: groupId, weekId: weekId, userId: nomination.submittedBy)
+    }
+
+    /// Swap a Selection for another game, keeping the same member attribution.
+    func replaceNomination(
+        groupId: String,
+        weekId: String,
+        nomination: Nomination,
+        game: ESPNGame,
+        rules: GroupRules,
+        week: WeekSummary,
+        isCommissioner: Bool,
+        userId: String
+    ) async throws {
+        let managingOther = nomination.submittedBy != userId
+        if managingOther {
+            guard isCommissioner else { throw PickError.unauthorized }
+            guard WeekTransition.commissionerCanManageSelections(week) else {
+                throw PickError.cannotModifyLockedSlate
+            }
+        } else {
+            guard WeekTransition.canRemakeSelections(week)
+                    || (isCommissioner && WeekTransition.commissionerCanManageSelections(week)) else {
+                throw PickError.selectionClosed
+            }
+        }
+
+        let newEventId = game.espnEventId
+        let takenByOtherNom = nominations.contains {
+            $0.id != nomination.id && $0.espnEventId == newEventId
+        }
+        let takenBySlate = slateGames.contains {
+            $0.espnEventId == newEventId && $0.espnEventId != nomination.espnEventId
+        }
+        guard !takenByOtherNom, !takenBySlate else {
+            throw PickError.duplicateGame
+        }
+
+        let weekRef = db.collection("groups").document(groupId)
+            .collection("weeks").document(weekId)
+        var updated = Nomination.fromESPNGame(
+            game,
+            id: nomination.id,
+            submittedBy: nomination.submittedBy,
+            submitterName: nomination.submitterName,
+            createdAt: nomination.createdAt
+        )
+        updated.id = nomination.id
+        try await weekRef.collection("nominations").document(nomination.id).setData(from: updated)
+
+        if nomination.espnEventId != newEventId {
+            try await deleteSlateGames(matchingEventId: nomination.espnEventId, weekRef: weekRef)
+        }
+        if let idx = nominations.firstIndex(where: { $0.id == nomination.id }) {
+            nominations[idx] = updated
+        }
+        userPickEpoch += 1
+    }
+
+    private func deleteSlateGames(
+        matchingEventId eventId: String,
+        weekRef: DocumentReference
+    ) async throws {
         var gameIds = Set(
             slateGames
                 .filter { $0.espnEventId == eventId || $0.id == eventId }
@@ -468,11 +539,6 @@ final class PickService {
             try? await weekRef.collection("games").document(gameId).delete()
         }
         slateGames.removeAll { $0.espnEventId == eventId || $0.id == eventId || gameIds.contains($0.id) }
-        userPickEpoch += 1
-
-        if nomination.submittedBy == userId {
-            clearNominationsSubmitted(groupId: groupId, weekId: weekId, userId: userId)
-        }
     }
 
     func submitCommissionerGame(

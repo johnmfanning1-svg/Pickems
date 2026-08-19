@@ -120,6 +120,19 @@ struct WeekTransitionTests {
         #expect(!WeekTransition.arePickemsOpen(week(status: .selection)))
     }
 
+    @Test func commissionerCanManageSelectionsDuringSelectionEvenAfterDeadline() {
+        let past = Date().addingTimeInterval(-60)
+        #expect(WeekTransition.commissionerCanManageSelections(week(status: .selection)))
+        #expect(WeekTransition.commissionerCanManageSelections(
+            week(status: .selection, selectionDeadline: past)
+        ))
+        #expect(!WeekTransition.canRemakeSelections(
+            week(status: .selection, selectionDeadline: past)
+        ))
+        #expect(!WeekTransition.commissionerCanManageSelections(week(status: .picking)))
+        #expect(!WeekTransition.commissionerCanManageSelections(week(status: .scored)))
+    }
+
     @Test func fillingSlateSetsDeadlineWithoutLockedAt() {
         let kickoff = Date().addingTimeInterval(21 * 24 * 3600)
         let updates = WeekTransition.toPickingUpdates(

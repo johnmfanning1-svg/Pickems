@@ -162,6 +162,14 @@ struct GroupPicksView: View {
                 Text(progressSubtitle)
                     .font(.caption)
                     .foregroundStyle(PickemsColors.textSecondary)
+                if isNominatingPhase,
+                   appState.isCommissioner,
+                   selectionMode == .member,
+                   week.map({ WeekTransition.commissionerCanManageSelections($0) }) ?? false {
+                    Text("Expand a member to remove, replace, or add their Selections.")
+                        .font(.caption)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
             }
         }
     }
@@ -332,7 +340,12 @@ struct GroupPicksView: View {
         let noms = nominations.filter { $0.submittedBy == member.id }
         let canRemake = week.map { WeekTransition.canRemakeSelections($0) } ?? false
         let isOwn = member.id == currentUserId
-        let canRemove = canRemake && isOwn && !appState.pickService.didSubmitNominations
+        let commissionerCanManage = appState.isCommissioner
+            && (week.map { WeekTransition.commissionerCanManageSelections($0) } ?? false)
+        let memberCanRemove = canRemake && isOwn && !appState.pickService.didSubmitNominations
+        let canRemove = memberCanRemove || commissionerCanManage
+        let canAdd = commissionerCanManage && noms.count < nominationsPerMember
+            && selectionMode == .member
 
         VStack(alignment: .leading, spacing: 8) {
             if isOwn, canRemake {
@@ -367,20 +380,37 @@ struct GroupPicksView: View {
                             }
                             Spacer(minLength: 8)
                             if canRemove, let rules = appState.groupService.selectedGroup?.rules {
+                                if commissionerCanManage {
+                                    Button {
+                                        appState.picksViewModel.beginReplaceSelection(nom, appState: appState)
+                                    } label: {
+                                        Label("Replace", systemImage: "arrow.triangle.2.circlepath")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(theme.accent)
+                                    }
+                                    .accessibilityHint("Pick a different game for \(member.displayName)")
+                                }
                                 Button(role: .destructive) {
                                     appState.picksViewModel.removeNomination(nom, rules: rules, appState: appState)
                                 } label: {
-                                    Label("Remove Selection", systemImage: "trash")
+                                    Label("Remove", systemImage: "trash")
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(theme.accent)
                                 }
-                                .accessibilityHint("Frees a slot so you can select a different game")
+                                .accessibilityHint("Frees a slot so a different game can be selected")
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(.horizontal, 4)
                 }
+            }
+
+            if canAdd {
+                SecondaryButton("Add Selection", icon: "plus") {
+                    appState.picksViewModel.beginAddSelection(for: member, appState: appState)
+                }
+                .padding(.horizontal, 6)
             }
         }
     }

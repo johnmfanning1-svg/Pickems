@@ -71,13 +71,21 @@ struct PicksView: View {
                 HelpToolbarItem(topic: kind == .selections ? PickemsHelp.nominations : PickemsHelp.picksOverview)
             }
             .refreshable { await reloadPicks() }
-            .sheet(isPresented: $viewModel.showGameBrowse) {
+            .sheet(isPresented: $viewModel.showGameBrowse, onDismiss: {
+                viewModel.selectionBrowseIntent = .own
+            }) {
                 GameBrowseView(
                     games: viewModel.espnGames,
-                    nominatedEventIds: Set(
-                        appState.pickService.nominations.map(\.espnEventId)
-                            + appState.pickService.slateGames.map(\.espnEventId)
-                    ),
+                    nominatedEventIds: {
+                        var ids = Set(
+                            appState.pickService.nominations.map(\.espnEventId)
+                                + appState.pickService.slateGames.map(\.espnEventId)
+                        )
+                        if case .replace(let nom) = viewModel.selectionBrowseIntent {
+                            ids.remove(nom.espnEventId)
+                        }
+                        return ids
+                    }(),
                     nominatorNamesByEventId: {
                         var names = Dictionary(
                             appState.pickService.nominations.map { ($0.espnEventId, $0.submitterName) },
@@ -356,16 +364,10 @@ struct PicksView: View {
             }
             .padding(.horizontal)
 
-            ForEach(appState.pickService.displaySlateGames) { game in
-                GamePickRow(game: game, selectedTeamId: nil, onSelect: { _ in })
-                    .padding(.horizontal)
-            }
-            if WeekTransition.canRemakeSelections(week) {
-                Text("To edit spreads or remove a game, use Commissioner Settings.")
-                    .font(.caption)
-                    .foregroundStyle(PickemsColors.textSecondary)
-                    .padding(.horizontal)
-            }
+            Text("Games are listed by person below. Edit spreads in Commissioner Settings.")
+                .font(.caption)
+                .foregroundStyle(PickemsColors.textSecondary)
+                .padding(.horizontal)
         }
     }
 
@@ -401,55 +403,12 @@ struct PicksView: View {
                 nominationSubmitSection(userNoms: userNoms, perMember: perMember, week: week)
             } else if WeekTransition.canRemakeSelections(week) {
                 PrimaryButton(title: "Select Game") {
+                    viewModel.selectionBrowseIntent = .own
                     viewModel.showGameBrowse = true
                 }
                 .padding(.horizontal)
             }
-
-            ForEach(appState.pickService.nominations) { nom in
-                PickemsCard {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("\(nom.awayTeamName) @ \(nom.homeTeamName)")
-                            Text(nominationSpreadLabel(nom))
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(theme.accent)
-                            Text("by \(nom.submitterName)").font(.caption).foregroundStyle(PickemsColors.textSecondary)
-                        }
-                        Spacer()
-                        if WeekTransition.canRemakeSelections(week),
-                           nom.submittedBy == userId,
-                           !appState.pickService.didSubmitNominations {
-                            Button(role: .destructive) {
-                                viewModel.removeNomination(nom, rules: rules, appState: appState)
-                            } label: {
-                                Label("Remove Selection", systemImage: "trash")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(theme.accent)
-                            }
-                            .accessibilityHint("Frees a slot so you can select a different game")
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
         }
-    }
-
-    private func nominationSpreadLabel(_ nom: Nomination) -> String {
-        let abbr: String
-        if nom.spreadTeamId == nom.homeTeamId {
-            abbr = nom.homeTeamAbbreviation ?? String(nom.homeTeamName.prefix(4)).uppercased()
-        } else if nom.spreadTeamId == nom.awayTeamId {
-            abbr = nom.awayTeamAbbreviation ?? String(nom.awayTeamName.prefix(4)).uppercased()
-        } else {
-            abbr = nom.homeTeamAbbreviation
-                ?? nom.awayTeamAbbreviation
-                ?? String(nom.homeTeamName.prefix(4)).uppercased()
-        }
-        let magnitude = abs(nom.spread).formatted(.number.precision(.fractionLength(1)))
-        // Favorite (spreadTeamId) always shows as -line, matching SlateGame.spreadLabel.
-        return "\(abbr) -\(magnitude)"
     }
 
     @ViewBuilder

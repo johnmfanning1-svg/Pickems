@@ -12,6 +12,13 @@ final class PicksViewModel {
     var showConfirmSubmit = false
     var showConfirmNominations = false
     var spreadEditGame: SlateGame?
+    var selectionBrowseIntent: SelectionBrowseIntent = .own
+
+    enum SelectionBrowseIntent: Equatable {
+        case own
+        case addFor(memberId: String, displayName: String)
+        case replace(Nomination)
+    }
 
     private var liveRefreshTask: Task<Void, Never>?
     private var saveDraftTask: Task<Void, Never>?
@@ -29,6 +36,7 @@ final class PicksViewModel {
         showConfirmSubmit = false
         showConfirmNominations = false
         spreadEditGame = nil
+        selectionBrowseIntent = .own
         espnGames = []
         livePickCards = [:]
     }
@@ -178,61 +186,109 @@ final class PicksViewModel {
         if present { showGameBrowse = true }
     }
 
+    func beginAddSelection(for member: GroupMember, appState: AppState) {
+        selectionBrowseIntent = .addFor(memberId: member.id, displayName: member.displayName)
+        Task { await browseGames(appState: appState) }
+    }
+
+    func beginReplaceSelection(_ nomination: Nomination, appState: AppState) {
+        selectionBrowseIntent = .replace(nomination)
+        Task { await browseGames(appState: appState) }
+    }
+
     func handleGameSelection(_ game: ESPNGame, appState: AppState) {
         guard let group = appState.groupService.selectedGroup,
               let week = appState.groupService.currentWeek,
               let user = appState.authService.currentUser else { return }
 
+        let intent = selectionBrowseIntent
         Task {
             do {
                 let rules = group.rules
-                let selectionMode = week.selectionMode
-                let commissionerFill =
-                    appState.isCommissioner
-                    && (
-                        (selectionMode == .member && week.isSelectionDeadlinePassed)
-                        || week.status == .picking
-                    )
-
-                if selectionMode == .commissioner || commissionerFill {
-                    try await appState.pickService.submitCommissionerGame(
-                        groupId: group.id,
-                        weekId: week.id,
-                        game: game.toSlateGame(),
-                        rules: rules,
-                        week: week
-                    )
-                } else {
-                    try await appState.pickService.submitNomination(
-                        groupId: group.id,
-                        weekId: week.id,
-                        nomination: Nomination(
-                            id: "",
-                            submittedBy: user.id,
-                            submitterName: user.displayName,
-                            espnEventId: game.espnEventId,
-                            spread: game.spread ?? 0,
-                            spreadTeamId: game.spreadTeamId ?? game.homeTeamId,
-                            homeTeamId: game.homeTeamId,
-                            homeTeamName: game.homeTeamName,
-                            homeTeamAbbreviation: game.homeTeamAbbreviation,
-                            homeTeamLogoURL: game.homeTeamLogoURL,
-                            awayTeamId: game.awayTeamId,
-                            awayTeamName: game.awayTeamName,
-                            awayTeamAbbreviation: game.awayTeamAbbreviation,
-                            awayTeamLogoURL: game.awayTeamLogoURL,
-                            kickoff: game.kickoff,
-                            createdAt: Date()
-                        ),
-                        rules: rules,
-                        week: week,
-                        memberIds: group.memberIds
-                    )
-                }
+                try await applyGameSelection(
+                    game,
+                    intent: intent,
+                    group: group,
+                    week: week,
+                    user: user,
+                    rules: rules,
+                    appState: appState
+                )
                 PickemsHaptics.success()
+                selectionBrowseIntent = .own
                 showGameBrowse = false
             } catch {
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
+            }
+        }
+    }
+
+    private func applyGameSelection(
+        _ game: ESPNGame,
+        intent: SelectionBrowseIntent,
+        group: PickemGroup,
+        week: WeekSummary,
+        user: UserProfile,
+        rules: GroupRules,
+        appState: AppState
+    ) async throws {
+        switch intent {
+        case .replace(let nomination):
+            try await appState.pickService.replaceNomination(
+                groupId: group.id,
+                weekId: week.id,
+                nomination: nomination,
+                game: game,
+                rules: rules,
+                week: week,
+                isCommissioner: appState.isCommissioner,
+                userId: user.id
+            )
+        case .addFor(let memberId, let displayName):
+            try await appState.pickService.submitNomination(
+                groupId: group.id,
+                weekId: week.id,
+                nomination: Nomination.fromESPNGame(
+                    game,
+                    submittedBy: memberId,
+                    submitterName: displayName
+                ),
+                rules: rules,
+                week: week,
+                memberIds: group.memberIds,
+                isCommissioner: true
+            )
+        case .own:
+            let selectionMode = week.selectionMode
+            let commissionerFill =
+                appState.isCommissioner
+                && (
+                    (selectionMode == .member && week.isSelectionDeadlinePassed)
+                    || week.status == .picking
+                )
+
+            if selectionMode == .commissioner || commissionerFill {
+                try await appState.pickService.submitCommissionerGame(
+                    groupId: group.id,
+                    weekId: week.id,
+                    game: game.toSlateGame(),
+                    rules: rules,
+                    week: week
+                )
+            } else {
+                try await appState.pickService.submitNomination(
+                    groupId: group.id,
+                    weekId: week.id,
+                    nomination: Nomination.fromESPNGame(
+                        game,
+                        submittedBy: user.id,
+                        submitterName: user.displayName
+                    ),
+                    rules: rules,
+                    week: week,
+                    memberIds: group.memberIds,
+                    isCommissioner: appState.isCommissioner
+                )
             }
         }
     }

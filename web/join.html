@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Join a league — CFB Pickems</title>
+  <meta name="description" content="Open this invite in the Pickems iOS app to join a private college football pick'em league." />
+  <meta name="apple-itunes-app" content="app-id=6785697079" />
+  <meta name="theme-color" content="#14141A" />
+  <style>
+    :root {
+      --bg: #14141A;
+      --ink: #F5F5F7;
+      --muted: #9A9AA3;
+      --accent: #DC2626;
+      --accent-deep: #A61B1B;
+      --font-display: "Iowan Old Style", Palatino, Georgia, serif;
+      --font-body: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      font-family: var(--font-body);
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse 90% 60% at 80% -10%, rgba(220, 38, 38, 0.22), transparent 55%),
+        linear-gradient(165deg, #0E0E12 0%, var(--bg) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1.25rem;
+    }
+    .card { width: min(26rem, 100%); text-align: center; }
+    h1 {
+      font-family: var(--font-display);
+      font-size: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+    p { color: var(--muted); margin-bottom: 1.25rem; }
+    .code {
+      font-size: 2rem;
+      letter-spacing: 0.28em;
+      font-weight: 700;
+      margin: 0 0 1.5rem;
+    }
+    .cta {
+      display: block;
+      width: 100%;
+      padding: 0.9rem 1.2rem;
+      margin-bottom: 0.75rem;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      font-weight: 600;
+      border-radius: 8px;
+    }
+    .cta.secondary {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.16);
+      color: var(--ink);
+    }
+    .cta:hover { background: var(--accent-deep); }
+    .cta.secondary:hover { background: rgba(255,255,255,0.06); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Join this league</h1>
+    <p id="copy">Open Pickems to accept the invite. If you don’t have the app yet, get it on the App Store, then enter this code.</p>
+    <p class="code" id="code">————</p>
+    <a class="cta" id="open" href="https://apps.apple.com/app/id6785697079">Open in Pickems</a>
+    <a class="cta secondary" href="https://apps.apple.com/app/id6785697079">Download on the App Store</a>
+  </div>
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var code = (params.get("code") || "").trim().toUpperCase();
+      var open = document.getElementById("open");
+      var codeEl = document.getElementById("code");
+      if (!code) {
+        document.getElementById("copy").textContent = "This invite is missing a league code. Ask your commissioner for a new link.";
+        return;
+      }
+      codeEl.textContent = code;
+      open.href = "pickems://join?code=" + encodeURIComponent(code);
+    })();
+  </script>
+</body>
+</html>

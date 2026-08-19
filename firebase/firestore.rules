@@ -184,7 +184,12 @@ service cloud.firestore {
 
         match /nominations/{nominationId} {
           allow read: if isGroupMember(groupId) || isSuperAdmin();
+          // Members may only create their own Selections before the deadline.
+          // Commissioners may create/replace a Selection for any member while
+          // the week is still in selection (including after the member deadline).
           allow create: if isSuperAdmin()
+            || (isCommissioner(groupId)
+                && weekData(groupId, weekId).status == 'selection')
             || (isGroupMember(groupId)
                 && weekData(groupId, weekId).status == 'selection'
                 && selectionNominationsOpen(groupId, weekId)

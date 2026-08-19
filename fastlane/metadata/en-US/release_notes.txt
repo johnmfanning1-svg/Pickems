@@ -1,7 +1,6 @@
-What's new in 3.1
+What's new in 3.1.6
 
-• Week 0 is the eight Saturday openers; Week 1 is the rest of ESPN's opening week
-• Browse future weeks on Selections; Pickems stays on the current week
-• More stable week switching and Home scores
+• Commissioners can remove, replace, or add Selections for any member
+• Selections tab lists games by person (collapsible), not a duplicate full-slate list
 
 Thanks for playing with us.

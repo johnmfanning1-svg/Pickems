@@ -1,0 +1,22 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "22A943P8SJ.FannypackInc.Pickems",
+        "appIDs": ["22A943P8SJ.FannypackInc.Pickems"],
+        "paths": ["/join", "/join/*"],
+        "components": [
+          {
+            "/": "/join",
+            "?": { "code": "?" },
+            "comment": "League invite"
+          },
+          {
+            "/": "/join/*"
+          }
+        ]
+      }
+    ]
+  }
+}

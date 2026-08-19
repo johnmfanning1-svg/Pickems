@@ -62,6 +62,13 @@ enum WeekTransition {
     /// (Cloud Function) or commissioner lock-early (`lockEarlyUpdates`) flips status.
     static var opensPickingWhenSlateFills: Bool { false }
 
+    /// Commissioner can add, replace, or remove any member's Selections while
+    /// the week is still in `.selection` (including after the member deadline).
+    static func commissionerCanManageSelections(_ week: WeekSummary) -> Bool {
+        guard !week.skipsSelection else { return false }
+        return week.status == .selection
+    }
+
     /// Members can add/remove Selections while the week is still in `.selection`
     /// and the Selection deadline has not passed. After lock-early or deadline,
     /// status is `.picking` and Selections are frozen.

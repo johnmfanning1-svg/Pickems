@@ -20,6 +20,7 @@ struct CommissionerWeekAdminSections: View {
 
     var body: some View {
         weekStatusSection
+        selectionsAdminSection
         slateSection
         pickemsAdminSection
         tiesSection
@@ -88,6 +89,32 @@ struct CommissionerWeekAdminSections: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Members can add and remove Selections again. Pickems close until you open the week.")
+        }
+    }
+
+    @ViewBuilder
+    private var selectionsAdminSection: some View {
+        if let week, WeekTransition.commissionerCanManageSelections(week),
+           week.selectionMode == .member,
+           let groupId = appState.groupService.selectedGroup?.id {
+            Section {
+                ForEach(appState.groupService.members) { member in
+                    NavigationLink {
+                        CommissionerManageSelectionsSheet(
+                            member: member,
+                            week: week,
+                            groupId: groupId
+                        )
+                    } label: {
+                        Label("Manage Selections — \(member.displayName)", systemImage: "american.football")
+                    }
+                    .listRowBackground(PickemsColors.cardBackground)
+                }
+            } header: {
+                Text("Selections Admin")
+            } footer: {
+                Text("Remove, replace, or add a member's Selections. You can also do this from the Selections tab.")
+            }
         }
     }
 

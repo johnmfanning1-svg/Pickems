@@ -212,6 +212,33 @@ struct Nomination: Codable, Identifiable, Equatable {
     var awayTeamLogoURL: String?
     var kickoff: Date
     var createdAt: Date
+
+    static func fromESPNGame(
+        _ game: ESPNGame,
+        id: String = "",
+        submittedBy: String,
+        submitterName: String,
+        createdAt: Date = Date()
+    ) -> Nomination {
+        Nomination(
+            id: id,
+            submittedBy: submittedBy,
+            submitterName: submitterName,
+            espnEventId: game.espnEventId,
+            spread: game.spread ?? 0,
+            spreadTeamId: game.spreadTeamId ?? game.homeTeamId,
+            homeTeamId: game.homeTeamId,
+            homeTeamName: game.homeTeamName,
+            homeTeamAbbreviation: game.homeTeamAbbreviation,
+            homeTeamLogoURL: game.homeTeamLogoURL,
+            awayTeamId: game.awayTeamId,
+            awayTeamName: game.awayTeamName,
+            awayTeamAbbreviation: game.awayTeamAbbreviation,
+            awayTeamLogoURL: game.awayTeamLogoURL,
+            kickoff: game.kickoff,
+            createdAt: createdAt
+        )
+    }
 }
 
 struct UserPick: Codable, Identifiable, Equatable {

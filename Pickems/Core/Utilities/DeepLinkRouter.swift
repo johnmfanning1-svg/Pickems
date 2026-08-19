@@ -17,7 +17,7 @@ enum DeepLinkRouter {
         if url.scheme?.lowercased() == "pickems" {
             return parseHost(path: url.host ?? "", query: url.queryItems)
         }
-        if url.host?.contains("pickems.app") == true {
+        if isUniversalLinkHost(url.host) {
             let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             return parseHost(path: path, query: url.queryItems)
         }
@@ -41,6 +41,19 @@ enum DeepLinkRouter {
             return .openLiveSlate(groupId: groupId)
         default:
             return .openHome
+        }
+    }
+
+    nonisolated private static func isUniversalLinkHost(_ host: String?) -> Bool {
+        guard let host else { return false }
+        switch host.lowercased() {
+        case "pickems.app",
+             "www.pickems.app",
+             "pickems-fb.web.app",
+             "pickems-fb.firebaseapp.com":
+            return true
+        default:
+            return false
         }
     }
 
