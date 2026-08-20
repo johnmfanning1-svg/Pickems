@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "xapi": {
+      "command": "npx",
+      "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],
+      "envFile": "${workspaceFolder}/.env",
+      "startup_timeout_sec": 300
+    },
+    "x-docs": {
+      "url": "https://docs.x.com/mcp"
+    }
+  }
+}
