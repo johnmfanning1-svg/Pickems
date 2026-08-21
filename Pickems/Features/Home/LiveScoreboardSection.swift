@@ -10,6 +10,7 @@ struct LiveGameRow: View {
                 teamColumn(
                     name: card.awayTeamAbbreviation,
                     logo: card.awayTeamLogoURL,
+                    rank: card.awayCuratedRank,
                     score: card.awayScore,
                     caption: "Away"
                 )
@@ -49,6 +50,7 @@ struct LiveGameRow: View {
                 teamColumn(
                     name: card.homeTeamAbbreviation,
                     logo: card.homeTeamLogoURL,
+                    rank: card.homeCuratedRank,
                     score: card.homeScore,
                     caption: "Home"
                 )
@@ -62,7 +64,15 @@ struct LiveGameRow: View {
         var parts: [String] = []
         let awayScore = card.awayScore.map { "\($0)" } ?? "not started"
         let homeScore = card.homeScore.map { "\($0)" } ?? "not started"
-        parts.append("\(card.awayTeamAbbreviation) \(awayScore), \(card.homeTeamAbbreviation) \(homeScore)")
+        let awayName = TeamDisplay.rankedLabel(
+            abbreviation: card.awayTeamAbbreviation,
+            rank: card.awayCuratedRank
+        )
+        let homeName = TeamDisplay.rankedLabel(
+            abbreviation: card.homeTeamAbbreviation,
+            rank: card.homeCuratedRank
+        )
+        parts.append("\(awayName) \(awayScore), \(homeName) \(homeScore)")
         if card.status == .scheduled {
             parts.append("Kickoff \(card.kickoff.formatted(date: .abbreviated, time: .shortened))")
         } else {
@@ -104,18 +114,9 @@ struct LiveGameRow: View {
         }
     }
 
-    private func teamColumn(name: String, logo: String?, score: Int?, caption: String) -> some View {
+    private func teamColumn(name: String, logo: String?, rank: Int?, score: Int?, caption: String) -> some View {
         VStack(spacing: 2) {
-            if let logo, let url = URL(string: logo) {
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFit()
-                } placeholder: {
-                    Text(name).font(.caption.bold())
-                }
-                .frame(width: 32, height: 32)
-            } else {
-                Text(name).font(.headline)
-            }
+            TeamMark(logoURL: logo, abbreviation: name, rank: rank, size: 32)
             Text(caption)
                 .font(.caption2)
                 .foregroundStyle(PickemsColors.textSecondary)

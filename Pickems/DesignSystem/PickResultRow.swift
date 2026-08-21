@@ -4,12 +4,22 @@ struct PickResultRow: View {
     let game: SlateGame
     let pickedTeamId: String?
     var showSpread: Bool = true
+    var homeRank: Int? = nil
+    var awayRank: Int? = nil
     @Environment(\.themePalette) private var theme
 
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(game.awayTeamAbbreviation) \(game.matchupSeparator) \(game.homeTeamAbbreviation)")
+                Text(
+                    TeamDisplay.matchupLabel(
+                        awayAbbreviation: game.awayTeamAbbreviation,
+                        awayRank: awayRank,
+                        homeAbbreviation: game.homeTeamAbbreviation,
+                        homeRank: homeRank,
+                        separator: game.matchupSeparator
+                    )
+                )
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textPrimary)
                 if showSpread {

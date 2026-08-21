@@ -15,6 +15,7 @@ final class HomeViewModel {
     var seasonWeeks: [CFBSeasonWeek] = []
     /// User-selected browse week for the scoreboard; nil means follow current ESPN/league week.
     var selectedBrowseWeek: CFBSeasonWeek?
+    var teamRanks: TeamRankLookup = .empty
 
     private var refreshTask: Task<Void, Never>?
     private var refreshGeneration = 0
@@ -108,6 +109,7 @@ final class HomeViewModel {
             // Stale-while-revalidate: only replace when the fetch succeeded.
             liveGames = allCards
             self.slateGames = allCards.filter(\.isSlateGame)
+            teamRanks = TeamRankLookup(cards: allCards)
 
             if let news = try? await ESPNService.shared.fetchNews(limit: 6), !news.isEmpty {
                 guard generation == refreshGeneration else { return }

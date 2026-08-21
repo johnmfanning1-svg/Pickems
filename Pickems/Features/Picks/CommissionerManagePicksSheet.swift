@@ -37,6 +37,8 @@ struct CommissionerManagePicksSheet: View {
                             GamePickRow(
                                 game: game,
                                 selectedTeamId: draftPicks[game.id],
+                                homeRank: appState.picksViewModel.teamRanks.rank(for: game.homeTeamId),
+                                awayRank: appState.picksViewModel.teamRanks.rank(for: game.awayTeamId),
                                 showConfidenceToggle: false
                             ) { teamId in
                                 if teamId.isEmpty {
@@ -96,6 +98,7 @@ struct CommissionerManagePicksSheet: View {
             }
             .task {
                 await appState.pickService.loadAllPicks(groupId: groupId, weekId: week.id)
+                await appState.picksViewModel.ensureTeamRanks(appState: appState)
                 if draftPicks.isEmpty {
                     if let existing = appState.pickService.allPicks.first(where: { $0.userId == member.id }) {
                         draftPicks = existing.picks

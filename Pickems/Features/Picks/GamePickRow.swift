@@ -5,17 +5,33 @@ struct GamePickRow: View {
     let selectedTeamId: String?
     var isDisabled: Bool = false
     var liveCard: ESPNLiveGameCard? = nil
+    var homeRank: Int? = nil
+    var awayRank: Int? = nil
     var showConfidenceToggle: Bool = false
     var isConfidence: Bool = false
     var onConfidenceToggle: (() -> Void)? = nil
     let onSelect: (String) -> Void
     @Environment(\.themePalette) private var theme
 
+    private var resolvedAwayRank: Int? {
+        awayRank ?? liveCard?.awayCuratedRank
+    }
+
+    private var resolvedHomeRank: Int? {
+        homeRank ?? liveCard?.homeCuratedRank
+    }
+
     var body: some View {
         PickemsCard {
             VStack(spacing: 12) {
                 HStack {
-                    teamButton(teamId: game.awayTeamId, name: game.awayTeamAbbreviation, logo: game.awayTeamLogoURL, caption: "Away")
+                    teamButton(
+                        teamId: game.awayTeamId,
+                        name: game.awayTeamAbbreviation,
+                        logo: game.awayTeamLogoURL,
+                        rank: resolvedAwayRank,
+                        caption: "Away"
+                    )
                     VStack(spacing: 2) {
                         Text(game.matchupSeparator)
                             .foregroundStyle(PickemsColors.textSecondary)
@@ -25,7 +41,13 @@ struct GamePickRow: View {
                                 .foregroundStyle(live.status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
                         }
                     }
-                    teamButton(teamId: game.homeTeamId, name: game.homeTeamAbbreviation, logo: game.homeTeamLogoURL, caption: "Home")
+                    teamButton(
+                        teamId: game.homeTeamId,
+                        name: game.homeTeamAbbreviation,
+                        logo: game.homeTeamLogoURL,
+                        rank: resolvedHomeRank,
+                        caption: "Home"
+                    )
                 }
 
                 ZStack {
@@ -97,7 +119,13 @@ struct GamePickRow: View {
         return selectedTeamId
     }
 
-    private func teamButton(teamId: String, name: String, logo: String?, caption: String) -> some View {
+    private func teamButton(
+        teamId: String,
+        name: String,
+        logo: String?,
+        rank: Int?,
+        caption: String
+    ) -> some View {
         let isSelected = resolvedSelectedTeamId == teamId
         return Button {
             guard !isDisabled else { return }
@@ -106,14 +134,13 @@ struct GamePickRow: View {
             onSelect(isSelected ? "" : teamId)
         } label: {
             VStack(spacing: 2) {
-                if let logo, let url = URL(string: logo) {
-                    AsyncImage(url: url) { image in
-                        image.resizable().scaledToFit()
-                    } placeholder: {
-                        Image(systemName: "football.fill")
-                    }
-                    .frame(width: 32, height: 32)
-                }
+                TeamMark(
+                    logoURL: logo,
+                    abbreviation: name,
+                    rank: rank,
+                    size: 32,
+                    showsAbbreviationFallback: false
+                )
                 Text(name)
                     .font(.subheadline.weight(.semibold))
                 Text(caption)
@@ -130,7 +157,7 @@ struct GamePickRow: View {
         }
         .disabled(isDisabled)
         .foregroundStyle(PickemsColors.textPrimary)
-        .accessibilityLabel("\(caption) \(name)")
+        .accessibilityLabel("\(caption) \(TeamDisplay.rankedLabel(abbreviation: name, rank: rank))")
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         .accessibilityHint(
             isDisabled

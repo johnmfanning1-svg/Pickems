@@ -6,6 +6,7 @@ struct LeaguePickemsBoard: View {
     let games: [SlateGame]
     let picksByUserId: [String: UserPick]
     var liveCards: [String: ESPNLiveGameCard] = [:]
+    var teamRanks: TeamRankLookup = .empty
     var currentUserId: String?
 
     private let gameColumnWidth: CGFloat = 132
@@ -120,8 +121,18 @@ struct LeaguePickemsBoard: View {
     private func gameLabel(_ game: SlateGame) -> some View {
         let live = liveCards[game.espnEventId]
         let status = live?.status ?? game.status
+        let awayRank = live?.awayCuratedRank ?? teamRanks.rank(for: game.awayTeamId)
+        let homeRank = live?.homeCuratedRank ?? teamRanks.rank(for: game.homeTeamId)
         return VStack(alignment: .leading, spacing: 2) {
-            Text("\(game.awayTeamAbbreviation) \(game.matchupSeparator) \(game.homeTeamAbbreviation)")
+            Text(
+                TeamDisplay.matchupLabel(
+                    awayAbbreviation: game.awayTeamAbbreviation,
+                    awayRank: awayRank,
+                    homeAbbreviation: game.homeTeamAbbreviation,
+                    homeRank: homeRank,
+                    separator: game.matchupSeparator
+                )
+            )
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(PickemsColors.textPrimary)
             Text(game.spreadLabel(for: game.spreadTeamId))

@@ -265,6 +265,31 @@ struct ESPNServiceTests {
         #expect(card.userPickTeamAbbreviation == "HOM")
         #expect(card.matches(.groupSlate))
         #expect(card.matches(.myPicks))
+        #expect(card.homeCuratedRank == nil)
+        #expect(card.awayCuratedRank == nil)
+        #expect(!card.isTop25)
+    }
+
+    @Test func cardFromSlateAppliesRankLookup() {
+        let slate = makeSlate(id: "firestore-1", espnEventId: "401856766")
+        let ranks = TeamRankLookup(ranksByTeamId: ["home": 7, "away": 19])
+        let card = ESPNService.card(from: slate, userPicks: [:], ranks: ranks)
+        #expect(card.homeCuratedRank == 7)
+        #expect(card.awayCuratedRank == 19)
+        #expect(card.isTop25)
+        #expect(card.homeTeamId == "home")
+        #expect(card.awayTeamId == "away")
+    }
+
+    @Test func liveCardPreservesNumericRanksAndTreats99AsNil() {
+        let ranked = makeGame(homeRank: 3, awayRank: 11)
+        #expect(ranked.homeCuratedRank == 3)
+        #expect(ranked.awayCuratedRank == 11)
+        #expect(ranked.isTop25)
+
+        let unranked = makeGame(homeRank: nil, awayRank: nil)
+        #expect(unranked.homeCuratedRank == nil)
+        #expect(!unranked.isTop25)
     }
 
     private func makeSlate(id: String, espnEventId: String) -> SlateGame {

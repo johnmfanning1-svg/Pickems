@@ -9,6 +9,7 @@ final class PicksViewModel {
     var espnGames: [ESPNGame] = []
     var isLoadingGames = false
     var livePickCards: [String: ESPNLiveGameCard] = [:]
+    var teamRanks: TeamRankLookup = .empty
     var showConfirmSubmit = false
     var showConfirmNominations = false
     var spreadEditGame: SlateGame?
@@ -39,6 +40,7 @@ final class PicksViewModel {
         selectionBrowseIntent = .own
         espnGames = []
         livePickCards = [:]
+        teamRanks = .empty
     }
 
     func loadWeek(appState: AppState) async {
@@ -172,8 +174,10 @@ final class PicksViewModel {
                     seasonType: weekInfo.seasonType
                 ).matching(seasonYear: app.seasonYear, appWeekNumber: app.weekNumber)
             }
+            teamRanks = TeamRankLookup(games: espnGames)
         } catch {
             espnGames = []
+            teamRanks = .empty
             UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
         }
     }
@@ -573,9 +577,15 @@ final class PicksViewModel {
                 slateGames: appState.pickService.slateGames
             )
             livePickCards = Dictionary(uniqueKeysWithValues: cards.map { ($0.espnEventId, $0) })
+            teamRanks = teamRanks.merging(TeamRankLookup(cards: cards))
         } catch {
             // Live refresh is best-effort during locked weeks.
         }
+    }
+
+    func ensureTeamRanks(appState: AppState) async {
+        guard teamRanks.isEmpty else { return }
+        await loadESPNGames(appState: appState)
     }
 }
 

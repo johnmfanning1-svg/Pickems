@@ -52,7 +52,18 @@ struct CommissionerManageSelectionsSheet: View {
                     ForEach(nominations) { nom in
                         PickemsCard {
                             VStack(alignment: .leading, spacing: 10) {
-                                Text("\(nom.awayTeamName) @ \(nom.homeTeamName)")
+                                Text(
+                                    TeamDisplay.matchupLabel(
+                                        awayAbbreviation: nom.awayTeamName,
+                                        awayRank: nom.awayTeamId.flatMap {
+                                            appState.picksViewModel.teamRanks.rank(for: $0)
+                                        },
+                                        homeAbbreviation: nom.homeTeamName,
+                                        homeRank: nom.homeTeamId.flatMap {
+                                            appState.picksViewModel.teamRanks.rank(for: $0)
+                                        }
+                                    )
+                                )
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(PickemsColors.textPrimary)
                                 HStack {
@@ -96,6 +107,9 @@ struct CommissionerManageSelectionsSheet: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Close") { dismiss() }
             }
+        }
+        .task {
+            await appState.picksViewModel.ensureTeamRanks(appState: appState)
         }
         .sheet(isPresented: $showBrowse) {
             GameBrowseView(

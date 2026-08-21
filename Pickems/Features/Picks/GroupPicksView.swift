@@ -119,6 +119,7 @@ struct GroupPicksView: View {
         .task(id: "\(appState.groupService.selectedGroup?.id ?? "")-\(week?.id ?? "")-\(week?.status.rawValue ?? "")") {
             await appState.syncSelectedWeek()
             await refreshAllPicks()
+            await appState.picksViewModel.ensureTeamRanks(appState: appState)
             if showsPickemsBoard, let week {
                 appState.picksViewModel.startLiveRefresh(week: week, appState: appState)
             }
@@ -152,6 +153,7 @@ struct GroupPicksView: View {
                     games: slateGames.sortedByKickoff,
                     picksByUserId: picksByUserId,
                     liveCards: appState.picksViewModel.livePickCards,
+                    teamRanks: appState.picksViewModel.teamRanks,
                     currentUserId: currentUserId
                 )
             } else {
@@ -353,7 +355,13 @@ struct GroupPicksView: View {
                     .foregroundStyle(PickemsColors.textSecondary)
                     .padding(.horizontal, 10)
                 ForEach(slateGames) { game in
-                    PickResultRow(game: game, pickedTeamId: pick?.picks[game.id], showSpread: true)
+                    PickResultRow(
+                        game: game,
+                        pickedTeamId: pick?.picks[game.id],
+                        showSpread: true,
+                        homeRank: appState.picksViewModel.teamRanks.rank(for: game.homeTeamId),
+                        awayRank: appState.picksViewModel.teamRanks.rank(for: game.awayTeamId)
+                    )
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                 }
@@ -397,7 +405,7 @@ struct GroupPicksView: View {
                     PickemsCard {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("\(nom.awayTeamAbbreviation ?? String(nom.awayTeamName.prefix(4))) @ \(nom.homeTeamAbbreviation ?? String(nom.homeTeamName.prefix(4)))")
+                                Text(nominationMatchupLabel(nom))
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(PickemsColors.textPrimary)
                                 Text(nominationSpreadLabel(nom))
@@ -439,6 +447,18 @@ struct GroupPicksView: View {
                 .padding(.horizontal, 6)
             }
         }
+    }
+
+    private func nominationMatchupLabel(_ nom: Nomination) -> String {
+        let away = nom.awayTeamAbbreviation ?? String(nom.awayTeamName.prefix(4))
+        let home = nom.homeTeamAbbreviation ?? String(nom.homeTeamName.prefix(4))
+        let ranks = appState.picksViewModel.teamRanks
+        return TeamDisplay.matchupLabel(
+            awayAbbreviation: away,
+            awayRank: nom.awayTeamId.flatMap { ranks.rank(for: $0) },
+            homeAbbreviation: home,
+            homeRank: nom.homeTeamId.flatMap { ranks.rank(for: $0) }
+        )
     }
 
     private func nominationSpreadLabel(_ nom: Nomination) -> String {

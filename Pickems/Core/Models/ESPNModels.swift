@@ -136,9 +136,11 @@ struct CFBWeekInfo: Equatable {
 struct ESPNLiveGameCard: Identifiable, Equatable {
     let id: String
     let espnEventId: String
+    let awayTeamId: String?
     let awayTeamName: String
     let awayTeamAbbreviation: String
     let awayTeamLogoURL: String?
+    let homeTeamId: String?
     let homeTeamName: String
     let homeTeamAbbreviation: String
     let homeTeamLogoURL: String?
@@ -149,7 +151,9 @@ struct ESPNLiveGameCard: Identifiable, Equatable {
     let statusDetail: String
     let kickoff: Date
     let isSlateGame: Bool
-    let isTop25: Bool
+    /// ESPN curated poll rank (1...25). `nil` when unranked.
+    let homeCuratedRank: Int?
+    let awayCuratedRank: Int?
     let homeConferenceId: String?
     let awayConferenceId: String?
     var broadcastLabel: String? = nil
@@ -162,6 +166,14 @@ struct ESPNLiveGameCard: Identifiable, Equatable {
     }
 
     var hasUserPick: Bool { userPickTeamAbbreviation != nil || pickResult != nil }
+
+    var isTop25: Bool { homeCuratedRank != nil || awayCuratedRank != nil }
+
+    func curatedRank(forTeamId teamId: String) -> Int? {
+        if teamId == homeTeamId { return homeCuratedRank }
+        if teamId == awayTeamId { return awayCuratedRank }
+        return nil
+    }
 
     func matches(_ filter: HomeScoreboardFilter) -> Bool {
         switch filter {

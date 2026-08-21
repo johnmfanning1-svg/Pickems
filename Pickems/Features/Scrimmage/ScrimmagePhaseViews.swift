@@ -510,15 +510,13 @@ struct ScrimmageScoreCard: View {
     private func teamColumn(abbreviation: String, logo: String?, score: Int?, teamId: String) -> some View {
         let isPicked = pickedTeamId == teamId
         return VStack(spacing: 6) {
-            if let logo, let url = URL(string: logo) {
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFit()
-                } placeholder: {
-                    Image(systemName: "football.fill")
-                }
-                .frame(width: 28, height: 28)
-                .accessibilityHidden(true)
-            }
+            TeamMark(
+                logoURL: logo,
+                abbreviation: abbreviation,
+                rank: nil,
+                size: 28,
+                showsAbbreviationFallback: false
+            )
 
             Text(abbreviation)
                 .font(.subheadline.weight(.semibold))

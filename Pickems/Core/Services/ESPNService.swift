@@ -164,9 +164,11 @@ actor ESPNService {
             return ESPNLiveGameCard(
                 id: game.espnEventId,
                 espnEventId: game.espnEventId,
+                awayTeamId: game.awayTeamId,
                 awayTeamName: game.awayTeamName,
                 awayTeamAbbreviation: game.awayTeamAbbreviation,
                 awayTeamLogoURL: game.awayTeamLogoURL,
+                homeTeamId: game.homeTeamId,
                 homeTeamName: game.homeTeamName,
                 homeTeamAbbreviation: game.homeTeamAbbreviation,
                 homeTeamLogoURL: game.homeTeamLogoURL,
@@ -179,7 +181,8 @@ actor ESPNService {
                 statusDetail: statusDetail(for: game),
                 kickoff: game.kickoff,
                 isSlateGame: isSlate,
-                isTop25: game.isTop25,
+                homeCuratedRank: game.homeCuratedRank,
+                awayCuratedRank: game.awayCuratedRank,
                 homeConferenceId: game.homeConferenceId,
                 awayConferenceId: game.awayConferenceId,
                 broadcastLabel: game.broadcastLabel,
@@ -189,10 +192,12 @@ actor ESPNService {
             )
         }
 
+        let ranks = TeamRankLookup(games: espnGames)
+
         // Slate games missing from this ESPN week still belong on Group / My Picks.
         let presentIds = Set(cards.map(\.espnEventId))
         for slate in slateGames where !presentIds.contains(slate.espnEventId) {
-            cards.append(Self.card(from: slate, userPicks: userPicks))
+            cards.append(Self.card(from: slate, userPicks: userPicks, ranks: ranks))
         }
 
         return cards.sorted { $0.kickoff < $1.kickoff }
@@ -228,7 +233,11 @@ actor ESPNService {
         return nil
     }
 
-    nonisolated static func card(from slate: SlateGame, userPicks: [String: String]) -> ESPNLiveGameCard {
+    nonisolated static func card(
+        from slate: SlateGame,
+        userPicks: [String: String],
+        ranks: TeamRankLookup = .empty
+    ) -> ESPNLiveGameCard {
         let pickedTeamId = resolvedPickedTeamId(
             espnEventId: slate.espnEventId,
             espnGameId: slate.id,
@@ -268,9 +277,11 @@ actor ESPNService {
         return ESPNLiveGameCard(
             id: slate.espnEventId,
             espnEventId: slate.espnEventId,
+            awayTeamId: slate.awayTeamId,
             awayTeamName: slate.awayTeamName,
             awayTeamAbbreviation: slate.awayTeamAbbreviation,
             awayTeamLogoURL: slate.awayTeamLogoURL,
+            homeTeamId: slate.homeTeamId,
             homeTeamName: slate.homeTeamName,
             homeTeamAbbreviation: slate.homeTeamAbbreviation,
             homeTeamLogoURL: slate.homeTeamLogoURL,
@@ -286,7 +297,8 @@ actor ESPNService {
             statusDetail: statusDetail,
             kickoff: slate.kickoff,
             isSlateGame: true,
-            isTop25: false,
+            homeCuratedRank: ranks.rank(for: slate.homeTeamId),
+            awayCuratedRank: ranks.rank(for: slate.awayTeamId),
             homeConferenceId: nil,
             awayConferenceId: nil,
             broadcastLabel: slate.broadcastLabel,

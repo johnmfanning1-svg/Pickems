@@ -8,7 +8,12 @@ struct PickHistoryView: View {
             if let pick = appState.pickService.userPick {
                 Section {
                     ForEach(appState.pickService.slateGames) { game in
-                        PickResultRow(game: game, pickedTeamId: pick.picks[game.id])
+                        PickResultRow(
+                            game: game,
+                            pickedTeamId: pick.picks[game.id],
+                            homeRank: appState.picksViewModel.teamRanks.rank(for: game.homeTeamId),
+                            awayRank: appState.picksViewModel.teamRanks.rank(for: game.awayTeamId)
+                        )
                     }
                 } header: {
                     Text("Your Picks")
@@ -37,6 +42,9 @@ struct PickHistoryView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 HelpInfoButton(topic: PickemsHelp.spreadPicks, size: .body)
             }
+        }
+        .task {
+            await appState.picksViewModel.ensureTeamRanks(appState: appState)
         }
     }
 }

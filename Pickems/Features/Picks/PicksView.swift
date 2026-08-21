@@ -258,6 +258,7 @@ struct PicksView: View {
     private func reloadPicks() async {
         await appState.refreshLeagueData()
         await viewModel.loadWeek(appState: appState)
+        await viewModel.ensureTeamRanks(appState: appState)
     }
 
     // MARK: - Phase content
@@ -494,6 +495,9 @@ struct PicksView: View {
                     game: game,
                     selectedTeamId: viewModel.draftPicks[game.id],
                     isDisabled: appState.pickService.userPick?.isLocked == true || picksClosed,
+                    liveCard: viewModel.livePickCards[game.espnEventId],
+                    homeRank: viewModel.teamRanks.rank(for: game.homeTeamId),
+                    awayRank: viewModel.teamRanks.rank(for: game.awayTeamId),
                     showConfidenceToggle: appState.groupService.selectedGroup?.rules.allowConfidencePick == true
                         && appState.pickService.userPick?.isLocked != true
                         && !picksClosed,
@@ -580,6 +584,8 @@ struct PicksView: View {
                     selectedTeamId: viewModel.draftPicks[game.id],
                     isDisabled: true,
                     liveCard: viewModel.livePickCards[game.espnEventId],
+                    homeRank: viewModel.teamRanks.rank(for: game.homeTeamId),
+                    awayRank: viewModel.teamRanks.rank(for: game.awayTeamId),
                     onSelect: { _ in }
                 )
                 .padding(.horizontal)
@@ -597,6 +603,7 @@ struct PicksView: View {
             if let group = appState.groupService.selectedGroup {
                 await appState.pickService.loadAllPicks(groupId: group.id, weekId: week.id)
             }
+            await viewModel.ensureTeamRanks(appState: appState)
             viewModel.startLiveRefresh(week: week, appState: appState)
         }
         .onDisappear { viewModel.stopLiveRefresh() }

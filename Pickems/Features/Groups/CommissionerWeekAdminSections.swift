@@ -24,6 +24,9 @@ struct CommissionerWeekAdminSections: View {
         slateSection
         pickemsAdminSection
         tiesSection
+            .task {
+                await picksVM.ensureTeamRanks(appState: appState)
+            }
     }
 
     @ViewBuilder
@@ -125,7 +128,15 @@ struct CommissionerWeekAdminSections: View {
             Section {
                 ForEach(games) { game in
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("\(game.awayTeamName) \(game.matchupSeparator) \(game.homeTeamName)")
+                        Text(
+                            TeamDisplay.matchupLabel(
+                                awayAbbreviation: game.awayTeamName,
+                                awayRank: appState.picksViewModel.teamRanks.rank(for: game.awayTeamId),
+                                homeAbbreviation: game.homeTeamName,
+                                homeRank: appState.picksViewModel.teamRanks.rank(for: game.homeTeamId),
+                                separator: game.matchupSeparator
+                            )
+                        )
                             .foregroundStyle(PickemsColors.textPrimary)
                         HStack {
                             Button("Edit Spread") { picksVM.spreadEditGame = game }

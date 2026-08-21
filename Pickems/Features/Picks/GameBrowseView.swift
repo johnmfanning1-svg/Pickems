@@ -309,6 +309,7 @@ struct GameBrowseRow: View {
                     teamBadge(
                         abbr: game.awayTeamAbbreviation,
                         logo: game.awayTeamLogoURL,
+                        rank: game.awayCuratedRank,
                         caption: "Away"
                     )
 
@@ -321,6 +322,7 @@ struct GameBrowseRow: View {
                     teamBadge(
                         abbr: game.homeTeamAbbreviation,
                         logo: game.homeTeamLogoURL,
+                        rank: game.homeCuratedRank,
                         caption: "Home"
                     )
                 }
@@ -396,20 +398,9 @@ struct GameBrowseRow: View {
         }
     }
 
-    private func teamBadge(abbr: String, logo: String?, caption: String) -> some View {
+    private func teamBadge(abbr: String, logo: String?, rank: Int?, caption: String) -> some View {
         VStack(spacing: 2) {
-            if let logo, let url = URL(string: logo) {
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFit()
-                } placeholder: {
-                    Text(abbr).font(.caption.bold())
-                }
-                .frame(width: 36, height: 36)
-            } else {
-                Text(abbr)
-                    .font(.headline)
-                    .foregroundStyle(PickemsColors.textPrimary)
-            }
+            TeamMark(logoURL: logo, abbreviation: abbr, rank: rank, size: 36)
             Text(caption)
                 .font(.caption2)
                 .foregroundStyle(PickemsColors.textSecondary)
