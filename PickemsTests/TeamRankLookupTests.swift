@@ -61,6 +61,18 @@ struct TeamRankLookupTests {
         #expect(TeamDisplay.rankedLabel(abbreviation: "ALA", rank: 99) == "ALA")
     }
 
+    @Test func logoRankTextMatchesESPNScoresList() {
+        #expect(TeamDisplay.logoRankText(nil) == nil)
+        #expect(TeamDisplay.logoRankText(1) == "1")
+        #expect(TeamDisplay.logoRankText(14) == "14")
+        #expect(TeamDisplay.logoRankText(25) == "25")
+        #expect(TeamDisplay.logoRankText(0) == nil)
+        #expect(TeamDisplay.logoRankText(26) == nil)
+        #expect(TeamDisplay.logoRankText(99) == nil)
+        #expect(TeamDisplay.top25Rank(14) == 14)
+        #expect(TeamDisplay.top25Rank(nil) == nil)
+    }
+
     @Test func matchupLabelPrefixesOnlyRankedSides() {
         #expect(
             TeamDisplay.matchupLabel(

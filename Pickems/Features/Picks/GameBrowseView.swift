@@ -405,6 +405,6 @@ struct GameBrowseRow: View {
                 .font(.caption2)
                 .foregroundStyle(PickemsColors.textSecondary)
         }
-        .frame(width: 44)
+        .frame(minWidth: 44)
     }
 }

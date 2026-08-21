@@ -58,9 +58,20 @@ struct TeamRankLookup: Equatable, Sendable {
 }
 
 enum TeamDisplay {
+    /// ESPN curated poll rank shown on logos and labels. `nil` when unranked.
+    static func top25Rank(_ rank: Int?) -> Int? {
+        guard let rank, (1...25).contains(rank) else { return nil }
+        return rank
+    }
+
+    /// ESPN scores-list rank beside a logo (`14`). No `#`; `nil` when unranked.
+    static func logoRankText(_ rank: Int?) -> String? {
+        top25Rank(rank).map(String.init)
+    }
+
     /// Ranked abbreviation for text-only surfaces (`#5 ALA`). Unranked stays plain.
     static func rankedLabel(abbreviation: String, rank: Int?) -> String {
-        guard let rank, (1...25).contains(rank) else { return abbreviation }
+        guard let rank = top25Rank(rank) else { return abbreviation }
         return "#\(rank) \(abbreviation)"
     }
 
