@@ -5,7 +5,10 @@ import Foundation
 final class ScrimmageEngine {
     private(set) var phase: ScrimmagePhase = .intro
     private(set) var games: [SlateGame]
+    /// ATS Pickems keyed by game id.
     private(set) var draftPicks: [String: String] = [:]
+    /// Optional 2x confidence game (product: one confidence Pickem per week).
+    private(set) var confidenceGameId: String?
     private(set) var standings: [ScrimmageStanding] = []
     let userDisplayName: String
 
@@ -15,9 +18,12 @@ final class ScrimmageEngine {
     private static let liveTickCount = 5
     private static let userStandingId = "scrimmage-user"
 
-    var allPicksMade: Bool {
+    var allPickemsMade: Bool {
         games.allSatisfy { draftPicks[$0.id] != nil }
     }
+
+    /// Legacy alias used by older call sites / tests.
+    var allPicksMade: Bool { allPickemsMade }
 
     var userRecord: (wins: Int, losses: Int) {
         guard let user = standings.first(where: \.isUser) else { return (0, 0) }
@@ -33,6 +39,8 @@ final class ScrimmageEngine {
     func advance() {
         switch phase {
         case .intro:
+            phase = .selection
+        case .selection:
             phase = .picking
         case .results:
             phase = .standings
@@ -43,20 +51,33 @@ final class ScrimmageEngine {
         }
     }
 
+    /// Selects or clears a Pickem. Pass an empty `teamId` to clear (matches `GamePickRow`).
     func selectTeam(gameId: String, teamId: String) {
         guard phase == .picking else { return }
         guard games.contains(where: { $0.id == gameId }) else { return }
-        draftPicks[gameId] = teamId
+        if teamId.isEmpty {
+            draftPicks.removeValue(forKey: gameId)
+            if confidenceGameId == gameId {
+                confidenceGameId = nil
+            }
+        } else {
+            draftPicks[gameId] = teamId
+        }
     }
 
-    func submitPicks() {
-        guard phase == .picking, allPicksMade else { return }
+    func toggleConfidence(gameId: String) {
+        guard phase == .picking else { return }
+        guard draftPicks[gameId] != nil else { return }
+        confidenceGameId = confidenceGameId == gameId ? nil : gameId
+    }
+
+    func submitPickems() {
+        guard phase == .picking, allPickemsMade else { return }
 
         var scores: [String: (home: Int, away: Int)] = [:]
         for (index, game) in games.enumerated() {
             guard let pickedTeamId = draftPicks[game.id] else { continue }
             let pair = Self.riggedScores(for: game, pickedTeamId: pickedTeamId, gameIndex: index)
-            // Favorite must cover by more than |spread|; underdog wins outright — both guaranteed by construction.
             assert(game.coveredTeamId(homeScore: pair.home, awayScore: pair.away) == pickedTeamId)
             scores[game.id] = pair
         }
@@ -64,6 +85,9 @@ final class ScrimmageEngine {
         standings = Self.makeStandings(userDisplayName: userDisplayName, slateSize: games.count)
         phase = .locked
     }
+
+    /// Legacy alias.
+    func submitPicks() { submitPickems() }
 
     func runLiveSimulation() async {
         guard phase == .locked else { return }
@@ -109,14 +133,13 @@ final class ScrimmageEngine {
     func reset() {
         phase = .intro
         draftPicks = [:]
+        confidenceGameId = nil
         standings = []
         finalScores = [:]
         games = ScrimmageData.makeGames()
     }
 
-    /// Builds final scores so the user's pick always covers.
-    /// - Favorite pick: win by `ceil(|spread|) + 3` (never a push with half-point lines).
-    /// - Underdog pick: win outright by a few points (always covers).
+    /// Builds final scores so the user's Pickem always covers.
     private static func riggedScores(
         for game: SlateGame,
         pickedTeamId: String,

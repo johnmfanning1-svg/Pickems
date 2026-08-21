@@ -19,6 +19,7 @@ struct ProfileView: View {
     @State private var managementError: String?
     @State private var presentedHelp: HelpTopic?
     @State private var isRefreshing = false
+    @State private var showScrimmage = false
 
     var body: some View {
         NavigationStack {
@@ -29,6 +30,7 @@ struct ProfileView: View {
                     sharingSection
                 }
                 leaguesSection
+                howToPlaySection
                 legalSection
                 accountActionsSection
             }
@@ -84,6 +86,10 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showDeleteAccountSheet) {
                 DeleteAccountConfirmSheet()
+                    .pickemsEnvironment(appState)
+            }
+            .fullScreenCover(isPresented: $showScrimmage) {
+                ScrimmageView(context: .replay)
                     .pickemsEnvironment(appState)
             }
             // Prefer `.alert` over `.confirmationDialog` on Profile: on iPad,
@@ -439,6 +445,23 @@ struct ProfileView: View {
                     presentedTopic: $presentedHelp
                 )
             }
+        }
+    }
+
+    private var howToPlaySection: some View {
+        Section {
+            Button {
+                showScrimmage = true
+            } label: {
+                Label("Play a Scrimmage", systemImage: "figure.american.football")
+            }
+            .buttonStyle(.borderless)
+            .listRowBackground(PickemsColors.cardBackground)
+            .accessibilityHint("Opens a practice week that teaches Selections and Pickems")
+        } header: {
+            Text("How to Play")
+        } footer: {
+            Text("Practice Selections → Pickems with fake games. Results never count.")
         }
     }
 

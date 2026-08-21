@@ -136,6 +136,12 @@ struct LiveScoreboardSection: View {
     var help: HelpTopic? = nil
     /// When non-nil, shows filter chips and filters `games` before display.
     var scoreboardFilter: Binding<HomeScoreboardFilter>? = nil
+    /// Optional week picker (replaces the section help “i” when provided).
+    var seasonWeeks: [CFBSeasonWeek] = []
+    var selectedWeek: CFBSeasonWeek? = nil
+    var weekMenuTitle: String = "This Week"
+    var onSelectWeek: ((CFBSeasonWeek?) -> Void)? = nil
+    var showsRefreshSpinner: Bool = false
 
     @Environment(\.themePalette) private var theme
 
@@ -149,9 +155,17 @@ struct LiveScoreboardSection: View {
         HomeScoreboardDisplay.games(filteredGames, filter: scoreboardFilter?.wrappedValue)
     }
 
+    private var usesWeekMenu: Bool {
+        onSelectWeek != nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            PickemsSectionHeader(title: title, subtitle: subtitle, help: help)
+            if usesWeekMenu {
+                scoreboardHeaderWithWeekMenu
+            } else {
+                PickemsSectionHeader(title: title, subtitle: subtitle, help: help)
+            }
 
             if scoreboardFilter != nil {
                 filterBar
@@ -170,6 +184,74 @@ struct LiveScoreboardSection: View {
                 }
             }
         }
+    }
+
+    private var scoreboardHeaderWithWeekMenu: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(PickemsColors.textPrimary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 8)
+            if showsRefreshSpinner {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(theme.accent)
+                    .accessibilityLabel("Refreshing scores")
+            }
+            weekMenu
+        }
+        .padding(.horizontal)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var weekMenu: some View {
+        Menu {
+            Button {
+                onSelectWeek?(nil)
+            } label: {
+                if selectedWeek == nil {
+                    Label("Current week", systemImage: "checkmark")
+                } else {
+                    Text("Current week")
+                }
+            }
+            Divider()
+            ForEach(seasonWeeks) { week in
+                Button {
+                    onSelectWeek?(week)
+                } label: {
+                    let label = "Week \(week.weekNumber) · \(week.dateRangeLabel)"
+                    if selectedWeek?.id == week.id {
+                        Label(label, systemImage: "checkmark")
+                    } else {
+                        Text(label)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(weekMenuTitle)
+                    .font(.subheadline.weight(.semibold))
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(theme.accent)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(PickemsColors.cardBackground)
+            .clipShape(Capsule())
+        }
+        .accessibilityLabel("Select CFB week")
+        .accessibilityValue(weekMenuTitle)
+        .accessibilityHint("Choose which week’s games to show")
     }
 
     private var filterBar: some View {

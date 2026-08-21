@@ -4,10 +4,18 @@ import Testing
 
 @MainActor
 struct ScrimmageEngineTests {
+    /// Advances through intro → selection → picking.
+    private func enterPicking(_ engine: ScrimmageEngine) {
+        engine.advance()
+        #expect(engine.phase == .selection)
+        engine.advance()
+        #expect(engine.phase == .picking)
+    }
+
     @Test func allSixteenPickCombinationsYieldFourAndOhWithNoPushes() async {
         for mask in 0..<16 {
             let engine = ScrimmageEngine(userDisplayName: "Tester", liveTickInterval: 0)
-            engine.advance()
+            enterPicking(engine)
 
             for (index, game) in engine.games.enumerated() {
                 let pickHome = (mask & (1 << index)) != 0
@@ -17,7 +25,7 @@ struct ScrimmageEngineTests {
                 )
             }
 
-            engine.submitPicks()
+            engine.submitPickems()
             await engine.runLiveSimulation()
 
             #expect(engine.userRecord.wins == 4)
@@ -39,11 +47,11 @@ struct ScrimmageEngineTests {
 
     @Test func standingsPutUserFirstAboveBotsWithExpectedRecords() {
         let engine = ScrimmageEngine(userDisplayName: "Alex", liveTickInterval: 0)
-        engine.advance()
+        enterPicking(engine)
         for game in engine.games {
             engine.selectTeam(gameId: game.id, teamId: game.homeTeamId)
         }
-        engine.submitPicks()
+        engine.submitPickems()
 
         #expect(engine.standings.count == 4)
         #expect(engine.standings[0].isUser)
@@ -66,16 +74,18 @@ struct ScrimmageEngineTests {
         #expect(engine.phase == .intro)
 
         engine.advance()
+        #expect(engine.phase == .selection)
+
+        engine.advance()
         #expect(engine.phase == .picking)
 
-        // advance() is a no-op while picking / locked / live
         engine.advance()
         #expect(engine.phase == .picking)
 
         for game in engine.games {
             engine.selectTeam(gameId: game.id, teamId: game.awayTeamId)
         }
-        engine.submitPicks()
+        engine.submitPickems()
         #expect(engine.phase == .locked)
 
         engine.advance()
@@ -96,11 +106,11 @@ struct ScrimmageEngineTests {
 
     @Test func advanceIsNoOpDuringLive() async {
         let engine = ScrimmageEngine(userDisplayName: "Tester", liveTickInterval: 60)
-        engine.advance()
+        enterPicking(engine)
         for game in engine.games {
             engine.selectTeam(gameId: game.id, teamId: game.homeTeamId)
         }
-        engine.submitPicks()
+        engine.submitPickems()
 
         let sim = Task { await engine.runLiveSimulation() }
         var sawLive = false
@@ -120,11 +130,11 @@ struct ScrimmageEngineTests {
 
     @Test func resetRestoresIntroEmptyPicksAndUnscoredGames() async {
         let engine = ScrimmageEngine(userDisplayName: "Tester", liveTickInterval: 0)
-        engine.advance()
+        enterPicking(engine)
         for game in engine.games {
             engine.selectTeam(gameId: game.id, teamId: game.homeTeamId)
         }
-        engine.submitPicks()
+        engine.submitPickems()
         await engine.runLiveSimulation()
         engine.advance()
 
@@ -132,6 +142,7 @@ struct ScrimmageEngineTests {
 
         #expect(engine.phase == .intro)
         #expect(engine.draftPicks.isEmpty)
+        #expect(engine.confidenceGameId == nil)
         #expect(engine.standings.isEmpty)
         #expect(engine.userRecord == (0, 0))
         #expect(engine.games.count == 4)
@@ -143,13 +154,13 @@ struct ScrimmageEngineTests {
         }
     }
 
-    @Test func submitPicksDoesNothingWhenIncomplete() {
+    @Test func submitPickemsDoesNothingWhenIncomplete() {
         let engine = ScrimmageEngine(userDisplayName: "Tester", liveTickInterval: 0)
-        engine.advance()
+        enterPicking(engine)
         engine.selectTeam(gameId: engine.games[0].id, teamId: engine.games[0].homeTeamId)
-        #expect(!engine.allPicksMade)
+        #expect(!engine.allPickemsMade)
 
-        engine.submitPicks()
+        engine.submitPickems()
 
         #expect(engine.phase == .picking)
         #expect(engine.standings.isEmpty)
@@ -160,15 +171,39 @@ struct ScrimmageEngineTests {
         }
     }
 
-    @Test func selectTeamIgnoredOutsidePicking() {
+    @Test func selectTeamIgnoredOutsidePickingAndClearsOnEmpty() {
         let engine = ScrimmageEngine(userDisplayName: "Tester", liveTickInterval: 0)
         let game = engine.games[0]
         engine.selectTeam(gameId: game.id, teamId: game.homeTeamId)
         #expect(engine.draftPicks.isEmpty)
 
         engine.advance()
+        #expect(engine.phase == .selection)
+        engine.selectTeam(gameId: game.id, teamId: game.homeTeamId)
+        #expect(engine.draftPicks.isEmpty)
+
+        engine.advance()
         engine.selectTeam(gameId: game.id, teamId: game.homeTeamId)
         #expect(engine.draftPicks[game.id] == game.homeTeamId)
+
+        engine.selectTeam(gameId: game.id, teamId: "")
+        #expect(engine.draftPicks[game.id] == nil)
+    }
+
+    @Test func confidenceToggleRequiresPickem() {
+        let engine = ScrimmageEngine(userDisplayName: "Tester", liveTickInterval: 0)
+        enterPicking(engine)
+        let game = engine.games[0]
+
+        engine.toggleConfidence(gameId: game.id)
+        #expect(engine.confidenceGameId == nil)
+
+        engine.selectTeam(gameId: game.id, teamId: game.homeTeamId)
+        engine.toggleConfidence(gameId: game.id)
+        #expect(engine.confidenceGameId == game.id)
+
+        engine.toggleConfidence(gameId: game.id)
+        #expect(engine.confidenceGameId == nil)
     }
 
     @Test func scrimmageDataHasHalfPointSpreadsAndThreeBots() {

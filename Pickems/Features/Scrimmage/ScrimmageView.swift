@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Full-screen Scrimmage tutorial: a local, simulated practice week that
-/// teaches the pick'em rhythm without touching real records or Firestore.
+/// teaches Selections → Pickems without touching real records or Firestore.
 struct ScrimmageView: View {
     let context: ScrimmageContext
 
@@ -85,16 +85,27 @@ struct ScrimmageView: View {
                 }
             }
 
+        case .selection:
+            ScrimmageSelectionPhase(games: engine.games) {
+                withAnimation {
+                    engine.advance()
+                }
+            }
+
         case .picking:
             ScrimmagePickingPhase(
                 games: engine.games,
                 draftPicks: engine.draftPicks,
-                allPicksMade: engine.allPicksMade,
+                confidenceGameId: engine.confidenceGameId,
+                allPickemsMade: engine.allPickemsMade,
                 onSelect: { gameId, teamId in
                     engine.selectTeam(gameId: gameId, teamId: teamId)
                 },
+                onConfidenceToggle: { gameId in
+                    engine.toggleConfidence(gameId: gameId)
+                },
                 onSubmit: {
-                    engine.submitPicks()
+                    engine.submitPickems()
                     Task { await engine.runLiveSimulation() }
                 }
             )
@@ -153,8 +164,7 @@ struct ScrimmageView: View {
             PickemsHaptics.success()
         case .standings:
             PickemsHaptics.lightImpact()
-        case .intro, .picking, .live, .celebration:
-            // Celebration plays its own success haptic with the trophy entrance.
+        case .intro, .selection, .picking, .live, .celebration:
             break
         }
     }

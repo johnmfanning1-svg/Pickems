@@ -4,18 +4,20 @@ import Foundation
 /// feature reads from or writes to Firestore, so scrimmage results can
 /// never affect real records, standings, careers, or trophies.
 
-/// The phases of the scrimmage flow, mirroring a real week's lifecycle
-/// (picking → locked → live → scored) with tutorial framing around it.
+/// Tutorial phases that teach the real week lifecycle:
+/// Selection → Pickems → Locked (games live) → Scored.
 enum ScrimmagePhase: Int, CaseIterable, Equatable {
-    /// Welcome + explanation of how a week works.
+    /// Welcome + how a week works (Selections tab, then Pickems tab).
     case intro
-    /// User makes ATS picks on the fake slate (mirrors `WeekStatus.picking`).
+    /// Brief beat: slate is already set (mirrors `WeekStatus.selection` done).
+    case selection
+    /// User makes ATS Pickems on the slate (mirrors `WeekStatus.picking`).
     case picking
-    /// Picks are in; brief "locked" beat (mirrors `WeekStatus.locked`).
+    /// Pickems are final (mirrors `WeekStatus.locked`).
     case locked
-    /// Games play out with animated live scores over a few seconds.
+    /// Games animate as `GameStatus.inProgress` while the week stays locked.
     case live
-    /// Week scored: user's rigged 4-0 record revealed per game.
+    /// Week scored: covers revealed (mirrors `WeekStatus.scored`).
     case results
     /// Leaderboard with the user on top.
     case standings
@@ -45,7 +47,7 @@ struct ScrimmageStanding: Identifiable, Equatable {
 struct ScrimmageBot: Identifiable, Equatable {
     let id: String
     let displayName: String
-    /// How many of the user's picks this bot agrees with (0...slate size).
+    /// How many of the user's Pickems this bot agrees with (0...slate size).
     /// Because the user always goes 4-0, a bot's record is
     /// `agreesWithUserCount` wins and `slateSize - agreesWithUserCount` losses.
     let agreesWithUserCount: Int

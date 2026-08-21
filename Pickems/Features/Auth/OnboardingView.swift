@@ -9,6 +9,7 @@ struct OnboardingView: View {
     @State private var localError: String?
     @State private var showCreateWizard = false
     @State private var showFavoriteTeamPicker = false
+    @State private var showScrimmage = false
 
     enum OnboardingMode: String, CaseIterable {
         case join = "Join League"
@@ -41,6 +42,11 @@ struct OnboardingView: View {
                     favoriteTeamSection
 
                     stayOnTimeSection
+
+                    SecondaryButton("Try a Scrimmage first", icon: "figure.american.football") {
+                        showScrimmage = true
+                    }
+                    .accessibilityHint("Practice Selections and Pickems with a fake week before joining")
 
                     Picker("Mode", selection: $mode) {
                         ForEach(OnboardingMode.allCases, id: \.self) { mode in
@@ -85,6 +91,10 @@ struct OnboardingView: View {
             }
             .sheet(isPresented: $showFavoriteTeamPicker) {
                 FavoriteTeamPickerView()
+                    .pickemsEnvironment(appState)
+            }
+            .fullScreenCover(isPresented: $showScrimmage) {
+                ScrimmageView(context: .onboarding)
                     .pickemsEnvironment(appState)
             }
             .onAppear {

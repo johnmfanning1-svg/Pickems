@@ -7,10 +7,10 @@ struct ScrimmageIntroPhase: View {
     @Environment(\.themePalette) private var theme
 
     private let bullets: [(icon: String, title: String, detail: String)] = [
-        ("calendar", "Slate is set", "Your league gets a handful of games each week."),
-        ("hand.tap.fill", "Everyone picks ATS", "Tap the team you think will beat the spread."),
-        ("lock.fill", "Picks lock at kickoff", "Once games start, picks are final."),
-        ("chart.bar.fill", "Wins update standings", "Correct covers move you up the leaderboard."),
+        ("list.bullet.rectangle", "Selections", "Your league chooses this week's games on the Selections tab."),
+        ("hand.tap.fill", "Pickems", "Everyone submits spread Pickems on the Pickems tab."),
+        ("lock.fill", "Locked", "Once games start, Pickems are final — watch live scores."),
+        ("chart.bar.fill", "Scored", "Covers update standings when games go final."),
     ]
 
     var body: some View {
@@ -27,7 +27,7 @@ struct ScrimmageIntroPhase: View {
                     .foregroundStyle(PickemsColors.textPrimary)
                     .multilineTextAlignment(.center)
 
-                Text("A quick practice week so you can learn the rhythm before it counts.")
+                Text("A quick practice week so you learn Selections → Pickems before it counts.")
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -67,8 +67,8 @@ struct ScrimmageIntroPhase: View {
             .padding(.horizontal, -16)
 
             PrimaryButton(
-                title: "Start Picking",
-                accessibilityHint: "Begins the practice picking phase"
+                title: "See Selections",
+                accessibilityHint: "Shows how the weekly slate is built"
             ) {
                 onStart()
             }
@@ -78,35 +78,109 @@ struct ScrimmageIntroPhase: View {
     }
 }
 
-// MARK: - Picking
+// MARK: - Selection (slate already set)
+
+struct ScrimmageSelectionPhase: View {
+    let games: [SlateGame]
+    let onContinue: () -> Void
+    @Environment(\.themePalette) private var theme
+
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack {
+                StatusBadge(text: "Selection", color: theme.accent)
+                Spacer()
+            }
+            .padding(.horizontal)
+
+            ContextualTipBanner(
+                icon: "list.bullet.rectangle",
+                message: "In a real league, members (or the commissioner) choose these games on the Selections tab. Pickems open after the Selection deadline — not just when the slate fills."
+            )
+
+            Text("This week's slate · \(games.count) games")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PickemsColors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+
+            ForEach(games) { game in
+                PickemsCard {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("\(game.awayTeamAbbreviation) \(game.matchupSeparator) \(game.homeTeamAbbreviation)")
+                                .font(.headline)
+                                .foregroundStyle(PickemsColors.textPrimary)
+                            Text(game.kickoffMetaLine)
+                                .font(.caption)
+                                .foregroundStyle(PickemsColors.textSecondary)
+                        }
+                        Spacer()
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(PickemsColors.success)
+                            .accessibilityLabel("Selected")
+                    }
+                }
+                .padding(.horizontal)
+            }
+
+            PrimaryButton(
+                title: "Make Pickems",
+                accessibilityHint: "Opens the Pickems phase against the spread"
+            ) {
+                onContinue()
+            }
+            .padding(.horizontal)
+        }
+        .pickemsAppear()
+    }
+}
+
+// MARK: - Pickems (picking)
 
 struct ScrimmagePickingPhase: View {
     let games: [SlateGame]
     let draftPicks: [String: String]
-    let allPicksMade: Bool
+    let confidenceGameId: String?
+    let allPickemsMade: Bool
     let onSelect: (String, String) -> Void
+    let onConfidenceToggle: (String) -> Void
     let onSubmit: () -> Void
+
+    @State private var showSubmitConfirm = false
 
     private var pickedCount: Int { draftPicks.count }
 
     var body: some View {
         VStack(spacing: 16) {
+            HStack {
+                StatusBadge(text: "Pickems", color: PickemsColors.success)
+                Spacer()
+                Text("Spread Pickems")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+            }
+            .padding(.horizontal)
+
             ContextualTipBanner(
                 icon: "hand.tap.fill",
-                message: "Tap a team you think will beat the spread"
+                message: "Tap a team to pick them against the spread. Tap again to clear — the game stays on the slate."
             )
 
-            Text("\(pickedCount) of \(games.count) picked")
+            Text("\(pickedCount) of \(games.count) Pickems")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(PickemsColors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal)
-                .accessibilityLabel("\(pickedCount) of \(games.count) games picked")
+                .accessibilityLabel("\(pickedCount) of \(games.count) Pickems made")
 
-            ForEach(games) { game in
+            ForEach(Array(games.enumerated()), id: \.element.id) { index, game in
                 GamePickRow(
                     game: game,
                     selectedTeamId: draftPicks[game.id],
+                    showConfidenceToggle: index == 0 && draftPicks[game.id] != nil,
+                    isConfidence: confidenceGameId == game.id,
+                    onConfidenceToggle: { onConfidenceToggle(game.id) },
                     onSelect: { teamId in
                         onSelect(game.id, teamId)
                     }
@@ -115,17 +189,23 @@ struct ScrimmagePickingPhase: View {
             }
 
             PrimaryButton(
-                title: "Submit Picks",
-                accessibilityHint: allPicksMade
-                    ? "Locks your picks and starts the live simulation"
-                    : "Pick every game before submitting"
+                title: "Submit Pickems",
+                accessibilityHint: allPickemsMade
+                    ? "Locks your Pickems and starts the live simulation"
+                    : "Make a Pickem on every game before submitting"
             ) {
-                onSubmit()
+                showSubmitConfirm = true
             }
-            .disabled(!allPicksMade)
-            .opacity(allPicksMade ? 1 : 0.45)
+            .disabled(!allPickemsMade)
+            .opacity(allPickemsMade ? 1 : 0.45)
             .padding(.horizontal)
-            .accessibilityValue(allPicksMade ? "Ready" : "Disabled until all picks are made")
+            .accessibilityValue(allPickemsMade ? "Ready" : "Disabled until all Pickems are made")
+            .alert("Submit your Pickems?", isPresented: $showSubmitConfirm) {
+                Button("Submit") { onSubmit() }
+                Button("Keep Editing", role: .cancel) {}
+            } message: {
+                Text("In a real week you can still edit until lock. Scrimmage moves on once you submit.")
+            }
         }
     }
 }
@@ -140,15 +220,22 @@ struct ScrimmageLivePhase: View {
     var body: some View {
         VStack(spacing: 16) {
             if phase == .locked {
+                HStack {
+                    StatusBadge(text: "Locked", color: PickemsColors.warning)
+                    Spacer()
+                }
+                .padding(.horizontal)
+
                 ContextualTipBanner(
                     icon: "lock.fill",
-                    message: "Picks locked! In a real week this happens at kickoff."
+                    message: "Pickems locked! In a real week this happens at kickoff — then you Watch Live on Home."
                 )
             } else {
                 HStack {
+                    StatusBadge(text: "Locked", color: PickemsColors.warning)
                     StatusBadge(text: "In Progress", color: PickemsColors.warning)
                     Spacer()
-                    Text("Watching scores update…")
+                    Text("Watching scores…")
                         .font(.caption)
                         .foregroundStyle(PickemsColors.textSecondary)
                 }
@@ -181,13 +268,19 @@ struct ScrimmageResultsPhase: View {
 
     var body: some View {
         VStack(spacing: 16) {
+            HStack {
+                StatusBadge(text: "Scored", color: PickemsColors.success)
+                Spacer()
+            }
+            .padding(.horizontal)
+
             VStack(spacing: 8) {
                 Text("You went \(userRecord.wins)-\(userRecord.losses)!")
                     .font(PickemsTypography.display(28))
                     .foregroundStyle(theme.accent)
                     .multilineTextAlignment(.center)
 
-                Text("Every cover counted. Here's how each pick finished.")
+                Text("Every cover counted. Here's how each Pickem finished.")
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -205,7 +298,7 @@ struct ScrimmageResultsPhase: View {
 
             ContextualTipBanner(
                 icon: "icloud.fill",
-                message: "In a real week, a Cloud scoring job updates results automatically when games go final."
+                message: "In a real week, Cloud scoring updates results automatically when games go final."
             )
 
             PrimaryButton(
@@ -361,7 +454,7 @@ struct ScrimmageScoreCard: View {
                     )
 
                     VStack(spacing: 4) {
-                        Text("@")
+                        Text(game.matchupSeparator)
                             .foregroundStyle(PickemsColors.textSecondary)
                         statusLabel
                     }
@@ -377,7 +470,7 @@ struct ScrimmageScoreCard: View {
 
                 HStack {
                     if let pickedTeamId {
-                        Text("Your pick: \(abbreviation(for: pickedTeamId))")
+                        Text("Your Pickem: \(abbreviation(for: pickedTeamId))")
                             .font(.caption)
                             .foregroundStyle(PickemsColors.textSecondary)
                     }
@@ -456,8 +549,9 @@ struct ScrimmageScoreCard: View {
     private var accessibilitySummary: String {
         let awayScore = game.awayScore.map(String.init) ?? "no score"
         let homeScore = game.homeScore.map(String.init) ?? "no score"
-        let pick = pickedTeamId.map { "Your pick \(abbreviation(for: $0))." } ?? ""
+        let pick = pickedTeamId.map { "Your Pickem \(abbreviation(for: $0))." } ?? ""
         let result = showsResult ? " Win." : ""
-        return "\(game.awayTeamAbbreviation) \(awayScore) at \(game.homeTeamAbbreviation) \(homeScore). \(pick)\(result)"
+        let sep = game.matchupSeparator == "vs" ? "versus" : "at"
+        return "\(game.awayTeamAbbreviation) \(awayScore) \(sep) \(game.homeTeamAbbreviation) \(homeScore). \(pick)\(result)"
     }
 }

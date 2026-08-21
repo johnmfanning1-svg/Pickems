@@ -78,7 +78,7 @@ struct HomeView: View {
             }
             .pickemsRefreshable(isRefreshing: $isRefreshing) {
                 await appState.refreshLeagueData()
-                await viewModel.refresh(appState: appState, showLoading: true)
+                await viewModel.refresh(appState: appState, showLoading: viewModel.liveGames.isEmpty)
                 WidgetSnapshotService.publish(from: appState)
                 LiveActivityController.sync(from: appState)
             }
@@ -266,13 +266,19 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 24)
                     .accessibilityLabel("Loading scores")
-            } else {
+            } else if !viewModel.liveGames.isEmpty || viewModel.isRefreshingContent {
                 LiveScoreboardSection(
                     games: viewModel.liveGames,
                     title: "CFB This Week",
                     subtitle: scoreboardSubtitle,
-                    help: PickemsHelp.liveScores,
-                    scoreboardFilter: $scoreboardFilter
+                    scoreboardFilter: $scoreboardFilter,
+                    seasonWeeks: viewModel.seasonWeeks,
+                    selectedWeek: viewModel.selectedBrowseWeek,
+                    weekMenuTitle: viewModel.scoreboardWeekLabel,
+                    onSelectWeek: { week in
+                        viewModel.selectBrowseWeek(week, appState: appState)
+                    },
+                    showsRefreshSpinner: viewModel.isRefreshingContent
                 )
             }
 
