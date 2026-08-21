@@ -1,6 +1,6 @@
-What's new in 3.2.0 (321)
+What's new in 3.2.2
 
-• Top 25 rank badges on matchups — #N on logos and ranked text rows
+• Top 25 ranks sit beside team logos, ESPN-style (unranked teams stay clean)
 • Scrimmage practice week — learn Selections → Pickems before it counts
 • Home CFB This Week week picker, plus scores/news that stay put while refreshing
 
