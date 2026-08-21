@@ -1,6 +1,9 @@
 import SwiftUI
 
-/// Compact team logo with an optional Top 25 `#N` overlay inside the logo frame.
+/// Compact team logo with an optional ESPN-style Top 25 rank to the left of the mark.
+///
+/// Ranked teams show a small number beside the logo (`14` next to USC), never as a
+/// pill over the artwork. Unranked teams keep the original square mark.
 struct TeamMark: View {
     let logoURL: String?
     let abbreviation: String
@@ -10,27 +13,35 @@ struct TeamMark: View {
     var showsAbbreviationFallback: Bool = true
 
     private var displayRank: Int? {
-        guard let rank, (1...25).contains(rank) else { return nil }
-        return rank
+        TeamDisplay.top25Rank(rank)
+    }
+
+    /// Two-digit gutter so `5` and `25` both sit against the logo, ESPN-style.
+    private var rankColumnWidth: CGFloat {
+        max(12, (size * 0.44).rounded())
+    }
+
+    private var rankFontSize: CGFloat {
+        max(9, (size * 0.34).rounded())
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            logoContent
-                .frame(width: size, height: size)
-
-            if let displayRank {
-                Text("#\(displayRank)")
-                    .font(.system(size: max(8, size * 0.28), weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 3)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(Color.black.opacity(0.72)))
-                    .offset(x: -2, y: -2)
+        HStack(alignment: .center, spacing: 3) {
+            if let rankText = TeamDisplay.logoRankText(rank) {
+                Text(rankText)
+                    .font(.system(size: rankFontSize, weight: .bold))
+                    .foregroundStyle(PickemsColors.textPrimary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(width: rankColumnWidth, alignment: .trailing)
                     .accessibilityHidden(true)
             }
+
+            logoContent
+                .frame(width: size, height: size)
         }
-        .frame(width: size, height: size)
+        .frame(height: size)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
     }
