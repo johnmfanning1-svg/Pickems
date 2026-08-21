@@ -1,7 +1,7 @@
-What's new in 3.2.0
+What's new in 3.2.0 (321)
 
+• Top 25 rank badges on matchups — #N on logos and ranked text rows
 • Scrimmage practice week — learn Selections → Pickems before it counts
 • Home CFB This Week week picker, plus scores/news that stay put while refreshing
-• Live Pickems board and pull-to-refresh polish from 3.1.7
 
 Thanks for helping us UAT this build.
