@@ -1,7 +1,7 @@
-What's new in 3.1.7
+What's new in 3.2.0
 
-• After Pickems lock, compare everyone's picks on a games-by-row board
-• Yellow trailing, blue covering, green won, red lost
-• Pull to refresh on every tab, with a loading banner until data arrives
+• Scrimmage practice week — learn Selections → Pickems before it counts
+• Home CFB This Week week picker, plus scores/news that stay put while refreshing
+• Live Pickems board and pull-to-refresh polish from 3.1.7
 
-Thanks for playing with us.
+Thanks for helping us UAT this build.
