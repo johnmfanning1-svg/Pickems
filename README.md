@@ -102,7 +102,11 @@ Hosted [X MCP](https://docs.x.com/tools/mcp) so Cursor can search X, read API do
 
 ## App Store
 
-See [docs/APP_STORE.md](docs/APP_STORE.md) and [docs/privacy-policy.md](docs/privacy-policy.md).
+- TestFlight bump / archive / upload: [docs/TESTFLIGHT.md](docs/TESTFLIGHT.md)
+- App Review submit: [docs/APP_STORE.md](docs/APP_STORE.md)
+- Force a minimum build: [docs/MINIMUM_BUILD.md](docs/MINIMUM_BUILD.md)
+- ASO copy: [docs/ASO.md](docs/ASO.md) · `fastlane/metadata/en-US/`
+- Privacy: [docs/privacy-policy.md](docs/privacy-policy.md)
 
 ## Cost
 

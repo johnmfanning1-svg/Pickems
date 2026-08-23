@@ -210,7 +210,7 @@ Edits the `appConfig/live` Firestore document, which every signed-in client read
 |------|---------|
 | `chatEnabled` | Master kill switch for group chat. Turn this off if moderation slips (Guideline 1.2 fallback). |
 | `top25FilterEnabled` | Enables Top 25 and conference filters in the game browse screen. |
-| `minimumBuild` | Forces users below this build number to update. **Never** set this above the newest build actually available in TestFlight or the App Store. Leave blank for no minimum. |
+| `minimumBuild` | Forces users below this build number onto the App Store update screen. **Never** set this above the build currently on the App Store (the gate does not open TestFlight). Leave blank for no minimum. Full SOP: [MINIMUM_BUILD.md](MINIMUM_BUILD.md). |
 
 ### Marketing strings
 

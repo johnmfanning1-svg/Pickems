@@ -1,105 +1,182 @@
-# App Store submission notes
+# App Store Review SOP
 
-## Version
+Submit an **already-uploaded** TestFlight build for App Review. TestFlight first: [TESTFLIGHT.md](TESTFLIGHT.md). Agent entry point: `.cursor/skills/ship-ios/SKILL.md`.
 
-- **Marketing version:** 2.4.0
-- **Build:** 240
-- **Bundle ID:** `FannypackInc.Pickems`
-- **Apple ID:** 6785697079
-- **ASO copy:** `docs/ASO.md` · upload via `fastlane/metadata/en-US/`
+ASO copy: [ASO.md](ASO.md) · `fastlane/metadata/en-US/`.
 
 ---
 
-## What Apple rejected in 1.0 (build 2)
+## Identity
 
-App Review attached crash logs from **2026-07-15** on iPhone OS 26.5.2. All incidents match the same failure:
-
-| Field | Value |
+| | |
 |--|--|
-| Exception | `EXC_BREAKPOINT` / `SIGTRAP` |
-| Faulting path | `EnvironmentValues.subscript.getter` → `SheetBridge.present` |
-| Timing | ~3–7s after launch while presenting a sheet |
-| Likely UI | Groups → **Commissioner Settings** or **Join** (see review screenshot) |
+| Bundle | `FannypackInc.Pickems` |
+| Apple ID | `6785697079` |
+| Team | `22A943P8SJ` |
+| Copyright | `2026 Fannypack Inc.` (update year when needed) |
+| Release type | `AFTER_APPROVAL` (manual release after Apple approves) |
+| Connect UI | [iOS version deliverable](https://appstoreconnect.apple.com/apps/6785697079/distribution/ios/version/deliverable) |
+| Encryption | `ITSAppUsesNonExemptEncryption` = false |
 
-Root cause: SwiftUI sheets reading `@Environment(AppState.self)` without a guaranteed environment (and empty `if let` sheet content). Fixed in 1.2.3 via `.pickemsEnvironment(appState)` on sheet roots and non-empty Commissioner Settings sheet content. Still required for any new sheets in 2.3.0.
+Demo account **email** (already in Connect): `review.pickems.appstore@gmail.com`. Copy the password from the previous version’s `appStoreReviewDetail` over iris. **Never commit it. Delete `/tmp` scripts that contain it when the submit is done.**
 
-## Work already shipped after 1.0 (through 1.2.4)
+---
 
-| Change | Status |
-|--|--|
-| Auth navigation / email-password / favorite team | Merged |
-| Theme contrast + session tracing | Merged |
-| TestFlight cold-launch Firebase / notifications crash → 1.2.2 | Merged |
-| Sheet environment crash + Groups UX + account deletion | Merged (1.2.3 / 1.2.4) |
-| Privacy Manifest, Privacy Policy + Terms, invite App Store URL | Merged |
-| Watch app not embedded for iPhone App Store build | Remains for 2.3.0 |
+## Do not
 
-## Fixes in 2.3.0 (this submission)
+- Submit unless the user explicitly asked for App Review / App Store submit
+- Raise `appConfig/live.minimumBuild` unless they asked (see [MINIMUM_BUILD.md](MINIMUM_BUILD.md))
+- Set `resetRatingsRequest` (do not reset ratings)
+- Use Cursor’s browser for Connect (Apple login blocks it)
+- Create a new version while another iOS version is `WAITING_FOR_REVIEW` or `IN_REVIEW` — cancel that review first
+- Re-run production Week 0 migration, call ESPN with `week=0`, or auto-migrate on client launch
 
-Feedback-driven release covering all eleven workstreams:
+---
 
-| Workstream | Fix |
-|--|--|
-| **AUTH** | Sign in with Apple is primary; email/password behind “Use email and password instead” |
-| **GROUPS-NAV** | Group Picks, Build Slate / Make Picks / Live Picks, and Chat reachable from Groups |
-| **NOMINATE-UX** | Already-nominated games greyed out in browse with nominator name; Top 25 + conference filters; spreads prominent |
-| **DUP-GUARD** | Commissioner cannot add a game already on the slate or in nominations |
-| **GROUP-PICKS** | Collapsible per-member sections (default open) with remaining-picks counts; spreads on rows |
-| **ESPN-SLATE** | FBS-only scoreboard (`groups=80`); rank + conference decode; spreads hardened |
-| **WEEK-NUM** | Preseason/widget copy uses Kickoff until Aug 29; first playable slate is Week 0 (Saturday openers), then Week 1 (Sep 3–7) |
-| **CHAT** | Firestore group chat with report, block, delete-own, and terms (Guideline 1.2) |
-| **ADMIN** | Super-user web admin (Hosting) for ops — not required for App Review path |
-| **ASO** | Subtitle/keywords/description + pickems.app SEO landing; fastlane metadata |
-| **RELEASE** | Marketing `2.3.0` / build `230` across app + extensions |
+## Tooling: Google Chrome + iris
 
-Watch app stays **not embedded** for this iPhone App Store build.
+App Store Connect work is done in a **logged-in Google Chrome** tab via `osascript` `execute javascript`, `fetch(..., { credentials: 'include' })` against `https://appstoreconnect.apple.com/iris/v1/...`.
 
-## App Review Information (paste into App Store Connect)
+1. Confirm Chrome has a Connect tab (create/navigate if needed).
+2. Write a short JS snippet to `/tmp`, execute it, then poll `window.__someFlag`.
+3. After submit, `rm` any `/tmp` file that contains the demo password.
 
-**Demo account (email/password):** create a dedicated reviewer account in Firebase Auth before submit, then fill:
-
-```
-Username: review@pickems.app   (or your seeded email)
-Password: <set in Firebase>
+```applescript
+osascript <<'AS'
+set js to read POSIX file "/tmp/pickems-asc-state.js" as «class utf8»
+tell application "Google Chrome"
+  tell tab 1 of window 1
+    execute javascript js
+  end tell
+end tell
+AS
 ```
 
-**Notes for Review:**
+List tabs first if window/tab index is unknown.
 
-> Pickems is a college football pick'em app for private leagues. Version 2.3.0 adds group chat and several UX fixes from TestFlight feedback.
->
-> ### Guideline 1.2 — User-Generated Content (group chat)
-> Chat messages are user-generated. We provide the required moderation controls:
-> 1. **Report** — any member can report a message from the message context menu; reports are stored for review. Messages that accumulate reports are automatically soft-deleted.
-> 2. **Block** — members can block another user; blocked users’ messages are filtered from their chat feed.
-> 3. **Delete own** — authors can soft-delete their own messages; commissioners can remove messages.
-> 4. **Terms of Use** — linked in-app (Profile and chat first-run notice). The notice states that reported messages are reviewed and accounts can be removed for abuse.
-> Contact for content concerns: support via https://pickems.app (or the support URL in App Store Connect).
->
-> ### How to review
-> 1. Sign in with the demo account (or Sign in with Apple / Create Account). Apple Sign In is the primary button; email/password is optional under “Use email and password instead.”
-> 2. Create a league or join with the invite code from Notes.
-> 3. From Groups: open Group Picks, Build Slate / Make Picks, and Chat.
-> 4. In Chat: send a message, open a message’s context menu to confirm Report / Block / Delete own.
-> 5. Nominate a game — already-nominated games are greyed out. Spreads appear on browse, nominations, and picks.
-> 6. Account deletion remains under Profile → Delete Account.
-> 7. Sheets that present league flows forward AppState via `.pickemsEnvironment` (fix for the 1.0 crash).
->
-> Privacy Policy: https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/main/docs/privacy-policy.html
-> Terms: https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/main/docs/terms.html
+---
 
-**Invite code:** seed a stable public/private league and paste the 6-character code here before submit.
+## 1. Inspect live state
 
-## Hosting legal pages
+Query in parallel:
 
-`AppConfig` currently points at raw GitHub URLs on `main` (HTTPS, publicly reachable). The marketing site at `web/` (pickems.app) links to the same Privacy/Terms URLs for now. A later pass can host branded `/privacy` and `/terms` on pickems.app and update `AppConfig`.
+- `GET /iris/v1/apps/6785697079/appStoreVersions?filter[platform]=IOS&limit=8`
+- `GET /iris/v1/reviewSubmissions?filter[app]=6785697079&filter[platform]=IOS&limit=10`
+- `GET /iris/v1/builds?filter[app]=6785697079&filter[version]=NNN&limit=5` (the TestFlight build)
 
-## Preflight checklist
+Need: build `NNN` `processingState` = `VALID`, `expired` = false.
 
-- [ ] Seed App Review demo account + invite code in Connect notes
-- [ ] Deploy Firestore indexes, then rules + storage, then functions (chat moderation paths)
-- [ ] Confirm chat moderation: report, block, delete-own, terms notice
-- [ ] Archive 2.3.0 (230) → TestFlight for PO acceptance, then App Store submit
-- [ ] Confirm Sign in with Apple capability on the App ID
-- [ ] Upload metadata via `fastlane metadata` (or paste from `fastlane/metadata/en-US/`)
-- [ ] App Privacy questionnaire matches `PrivacyInfo.xcprivacy` / privacy policy
-- [ ] Watch app remains not embedded
+### If another version is in review
+
+`PATCH /iris/v1/reviewSubmissions/{id}` with `{ canceled: true }`. Poll until the submission is `COMPLETE` and the version is editable (`PREPARE_FOR_SUBMISSION` or similar — not `WAITING_FOR_REVIEW`). Then either rename that version to the new marketing string and attach the new build, or create a fresh version once the slot is free.
+
+### If latest is `READY_FOR_DISTRIBUTION`
+
+Create a new version (next section). Do not attach a build to a live `READY_FOR_DISTRIBUTION` version.
+
+### If a `PREPARE_FOR_SUBMISSION` version already exists
+
+Reuse it (patch version string if needed) instead of creating another.
+
+---
+
+## 2. Create version (when needed)
+
+`POST /iris/v1/appStoreVersions`
+
+```json
+{
+  "data": {
+    "type": "appStoreVersions",
+    "attributes": {
+      "platform": "IOS",
+      "versionString": "X.Y.Z",
+      "copyright": "2026 Fannypack Inc.",
+      "releaseType": "AFTER_APPROVAL"
+    },
+    "relationships": {
+      "app": { "data": { "type": "apps", "id": "6785697079" } }
+    }
+  }
+}
+```
+
+Then load:
+
+- `GET .../appStoreVersions/{vid}/appStoreVersionLocalizations?limit=5` → localization id
+- `GET .../appStoreVersions/{vid}/appStoreReviewDetail` → review detail id (and demo password to reuse)
+
+Screenshots usually copy forward. Confirm at least iPhone 6.7" (and existing iPad set) remain.
+
+---
+
+## 3. Attach build + metadata
+
+| Step | Call |
+|--|--|
+| Attach build | `PATCH .../appStoreVersions/{vid}/relationships/build` body `{ "data": { "type": "builds", "id": "<build uuid>" } }` |
+| Release type | `PATCH .../appStoreVersions/{vid}` `releaseType: AFTER_APPROVAL` |
+| What’s New | `PATCH .../appStoreVersionLocalizations/{loc}` |
+| Review notes | `PATCH .../appStoreReviewDetails/{reviewId}` |
+
+**What’s New:** start from `fastlane/metadata/en-US/release_notes.txt`. Drop TestFlight-only lines (“Thanks for helping us UAT…”). Close with “Thanks for playing with us.” Promotional text: `fastlane/metadata/en-US/promotional_text.txt`.
+
+**Review notes:** version + build, short “what’s new”, Guideline 1.2 chat moderation (Report / Block / Delete own / Terms), HOW TO REVIEW for the new features, demo email, Privacy URL:
+
+`https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/main/docs/privacy-policy.html`
+
+Keep `demoAccountRequired: true` and the existing demo email/password.
+
+---
+
+## 4. Submit
+
+1. `POST /iris/v1/reviewSubmissions` — `{ platform: "IOS" }` related to app `6785697079`
+2. `POST /iris/v1/reviewSubmissionItems` — relate that submission to the `appStoreVersion`
+3. `PATCH /iris/v1/reviewSubmissions/{rsId}` — `{ submitted: true }`
+
+Confirm:
+
+- Review submission `state` = `WAITING_FOR_REVIEW`
+- Version `appVersionState` = `WAITING_FOR_REVIEW`
+- Included build `version` = the intended build number
+
+Then delete `/tmp` JS that held credentials.
+
+---
+
+## 5. Tell the user
+
+- Marketing version + build
+- Waiting for Review
+- Release is manual after approval (live store stays on the previous `READY_FOR_DISTRIBUTION` version)
+- Link to the Connect deliverable page
+
+Do not bump `minimumBuild` as part of submit (see [MINIMUM_BUILD.md](MINIMUM_BUILD.md)). Do not announce a store release until Apple approves and someone releases it.
+
+---
+
+## Fastlane metadata (copy, not binary)
+
+```bash
+bundle exec fastlane metadata
+```
+
+Use when ASO fields in `fastlane/metadata/en-US/` changed. Binary upload is [TESTFLIGHT.md](TESTFLIGHT.md), not this lane.
+
+---
+
+## Preflight (features that App Review cares about)
+
+- [ ] Demo account still signs in (email/password behind “Use email and password instead”, or Sign in with Apple)
+- [ ] Chat: Report, Block, Delete own, Terms linked (Guideline 1.2)
+- [ ] Account deletion: Profile → Delete Account
+- [ ] Privacy / Terms URLs load over HTTPS
+- [ ] Sheets that present league flows still use `.pickemsEnvironment` (1.0 crash)
+- [ ] Watch remains `SKIP_INSTALL`; do not change embedding as part of a routine ship
+
+---
+
+## Appendix: 1.0 rejection (keep)
+
+App Review crash logs from **2026-07-15** on iPhone OS 26.5.2: `EXC_BREAKPOINT` / `SIGTRAP` in `EnvironmentValues.subscript.getter` → `SheetBridge.present`, ~3–7s after launch. Root cause: SwiftUI sheets reading `@Environment(AppState.self)` without a guaranteed environment. Fixed via `.pickemsEnvironment(appState)` on sheet roots. Still required for any new sheets.

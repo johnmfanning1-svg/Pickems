@@ -38,7 +38,7 @@ platform :ios do
         notify_external_testers: false
       )
     else
-      UI.user_error!("Set PILOT_IPA to a signed .ipa path, or archive in Xcode for this release (see docs/APP_STORE.md).")
+      UI.user_error!("Set PILOT_IPA to a signed .ipa path, or archive in Xcode for this release (see docs/TESTFLIGHT.md).")
     end
   end
 end
