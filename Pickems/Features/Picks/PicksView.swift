@@ -12,6 +12,7 @@ struct PicksView: View {
     @State private var showIncompletePickemsAlert = false
     @State private var incompletePickemsAlertText = ""
     @State private var isRefreshing = false
+    @State private var showSubmissionStatus = false
 
     private var viewModel: PicksViewModel { appState.picksViewModel }
 
@@ -73,6 +74,10 @@ struct PicksView: View {
             }
             .pickemsRefreshable(isRefreshing: $isRefreshing) {
                 await reloadPicks()
+            }
+            .sheet(isPresented: $showSubmissionStatus) {
+                SubmissionStatusView()
+                    .pickemsEnvironment(appState)
             }
             .sheet(isPresented: $viewModel.showGameBrowse, onDismiss: {
                 viewModel.selectionBrowseIntent = .own
@@ -309,6 +314,13 @@ struct PicksView: View {
             if WeekTransition.arePickemsOpen(week) {
                 if let deadline = week.pickDeadline {
                     PickDeadlineBanner(deadline: deadline)
+                }
+                if picksMatchWeek(week) {
+                    SecondaryButton("See who's in", icon: "person.crop.circle.badge.clock") {
+                        showSubmissionStatus = true
+                    }
+                    .padding(.horizontal)
+                    .accessibilityHint("Shows how many Pickems each member has made, without revealing their picks")
                 }
                 pickemsGames(for: week)
             } else {

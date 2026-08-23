@@ -130,7 +130,7 @@ struct CommissionerSettingsView: View {
                 } header: {
                     Text("Visibility")
                 } footer: {
-                    Text("Public leagues appear in Discover. Submission chase is under This Week when Pickems are open.")
+                    Text("Public leagues appear in Discover. See who's in is on the Pickems tab, and under This Week when Pickems are open.")
                 }
 
                 Section {

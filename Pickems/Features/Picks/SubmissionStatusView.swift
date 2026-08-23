@@ -1,70 +1,117 @@
 import SwiftUI
 
 struct SubmissionStatusView: View {
-    let members: [GroupMember]
-    let submissions: [PickSubmission]
-    var slateSize: Int = 0
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
 
-    private var submittedIds: Set<String> {
-        Set(members.map(\.id).filter(isSubmitted))
+    private var rows: [SubmissionRosterRow] {
+        SubmissionRoster.rows(
+            members: appState.groupService.members,
+            submissions: appState.pickService.submissions,
+            slateSize: appState.pickService.slateGames.count
+        )
+    }
+
+    private var currentUserId: String? {
+        appState.authService.currentUser?.id ?? appState.authService.currentUserId
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            PickemsSectionHeader(
-                title: "Submission Status",
-                subtitle: "\(submittedIds.count) of \(members.count) submitted"
+        NavigationStack {
+            Group {
+                if rows.isEmpty {
+                    ContentUnavailableView(
+                        "No Members",
+                        systemImage: "person.3",
+                        description: Text("League members will appear here.")
+                    )
+                } else {
+                    rosterList
+                }
+            }
+            .pickemsScreenBackground()
+            .navigationTitle("Who's in")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .fontWeight(.semibold)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationContentInteraction(.scrolls)
+    }
+
+    private var rosterList: some View {
+        let submitted = SubmissionRoster.submittedCount(in: rows)
+        return List {
+            Section {
+                ForEach(rows) { row in
+                    rosterRow(row)
+                        .listRowBackground(PickemsColors.cardBackground)
+                        .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+                }
+            } header: {
+                Text("\(submitted) of \(rows.count) submitted")
+                    .foregroundStyle(PickemsColors.textSecondary)
+            } footer: {
+                Text("Counts only. Who they picked stays hidden until the first kickoff or an early lock.")
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .listStyle(.insetGrouped)
+    }
+
+    private func rosterRow(_ row: SubmissionRosterRow) -> some View {
+        let isYou = row.id == currentUserId
+        return HStack(spacing: 12) {
+            InitialsAvatar(
+                initials: row.initials,
+                colorHex: row.avatarColorHex,
+                imageURL: row.avatarImageURL,
+                size: 36
             )
 
-            ForEach(members) { member in
-                HStack {
-                    InitialsAvatar(
-                        initials: member.initials,
-                        colorHex: member.avatarColorHex,
-                        imageURL: member.avatarImageURL,
-                        size: 32
-                    )
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(member.displayName)
-                            .font(.subheadline)
-                            .foregroundStyle(PickemsColors.textPrimary)
-                        let made = pickCount(for: member.id)
-                        if slateSize > 0 {
-                            Text("\(made)/\(slateSize)")
-                                .font(.caption2)
-                                .foregroundStyle(PickemsColors.textSecondary)
-                        }
-                    }
-                    Spacer()
-                    if submittedIds.contains(member.id) {
-                        Label("In", systemImage: "checkmark.circle.fill")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(PickemsColors.success)
-                    } else {
-                        Label("Pending", systemImage: "clock")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(PickemsColors.warning)
-                    }
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(isYou ? "\(row.displayName) (You)" : row.displayName)
+                        .font(.subheadline.weight(isYou ? .semibold : .regular))
+                        .foregroundStyle(PickemsColors.textPrimary)
+                        .lineLimit(1)
                 }
-                .padding(.horizontal)
+                Text(countLabel(for: row))
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .monospacedDigit()
             }
+
+            Spacer(minLength: 8)
+
+            StatusBadge(text: row.status.label, color: badgeColor(for: row.status))
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel(for: row, isYou: isYou))
+    }
+
+    private func countLabel(for row: SubmissionRosterRow) -> String {
+        if row.total > 0 {
+            return "\(row.made) of \(row.total) Pickems"
+        }
+        return "No slate yet"
+    }
+
+    private func badgeColor(for status: SubmissionRosterStatus) -> Color {
+        switch status {
+        case .submitted: return PickemsColors.success
+        case .inProgress: return PickemsColors.covering
+        case .notStarted: return PickemsColors.warning
         }
     }
 
-    private func submission(for userId: String) -> PickSubmission? {
-        submissions.first { $0.userId == userId }
-    }
-
-    private func pickCount(for userId: String) -> Int {
-        let sub = submission(for: userId)
-        if let count = sub?.pickCount, count > 0 { return count }
-        if sub?.isLocked == true, slateSize > 0 { return slateSize }
-        return sub?.pickCount ?? 0
-    }
-
-    private func isSubmitted(_ userId: String) -> Bool {
-        guard let sub = submission(for: userId) else { return false }
-        if sub.isLocked { return true }
-        return slateSize > 0 && sub.pickCount >= slateSize
+    private func accessibilityLabel(for row: SubmissionRosterRow, isYou: Bool) -> String {
+        let name = isYou ? "You, \(row.displayName)" : row.displayName
+        return "\(name), \(countLabel(for: row)), \(row.status.label)"
     }
 }

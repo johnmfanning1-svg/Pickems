@@ -67,7 +67,19 @@ enum PickemsHelp {
             "Tap a team to select them against the spread.",
             "Submit before the deadline shown at the top.",
             "Draft Pickems save automatically as you tap.",
-            "Pickems stay locked until Selections are done or the Selection deadline passes."
+            "Pickems stay locked until Selections are done or the Selection deadline passes.",
+            "See who's in shows how many Pickems each member has made — not who they picked."
+        ]
+    )
+
+    static let submissionStatus = HelpTopic(
+        id: "picks.submissionStatus",
+        title: "Who's in",
+        message: "A count of how many Pickems each member has made this week, and whether they have submitted.",
+        tips: [
+            "Other members' actual picks stay hidden until the first kickoff or an early lock.",
+            "Submitted means they locked in a full slate.",
+            "In progress means they have started but have not submitted yet."
         ]
     )
 

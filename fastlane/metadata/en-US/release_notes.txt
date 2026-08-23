@@ -1,7 +1,7 @@
-What's new in 3.2.2
+What's new in 3.2.3
 
-• Top 25 ranks sit beside team logos, ESPN-style (unranked teams stay clean)
-• Scrimmage practice week — learn Selections → Pickems before it counts
-• Home CFB This Week week picker, plus scores/news that stay put while refreshing
+• See who's in — check who has made Pickems, how many, and who still needs to submit
+• Counts only; other members' actual picks stay hidden until lock
+• Submission chase is now a compact sheet instead of an empty full page
 
 Thanks for helping us UAT this build.

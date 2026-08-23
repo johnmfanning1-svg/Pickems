@@ -8,6 +8,7 @@ struct CommissionerWeekAdminSections: View {
     @Binding var showPickDeadlineSheet: Bool
     @Binding var showAdminGameBrowse: Bool
     @State private var showReopenSelectionsConfirm = false
+    @State private var showSubmissionStatus = false
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var week: WeekSummary? { appState.groupService.currentWeek }
@@ -26,6 +27,10 @@ struct CommissionerWeekAdminSections: View {
         tiesSection
             .task {
                 await picksVM.ensureTeamRanks(appState: appState)
+            }
+            .sheet(isPresented: $showSubmissionStatus) {
+                SubmissionStatusView()
+                    .pickemsEnvironment(appState)
             }
     }
 
@@ -174,14 +179,10 @@ struct CommissionerWeekAdminSections: View {
     private var pickemsAdminSection: some View {
         if let week, WeekTransition.arePickemsOpen(week) {
             Section {
-                NavigationLink {
-                    SubmissionStatusView(
-                        members: appState.groupService.members,
-                        submissions: appState.pickService.submissions,
-                        slateSize: appState.pickService.slateGames.count
-                    )
+                Button {
+                    showSubmissionStatus = true
                 } label: {
-                    Label("Submission chase", systemImage: "person.crop.circle.badge.clock")
+                    Label("See who's in", systemImage: "person.crop.circle.badge.clock")
                 }
                 .listRowBackground(PickemsColors.cardBackground)
 
@@ -210,7 +211,7 @@ struct CommissionerWeekAdminSections: View {
             } header: {
                 Text("Pickems Admin")
             } footer: {
-                Text("Force or clear a member's Pickems, or change the Pickems deadline. This never removes Selections.")
+                Text("See who's in is also on the Pickems tab for every member. Force or clear a member's Pickems, or change the deadline, here. This never removes Selections.")
             }
         }
     }
