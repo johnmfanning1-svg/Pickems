@@ -29,13 +29,20 @@ Agent entry point: `.cursor/skills/ship-ios/SKILL.md`. Related: [TESTFLIGHT.md](
 
 ---
 
-## How the gate behaves
+## How it is enforced (not a Cloud Function)
 
-`ForceUpdatePolicy.requiresUpdate` is `currentBuild < minimumBuild` (`CFBundleVersion`). Equal builds are allowed.
+Nothing in `firebase/functions` reads `minimumBuild`. Callables, scheduled jobs, and Firestore rules do **not** reject old binaries. A blocked user can still hit the backend if they bypass the UI.
 
-`LiveAppConfigService` listens to `appConfig/live`. Signed-in users can be blocked **without** relaunching. `ForceUpdateView` cannot be dismissed.
+The gate is honor-system UI in the iOS app:
 
-Missing, `0`, negative, or unparsable `minimumBuild` → no gate. If the document is unreadable, the gate stays off.
+1. `AppState.configure()` starts `LiveAppConfigService`, which snapshot-listens to `appConfig/live`.
+2. `ForceUpdatePolicy` compares this binary’s `CFBundleVersion` to `minimumBuild`. Block when `currentBuild < minimumBuild`. Equal builds pass.
+3. `RootView` swaps the whole app for `ForceUpdateView` when `liveConfig.requiresUpdate` is true. That screen cannot be dismissed; the button opens `https://apps.apple.com/app/id6785697079`.
+4. Join / favorite-team sheets in `PickemsApp` are also suppressed while the gate is on.
+
+Missing, `0`, negative, or unparsable `minimumBuild` → no gate. If the document is unreadable, the gate stays **off** (fail open).
+
+Binaries shipped **before** this client code existed will ignore the field entirely. There is no server-side backstop for those.
 
 ---
 
