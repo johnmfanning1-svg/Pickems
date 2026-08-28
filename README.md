@@ -51,7 +51,11 @@ PickemsWatch/            watchOS glance sources
 firebase/
   firestore.rules
   functions/             Slate lock, scoring, push, season close
+web/                     Marketing + invite landing (not a member app)
+docs/                    Including web architecture assessment
 ```
+
+Web replica assessment (iOS + website on the same Firebase backend, Vercel Hobby): [docs/WEB_ARCHITECTURE_ASSESSMENT.md](docs/WEB_ARCHITECTURE_ASSESSMENT.md).
 
 ## 2.0 Features
 
