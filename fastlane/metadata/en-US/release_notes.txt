@@ -1,6 +1,7 @@
-What's new in 3.2.7
+What's new in 3.2.8
 
-• Leagues larger than 10 members show the top 10, with Full ranking for the rest
-• Pickems Admin lists member names without repeating “Manage Pickems”
+• Full ranking sits under the This Week / Season picker on Leagues and includes every member
+• Pickems Admin shows each member’s made/needed count and submitted state
+• See who’s in is gone from Commissioner Settings — those counts live on the member rows
 
 Thanks for helping us UAT this build.

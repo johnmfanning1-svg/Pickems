@@ -120,45 +120,11 @@ extension AppState {
 
     func rankedStandings(weekly: Bool) -> [StandingEntry] {
         let members = groupService.members
-        let joinedAtById = Dictionary(uniqueKeysWithValues: members.map { ($0.id, $0.joinedAt) })
-
-        let baseEntries: [StandingEntry]
-        let avatarURLById = Dictionary(uniqueKeysWithValues: members.compactMap { member -> (String, String)? in
-            guard let url = member.avatarImageURL, !url.isEmpty else { return nil }
-            return (member.id, url)
-        })
-
-        if let standings = groupService.standings, !standings.entries.isEmpty {
-            baseEntries = standings.entries.map { entry in
-                var copy = entry
-                if copy.joinedAt == nil {
-                    copy.joinedAt = joinedAtById[entry.id]
-                }
-                if copy.avatarImageURL == nil {
-                    copy.avatarImageURL = avatarURLById[entry.id]
-                }
-                return copy
-            }
-        } else if !members.isEmpty {
-            // Interim board before the first scored week: members ranked by join date.
-            baseEntries = members.map { member in
-                StandingEntry(
-                    id: member.id,
-                    displayName: member.displayName,
-                    avatarColorHex: member.avatarColorHex,
-                    weeklyWins: 0,
-                    weeklyLosses: 0,
-                    seasonWins: member.seasonWins,
-                    seasonLosses: member.seasonLosses,
-                    rank: 0,
-                    isTied: false,
-                    joinedAt: member.joinedAt,
-                    avatarImageURL: member.avatarImageURL
-                )
-            }
-        } else {
-            return []
-        }
+        let baseEntries = StandingBoard.baseEntries(
+            standingsEntries: groupService.standings?.entries,
+            members: members
+        )
+        guard !baseEntries.isEmpty else { return [] }
 
         let tieBreaker = groupService.selectedGroup?.rules.tieBreaker ?? .commissionerOverride
         return ScoringEngine.rankedStandings(

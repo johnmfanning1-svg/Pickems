@@ -8,7 +8,6 @@ struct CommissionerWeekAdminSections: View {
     @Binding var showPickDeadlineSheet: Bool
     @Binding var showAdminGameBrowse: Bool
     @State private var showReopenSelectionsConfirm = false
-    @State private var showSubmissionStatus = false
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var week: WeekSummary? { appState.groupService.currentWeek }
@@ -21,17 +20,13 @@ struct CommissionerWeekAdminSections: View {
 
     var body: some View {
         weekStatusSection
+            .task {
+                await picksVM.ensureTeamRanks(appState: appState)
+            }
         selectionsAdminSection
         slateSection
         pickemsAdminSection
         tiesSection
-            .task {
-                await picksVM.ensureTeamRanks(appState: appState)
-            }
-            .sheet(isPresented: $showSubmissionStatus) {
-                SubmissionStatusView()
-                    .pickemsEnvironment(appState)
-            }
     }
 
     @ViewBuilder
@@ -107,6 +102,11 @@ struct CommissionerWeekAdminSections: View {
            let groupId = appState.groupService.selectedGroup?.id {
             Section {
                 ForEach(appState.groupService.members) { member in
+                    let progress = SubmissionRoster.selectionProgress(
+                        nominations: appState.pickService.nominations,
+                        memberId: member.id,
+                        perMember: selectionsPerMember
+                    )
                     NavigationLink {
                         CommissionerManageSelectionsSheet(
                             member: member,
@@ -114,14 +114,23 @@ struct CommissionerWeekAdminSections: View {
                             groupId: groupId
                         )
                     } label: {
-                        Label("Manage Selections — \(member.displayName)", systemImage: "american.football")
+                        memberProgressLabel(
+                            name: member.displayName,
+                            made: progress.made,
+                            total: progress.total,
+                            status: progress.status,
+                            unitName: "Selections"
+                        )
                     }
+                    .accessibilityLabel(
+                        "\(member.displayName), \(progress.made) of \(progress.total) Selections, \(progress.status.label). Manage Selections."
+                    )
                     .listRowBackground(PickemsColors.cardBackground)
                 }
             } header: {
                 Text("Selections Admin")
             } footer: {
-                Text("Remove, replace, or add a member's Selections. You can also do this from the Selections tab.")
+                Text("Tap a member to change their Selections. Counts are games submitted versus the weekly requirement.")
             }
         }
     }
@@ -183,13 +192,6 @@ struct CommissionerWeekAdminSections: View {
     private var pickemsAdminSection: some View {
         if let week, WeekTransition.arePickemsOpen(week) {
             Section {
-                Button {
-                    showSubmissionStatus = true
-                } label: {
-                    Label("See who's in", systemImage: "person.crop.circle.badge.clock")
-                }
-                .listRowBackground(PickemsColors.cardBackground)
-
                 Button(week.status == .locked ? "Reopen Pickems" : (
                     PickDeadlineCalculator.isPast(week.pickDeadline) ? "Extend / Unlock Deadline" : "Set Pickems Deadline"
                 )) {
@@ -198,7 +200,15 @@ struct CommissionerWeekAdminSections: View {
                 .listRowBackground(PickemsColors.cardBackground)
 
                 if let groupId = appState.groupService.selectedGroup?.id {
+                    let pickemsById = Dictionary(
+                        uniqueKeysWithValues: SubmissionRoster.rows(
+                            members: appState.groupService.members,
+                            submissions: appState.pickService.submissions,
+                            slateSize: appState.pickService.slateGames.count
+                        ).map { ($0.id, $0) }
+                    )
                     ForEach(appState.groupService.members) { member in
+                        let row = pickemsById[member.id]
                         NavigationLink {
                             CommissionerManagePicksSheet(
                                 member: member,
@@ -207,16 +217,24 @@ struct CommissionerWeekAdminSections: View {
                                 slateGames: appState.pickService.slateGames
                             )
                         } label: {
-                            Label(member.displayName, systemImage: "slider.horizontal.3")
+                            memberProgressLabel(
+                                name: member.displayName,
+                                made: row?.made ?? 0,
+                                total: row?.total ?? appState.pickService.slateGames.count,
+                                status: row?.status ?? .notStarted,
+                                unitName: "Pickems"
+                            )
                         }
-                        .accessibilityLabel("Manage Pickems for \(member.displayName)")
+                        .accessibilityLabel(
+                            "\(member.displayName), \(row?.made ?? 0) of \(row?.total ?? appState.pickService.slateGames.count) Pickems, \(row?.status.label ?? SubmissionRosterStatus.notStarted.label). Manage Pickems."
+                        )
                         .listRowBackground(PickemsColors.cardBackground)
                     }
                 }
             } header: {
                 Text("Pickems Admin")
             } footer: {
-                Text("See who's in is also on the Pickems tab for every member. Force or clear a member's Pickems, or change the deadline, here. This never removes Selections.")
+                Text("Tap a member to force or clear their Pickems. Counts are Pickems made versus the slate. This never removes Selections.")
             }
         }
     }
@@ -244,5 +262,27 @@ struct CommissionerWeekAdminSections: View {
                 }
             }
         }
+    }
+
+    private var selectionsPerMember: Int {
+        let weekValue = week?.selectionsPerMember ?? 0
+        if weekValue > 0 { return weekValue }
+        return max(appState.groupService.selectedGroup?.rules.selectionsPerMember ?? 1, 1)
+    }
+
+    private func memberProgressLabel(
+        name: String,
+        made: Int,
+        total: Int,
+        status: SubmissionRosterStatus,
+        unitName: String
+    ) -> some View {
+        HStack(spacing: 12) {
+            Text(name)
+                .foregroundStyle(PickemsColors.textPrimary)
+            Spacer(minLength: 8)
+            CountStatusMeter(made: made, total: total, status: status, unitName: unitName)
+        }
+        .accessibilityElement(children: .ignore)
     }
 }

@@ -198,6 +198,47 @@ struct StatusBadge: View {
     }
 }
 
+struct CountStatusMeter: View {
+    let made: Int
+    let total: Int
+    let status: SubmissionRosterStatus
+    var unitName: String = "Pickems"
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(countText)
+                .font(.subheadline.monospacedDigit().weight(.semibold))
+                .foregroundStyle(PickemsColors.textPrimary)
+            Image(systemName: status.symbolName)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(tint)
+                .symbolRenderingMode(.hierarchical)
+                .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var countText: String {
+        total > 0 ? "\(made)/\(total)" : "\(made)"
+    }
+
+    private var tint: Color {
+        switch status {
+        case .submitted: return PickemsColors.success
+        case .inProgress: return PickemsColors.covering
+        case .notStarted: return PickemsColors.textSecondary
+        }
+    }
+
+    private var accessibilityText: String {
+        if total > 0 {
+            return "\(made) of \(total) \(unitName), \(status.label)"
+        }
+        return status.label
+    }
+}
+
 struct EmptyStateView: View {
     let icon: String
     let title: String

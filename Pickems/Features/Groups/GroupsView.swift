@@ -665,6 +665,18 @@ struct LeaderboardView: View {
         Array(allEntries.prefix(Self.previewLimit))
     }
 
+    private var rosterCount: Int {
+        max(
+            allEntries.count,
+            appState.groupService.members.count,
+            appState.groupService.selectedGroup?.memberCount ?? 0
+        )
+    }
+
+    private var showsFullRanking: Bool {
+        rosterCount > Self.previewLimit
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
@@ -680,6 +692,10 @@ struct LeaderboardView: View {
             .pickerStyle(.segmented)
             .padding(.horizontal)
             .accessibilityLabel("Standings period")
+
+            if showsFullRanking {
+                fullRankingLink
+            }
 
             if allEntries.isEmpty {
                 EmptyStateView(
@@ -697,39 +713,6 @@ struct LeaderboardView: View {
                     )
                     .padding(.horizontal)
                 }
-                if allEntries.count > Self.previewLimit {
-                    NavigationLink {
-                        FullLeaderboardView(showWeekly: $showWeekly)
-                    } label: {
-                        PickemsCard {
-                            HStack(spacing: 12) {
-                                Image(systemName: "list.number")
-                                    .font(.title3)
-                                    .foregroundStyle(theme.accent)
-                                    .accessibilityHidden(true)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Full ranking")
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(theme.accent)
-                                    Text("All \(allEntries.count) members")
-                                        .font(.caption)
-                                        .foregroundStyle(PickemsColors.textSecondary)
-                                }
-                                Spacer(minLength: 8)
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(PickemsColors.textSecondary)
-                                    .accessibilityHidden(true)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal)
-                    .accessibilityLabel("View full ranking")
-                    .accessibilityHint("See every member in this league")
-                    .accessibilityValue("\(allEntries.count) members")
-                }
             }
         }
         .task(id: appState.groupService.currentWeek?.id) {
@@ -737,6 +720,40 @@ struct LeaderboardView: View {
                   let week = appState.groupService.currentWeek else { return }
             await appState.pickService.loadAllPicks(groupId: group.id, weekId: week.id)
         }
+    }
+
+    private var fullRankingLink: some View {
+        NavigationLink {
+            FullLeaderboardView(showWeekly: $showWeekly)
+        } label: {
+            PickemsCard {
+                HStack(spacing: 12) {
+                    Image(systemName: "list.number")
+                        .font(.title3)
+                        .foregroundStyle(theme.accent)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Full ranking")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(theme.accent)
+                        Text("All \(rosterCount) members")
+                            .font(.caption)
+                            .foregroundStyle(PickemsColors.textSecondary)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .accessibilityHidden(true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal)
+        .accessibilityLabel("View full ranking")
+        .accessibilityHint("See every member in this league")
+        .accessibilityValue("\(rosterCount) members")
     }
 }
 

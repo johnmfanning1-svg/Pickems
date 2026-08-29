@@ -159,28 +159,11 @@ enum WidgetSnapshotService {
         members: [GroupMember],
         tieBreaker: TieBreakerPolicy
     ) -> [StandingEntry] {
-        let base: [StandingEntry]
-        if let entries = standings?.entries, !entries.isEmpty {
-            base = entries
-        } else if !members.isEmpty {
-            base = members.map { member in
-                StandingEntry(
-                    id: member.id,
-                    displayName: member.displayName,
-                    avatarColorHex: member.avatarColorHex,
-                    weeklyWins: 0,
-                    weeklyLosses: 0,
-                    seasonWins: member.seasonWins,
-                    seasonLosses: member.seasonLosses,
-                    rank: 0,
-                    isTied: false,
-                    joinedAt: member.joinedAt,
-                    avatarImageURL: member.avatarImageURL
-                )
-            }
-        } else {
-            return []
-        }
+        let base = StandingBoard.baseEntries(
+            standingsEntries: standings?.entries,
+            members: members
+        )
+        guard !base.isEmpty else { return [] }
         return ScoringEngine.rankedStandings(entries: base, weekly: true, tieBreaker: tieBreaker)
     }
 

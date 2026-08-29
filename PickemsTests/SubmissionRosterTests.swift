@@ -49,6 +49,43 @@ struct SubmissionRosterTests {
         #expect(SubmissionRoster.submittedCount(in: rows) == 0)
     }
 
+    @Test func statusUsesCountsAndLock() {
+        #expect(SubmissionRoster.status(made: 0, total: 8, isLocked: false) == .notStarted)
+        #expect(SubmissionRoster.status(made: 3, total: 8, isLocked: false) == .inProgress)
+        #expect(SubmissionRoster.status(made: 8, total: 8, isLocked: false) == .submitted)
+        #expect(SubmissionRoster.status(made: 0, total: 8, isLocked: true) == .submitted)
+    }
+
+    @Test func selectionProgressCountsNominations() {
+        let nominations = [
+            nomination(by: "a"),
+            nomination(by: "a"),
+            nomination(by: "b"),
+        ]
+        let partial = SubmissionRoster.selectionProgress(
+            nominations: nominations,
+            memberId: "a",
+            perMember: 3
+        )
+        #expect(partial.made == 2)
+        #expect(partial.total == 3)
+        #expect(partial.status == .inProgress)
+
+        let none = SubmissionRoster.selectionProgress(
+            nominations: nominations,
+            memberId: "c",
+            perMember: 3
+        )
+        #expect(none.status == .notStarted)
+
+        let done = SubmissionRoster.selectionProgress(
+            nominations: nominations + [nomination(by: "a")],
+            memberId: "a",
+            perMember: 3
+        )
+        #expect(done.status == .submitted)
+    }
+
     private func member(_ id: String, _ name: String) -> GroupMember {
         GroupMember(
             id: id,
@@ -58,6 +95,23 @@ struct SubmissionRosterTests {
             joinedAt: Date(),
             seasonWins: 0,
             seasonLosses: 0
+        )
+    }
+
+    private func nomination(by userId: String) -> Nomination {
+        Nomination(
+            id: UUID().uuidString,
+            submittedBy: userId,
+            submitterName: "Tester",
+            espnEventId: "evt-\(userId)",
+            spread: 3.5,
+            spreadTeamId: "home",
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            kickoff: Date(),
+            createdAt: Date()
         )
     }
 }

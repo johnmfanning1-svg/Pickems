@@ -341,6 +341,53 @@ struct StandingEntry: Codable, Identifiable, Equatable {
     var seasonBattingAverage: Double {
         BattingAverage.rate(wins: seasonWins, losses: seasonLosses)
     }
+
+    static func placeholder(from member: GroupMember) -> StandingEntry {
+        StandingEntry(
+            id: member.id,
+            displayName: member.displayName,
+            avatarColorHex: member.avatarColorHex,
+            weeklyWins: 0,
+            weeklyLosses: 0,
+            seasonWins: member.seasonWins,
+            seasonLosses: member.seasonLosses,
+            rank: 0,
+            isTied: false,
+            joinedAt: member.joinedAt,
+            avatarImageURL: member.avatarImageURL
+        )
+    }
+}
+
+/// Standings documents can lag new members. Always rank the live roster.
+enum StandingBoard {
+    static func baseEntries(standingsEntries: [StandingEntry]?, members: [GroupMember]) -> [StandingEntry] {
+        let joinedAtById = Dictionary(uniqueKeysWithValues: members.map { ($0.id, $0.joinedAt) })
+        let avatarURLById = Dictionary(uniqueKeysWithValues: members.compactMap { member -> (String, String)? in
+            guard let url = member.avatarImageURL, !url.isEmpty else { return nil }
+            return (member.id, url)
+        })
+
+        guard let standingsEntries, !standingsEntries.isEmpty else {
+            return members.map { .placeholder(from: $0) }
+        }
+
+        let known = Set(standingsEntries.map(\.id))
+        var entries = standingsEntries.map { entry -> StandingEntry in
+            var copy = entry
+            if copy.joinedAt == nil {
+                copy.joinedAt = joinedAtById[entry.id]
+            }
+            if copy.avatarImageURL == nil {
+                copy.avatarImageURL = avatarURLById[entry.id]
+            }
+            return copy
+        }
+        for member in members where !known.contains(member.id) {
+            entries.append(.placeholder(from: member))
+        }
+        return entries
+    }
 }
 
 struct GroupStandings: Codable, Equatable {

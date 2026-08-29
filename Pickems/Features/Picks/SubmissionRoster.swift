@@ -12,6 +12,14 @@ enum SubmissionRosterStatus: Equatable {
         case .submitted: return "Submitted"
         }
     }
+
+    var symbolName: String {
+        switch self {
+        case .notStarted: return "circle"
+        case .inProgress: return "circle.lefthalf.filled"
+        case .submitted: return "checkmark.circle.fill"
+        }
+    }
 }
 
 struct SubmissionRosterRow: Identifiable, Equatable {
@@ -61,6 +69,23 @@ enum SubmissionRoster {
         rows.filter { $0.status == .submitted }.count
     }
 
+    static func selectionProgress(
+        nominations: [Nomination],
+        memberId: String,
+        perMember: Int
+    ) -> (made: Int, total: Int, status: SubmissionRosterStatus) {
+        let made = nominations.filter { $0.submittedBy == memberId }.count
+        let total = max(perMember, 0)
+        return (made, total, status(made: made, total: total, isLocked: false))
+    }
+
+    static func status(made: Int, total: Int, isLocked: Bool) -> SubmissionRosterStatus {
+        if isLocked { return .submitted }
+        if total > 0, made >= total { return .submitted }
+        if made > 0 { return .inProgress }
+        return .notStarted
+    }
+
     private static func sortRank(_ status: SubmissionRosterStatus) -> Int {
         switch status {
         case .notStarted: return 0
@@ -83,8 +108,6 @@ enum SubmissionRoster {
     ) -> SubmissionRosterStatus {
         guard let submission else { return .notStarted }
         if submission.isLocked { return .submitted }
-        if slateSize > 0, made >= slateSize { return .submitted }
-        if made > 0 { return .inProgress }
-        return .notStarted
+        return status(made: made, total: slateSize, isLocked: false)
     }
 }
