@@ -13,6 +13,7 @@ struct PicksView: View {
     @State private var incompletePickemsAlertText = ""
     @State private var isRefreshing = false
     @State private var showSubmissionStatus = false
+    @State private var picksExpanded = false
 
     private var viewModel: PicksViewModel { appState.picksViewModel }
 
@@ -136,6 +137,7 @@ struct PicksView: View {
                 await reloadPicks()
             }
             .onChange(of: appState.groupService.currentWeek?.id) { _, newWeekId in
+                picksExpanded = false
                 reobservePicks(weekId: newWeekId)
                 viewModel.refreshNominationSubmissionState(appState: appState)
             }
@@ -187,7 +189,7 @@ struct PicksView: View {
                 .foregroundStyle(theme.accent)
         }
         .padding(.horizontal)
-        .accessibilityHint("Review your Pickems across the season")
+        .accessibilityHint("View league Pickems charts by week")
     }
 
     private var displayedWeeks: [WeekSummary] {
@@ -264,6 +266,7 @@ struct PicksView: View {
         await appState.refreshLeagueData()
         await viewModel.loadWeek(appState: appState)
         await viewModel.ensureTeamRanks(appState: appState)
+        await viewModel.refreshLiveNow(appState: appState, forceRefresh: true)
     }
 
     // MARK: - Phase content
@@ -312,15 +315,17 @@ struct PicksView: View {
             }
         case .pickems:
             if WeekTransition.arePickemsOpen(week) {
-                if let deadline = week.pickDeadline {
-                    PickDeadlineBanner(deadline: deadline)
-                }
-                if picksMatchWeek(week) {
-                    SecondaryButton("See who's in", icon: "person.crop.circle.badge.clock") {
-                        showSubmissionStatus = true
+                if !WeekTransition.pickemsShouldShowLeagueBoard(week) {
+                    if let deadline = week.pickDeadline {
+                        PickDeadlineBanner(deadline: deadline)
                     }
-                    .padding(.horizontal)
-                    .accessibilityHint("Shows how many Pickems each member has made, without revealing their picks")
+                    if picksMatchWeek(week) {
+                        SecondaryButton("See who's in", icon: "person.crop.circle.badge.clock") {
+                            showSubmissionStatus = true
+                        }
+                        .padding(.horizontal)
+                        .accessibilityHint("Shows how many Pickems each member has made, without revealing their picks")
+                    }
                 }
                 pickemsGames(for: week)
             } else {
@@ -464,10 +469,10 @@ struct PicksView: View {
     @ViewBuilder
     private func pickemsGames(for week: WeekSummary) -> some View {
         if picksMatchWeek(week) {
-            switch week.status {
-            case .picking: pickingPhase(week: week)
-            case .locked, .scored: lockedPhase(week: week)
-            case .selection: EmptyView()
+            if WeekTransition.pickemsShouldShowLeagueBoard(week) {
+                lockedPhase(week: week)
+            } else if week.status != .selection {
+                pickingPhase(week: week)
             }
         } else {
             ProgressView()
@@ -583,33 +588,10 @@ struct PicksView: View {
     }
 
     private func lockedPhase(week: WeekSummary) -> some View {
-        VStack(spacing: 12) {
-            StatusBadge(
-                text: week.status == .scored ? "Scored" : "Locked",
-                color: week.status == .scored ? PickemsColors.success : PickemsColors.textSecondary
-            )
-            .padding(.horizontal)
+        VStack(spacing: 16) {
+            GroupPicksView(embedded: true)
 
-            ForEach(appState.pickService.slateGames.sortedByKickoff) { game in
-                GamePickRow(
-                    game: game,
-                    selectedTeamId: viewModel.draftPicks[game.id],
-                    isDisabled: true,
-                    liveCard: viewModel.livePickCards[game.espnEventId],
-                    homeRank: viewModel.teamRanks.rank(for: game.homeTeamId),
-                    awayRank: viewModel.teamRanks.rank(for: game.awayTeamId),
-                    onSelect: { _ in }
-                )
-                .padding(.horizontal)
-            }
-
-            NavigationLink { GroupPicksView() } label: {
-                Label("View League Pickems", systemImage: "person.3")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .foregroundStyle(theme.accent)
-            }
-            .padding(.horizontal)
+            yourPickemsDisclosure(week: week)
         }
         .task(id: week.id) {
             if let group = appState.groupService.selectedGroup {
@@ -619,6 +601,71 @@ struct PicksView: View {
             viewModel.startLiveRefresh(week: week, appState: appState)
         }
         .onDisappear { viewModel.stopLiveRefresh() }
+    }
+
+    private func yourPickemsDisclosure(week: WeekSummary) -> some View {
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    picksExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Your Pickems")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(PickemsColors.textPrimary)
+                        Text(week.status == .scored ? "Final results" : "Locked for this week")
+                            .font(.caption)
+                            .foregroundStyle(PickemsColors.textSecondary)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    StatusBadge(
+                        text: week.status == .scored ? "Scored" : "Locked",
+                        color: week.status == .scored ? PickemsColors.success : PickemsColors.textSecondary
+                    )
+
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .rotationEffect(.degrees(picksExpanded ? 0 : -90))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(PickemsColors.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Your Pickems")
+            .accessibilityValue(picksExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(picksExpanded ? "Hides your Pickems" : "Shows your Pickems")
+            .accessibilityAddTraits(.isButton)
+
+            if picksExpanded {
+                VStack(spacing: 8) {
+                    ForEach(appState.pickService.slateGames.sortedByKickoff) { game in
+                        GamePickRow(
+                            game: game,
+                            selectedTeamId: viewModel.draftPicks[game.id],
+                            isDisabled: true,
+                            liveCard: viewModel.livePickCards[game.espnEventId],
+                            homeRank: viewModel.teamRanks.rank(for: game.homeTeamId),
+                            awayRank: viewModel.teamRanks.rank(for: game.awayTeamId),
+                            onSelect: { _ in }
+                        )
+                    }
+                }
+                .padding(.top, 8)
+                .padding(.horizontal, 4)
+            }
+        }
+        .padding(.horizontal)
     }
 }
 

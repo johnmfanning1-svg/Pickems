@@ -171,6 +171,14 @@ struct SlateGame: Codable, Identifiable, Equatable {
         return "\(abbr) \(spreadLabel(for: spreadTeamId))"
     }
 
+    /// Which side the Pickems spread applies to. `nil` when there is no favorite.
+    var favoredSide: TeamDisplay.FavoredSide? {
+        guard abs(spread) > 0 else { return nil }
+        if spreadTeamId == homeTeamId { return .home }
+        if spreadTeamId == awayTeamId { return .away }
+        return nil
+    }
+
     func coveredTeamId(homeScore: Int, awayScore: Int) -> String? {
         let spreadMagnitude = abs(spread)
         let margin = Double(homeScore - awayScore)

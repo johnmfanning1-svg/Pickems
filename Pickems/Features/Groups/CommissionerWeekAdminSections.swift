@@ -143,6 +143,10 @@ struct CommissionerWeekAdminSections: View {
                             )
                         )
                             .foregroundStyle(PickemsColors.textPrimary)
+                        LockedSpreadLabel(
+                            lockedText: game.favoriteSpreadDisplay,
+                            liveText: picksVM.livePickCards[game.espnEventId]?.liveSpreadLabel
+                        )
                         HStack {
                             Button("Edit Spread") { picksVM.spreadEditGame = game }
                             if !week.skipsSelection {

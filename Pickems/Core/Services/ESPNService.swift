@@ -7,29 +7,33 @@ actor ESPNService {
     private var weekCache: CFBWeekInfo?
     private var weekCacheTime: Date?
     private var seasonWeeksCache: (year: Int, weeks: [CFBSeasonWeek], fetchedAt: Date)?
-    private let browseCacheTTL: TimeInterval = 15 * 60
-    private let liveCacheTTL: TimeInterval = 60
+    private var browseCacheTTL: TimeInterval { ScoreboardCachePolicy.browseTTL }
 
     private struct CachedScoreboard {
         let games: [ESPNGame]
         let fetchedAt: Date
     }
 
+    /// Drops in-memory scoreboard and current-week caches so the next fetch hits the network.
+    func invalidateScoreboardCache() {
+        scoreboardCache.removeAll()
+        weekCache = nil
+        weekCacheTime = nil
+    }
+
     func currentWeek(forceRefresh: Bool = false) async throws -> CFBWeekInfo {
-        if !forceRefresh,
-           let weekCache,
-           let weekCacheTime,
-           Date().timeIntervalSince(weekCacheTime) < browseCacheTTL {
+        if ScoreboardCachePolicy.shouldReturnCached(
+            forceRefresh: forceRefresh,
+            fetchedAt: weekCacheTime,
+            ttl: ScoreboardCachePolicy.browseTTL
+        ), let weekCache {
             return weekCache
         }
 
         guard let url = Self.currentWeekURL() else {
             throw ESPNError.invalidURL
         }
-        let (data, response) = try await URLSession.shared.data(from: url)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw ESPNError.requestFailed
-        }
+        let data = try await fetchData(from: url, ignoreCache: forceRefresh)
 
         let decoded = try JSONDecoder().decode(ESPNScoreboardMetaResponse.self, from: data)
         let season = decoded.season?.year ?? Calendar.current.component(.year, from: Date())
@@ -76,21 +80,28 @@ actor ESPNService {
         seasonWeeksCache = (year, weeks, Date())
     }
 
-    func fetchScoreboard(week: Int, seasonType: Int = 2, live: Bool = false) async throws -> [ESPNGame] {
-        let cacheKey = "\(seasonType)-\(week)-fbs-\(live ? "live" : "browse")"
-        let ttl = live ? liveCacheTTL : browseCacheTTL
+    func fetchScoreboard(
+        week: Int,
+        seasonType: Int = 2,
+        live: Bool = false,
+        forceRefresh: Bool = false
+    ) async throws -> [ESPNGame] {
+        let cacheKey = ScoreboardCachePolicy.key(week: week, seasonType: seasonType, live: live)
+        let ttl = live ? ScoreboardCachePolicy.liveTTL : ScoreboardCachePolicy.browseTTL
 
-        if let cached = scoreboardCache[cacheKey], Date().timeIntervalSince(cached.fetchedAt) < ttl {
+        if let cached = scoreboardCache[cacheKey],
+           ScoreboardCachePolicy.shouldReturnCached(
+            forceRefresh: forceRefresh,
+            fetchedAt: cached.fetchedAt,
+            ttl: ttl
+           ) {
             return cached.games
         }
 
         guard let url = Self.scoreboardURL(week: week, seasonType: seasonType) else {
             throw ESPNError.invalidURL
         }
-        let (data, response) = try await URLSession.shared.data(from: url)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw ESPNError.requestFailed
-        }
+        let data = try await fetchData(from: url, ignoreCache: forceRefresh)
 
         let decoded = try JSONDecoder().decode(ESPNScoreboardResponse.self, from: data)
         let games = (decoded.events ?? []).compactMap { parseEvent($0) }
@@ -98,11 +109,17 @@ actor ESPNService {
         return games
     }
 
-    func fetchScoreboard(for week: WeekSummary, seasonType: Int = 2, live: Bool = false) async throws -> [ESPNGame] {
+    func fetchScoreboard(
+        for week: WeekSummary,
+        seasonType: Int = 2,
+        live: Bool = false,
+        forceRefresh: Bool = false
+    ) async throws -> [ESPNGame] {
         let games = try await fetchScoreboard(
             week: week.espnScoreboardWeek,
             seasonType: seasonType,
-            live: live
+            live: live,
+            forceRefresh: forceRefresh
         )
         return games.matching(seasonYear: week.seasonYear, appWeekNumber: week.weekNumber)
     }
@@ -134,9 +151,15 @@ actor ESPNService {
         seasonType: Int = 2,
         slateEventIds: Set<String> = [],
         userPicks: [String: String] = [:],
-        slateGames: [SlateGame] = []
+        slateGames: [SlateGame] = [],
+        forceRefresh: Bool = false
     ) async throws -> [ESPNLiveGameCard] {
-        let espnGames = try await fetchScoreboard(week: week, seasonType: seasonType, live: true)
+        let espnGames = try await fetchScoreboard(
+            week: week,
+            seasonType: seasonType,
+            live: true,
+            forceRefresh: forceRefresh
+        )
         let slateByEventId = Dictionary(slateGames.map { ($0.espnEventId, $0) }, uniquingKeysWith: { _, last in last })
         let slateIds = slateEventIds.union(Set(slateGames.map(\.espnEventId)))
 
@@ -186,7 +209,8 @@ actor ESPNService {
                 broadcastLabel: game.broadcastLabel,
                 isNeutralSite: game.isNeutralSite,
                 userPickTeamAbbreviation: pickAbbr,
-                pickResult: result
+                pickResult: result,
+                liveSpreadLabel: Self.liveSpreadLabel(espnGame: game, isSlateGame: isSlate)
             )
         }
 
@@ -205,14 +229,16 @@ actor ESPNService {
         for week: WeekSummary,
         slateEventIds: Set<String> = [],
         userPicks: [String: String] = [:],
-        slateGames: [SlateGame] = []
+        slateGames: [SlateGame] = [],
+        forceRefresh: Bool = false
     ) async throws -> [ESPNLiveGameCard] {
         let cards = try await liveGameCards(
             week: week.espnScoreboardWeek,
             seasonType: 2,
             slateEventIds: slateEventIds,
             userPicks: userPicks,
-            slateGames: slateGames
+            slateGames: slateGames,
+            forceRefresh: forceRefresh
         )
         return cards.matching(seasonYear: week.seasonYear, appWeekNumber: week.weekNumber)
     }
@@ -433,6 +459,12 @@ actor ESPNService {
         return espnGame.spreadDisplayLabel
     }
 
+    /// ESPN's current line, shown next to a locked Pickems line for reference.
+    nonisolated static func liveSpreadLabel(espnGame: ESPNGame, isSlateGame: Bool) -> String? {
+        guard isSlateGame else { return nil }
+        return espnGame.spreadDisplayLabel
+    }
+
     /// National `broadcasts.names[0]`, else first geo short name. Hides empty / TBD.
     static func parseBroadcastLabel(
         broadcasts: [ESPNScoreboardResponse.ESPNBroadcast]?,
@@ -506,6 +538,48 @@ actor ESPNService {
               let head = Range(match.range(at: 1), in: raw),
               let zone = Range(match.range(at: 2), in: raw) else { return nil }
         return "\(raw[head]):00\(raw[zone])"
+    }
+
+    private func fetchData(from url: URL, ignoreCache: Bool) async throws -> Data {
+        let (data, response): (Data, URLResponse)
+        if ignoreCache {
+            let request = URLRequest(
+                url: url,
+                cachePolicy: .reloadIgnoringLocalCacheData,
+                timeoutInterval: 30
+            )
+            (data, response) = try await URLSession.shared.data(for: request)
+        } else {
+            (data, response) = try await URLSession.shared.data(from: url)
+        }
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw ESPNError.requestFailed
+        }
+        return data
+    }
+
+    enum ScoreboardCachePolicy {
+        static let browseTTL: TimeInterval = 15 * 60
+        static let liveTTL: TimeInterval = 60
+
+        static func key(week: Int, seasonType: Int, live: Bool) -> String {
+            "\(seasonType)-\(week)-fbs-\(live ? "live" : "browse")"
+        }
+
+        static func isFresh(fetchedAt: Date, ttl: TimeInterval, now: Date = Date()) -> Bool {
+            now.timeIntervalSince(fetchedAt) < ttl
+        }
+
+        /// In-memory cache is skipped when `forceRefresh` is true or the entry is missing/stale.
+        static func shouldReturnCached(
+            forceRefresh: Bool,
+            fetchedAt: Date?,
+            ttl: TimeInterval,
+            now: Date = Date()
+        ) -> Bool {
+            guard !forceRefresh, let fetchedAt else { return false }
+            return isFresh(fetchedAt: fetchedAt, ttl: ttl, now: now)
+        }
     }
 
     enum ESPNError: LocalizedError {

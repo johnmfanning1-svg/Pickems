@@ -1341,6 +1341,57 @@ final class GroupService {
         }
     }
 
+    /// Standings and current week for another league. Does not change `selectedGroup`.
+    func fetchStandings(groupId: String) async -> (standings: GroupStandings?, week: WeekSummary?, members: [GroupMember]) {
+        let groupRef = db.collection("groups").document(groupId)
+
+        var standings: GroupStandings?
+        do {
+            let snap = try await groupRef.collection("standings").document("current").getDocument()
+            if snap.exists {
+                standings = try? snap.data(as: GroupStandings.self)
+            }
+        } catch {
+            AppLog.error(AppLog.firestore, "display standings fetch failed", error: error, metadata: [
+                "group_id": groupId,
+            ])
+        }
+
+        let weekId: String
+        if let cfbWeek {
+            weekId = await resolvedWeekIdToObserve(groupId: groupId, espn: cfbWeek)
+        } else {
+            weekId = CFBWeekSync.fallbackWeekId()
+        }
+
+        var week: WeekSummary?
+        do {
+            let weekSnap = try await groupRef.collection("weeks").document(weekId).getDocument()
+            if weekSnap.exists {
+                week = try? weekSnap.data(as: WeekSummary.self)
+            }
+        } catch {
+            AppLog.error(AppLog.firestore, "display week fetch failed", error: error, metadata: [
+                "group_id": groupId,
+                "week_id": weekId,
+            ])
+        }
+
+        var members: [GroupMember] = []
+        if standings?.entries.isEmpty ?? true {
+            do {
+                let membersSnapshot = try await groupRef.collection("members").getDocuments()
+                members = membersSnapshot.documents.compactMap { try? $0.data(as: GroupMember.self) }
+            } catch {
+                AppLog.error(AppLog.firestore, "display members fetch failed", error: error, metadata: [
+                    "group_id": groupId,
+                ])
+            }
+        }
+
+        return (standings, week, members)
+    }
+
     /// One-shot server fetch for pull-to-refresh. Listeners stay attached.
     func refreshFromServer() async {
         guard let groupId = selectedGroup?.id else { return }
@@ -1357,10 +1408,11 @@ final class GroupService {
             UserFacingError.apply(error, to: &errorMessage)
         }
 
-        if let info = try? await ESPNService.shared.currentWeek() {
+        if let info = try? await ESPNService.shared.currentWeek(forceRefresh: true) {
             cfbWeek = info
         }
 
+        // Refresh the week on screen (pinned browse or active), not only ESPN current.
         let weekId = currentWeek?.id ?? observedWeekId
         if let weekId {
             do {
@@ -1368,7 +1420,9 @@ final class GroupService {
                     .collection("weeks").document(weekId)
                     .getDocument(source: .server)
                 if weekSnap.exists, let week = try? weekSnap.data(as: WeekSummary.self) {
-                    if !(weekSelectionPinned && currentWeek?.id != week.id) {
+                    // Apply the displayed week's snapshot. Do not replace a pinned
+                    // browse with a different week id that raced in during the fetch.
+                    if currentWeek?.id == nil || currentWeek?.id == week.id {
                         currentWeek = week
                     }
                 }

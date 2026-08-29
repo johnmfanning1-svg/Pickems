@@ -30,6 +30,9 @@ struct ProfileView: View {
                     sharingSection
                 }
                 leaguesSection
+                if !appState.groupService.groups.isEmpty {
+                    widgetDisplaySection
+                }
                 howToPlaySection
                 legalSection
                 accountActionsSection
@@ -448,6 +451,30 @@ struct ProfileView: View {
         }
     }
 
+    private var widgetDisplaySection: some View {
+        Section {
+            Picker("League", selection: displayGroupSelection) {
+                ForEach(appState.groupService.groups) { option in
+                    Text(option.name).tag(option.id)
+                }
+            }
+            .listRowBackground(PickemsColors.cardBackground)
+            .accessibilityHint("Choose which league the Home Screen widget and Live Activities show")
+        } header: {
+            HStack {
+                Text("Home Screen & Live Activity")
+                Spacer()
+                HelpInfoButton(
+                    topic: PickemsHelp.widgetAndLiveActivity,
+                    size: .callout,
+                    presentedTopic: $presentedHelp
+                )
+            }
+        } footer: {
+            Text("The widget and live lock screen / Dynamic Island follow this league, even if you switch leagues in the app.")
+        }
+    }
+
     private var howToPlaySection: some View {
         Section {
             Button {
@@ -518,6 +545,19 @@ struct ProfileView: View {
         )
     }
 
+    private var displayGroupSelection: Binding<String> {
+        Binding(
+            get: {
+                WidgetSnapshotService.resolvedDisplayGroup(from: appState)?.id ?? ""
+            },
+            set: { newId in
+                guard appState.groupService.groups.contains(where: { $0.id == newId }) else { return }
+                PickemsAppGroup.setDisplayGroupId(newId)
+                appState.publishSurfaces()
+            }
+        )
+    }
+
     private func uploadAvatar(from item: PhotosPickerItem?) {
         guard let item,
               let userId = appState.authService.currentUser?.id else { return }
@@ -543,6 +583,7 @@ struct ProfileView: View {
         Task {
             do {
                 try await appState.groupService.leaveGroup(groupId: group.id, userId: userId)
+                appState.publishSurfaces()
                 PickemsHaptics.success()
             } catch {
                 managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
@@ -554,6 +595,7 @@ struct ProfileView: View {
         do {
             try appState.authService.signOut()
             appState.groupService.resetSession()
+            appState.publishSurfaces()
         } catch {
             managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
         }

@@ -11,6 +11,7 @@ struct PickHistoryView: View {
                         PickResultRow(
                             game: game,
                             pickedTeamId: pick.picks[game.id],
+                            liveSpreadLabel: appState.picksViewModel.livePickCards[game.espnEventId]?.liveSpreadLabel,
                             homeRank: appState.picksViewModel.teamRanks.rank(for: game.homeTeamId),
                             awayRank: appState.picksViewModel.teamRanks.rank(for: game.awayTeamId)
                         )

@@ -242,6 +242,12 @@ struct SlateGameDecodingTests {
         #expect(game(spread: 5.5, spreadTeamId: "a", status: .scheduled).favoriteSpreadDisplay == "AWY -5.5")
     }
 
+    @Test func favoredSideIsNilWhenThereIsNoLine() {
+        #expect(game(spread: 4, spreadTeamId: "h", status: .scheduled).favoredSide == .home)
+        #expect(game(spread: 5.5, spreadTeamId: "a", status: .scheduled).favoredSide == .away)
+        #expect(game(spread: 0, spreadTeamId: "h", status: .scheduled).favoredSide == nil)
+    }
+
     private func game(spread: Double, spreadTeamId: String, status: SlateGame.GameStatus) -> SlateGame {
         SlateGame(
             id: "401",

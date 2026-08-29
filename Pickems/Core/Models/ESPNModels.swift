@@ -160,6 +160,8 @@ struct ESPNLiveGameCard: Identifiable, Equatable {
     var isNeutralSite: Bool = false
     var userPickTeamAbbreviation: String?
     var pickResult: PickResult?
+    /// ESPN's current line when `spreadLabel` is the locked Pickems slate line.
+    var liveSpreadLabel: String? = nil
 
     enum PickResult: Equatable {
         case win, loss, push, pending

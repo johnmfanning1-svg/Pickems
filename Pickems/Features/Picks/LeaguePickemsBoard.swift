@@ -9,10 +9,10 @@ struct LeaguePickemsBoard: View {
     var teamRanks: TeamRankLookup = .empty
     var currentUserId: String?
 
-    private let gameColumnWidth: CGFloat = 132
+    private let gameColumnWidth: CGFloat = 152
     private let pickColumnWidth: CGFloat = 76
     private let headerHeight: CGFloat = 44
-    private let rowHeight: CGFloat = 58
+    private let rowHeight: CGFloat = 76
 
     private var columns: [GroupMember] {
         members.sorted { lhs, rhs in
@@ -27,6 +27,7 @@ struct LeaguePickemsBoard: View {
         VStack(alignment: .leading, spacing: 12) {
             colorKey
             board
+            chartFootnote
         }
     }
 
@@ -54,6 +55,17 @@ struct LeaguePickemsBoard: View {
             .background(fill)
             .clipShape(Capsule())
             .accessibilityLabel(title)
+    }
+
+    private var chartFootnote: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("* Favored team — the spread applies to this team.")
+            Text("The lock is the Pickems line used for scoring. The number in parentheses is ESPN’s live line, for reference.")
+        }
+        .font(.caption2)
+        .foregroundStyle(PickemsColors.textSecondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .combine)
     }
 
     private var board: some View {
@@ -123,27 +135,61 @@ struct LeaguePickemsBoard: View {
         let status = live?.status ?? game.status
         let awayRank = live?.awayCuratedRank ?? teamRanks.rank(for: game.awayTeamId)
         let homeRank = live?.homeCuratedRank ?? teamRanks.rank(for: game.homeTeamId)
+        let matchup = TeamDisplay.matchupLabel(
+            awayAbbreviation: game.awayTeamAbbreviation,
+            awayRank: awayRank,
+            homeAbbreviation: game.homeTeamAbbreviation,
+            homeRank: homeRank,
+            separator: game.matchupSeparator,
+            favoredSide: game.favoredSide
+        )
         return VStack(alignment: .leading, spacing: 2) {
-            Text(
-                TeamDisplay.matchupLabel(
-                    awayAbbreviation: game.awayTeamAbbreviation,
-                    awayRank: awayRank,
-                    homeAbbreviation: game.homeTeamAbbreviation,
-                    homeRank: homeRank,
-                    separator: game.matchupSeparator
-                )
-            )
+            Text(matchup)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(PickemsColors.textPrimary)
-            Text(game.spreadLabel(for: game.spreadTeamId))
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(PickemsColors.textSecondary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+            LockedSpreadLabel(
+                lockedText: game.favoriteSpreadDisplay,
+                liveText: live?.liveSpreadLabel,
+                isLocked: true
+            )
+            .lineLimit(2)
+            .minimumScaleFactor(0.8)
             Text(gameStatusLine(game: game, live: live, status: status))
                 .font(.caption2)
                 .foregroundStyle(status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
                 .lineLimit(1)
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(gameAccessibilityLabel(
+            game: game,
+            matchup: matchup,
+            live: live,
+            status: status
+        ))
+    }
+
+    private func gameAccessibilityLabel(
+        game: SlateGame,
+        matchup: String,
+        live: ESPNLiveGameCard?,
+        status: SlateGame.GameStatus
+    ) -> String {
+        var parts = [matchup]
+        if let side = game.favoredSide {
+            let name = side == .home ? game.homeTeamAbbreviation : game.awayTeamAbbreviation
+            parts.append("\(name) is favored — the spread applies to this team")
+        }
+        parts.append(
+            SpreadLineCopy.accessibilityLabel(
+                locked: game.favoriteSpreadDisplay,
+                live: live?.liveSpreadLabel,
+                isLocked: true
+            )
+        )
+        parts.append(gameStatusLine(game: game, live: live, status: status))
+        return parts.joined(separator: ". ")
     }
 
     private func gameStatusLine(

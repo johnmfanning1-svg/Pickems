@@ -4,6 +4,7 @@ struct PickResultRow: View {
     let game: SlateGame
     let pickedTeamId: String?
     var showSpread: Bool = true
+    var liveSpreadLabel: String? = nil
     var homeRank: Int? = nil
     var awayRank: Int? = nil
     @Environment(\.themePalette) private var theme
@@ -23,9 +24,13 @@ struct PickResultRow: View {
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textPrimary)
                 if showSpread {
-                    Text(game.spreadLabel(for: game.spreadTeamId))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(theme.accent)
+                    LockedSpreadLabel(
+                        lockedText: game.favoriteSpreadDisplay,
+                        liveText: liveSpreadLabel,
+                        isLocked: true,
+                        font: .caption.weight(.semibold),
+                        lockedColor: theme.accent
+                    )
                 }
             }
             Spacer()

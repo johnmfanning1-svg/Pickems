@@ -55,4 +55,8 @@ enum PickemsAppGroup {
         guard let data = defaults?.data(forKey: standingsKey) else { return nil }
         return try? JSONDecoder().decode(StandingsSnapshot.self, from: data)
     }
+
+    static func clear() {
+        defaults?.removeObject(forKey: standingsKey)
+    }
 }

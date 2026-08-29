@@ -66,9 +66,22 @@ struct WeekTransitionTests {
         #expect(!WeekTransition.arePicksEditable(week(status: .selection, deadline: deadline)))
     }
 
-    @Test func picksNotEditableAfterPickDeadline() {
-        let deadline = Date().addingTimeInterval(-60)
-        #expect(!WeekTransition.arePicksEditable(week(status: .picking, deadline: deadline)))
+    @Test func pickemsBoardShowsWhenLockedOrScored() {
+        #expect(WeekTransition.pickemsShouldShowLeagueBoard(week(status: .locked)))
+        #expect(WeekTransition.pickemsShouldShowLeagueBoard(week(status: .scored)))
+    }
+
+    @Test func pickemsBoardShowsWhenPickingAfterDeadline() {
+        let past = Date().addingTimeInterval(-60)
+        #expect(WeekTransition.pickemsShouldShowLeagueBoard(week(status: .picking, deadline: past)))
+        #expect(!WeekTransition.arePicksEditable(week(status: .picking, deadline: past)))
+    }
+
+    @Test func pickemsBoardHiddenWhilePickingBeforeDeadline() {
+        let future = Date().addingTimeInterval(7 * 24 * 3600)
+        #expect(!WeekTransition.pickemsShouldShowLeagueBoard(week(status: .picking, deadline: future)))
+        #expect(!WeekTransition.pickemsShouldShowLeagueBoard(week(status: .picking)))
+        #expect(!WeekTransition.pickemsShouldShowLeagueBoard(week(status: .selection)))
     }
 
     @Test func fillingSlateDoesNotAutoOpenPicking() {

@@ -266,7 +266,11 @@ final class PickService {
             let (nominationsSnap, gamesSnapshot, ownPickSnap, submissionsSnap) = try await (
                 nomsSnap, gamesSnap, pickSnap, subsSnap
             )
-            guard observedWeekId == weekId, observedGroupId == groupId else { return }
+            // Observation can remount during this await. Apply the payload for the
+            // week we fetched; re-observe if listeners landed on a different week.
+            if observedWeekId != weekId || observedGroupId != groupId {
+                observeWeek(groupId: groupId, weekId: weekId, userId: userId)
+            }
             nominations = nominationsSnap.documents.compactMap { try? $0.data(as: Nomination.self) }
             slateGames = SlateGameDecoding.sortedByKickoff(
                 gamesSnapshot.documents.compactMap { doc in
@@ -1151,6 +1155,38 @@ final class PickService {
             try await gamesRef.document(game.id).setData(from: game)
             added.append(game)
         }
+    }
+
+    /// One-shot league board for a week. Does **not** assign `slateGames` / `allPicks`
+    /// so browsing Season History cannot clobber the live current week.
+    func fetchLeagueBoard(
+        groupId: String,
+        weekId: String
+    ) async throws -> (week: WeekSummary, games: [SlateGame], picks: [UserPick]) {
+        let weekRef = db.week(groupId: groupId, weekId: weekId)
+        let weekDoc = try await weekRef.getDocument()
+        let week = try weekDoc.data(as: WeekSummary.self)
+
+        let gamesSnap = try await weekRef.collection(FirestoreCollection.games).getDocuments()
+        let games = SlateGameDecoding.sortedByKickoff(
+            gamesSnap.documents.compactMap { doc in
+                SlateGame.fromDocument(id: doc.documentID, data: doc.data())
+            }
+        )
+
+        var picks: [UserPick] = []
+        do {
+            let picksSnap = try await weekRef.collection(FirestoreCollection.picks).getDocuments(source: .server)
+            picks = picksSnap.documents.compactMap { try? $0.data(as: UserPick.self) }
+        } catch {
+            if UserFacingError.isPermissionDenied(error) {
+                picks = []
+            } else {
+                throw error
+            }
+        }
+
+        return (week, games, picks)
     }
 
     func loadWeekHistory(groupId: String, weekId: String, userId: String) async throws -> WeekHistoryEntry? {

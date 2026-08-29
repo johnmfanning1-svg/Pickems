@@ -89,6 +89,19 @@ enum WeekTransition {
         }
     }
 
+    /// League Pickems are public: week is locked/scored, or picking after the pick deadline.
+    /// Status can stay `.picking` after lock time; `.selection` never shows the board.
+    static func pickemsShouldShowLeagueBoard(_ week: WeekSummary) -> Bool {
+        switch week.status {
+        case .locked, .scored:
+            return true
+        case .picking:
+            return PickDeadlineCalculator.isPast(week.pickDeadline)
+        case .selection:
+            return false
+        }
+    }
+
     /// Slate games/noms can change during selection, or during picking before the pick deadline.
     /// Past weeks already stamped with a fill-time `lockedAt` stay editable until `pickDeadline`.
     /// Locked/scored weeks are never editable, even if `pickDeadline` is still in the future.

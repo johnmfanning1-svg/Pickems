@@ -22,6 +22,9 @@ final class PicksViewModel {
     }
 
     private var liveRefreshTask: Task<Void, Never>?
+    /// Pull-to-refresh live scores in flight; the background loop must not overwrite them with a cached fetch.
+    private var liveForceRefreshCount = 0
+    private var liveResultsGeneration = 0
     private var saveDraftTask: Task<Void, Never>?
     /// Local Pickems waiting for a Firestore echo. Stale listener snapshots must not clobber this.
     private var pendingWritePicks: [String: String]?
@@ -152,7 +155,8 @@ final class PicksViewModel {
 
     func startLiveRefresh(week: WeekSummary, appState: AppState) {
         liveRefreshTask = LiveScoreRefresh.start(existing: liveRefreshTask) { [weak self] in
-            await self?.refreshLiveResults(week: week, appState: appState)
+            guard let self, self.liveForceRefreshCount == 0 else { return }
+            await self.refreshLiveResults(week: week, appState: appState)
         }
     }
 
@@ -566,16 +570,33 @@ final class PicksViewModel {
         }
     }
 
-    private func refreshLiveResults(week: WeekSummary, appState: AppState) async {
+    func refreshLiveNow(appState: AppState, forceRefresh: Bool = true) async {
+        guard let week = appState.groupService.currentWeek else { return }
+        if forceRefresh { liveForceRefreshCount += 1 }
+        defer { if forceRefresh { liveForceRefreshCount = max(0, liveForceRefreshCount - 1) } }
+        await refreshLiveResults(week: week, appState: appState, forceRefresh: forceRefresh)
+    }
+
+    private func refreshLiveResults(
+        week: WeekSummary,
+        appState: AppState,
+        forceRefresh: Bool = false
+    ) async {
         let slateIds = Set(appState.pickService.slateGames.map(\.espnEventId))
         guard !slateIds.isEmpty else { return }
+        if !forceRefresh, liveForceRefreshCount > 0 { return }
+        liveResultsGeneration += 1
+        let generation = liveResultsGeneration
         do {
             let cards = try await ESPNService.shared.liveGameCards(
                 for: week,
                 slateEventIds: slateIds,
                 userPicks: draftPicks,
-                slateGames: appState.pickService.slateGames
+                slateGames: appState.pickService.slateGames,
+                forceRefresh: forceRefresh
             )
+            guard generation == liveResultsGeneration else { return }
+            if !forceRefresh, liveForceRefreshCount > 0 { return }
             livePickCards = Dictionary(uniqueKeysWithValues: cards.map { ($0.espnEventId, $0) })
             teamRanks = teamRanks.merging(TeamRankLookup(cards: cards))
         } catch {

@@ -1,7 +1,10 @@
-What's new in 3.2.3
+What's new in 3.2.4
 
-• See who's in — check who has made Pickems, how many, and who still needs to submit
-• Counts only; other members' actual picks stay hidden until lock
-• Submission chase is now a compact sheet instead of an empty full page
+• Locked Pickems spreads show a lock; ESPN’s live line appears in parentheses for reference
+• League Pickems charts mark the favored team with an asterisk and explain it below the board
+• After lock, the league chart is the default; Your Pickems is collapsed
+• View League Pickems on the Leagues tab; Season History browses past weeks’ charts
+• Choose which league drives the Home Screen widget and Live Activity
+• Home scoreboard shows kickoff date like Pickems cards; pull-to-refresh reloads more reliably
 
 Thanks for helping us UAT this build.

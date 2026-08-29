@@ -80,8 +80,7 @@ struct GroupPicksView: View {
 
     private var picksVisibleToAll: Bool {
         guard let week else { return false }
-        if week.status == .locked || week.status == .scored { return true }
-        return ScoringEngine.isPastDeadline(deadline: week.pickDeadline)
+        return WeekTransition.pickemsShouldShowLeagueBoard(week)
     }
 
     private var currentUserId: String? {
@@ -359,6 +358,7 @@ struct GroupPicksView: View {
                         game: game,
                         pickedTeamId: pick?.picks[game.id],
                         showSpread: true,
+                        liveSpreadLabel: appState.picksViewModel.livePickCards[game.espnEventId]?.liveSpreadLabel,
                         homeRank: appState.picksViewModel.teamRanks.rank(for: game.homeTeamId),
                         awayRank: appState.picksViewModel.teamRanks.rank(for: game.awayTeamId)
                     )
@@ -408,9 +408,13 @@ struct GroupPicksView: View {
                                 Text(nominationMatchupLabel(nom))
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(PickemsColors.textPrimary)
-                                Text(nominationSpreadLabel(nom))
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(theme.accent)
+                                LockedSpreadLabel(
+                                    lockedText: nominationSpreadLabel(nom),
+                                    liveText: liveSpreadText(forEventId: nom.espnEventId),
+                                    isLocked: true,
+                                    font: .caption.weight(.bold),
+                                    lockedColor: theme.accent
+                                )
                             }
                             Spacer(minLength: 8)
                             if canRemove, let rules = appState.groupService.selectedGroup?.rules {
@@ -471,6 +475,12 @@ struct GroupPicksView: View {
             abbr = "FAV"
         }
         return String(format: "%@ %g", abbr, -abs(nom.spread))
+    }
+
+    private func liveSpreadText(forEventId espnEventId: String) -> String? {
+        guard let card = appState.picksViewModel.livePickCards[espnEventId] else { return nil }
+        if card.isSlateGame { return card.liveSpreadLabel }
+        return card.spreadLabel
     }
 
     private var ownPickPendingState: some View {

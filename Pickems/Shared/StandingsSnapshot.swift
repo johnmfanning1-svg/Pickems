@@ -41,6 +41,7 @@ struct StandingsSnapshot: Codable, Equatable {
 enum PickemsAppGroup {
     static let suiteName = "group.FannypackInc.Pickems"
     static let standingsKey = "standingsSnapshot"
+    static let displayGroupIdKey = "widgetDisplayGroupId"
 
     static var defaults: UserDefaults? {
         UserDefaults(suiteName: suiteName)
@@ -54,5 +55,22 @@ enum PickemsAppGroup {
     static func load() -> StandingsSnapshot? {
         guard let data = defaults?.data(forKey: standingsKey) else { return nil }
         return try? JSONDecoder().decode(StandingsSnapshot.self, from: data)
+    }
+
+    static func clear() {
+        defaults?.removeObject(forKey: standingsKey)
+    }
+
+    static func displayGroupId() -> String? {
+        guard let id = defaults?.string(forKey: displayGroupIdKey), !id.isEmpty else { return nil }
+        return id
+    }
+
+    static func setDisplayGroupId(_ id: String?) {
+        if let id, !id.isEmpty {
+            defaults?.set(id, forKey: displayGroupIdKey)
+        } else {
+            defaults?.removeObject(forKey: displayGroupIdKey)
+        }
     }
 }

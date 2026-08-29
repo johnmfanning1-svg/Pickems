@@ -75,16 +75,33 @@ enum TeamDisplay {
         return "#\(rank) \(abbreviation)"
     }
 
+    enum FavoredSide: Equatable {
+        case away
+        case home
+    }
+
     /// Matchup line with ranks only on ranked sides.
+    /// When `favoredSide` is set, that team's abbreviation gets a trailing `*`.
     static func matchupLabel(
         awayAbbreviation: String,
         awayRank: Int?,
         homeAbbreviation: String,
         homeRank: Int?,
-        separator: String = "@"
+        separator: String = "@",
+        favoredSide: FavoredSide? = nil
     ) -> String {
-        let away = rankedLabel(abbreviation: awayAbbreviation, rank: awayRank)
-        let home = rankedLabel(abbreviation: homeAbbreviation, rank: homeRank)
+        let away = marked(
+            rankedLabel(abbreviation: awayAbbreviation, rank: awayRank),
+            favored: favoredSide == .away
+        )
+        let home = marked(
+            rankedLabel(abbreviation: homeAbbreviation, rank: homeRank),
+            favored: favoredSide == .home
+        )
         return "\(away) \(separator) \(home)"
+    }
+
+    private static func marked(_ label: String, favored: Bool) -> String {
+        favored ? "\(label)*" : label
     }
 }

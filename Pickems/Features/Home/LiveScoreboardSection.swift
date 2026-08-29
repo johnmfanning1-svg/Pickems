@@ -6,54 +6,68 @@ struct LiveGameRow: View {
 
     var body: some View {
         PickemsCard {
-            HStack(spacing: 12) {
-                teamColumn(
-                    name: card.awayTeamAbbreviation,
-                    logo: card.awayTeamLogoURL,
-                    rank: card.awayCuratedRank,
-                    score: card.awayScore,
-                    caption: "Away"
-                )
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    teamColumn(
+                        name: card.awayTeamAbbreviation,
+                        logo: card.awayTeamLogoURL,
+                        rank: card.awayCuratedRank,
+                        score: card.awayScore,
+                        caption: "Away"
+                    )
 
-                VStack(spacing: 4) {
-                    if card.status == .scheduled {
-                        Text(GameKickoffLine.make(
-                            kickoff: card.kickoff,
-                            broadcastLabel: card.broadcastLabel,
-                            includeDate: false
-                        ))
-                            .font(.caption.weight(.semibold))
-                    } else {
-                        Text(card.statusDetail)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(card.status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
-                    }
-                    Text(card.isNeutralSite ? "vs" : "@")
-                        .font(.caption2)
-                        .foregroundStyle(PickemsColors.textSecondary)
-                    if let spread = card.spreadLabel {
-                        Text(spread)
+                    VStack(spacing: 4) {
+                        if card.status != .scheduled {
+                            Text(card.statusDetail)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(card.status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
+                        }
+                        Text(card.isNeutralSite ? "vs" : "@")
                             .font(.caption2)
                             .foregroundStyle(PickemsColors.textSecondary)
-                    }
-                    if card.isSlateGame, let pick = card.userPickTeamAbbreviation {
-                        HStack(spacing: 4) {
-                            Text("Pick: \(pick)")
-                                .font(.caption2)
-                            pickResultIcon
+                        if let spread = card.spreadLabel {
+                            if card.isSlateGame {
+                                LockedSpreadLabel(
+                                    lockedText: spread,
+                                    liveText: card.liveSpreadLabel,
+                                    isLocked: true
+                                )
+                                .multilineTextAlignment(.center)
+                            } else {
+                                Text(spread)
+                                    .font(.caption2)
+                                    .foregroundStyle(PickemsColors.textSecondary)
+                            }
                         }
-                        .foregroundStyle(pickResultColor)
+                        if card.isSlateGame, let pick = card.userPickTeamAbbreviation {
+                            HStack(spacing: 4) {
+                                Text("Pick: \(pick)")
+                                    .font(.caption2)
+                                pickResultIcon
+                            }
+                            .foregroundStyle(pickResultColor)
+                        }
                     }
-                }
-                .frame(minWidth: 80)
+                    .frame(minWidth: 80)
 
-                teamColumn(
-                    name: card.homeTeamAbbreviation,
-                    logo: card.homeTeamLogoURL,
-                    rank: card.homeCuratedRank,
-                    score: card.homeScore,
-                    caption: "Home"
-                )
+                    teamColumn(
+                        name: card.homeTeamAbbreviation,
+                        logo: card.homeTeamLogoURL,
+                        rank: card.homeCuratedRank,
+                        score: card.homeScore,
+                        caption: "Home"
+                    )
+                }
+
+                if card.status == .scheduled {
+                    Text(GameKickoffLine.make(
+                        kickoff: card.kickoff,
+                        broadcastLabel: card.broadcastLabel,
+                        includeDate: true
+                    ))
+                    .font(.caption2)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                }
             }
         }
         .accessibilityElement(children: .ignore)
@@ -74,12 +88,26 @@ struct LiveGameRow: View {
         )
         parts.append("\(awayName) \(awayScore), \(homeName) \(homeScore)")
         if card.status == .scheduled {
-            parts.append("Kickoff \(card.kickoff.formatted(date: .abbreviated, time: .shortened))")
+            parts.append(GameKickoffLine.make(
+                kickoff: card.kickoff,
+                broadcastLabel: card.broadcastLabel,
+                includeDate: true
+            ))
         } else {
             parts.append(card.statusDetail)
         }
         if let spread = card.spreadLabel {
-            parts.append(spread)
+            if card.isSlateGame {
+                parts.append(
+                    SpreadLineCopy.accessibilityLabel(
+                        locked: spread,
+                        live: card.liveSpreadLabel,
+                        isLocked: true
+                    )
+                )
+            } else {
+                parts.append(spread)
+            }
         }
         if card.isSlateGame, let pick = card.userPickTeamAbbreviation {
             parts.append("Your pick: \(pick)")

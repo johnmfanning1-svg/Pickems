@@ -339,6 +339,8 @@ struct GroupsView: View {
         let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
 
         return VStack(spacing: 12) {
+            leaguePickemsEntry
+
             LazyVGrid(columns: columns, spacing: 12) {
                 NavigationLink {
                     StatsView()
@@ -356,14 +358,6 @@ struct GroupsView: View {
                 .buttonStyle(.plain)
                 .accessibilityHint("View league members and season records")
 
-                NavigationLink {
-                    RivalryView()
-                } label: {
-                    gridActionLabel("Rivalry", systemImage: "person.line.dotted.person.fill")
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("Compare records against another member")
-
                 GroupChatEntryButton(group: group)
             }
 
@@ -371,6 +365,99 @@ struct GroupsView: View {
                 .accessibilityHint("Share your invite code with friends")
         }
         .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private var leaguePickemsEntry: some View {
+        if let week = appState.groupService.currentWeek,
+           WeekTransition.pickemsShouldShowLeagueBoard(week) {
+            NavigationLink {
+                LeaguePickemsEntryView()
+            } label: {
+                leaguePickemsCard(
+                    subtitle: "Everyone's picks against the spread",
+                    showsChevron: true
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("View League Pickems")
+            .accessibilityHint("View this week's league Pickems chart")
+        } else {
+            leaguePickemsCountdownCard
+        }
+    }
+
+    private func leaguePickemsCard(subtitle: String, showsChevron: Bool) -> some View {
+        PickemsCard {
+            HStack(spacing: 12) {
+                Image(systemName: "person.3")
+                    .font(.title3)
+                    .foregroundStyle(theme.accent)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("View League Pickems")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(theme.accent)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                if showsChevron {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var leaguePickemsCountdownCard: some View {
+        let week = appState.groupService.currentWeek
+        return PickemsCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.3")
+                        .font(.title3)
+                        .foregroundStyle(theme.accent)
+                        .accessibilityHidden(true)
+                    Text("View League Pickems")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(theme.accent)
+                    Spacer(minLength: 0)
+                }
+
+                if let deadline = week?.pickDeadline {
+                    TimelineView(.periodic(from: .now, by: 30)) { _ in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(PickDeadlineCalculator.countdownLabel(to: deadline))
+                                .font(.title3.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(PickemsColors.textPrimary)
+                            Text("Locks \(PickDeadlineCalculator.lockTimeLabel(for: deadline))")
+                                .font(.caption)
+                                .foregroundStyle(PickemsColors.textSecondary)
+                        }
+                    }
+                } else if week?.status == .selection {
+                    Text("Pickems lock after the slate is set. Everyone's picks show here after lock.")
+                        .font(.caption)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("Everyone's Pickems show here after they lock.")
+                        .font(.caption)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("View League Pickems")
+        .accessibilityHint("Countdown until Pickems lock. The league chart opens after lock.")
     }
 
     private func gridActionLabel(_ title: String, systemImage: String) -> some View {

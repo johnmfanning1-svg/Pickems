@@ -36,6 +36,7 @@ extension AppState {
 
     /// Pull-to-refresh: hit the server for the selected league, week, and Pickems.
     func refreshLeagueData() async {
+        await ESPNService.shared.invalidateScoreboardCache()
         await groupService.refreshFromServer()
         guard let group = groupService.selectedGroup,
               let week = groupService.currentWeek,
@@ -43,6 +44,12 @@ extension AppState {
         pickService.observeWeek(groupId: group.id, weekId: week.id, userId: userId)
         await pickService.refreshFromServer(groupId: group.id, weekId: week.id, userId: userId)
         picksViewModel.resyncWhenVisible(appState: self)
+    }
+
+    /// Widget + Live Activity for the display league (not necessarily the in-app selection).
+    func publishSurfaces() {
+        WidgetSnapshotService.publish(from: self)
+        LiveActivityController.sync(from: self)
     }
 
     func joinGroup(inviteCode: String, markOnboarding: Bool = true) async throws {

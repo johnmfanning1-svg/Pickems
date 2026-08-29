@@ -51,11 +51,14 @@ struct GamePickRow: View {
                 }
 
                 ZStack {
-                    Text("Spread: \(game.spreadLabel(for: game.spreadTeamId)) \(spreadTeamAbbreviation)")
-                        .font(.caption)
-                        .foregroundStyle(PickemsColors.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .multilineTextAlignment(.center)
+                    LockedSpreadLabel(
+                        lockedText: game.favoriteSpreadDisplay,
+                        liveText: liveCard?.liveSpreadLabel,
+                        isLocked: true,
+                        font: .caption.weight(.semibold)
+                    )
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
 
                     if let result = liveCard?.pickResult {
                         HStack {
@@ -107,10 +110,6 @@ struct GamePickRow: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(PickemsColors.warning)
         }
-    }
-
-    private var spreadTeamAbbreviation: String {
-        game.spreadTeamId == game.homeTeamId ? game.homeTeamAbbreviation : game.awayTeamAbbreviation
     }
 
     /// Empty string is treated as no pick so a cleared Pickem can be tapped again.

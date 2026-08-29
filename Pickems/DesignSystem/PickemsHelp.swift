@@ -34,7 +34,8 @@ enum PickemsHelp {
         message: "Game data comes from ESPN. Spreads are locked when your commissioner builds the slate.",
         tips: [
             "Your Slate highlights games on your slate this week.",
-            "Green checkmarks mean your Pickem won."
+            "Green checkmarks mean your Pickem won.",
+            "A lock next to a spread is the Pickems line used for scoring. The number in parentheses is ESPN’s live line, for reference."
         ]
     )
 
@@ -68,7 +69,30 @@ enum PickemsHelp {
             "Submit before the deadline shown at the top.",
             "Draft Pickems save automatically as you tap.",
             "Pickems stay locked until Selections are done or the Selection deadline passes.",
-            "See who's in shows how many Pickems each member has made — not who they picked."
+            "See who's in shows how many Pickems each member has made — not who they picked.",
+            "After Pickems lock, this tab shows the league chart. Expand Your Pickems to review your own picks."
+        ]
+    )
+
+    static let leaguePickems = HelpTopic(
+        id: "picks.leagueBoard",
+        title: "League Pickems",
+        message: "Once Pickems lock, everyone can see the chart: games as rows, members as columns. Colors update as games go.",
+        tips: [
+            "Before lock, this screen shows a countdown — picks stay hidden.",
+            "An asterisk next to a team means that team is favored — the spread applies to them.",
+            "A lock is the Pickems line. The number in parentheses is ESPN’s live line, for reference.",
+            "After lock, open Season History to browse past weeks' charts."
+        ]
+    )
+
+    static let seasonHistory = HelpTopic(
+        id: "picks.seasonHistory",
+        title: "Season History",
+        message: "Browse locked and scored weeks as league Pickems charts. Choose a week to see how everyone picked.",
+        tips: [
+            "Your record for that week sits above the chart.",
+            "Weeks that have not locked yet show a countdown instead of an empty chart."
         ]
     )
 
@@ -122,6 +146,7 @@ enum PickemsHelp {
         message: "Pick the team you think will cover the point spread — not necessarily who wins outright.",
         tips: [
             "Example: Ohio State -7 means OSU must win by more than 7.",
+            "A lock marks the Pickems line. The number in parentheses is ESPN’s live line, for reference — scoring uses the locked line.",
             "Tap a selected team to clear that Pickem. The Selection (the game) stays on the slate.",
             "A push (exact spread) is neither a win nor a loss.",
             "You must make a Pickem on every slate game before submitting."
@@ -146,7 +171,8 @@ enum PickemsHelp {
         message: "Your private pick'em league. Switch leagues using the chips at the top. Selections and Pickems live on their own tabs.",
         tips: [
             "Share your invite code so friends can join.",
-            "Toggle between weekly and season standings."
+            "Toggle between weekly and season standings.",
+            "View League Pickems opens the chart after lock, or a countdown until then."
         ]
     )
 
@@ -187,7 +213,18 @@ enum PickemsHelp {
         tips: [
             "First and last name identify your account; username is what friends see in leagues.",
             "Usernames must be unique (letters, numbers, underscore).",
-            "Push alerts cover Selection and Pickems deadlines — toggle each in Profile, or change iOS permission in Settings."
+            "Push alerts cover Selection and Pickems deadlines — toggle each in Profile, or change iOS permission in Settings.",
+            "Home Screen widget and Live Activities follow the league you pick under Home Screen & Live Activity."
+        ]
+    )
+
+    static let widgetAndLiveActivity = HelpTopic(
+        id: "profile.widgetLiveActivity",
+        title: "Home Screen & Live Activity",
+        message: "Choose which league the Home Screen widget and Live Activities show. Switching leagues in the app does not change this until you pick a different league here.",
+        tips: [
+            "The widget and lock-screen Live Activity update as soon as you change this setting.",
+            "If you leave that league, Pickems falls back to another league you are in, or clears the widget."
         ]
     )
 

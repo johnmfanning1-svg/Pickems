@@ -33,6 +33,9 @@ struct MainTabView: View {
                 .accessibilityHint("Display name, favorite team, and notification settings")
         }
         .tint(theme.accent)
+        .onChange(of: appState.groupService.groups.map(\.id)) { _, _ in
+            appState.publishSurfaces()
+        }
         .sheet(isPresented: $appState.showNotificationOnboarding) {
             StayOnTimeSheet()
                 .pickemsEnvironment(appState)

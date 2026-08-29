@@ -93,6 +93,35 @@ struct TeamRankLookupTests {
         )
     }
 
+    @Test func matchupLabelMarksFavoredSideWithAsterisk() {
+        #expect(
+            TeamDisplay.matchupLabel(
+                awayAbbreviation: "OSU",
+                awayRank: 5,
+                homeAbbreviation: "UVA",
+                homeRank: nil,
+                favoredSide: .away
+            ) == "#5 OSU* @ UVA"
+        )
+        #expect(
+            TeamDisplay.matchupLabel(
+                awayAbbreviation: "OSU",
+                awayRank: nil,
+                homeAbbreviation: "UVA",
+                homeRank: 12,
+                favoredSide: .home
+            ) == "OSU @ #12 UVA*"
+        )
+        #expect(
+            TeamDisplay.matchupLabel(
+                awayAbbreviation: "OSU",
+                awayRank: nil,
+                homeAbbreviation: "UVA",
+                homeRank: nil
+            ) == "OSU @ UVA"
+        )
+    }
+
     private func makeGame(
         homeId: String,
         homeRank: Int?,

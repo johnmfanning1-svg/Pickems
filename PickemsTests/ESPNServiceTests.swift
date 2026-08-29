@@ -207,6 +207,8 @@ struct ESPNServiceTests {
             ESPNService.resolvedSpreadLabel(espnGame: espn, slateGame: invertedSlate) == "NCSU -5.5"
         )
         #expect(ESPNService.resolvedSpreadLabel(espnGame: espn, slateGame: nil) == "UVA -4.0")
+        #expect(ESPNService.liveSpreadLabel(espnGame: espn, isSlateGame: true) == "UVA -4.0")
+        #expect(ESPNService.liveSpreadLabel(espnGame: espn, isSlateGame: false) == nil)
     }
 
     @Test func parseBroadcastLabelPrefersNationalName() {
@@ -384,6 +386,60 @@ struct ESPNServiceTests {
         #expect(ESPNService.parseKickoffDate("2026-08-12T21:10:17.123Z") != nil)
     }
 
+    @Test func scoreboardCacheKeyDistinguishesWeekAndLive() {
+        let browse = ESPNService.ScoreboardCachePolicy.key(week: 1, seasonType: 2, live: false)
+        let live = ESPNService.ScoreboardCachePolicy.key(week: 1, seasonType: 2, live: true)
+        let otherWeek = ESPNService.ScoreboardCachePolicy.key(week: 2, seasonType: 2, live: false)
+        #expect(browse == "2-1-fbs-browse")
+        #expect(live == "2-1-fbs-live")
+        #expect(browse != live)
+        #expect(browse != otherWeek)
+    }
+
+    @Test func scoreboardCacheIsFreshWithinTTLButForceRefreshSkipsIt() {
+        let now = Date()
+        let fetchedAt = now.addingTimeInterval(-30)
+        #expect(
+            ESPNService.ScoreboardCachePolicy.isFresh(
+                fetchedAt: fetchedAt,
+                ttl: ESPNService.ScoreboardCachePolicy.liveTTL,
+                now: now
+            )
+        )
+        #expect(
+            ESPNService.ScoreboardCachePolicy.shouldReturnCached(
+                forceRefresh: false,
+                fetchedAt: fetchedAt,
+                ttl: ESPNService.ScoreboardCachePolicy.liveTTL,
+                now: now
+            )
+        )
+        #expect(
+            !ESPNService.ScoreboardCachePolicy.shouldReturnCached(
+                forceRefresh: true,
+                fetchedAt: fetchedAt,
+                ttl: ESPNService.ScoreboardCachePolicy.liveTTL,
+                now: now
+            )
+        )
+        #expect(
+            !ESPNService.ScoreboardCachePolicy.shouldReturnCached(
+                forceRefresh: false,
+                fetchedAt: now.addingTimeInterval(-120),
+                ttl: ESPNService.ScoreboardCachePolicy.liveTTL,
+                now: now
+            )
+        )
+        #expect(
+            !ESPNService.ScoreboardCachePolicy.shouldReturnCached(
+                forceRefresh: false,
+                fetchedAt: nil,
+                ttl: ESPNService.ScoreboardCachePolicy.liveTTL,
+                now: now
+            )
+        )
+    }
+
     @Test func resolvedPickedTeamIdPrefersEventIdThenSlateId() {
         let slate = makeSlate(id: "firestore-1", espnEventId: "401856766")
         #expect(
@@ -427,6 +483,7 @@ struct ESPNServiceTests {
         #expect(card.hasUserPick)
         #expect(card.userPickTeamAbbreviation == "HOM")
         #expect(card.spreadLabel == "HOM -7.0")
+        #expect(card.liveSpreadLabel == nil)
         #expect(card.matches(.groupSlate))
         #expect(card.matches(.myPicks))
         #expect(card.homeCuratedRank == nil)

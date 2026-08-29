@@ -77,16 +77,13 @@ struct HomeView: View {
                 HelpToolbarItem(topic: PickemsHelp.homeOverview)
             }
             .pickemsRefreshable(isRefreshing: $isRefreshing) {
-                await appState.refreshLeagueData()
-                await viewModel.refresh(appState: appState, showLoading: viewModel.liveGames.isEmpty)
-                WidgetSnapshotService.publish(from: appState)
-                LiveActivityController.sync(from: appState)
+                await viewModel.refresh(appState: appState, showLoading: viewModel.liveGames.isEmpty, forceRefresh: true)
+                appState.publishSurfaces()
             }
             .task(id: appState.groupService.selectedGroup?.id) {
                 await appState.syncSelectedWeek()
                 viewModel.startLiveUpdates(appState: appState)
-                WidgetSnapshotService.publish(from: appState)
-                LiveActivityController.sync(from: appState)
+                appState.publishSurfaces()
             }
             .onAppear {
                 viewModel.startLiveUpdates(appState: appState)
@@ -101,13 +98,11 @@ struct HomeView: View {
             }
             .onChange(of: appState.pickService.slateGames) { _, _ in
                 coverMoment.observe(appState: appState)
-                WidgetSnapshotService.publish(from: appState)
-                LiveActivityController.sync(from: appState)
+                appState.publishSurfaces()
                 Task { await viewModel.refresh(appState: appState) }
             }
             .onChange(of: appState.groupService.standings) { _, _ in
-                WidgetSnapshotService.publish(from: appState)
-                LiveActivityController.sync(from: appState)
+                appState.publishSurfaces()
             }
             .sheet(isPresented: $coverMoment.isPresented) {
                 CoverMomentView(
