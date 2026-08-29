@@ -207,8 +207,9 @@ struct CommissionerWeekAdminSections: View {
                                 slateGames: appState.pickService.slateGames
                             )
                         } label: {
-                            Label("Manage Pickems — \(member.displayName)", systemImage: "slider.horizontal.3")
+                            Label(member.displayName, systemImage: "slider.horizontal.3")
                         }
+                        .accessibilityLabel("Manage Pickems for \(member.displayName)")
                         .listRowBackground(PickemsColors.cardBackground)
                     }
                 }

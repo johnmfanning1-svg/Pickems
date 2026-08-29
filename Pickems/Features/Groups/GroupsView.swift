@@ -651,12 +651,18 @@ struct GroupChip: View {
 }
 
 struct LeaderboardView: View {
+    static let previewLimit = 10
+
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
     @State private var showWeekly = true
 
-    private var displayEntries: [StandingEntry] {
+    private var allEntries: [StandingEntry] {
         appState.rankedStandings(weekly: showWeekly)
+    }
+
+    private var previewEntries: [StandingEntry] {
+        Array(allEntries.prefix(Self.previewLimit))
     }
 
     var body: some View {
@@ -675,30 +681,101 @@ struct LeaderboardView: View {
             .padding(.horizontal)
             .accessibilityLabel("Standings period")
 
-            if !displayEntries.isEmpty {
-                ForEach(displayEntries) { entry in
-                    VStack(spacing: 4) {
-                        LeaderboardRow(
-                            entry: entry,
-                            showWeekly: showWeekly,
-                            isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId
-                        )
-                    }
-                    .padding(.horizontal)
-                }
-            } else {
+            if allEntries.isEmpty {
                 EmptyStateView(
                     icon: "chart.bar.fill",
                     title: "No Standings Yet",
                     message: "Invite members to see an interim ranking by join order.",
                     help: PickemsHelp.leaderboard
                 )
+            } else {
+                ForEach(previewEntries) { entry in
+                    LeaderboardRow(
+                        entry: entry,
+                        showWeekly: showWeekly,
+                        isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId
+                    )
+                    .padding(.horizontal)
+                }
+                if allEntries.count > Self.previewLimit {
+                    NavigationLink {
+                        FullLeaderboardView(showWeekly: $showWeekly)
+                    } label: {
+                        PickemsCard {
+                            HStack(spacing: 12) {
+                                Image(systemName: "list.number")
+                                    .font(.title3)
+                                    .foregroundStyle(theme.accent)
+                                    .accessibilityHidden(true)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Full ranking")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(theme.accent)
+                                    Text("All \(allEntries.count) members")
+                                        .font(.caption)
+                                        .foregroundStyle(PickemsColors.textSecondary)
+                                }
+                                Spacer(minLength: 8)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(PickemsColors.textSecondary)
+                                    .accessibilityHidden(true)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal)
+                    .accessibilityLabel("View full ranking")
+                    .accessibilityHint("See every member in this league")
+                    .accessibilityValue("\(allEntries.count) members")
+                }
             }
         }
         .task(id: appState.groupService.currentWeek?.id) {
             guard let group = appState.groupService.selectedGroup,
                   let week = appState.groupService.currentWeek else { return }
             await appState.pickService.loadAllPicks(groupId: group.id, weekId: week.id)
+        }
+    }
+}
+
+struct FullLeaderboardView: View {
+    @Environment(AppState.self) private var appState
+    @Binding var showWeekly: Bool
+
+    private var entries: [StandingEntry] {
+        appState.rankedStandings(weekly: showWeekly)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("Standings", selection: $showWeekly) {
+                    Text("This Week").tag(true)
+                    Text("Season").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .accessibilityLabel("Standings period")
+
+                ForEach(entries) { entry in
+                    LeaderboardRow(
+                        entry: entry,
+                        showWeekly: showWeekly,
+                        isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId
+                    )
+                    .padding(.horizontal)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+        .pickemsScreenBackground()
+        .navigationTitle("Full Ranking")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            HelpToolbarItem(topic: PickemsHelp.leaderboard)
         }
     }
 }

@@ -1,9 +1,6 @@
-What's new in 3.2.6
+What's new in 3.2.7
 
-• Home game tiles show the broadcast network (or TBD) instead of vs/@
-• Upcoming Home kickoffs use MM/DD · time, without the extra footer line
-• Live Home tiles drop the duplicate gold score so the clock can read larger
-• The large standings widget lists up to 10 members in your league
-• League Pickems charts use American MM/DD dates
+• Leagues larger than 10 members show the top 10, with Full ranking for the rest
+• Pickems Admin lists member names without repeating “Manage Pickems”
 
 Thanks for helping us UAT this build.

@@ -192,7 +192,8 @@ enum PickemsHelp {
         message: "Rankings based on Pickem record. This Week resets each slate; Season is cumulative.",
         tips: [
             "W-L is wins and losses against the spread.",
-            "Tied players may need a commissioner tie-break decision."
+            "Tied players may need a commissioner tie-break decision.",
+            "Leagues with more than 10 members show the top 10 here. Open Full ranking to see everyone."
         ]
     )
 
