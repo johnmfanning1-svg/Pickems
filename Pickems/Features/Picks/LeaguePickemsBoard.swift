@@ -252,7 +252,7 @@ struct LeaguePickemsBoard: View {
             return GameKickoffLine.make(
                 kickoff: game.kickoff,
                 broadcastLabel: game.broadcastLabel,
-                dateStyle: compactKickoff ? .compactDayMonth : .abbreviated
+                dateStyle: compactKickoff ? .compactMonthDay : .abbreviated
             )
         }
     }

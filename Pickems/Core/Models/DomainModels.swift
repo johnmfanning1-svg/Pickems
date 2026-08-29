@@ -198,7 +198,7 @@ enum GameKickoffLine {
     enum DateStyle {
         case omitted
         case abbreviated
-        case compactDayMonth
+        case compactMonthDay
     }
 
     static func make(kickoff: Date, broadcastLabel: String?, includeDate: Bool) -> String {
@@ -213,7 +213,8 @@ enum GameKickoffLine {
         kickoff: Date,
         broadcastLabel: String?,
         dateStyle: DateStyle,
-        calendar: Calendar = .autoupdatingCurrent
+        calendar: Calendar = .autoupdatingCurrent,
+        includeBroadcast: Bool = true
     ) -> String {
         let time: String
         switch dateStyle {
@@ -221,10 +222,11 @@ enum GameKickoffLine {
             time = kickoff.formatted(date: .omitted, time: .shortened)
         case .abbreviated:
             time = kickoff.formatted(date: .abbreviated, time: .shortened)
-        case .compactDayMonth:
+        case .compactMonthDay:
             let clock = kickoff.formatted(date: .omitted, time: .shortened)
-            time = "\(compactDayMonth(kickoff, calendar: calendar)) · \(clock)"
+            time = "\(compactMonthDay(kickoff, calendar: calendar)) · \(clock)"
         }
+        guard includeBroadcast else { return time }
         if let broadcastLabel {
             let trimmed = broadcastLabel.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty, trimmed.uppercased() != "TBD" {
@@ -234,10 +236,18 @@ enum GameKickoffLine {
         return time
     }
 
-    /// `29/08` — day then month, for tight chart cells.
-    static func compactDayMonth(_ kickoff: Date, calendar: Calendar = .autoupdatingCurrent) -> String {
+    /// `08/29` — month then day, for tight Home and chart cells.
+    static func compactMonthDay(_ kickoff: Date, calendar: Calendar = .autoupdatingCurrent) -> String {
         let parts = calendar.dateComponents([.day, .month], from: kickoff)
-        return String(format: "%02d/%02d", parts.day ?? 0, parts.month ?? 0)
+        return String(format: "%02d/%02d", parts.month ?? 0, parts.day ?? 0)
+    }
+
+    /// Network for Home tiles. Missing or ESPN `TBD` still shows `TBD`.
+    static func networkLabel(_ broadcastLabel: String?) -> String {
+        guard let broadcastLabel else { return "TBD" }
+        let trimmed = broadcastLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "TBD" }
+        return trimmed
     }
 }
 

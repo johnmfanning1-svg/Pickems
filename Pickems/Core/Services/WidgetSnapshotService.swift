@@ -3,6 +3,9 @@ import WidgetKit
 
 @MainActor
 enum WidgetSnapshotService {
+    /// Large Home Screen widgets can show ~10 names; keep a couple extra for bigger families.
+    static let maxListedEntries = 12
+
     private static var fetchGeneration = 0
 
     static func publish(from appState: AppState) {
@@ -203,7 +206,7 @@ enum WidgetSnapshotService {
             seasonLosses: mine?.seasonLosses ?? 0,
             rank: mine?.rank ?? 0,
             totalPlayers: ranked.count,
-            topEntries: ranked.prefix(5).map {
+            topEntries: ranked.prefix(Self.maxListedEntries).map {
                 .init(
                     id: $0.id,
                     displayName: $0.displayName,

@@ -356,33 +356,36 @@ struct PickemsWidgetEntryView: View {
     }
 
     private func large(_ snapshot: StandingsSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("\(snapshot.groupName) · Week \(snapshot.weekNumber)")
                 .font(.headline)
                 .foregroundStyle(.primary)
-            ForEach(snapshot.topEntries) { row in
-                let isYou = row.id == snapshot.userId
-                HStack {
-                    Text("#\(row.rank)")
-                        .font(.caption.monospacedDigit().weight(isYou ? .bold : .regular))
-                        .frame(width: 28, alignment: .leading)
-                    Text(row.displayName)
-                        .font(.subheadline.weight(isYou ? .bold : .regular))
-                    Spacer()
-                    Text("\(row.weeklyWins)-\(row.weeklyLosses)")
-                        .font(.subheadline.monospacedDigit().weight(isYou ? .bold : .regular))
-                    Text("·")
-                        .foregroundStyle(.secondary)
-                    Text("\(row.seasonWins)-\(row.seasonLosses)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(Array(snapshot.topEntries.prefix(10))) { row in
+                    let isYou = row.id == snapshot.userId
+                    HStack {
+                        Text("#\(row.rank)")
+                            .font(.caption.monospacedDigit().weight(isYou ? .bold : .regular))
+                            .frame(width: 28, alignment: .leading)
+                        Text(row.displayName)
+                            .font(.caption.weight(isYou ? .bold : .regular))
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text("\(row.weeklyWins)-\(row.weeklyLosses)")
+                            .font(.caption.monospacedDigit().weight(isYou ? .bold : .regular))
+                        Text("·")
+                            .foregroundStyle(.secondary)
+                        Text("\(row.seasonWins)-\(row.seasonLosses)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    .foregroundStyle(isYou ? Color.red : Color.primary)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(rowAccessibilityLabel(row, isYou: isYou, weekly: true))
+                    .accessibilityAddTraits(isYou ? [.isSelected] : [])
                 }
-                .foregroundStyle(isYou ? Color.red : Color.primary)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(rowAccessibilityLabel(row, isYou: isYou, weekly: true))
-                .accessibilityAddTraits(isYou ? [.isSelected] : [])
             }
-            Spacer()
+            Spacer(minLength: 0)
             Text("You: #\(snapshot.rank) · \(snapshot.weeklyRecord) this week")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)

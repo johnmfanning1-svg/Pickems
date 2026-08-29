@@ -17,14 +17,30 @@ struct LiveGameRow: View {
                     )
 
                     VStack(spacing: 4) {
-                        if card.status != .scheduled {
-                            Text(card.statusDetail)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(card.status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
-                        }
-                        Text(card.isNeutralSite ? "vs" : "@")
-                            .font(.caption2)
+                        if card.status == .scheduled {
+                            Text(
+                                GameKickoffLine.make(
+                                    kickoff: card.kickoff,
+                                    broadcastLabel: nil,
+                                    dateStyle: .compactMonthDay,
+                                    includeBroadcast: false
+                                )
+                            )
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(PickemsColors.textSecondary)
+                            .multilineTextAlignment(.center)
+                        } else {
+                            Text(card.homeClockLine)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(card.status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
+                                .multilineTextAlignment(.center)
+                                .minimumScaleFactor(0.8)
+                                .lineLimit(2)
+                        }
+                        Text(GameKickoffLine.networkLabel(card.broadcastLabel))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(PickemsColors.textSecondary)
+                            .multilineTextAlignment(.center)
                         if let spread = card.spreadLabel {
                             if card.isSlateGame {
                                 LockedSpreadLabel(
@@ -58,16 +74,6 @@ struct LiveGameRow: View {
                         caption: "Home"
                     )
                 }
-
-                if card.status == .scheduled {
-                    Text(GameKickoffLine.make(
-                        kickoff: card.kickoff,
-                        broadcastLabel: card.broadcastLabel,
-                        includeDate: true
-                    ))
-                    .font(.caption2)
-                    .foregroundStyle(PickemsColors.textSecondary)
-                }
             }
         }
         .accessibilityElement(children: .ignore)
@@ -88,14 +94,18 @@ struct LiveGameRow: View {
         )
         parts.append("\(awayName) \(awayScore), \(homeName) \(homeScore)")
         if card.status == .scheduled {
-            parts.append(GameKickoffLine.make(
-                kickoff: card.kickoff,
-                broadcastLabel: card.broadcastLabel,
-                includeDate: true
-            ))
+            parts.append(
+                GameKickoffLine.make(
+                    kickoff: card.kickoff,
+                    broadcastLabel: nil,
+                    dateStyle: .compactMonthDay,
+                    includeBroadcast: false
+                )
+            )
         } else {
-            parts.append(card.statusDetail)
+            parts.append(card.homeClockLine)
         }
+        parts.append(GameKickoffLine.networkLabel(card.broadcastLabel))
         if let spread = card.spreadLabel {
             if card.isSlateGame {
                 parts.append(

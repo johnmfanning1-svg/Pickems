@@ -62,7 +62,7 @@ struct GameKickoffLineTests {
         #expect(withDate != timeOnly)
     }
 
-    @Test func compactDayMonthIsDayThenMonth() {
+    @Test func compactMonthDayIsMonthThenDay() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/New_York")!
         let kickoff = calendar.date(from: DateComponents(
@@ -73,17 +73,35 @@ struct GameKickoffLineTests {
             minute: 0
         ))!
 
-        #expect(GameKickoffLine.compactDayMonth(kickoff, calendar: calendar) == "29/08")
+        #expect(GameKickoffLine.compactMonthDay(kickoff, calendar: calendar) == "08/29")
 
         let line = GameKickoffLine.make(
             kickoff: kickoff,
             broadcastLabel: "ABC",
-            dateStyle: .compactDayMonth,
+            dateStyle: .compactMonthDay,
             calendar: calendar
         )
-        #expect(line.hasPrefix("29/08 · "))
+        #expect(line.hasPrefix("08/29 · "))
         #expect(line.contains("ABC"))
         #expect(!line.contains("2026"))
         #expect(!line.contains("Aug"))
+
+        let withoutBroadcast = GameKickoffLine.make(
+            kickoff: kickoff,
+            broadcastLabel: "ABC",
+            dateStyle: .compactMonthDay,
+            calendar: calendar,
+            includeBroadcast: false
+        )
+        #expect(withoutBroadcast.hasPrefix("08/29 · "))
+        #expect(!withoutBroadcast.contains("ABC"))
+    }
+
+    @Test func networkLabelShowsTBDWhenMissing() {
+        #expect(GameKickoffLine.networkLabel(nil) == "TBD")
+        #expect(GameKickoffLine.networkLabel("  ") == "TBD")
+        #expect(GameKickoffLine.networkLabel("TBD") == "TBD")
+        #expect(GameKickoffLine.networkLabel("ESPN") == "ESPN")
+        #expect(GameKickoffLine.networkLabel("ACC Network") == "ACC Network")
     }
 }

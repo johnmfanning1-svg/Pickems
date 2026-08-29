@@ -1,9 +1,9 @@
-What's new in 3.2.5
+What's new in 3.2.6
 
-• Rivalry is back next to Chat on the Leagues tab
-• Dynasty uses the same card style as View League Pickems
-• League Pickems charts show compact DD/MM kickoff times for upcoming games
-• Expand the chart to landscape fullscreen to see more members at once
-• Live games show quarter and game clock (e.g. 2nd 7:12) with the score
+• Home game tiles show the broadcast network (or TBD) instead of vs/@
+• Upcoming Home kickoffs use MM/DD · time, without the extra footer line
+• Live Home tiles drop the duplicate gold score so the clock can read larger
+• The large standings widget lists up to 10 members in your league
+• League Pickems charts use American MM/DD dates
 
 Thanks for helping us UAT this build.

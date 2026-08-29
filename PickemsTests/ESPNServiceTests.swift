@@ -283,6 +283,15 @@ struct ESPNServiceTests {
         )
     }
 
+    @Test func homeClockLineDropsDuplicateScore() {
+        #expect(ESPNLiveGameCard.strippingTrailingScore(from: "4th 4:43 · 15-10") == "4th 4:43")
+        #expect(ESPNLiveGameCard.strippingTrailingScore(from: "2nd 7:12 · 15-10") == "2nd 7:12")
+        #expect(ESPNLiveGameCard.strippingTrailingScore(from: "Live · 15-10") == "Live")
+        #expect(ESPNLiveGameCard.strippingTrailingScore(from: "Final · 21-17") == "Final")
+        #expect(ESPNLiveGameCard.strippingTrailingScore(from: "Halftime") == "Halftime")
+        #expect(ESPNLiveGameCard.strippingTrailingScore(from: "Upcoming") == "Upcoming")
+    }
+
     @Test func espnStatusDecodesPeriodClockAndShortDetail() throws {
         let json = Data("""
         {

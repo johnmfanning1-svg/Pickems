@@ -177,6 +177,19 @@ struct ESPNLiveGameCard: Identifiable, Equatable {
 
     var isTop25: Bool { homeCuratedRank != nil || awayCuratedRank != nil }
 
+    /// Home tiles already show scores on the team columns, so drop ` · 15-10`.
+    var homeClockLine: String {
+        Self.strippingTrailingScore(from: statusDetail)
+    }
+
+    static func strippingTrailingScore(from statusDetail: String) -> String {
+        guard let match = statusDetail.range(of: #" · \d+-\d+$"#, options: .regularExpression) else {
+            return statusDetail
+        }
+        let stripped = String(statusDetail[..<match.lowerBound])
+        return stripped.isEmpty ? statusDetail : stripped
+    }
+
     func curatedRank(forTeamId teamId: String) -> Int? {
         if teamId == homeTeamId { return homeCuratedRank }
         if teamId == awayTeamId { return awayCuratedRank }
