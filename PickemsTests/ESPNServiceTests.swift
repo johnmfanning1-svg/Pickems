@@ -211,6 +211,100 @@ struct ESPNServiceTests {
         #expect(ESPNService.liveSpreadLabel(espnGame: espn, isSlateGame: false) == nil)
     }
 
+    @Test func liveClockLabelPrefersESPNShortDetail() {
+        #expect(
+            ESPNService.liveClockLabel(
+                shortDetail: "2nd 7:12",
+                detail: "2nd Quarter",
+                period: 2,
+                displayClock: "7:12",
+                isInProgress: true
+            ) == "2nd 7:12"
+        )
+        #expect(
+            ESPNService.liveClockLabel(
+                shortDetail: "Halftime",
+                detail: nil,
+                period: 2,
+                displayClock: "0:00",
+                isInProgress: true
+            ) == "Halftime"
+        )
+        #expect(
+            ESPNService.liveClockLabel(
+                shortDetail: nil,
+                detail: "In Progress",
+                period: 3,
+                displayClock: "4:01",
+                isInProgress: true
+            ) == "3rd 4:01"
+        )
+        #expect(
+            ESPNService.liveClockLabel(
+                shortDetail: "2nd 7:12",
+                detail: nil,
+                period: 2,
+                displayClock: "7:12",
+                isInProgress: false
+            ) == nil
+        )
+        #expect(
+            ESPNService.liveClockLabel(
+                shortDetail: nil,
+                detail: nil,
+                period: 5,
+                displayClock: "5:00",
+                isInProgress: true
+            ) == "OT 5:00"
+        )
+    }
+
+    @Test func inProgressStatusDetailIncludesClockAndScore() {
+        #expect(
+            ESPNService.inProgressStatusDetail(
+                awayScore: 15,
+                homeScore: 10,
+                liveClockLabel: "2nd 7:12"
+            ) == "2nd 7:12 · 15-10"
+        )
+        #expect(
+            ESPNService.inProgressStatusDetail(
+                awayScore: 15,
+                homeScore: 10,
+                liveClockLabel: nil
+            ) == "Live · 15-10"
+        )
+        #expect(
+            ESPNService.inProgressStatusDetail(
+                awayScore: nil,
+                homeScore: nil,
+                liveClockLabel: "Halftime"
+            ) == "Halftime"
+        )
+    }
+
+    @Test func espnStatusDecodesPeriodClockAndShortDetail() throws {
+        let json = Data("""
+        {
+          "clock": 432.0,
+          "displayClock": "7:12",
+          "period": 2,
+          "type": {
+            "completed": false,
+            "state": "in",
+            "shortDetail": "2nd 7:12",
+            "detail": "2nd Quarter"
+          }
+        }
+        """.utf8)
+        let status = try JSONDecoder().decode(ESPNScoreboardResponse.ESPNStatus.self, from: json)
+        #expect(status.period == 2)
+        #expect(status.displayClock == "7:12")
+        #expect(status.type.state == "in")
+        #expect(status.type.shortDetail == "2nd 7:12")
+        #expect(!status.type.completed)
+    }
+
     @Test func parseBroadcastLabelPrefersNationalName() {
         let broadcasts = [
             ESPNScoreboardResponse.ESPNBroadcast(market: "local", names: ["TBD"]),

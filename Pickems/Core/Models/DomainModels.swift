@@ -195,10 +195,36 @@ struct SlateGame: Codable, Identifiable, Equatable {
 }
 
 enum GameKickoffLine {
+    enum DateStyle {
+        case omitted
+        case abbreviated
+        case compactDayMonth
+    }
+
     static func make(kickoff: Date, broadcastLabel: String?, includeDate: Bool) -> String {
-        let time = includeDate
-            ? kickoff.formatted(date: .abbreviated, time: .shortened)
-            : kickoff.formatted(date: .omitted, time: .shortened)
+        make(
+            kickoff: kickoff,
+            broadcastLabel: broadcastLabel,
+            dateStyle: includeDate ? .abbreviated : .omitted
+        )
+    }
+
+    static func make(
+        kickoff: Date,
+        broadcastLabel: String?,
+        dateStyle: DateStyle,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> String {
+        let time: String
+        switch dateStyle {
+        case .omitted:
+            time = kickoff.formatted(date: .omitted, time: .shortened)
+        case .abbreviated:
+            time = kickoff.formatted(date: .abbreviated, time: .shortened)
+        case .compactDayMonth:
+            let clock = kickoff.formatted(date: .omitted, time: .shortened)
+            time = "\(compactDayMonth(kickoff, calendar: calendar)) · \(clock)"
+        }
         if let broadcastLabel {
             let trimmed = broadcastLabel.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty, trimmed.uppercased() != "TBD" {
@@ -206,6 +232,12 @@ enum GameKickoffLine {
             }
         }
         return time
+    }
+
+    /// `29/08` — day then month, for tight chart cells.
+    static func compactDayMonth(_ kickoff: Date, calendar: Calendar = .autoupdatingCurrent) -> String {
+        let parts = calendar.dateComponents([.day, .month], from: kickoff)
+        return String(format: "%02d/%02d", parts.day ?? 0, parts.month ?? 0)
     }
 }
 

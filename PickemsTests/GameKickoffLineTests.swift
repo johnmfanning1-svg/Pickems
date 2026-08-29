@@ -61,4 +61,29 @@ struct GameKickoffLineTests {
         #expect(!withDate.contains("·"))
         #expect(withDate != timeOnly)
     }
+
+    @Test func compactDayMonthIsDayThenMonth() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        let kickoff = calendar.date(from: DateComponents(
+            year: 2026,
+            month: 8,
+            day: 29,
+            hour: 15,
+            minute: 0
+        ))!
+
+        #expect(GameKickoffLine.compactDayMonth(kickoff, calendar: calendar) == "29/08")
+
+        let line = GameKickoffLine.make(
+            kickoff: kickoff,
+            broadcastLabel: "ABC",
+            dateStyle: .compactDayMonth,
+            calendar: calendar
+        )
+        #expect(line.hasPrefix("29/08 · "))
+        #expect(line.contains("ABC"))
+        #expect(!line.contains("2026"))
+        #expect(!line.contains("Aug"))
+    }
 }

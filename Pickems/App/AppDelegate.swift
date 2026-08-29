@@ -6,6 +6,10 @@ import UserNotifications
 /// completion-handler APIs — the `async` variants trap under Swift 6 / MainActor isolation
 /// when UserNotifications invokes them off the main actor (instant TestFlight launch kill).
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    /// Default portrait so tabs stay upright. Landscape is allowed only while the
+    /// expanded League Pickems chart is presented.
+    static var orientationLock: UIInterfaceOrientationMask = .portrait
+
     private(set) var pendingDeepLink: DeepLinkAction?
     var onDeepLink: ((DeepLinkAction) -> Void)?
 
@@ -22,6 +26,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ = FirebaseBootstrap.configureIfNeeded()
         UNUserNotificationCenter.current().delegate = self
         return true
+    }
+
+    func application(
+        _ application: UIApplication,
+        supportedInterfaceOrientationsFor window: UIWindow?
+    ) -> UIInterfaceOrientationMask {
+        Self.orientationLock
     }
 
     private func deliverPendingDeepLinkIfNeeded() {

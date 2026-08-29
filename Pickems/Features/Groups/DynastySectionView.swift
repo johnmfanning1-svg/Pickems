@@ -8,109 +8,49 @@ struct DynastySectionView: View {
         appState.groupService.seasonArchives
     }
 
-    private var topCareers: [CareerRecord] {
-        appState.groupService.careerRecords.sorted {
-            if $0.titles != $1.titles { return $0.titles > $1.titles }
-            if $0.seasonWins != $1.seasonWins { return $0.seasonWins > $1.seasonWins }
-            return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+    private var subtitle: String {
+        if let latest = archives.first {
+            let year = latest.seasonYear.pickemsYearString
+            if let name = latest.championDisplayName, !name.isEmpty {
+                return "\(year) Champion · \(name)"
+            }
+            return "\(year) season archived"
         }
+        return "Champions and career records"
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Dynasty")
-                    .font(.headline)
-                    .foregroundStyle(PickemsColors.textPrimary)
-                Spacer()
-                NavigationLink {
-                    DynastyDetailView()
-                } label: {
-                    Text("See All")
-                        .font(.subheadline.weight(.semibold))
+        NavigationLink {
+            DynastyDetailView()
+        } label: {
+            PickemsCard {
+                HStack(spacing: 12) {
+                    Image(systemName: "trophy.fill")
+                        .font(.title3)
                         .foregroundStyle(theme.accent)
-                }
-            }
-
-            if archives.isEmpty && topCareers.isEmpty {
-                PickemsCard {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("No crowns yet")
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Dynasty")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(PickemsColors.textPrimary)
-                        Text("When the commissioner closes a season, champions and career records live here.")
+                            .foregroundStyle(theme.accent)
+                        Text(subtitle)
                             .font(.caption)
                             .foregroundStyle(PickemsColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            } else {
-                if let latest = archives.first {
-                    championBanner(latest)
-                }
-
-                if !topCareers.isEmpty {
-                    VStack(spacing: 8) {
-                        ForEach(topCareers.prefix(3)) { career in
-                            careerRow(career)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func championBanner(_ archive: SeasonArchive) -> some View {
-        PickemsCard {
-            HStack(spacing: 12) {
-                Image(systemName: "trophy.fill")
-                    .font(.title2)
-                    .foregroundStyle(theme.accent)
-                    .symbolEffect(.bounce, value: archive.seasonYear)
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("\(archive.seasonYear.pickemsYearString) Champion")
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(PickemsColors.textSecondary)
-                    Text(archive.championDisplayName ?? "TBD")
-                        .font(PickemsTypography.display(24))
-                        .foregroundStyle(PickemsColors.textPrimary)
-                    if let champ = archive.finalStandings.first {
-                        Text("\(champ.seasonWins)-\(champ.seasonLosses) · \(archive.weekCount) weeks")
-                            .font(.caption)
-                            .foregroundStyle(PickemsColors.textSecondary)
-                    }
+                        .accessibilityHidden(true)
                 }
-                Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .pickemsAppear()
-    }
-
-    private func careerRow(_ career: CareerRecord) -> some View {
-        HStack(spacing: 12) {
-            InitialsAvatar(
-                initials: String(career.displayName.prefix(2)).uppercased(),
-                colorHex: career.avatarColorHex,
-                size: 36
-            )
-            VStack(alignment: .leading, spacing: 2) {
-                Text(career.displayName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(PickemsColors.textPrimary)
-                Text("\(career.seasonsPlayed) seasons · career \(career.recordLabel)")
-                    .font(.caption)
-                    .foregroundStyle(PickemsColors.textSecondary)
-            }
-            Spacer()
-            if career.titles > 0 {
-                Label("\(career.titles)", systemImage: "crown.fill")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(theme.accent)
-            }
-        }
-        .padding(.vertical, 4)
+        .buttonStyle(.plain)
+        .accessibilityLabel("Dynasty")
+        .accessibilityHint("View champions and career records")
+        .accessibilityValue(subtitle)
     }
 }
 

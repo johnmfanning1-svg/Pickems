@@ -8,9 +8,14 @@ struct LeaguePickemsBoard: View {
     var liveCards: [String: ESPNLiveGameCard] = [:]
     var teamRanks: TeamRankLookup = .empty
     var currentUserId: String?
+    var allowsExpand: Bool = true
+    var isExpandedLayout: Bool = false
 
-    private let gameColumnWidth: CGFloat = 152
-    private let pickColumnWidth: CGFloat = 76
+    @Environment(\.themePalette) private var theme
+    @State private var isExpanded = false
+
+    private var gameColumnWidth: CGFloat { isExpandedLayout ? 168 : 152 }
+    private var pickColumnWidth: CGFloat { isExpandedLayout ? 88 : 76 }
     private let headerHeight: CGFloat = 44
     private let rowHeight: CGFloat = 76
 
@@ -29,13 +34,40 @@ struct LeaguePickemsBoard: View {
             board
             chartFootnote
         }
+        .fullScreenCover(isPresented: $isExpanded) {
+            LeaguePickemsExpandedBoard(
+                members: members,
+                games: games,
+                picksByUserId: picksByUserId,
+                liveCards: liveCards,
+                teamRanks: teamRanks,
+                currentUserId: currentUserId
+            )
+        }
     }
 
     private var colorKey: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Color key")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(PickemsColors.textSecondary)
+            HStack {
+                Text("Color key")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+                Spacer(minLength: 8)
+                if allowsExpand {
+                    Button {
+                        isExpanded = true
+                    } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(theme.accent)
+                            .padding(8)
+                            .background(PickemsColors.cardBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .accessibilityLabel("Expand chart")
+                    .accessibilityHint("Opens a landscape fullscreen view of the league Pickems chart")
+                }
+            }
             HStack(spacing: 8) {
                 keyChip("Trailing", fill: PickemsColors.warning, ink: .black)
                 keyChip("Covering", fill: PickemsColors.covering, ink: .white)
@@ -188,20 +220,26 @@ struct LeaguePickemsBoard: View {
                 isLocked: true
             )
         )
-        parts.append(gameStatusLine(game: game, live: live, status: status))
+        parts.append(
+            gameStatusLine(game: game, live: live, status: status, compactKickoff: false)
+        )
         return parts.joined(separator: ". ")
     }
 
     private func gameStatusLine(
         game: SlateGame,
         live: ESPNLiveGameCard?,
-        status: SlateGame.GameStatus
+        status: SlateGame.GameStatus,
+        compactKickoff: Bool = true
     ) -> String {
         switch status {
         case .inProgress:
+            if let detail = live?.statusDetail, !detail.isEmpty {
+                return detail
+            }
             if let away = live?.awayScore ?? game.awayScore,
                let home = live?.homeScore ?? game.homeScore {
-                return live?.statusDetail ?? "Live \(away)–\(home)"
+                return "Live \(away)–\(home)"
             }
             return "Live"
         case .final:
@@ -214,7 +252,7 @@ struct LeaguePickemsBoard: View {
             return GameKickoffLine.make(
                 kickoff: game.kickoff,
                 broadcastLabel: game.broadcastLabel,
-                includeDate: true
+                dateStyle: compactKickoff ? .compactDayMonth : .abbreviated
             )
         }
     }
@@ -252,6 +290,47 @@ struct LeaguePickemsBoard: View {
         let parts = member.displayName.split(separator: " ")
         if let first = parts.first { return String(first) }
         return member.displayName
+    }
+}
+
+/// Landscape fullscreen chart. Portrait lock is restored on dismiss.
+struct LeaguePickemsExpandedBoard: View {
+    let members: [GroupMember]
+    let games: [SlateGame]
+    let picksByUserId: [String: UserPick]
+    var liveCards: [String: ESPNLiveGameCard] = [:]
+    var teamRanks: TeamRankLookup = .empty
+    var currentUserId: String?
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LeaguePickemsBoard(
+                    members: members,
+                    games: games,
+                    picksByUserId: picksByUserId,
+                    liveCards: liveCards,
+                    teamRanks: teamRanks,
+                    currentUserId: currentUserId,
+                    allowsExpand: false,
+                    isExpandedLayout: true
+                )
+                .padding()
+            }
+            .pickemsScreenBackground()
+            .navigationTitle("League Pickems")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .statusBarHidden(true)
+        .onAppear { InterfaceOrientationLock.set(.landscape) }
+        .onDisappear { InterfaceOrientationLock.set(.portrait) }
     }
 }
 

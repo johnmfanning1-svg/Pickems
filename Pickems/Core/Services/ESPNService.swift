@@ -343,15 +343,68 @@ actor ESPNService {
         case .scheduled:
             return game.kickoff.formatted(date: .abbreviated, time: .shortened)
         case .inProgress:
-            if let home = game.homeScore, let away = game.awayScore {
-                return "Live · \(away)-\(home)"
-            }
-            return "In Progress"
+            return Self.inProgressStatusDetail(
+                awayScore: game.awayScore,
+                homeScore: game.homeScore,
+                liveClockLabel: game.liveClockLabel
+            )
         case .final:
             if let home = game.homeScore, let away = game.awayScore {
                 return "Final · \(away)-\(home)"
             }
             return "Final"
+        }
+    }
+
+    /// ESPN's `shortDetail` is already "2nd 7:12" / "Halftime" / "OT". Fall back to period + clock.
+    nonisolated static func liveClockLabel(
+        shortDetail: String?,
+        detail: String?,
+        period: Int?,
+        displayClock: String?,
+        isInProgress: Bool
+    ) -> String? {
+        guard isInProgress else { return nil }
+        if let short = cleanedStatusText(shortDetail) { return short }
+        if let detail = cleanedStatusText(detail), !detail.localizedCaseInsensitiveContains("in progress") {
+            return detail
+        }
+        let clock = cleanedStatusText(displayClock)
+        if let period {
+            let quarter = periodLabel(period)
+            if let clock { return "\(quarter) \(clock)" }
+            return quarter
+        }
+        return clock
+    }
+
+    nonisolated static func inProgressStatusDetail(
+        awayScore: Int?,
+        homeScore: Int?,
+        liveClockLabel: String?
+    ) -> String {
+        if let homeScore, let awayScore {
+            if let liveClockLabel {
+                return "\(liveClockLabel) · \(awayScore)-\(homeScore)"
+            }
+            return "Live · \(awayScore)-\(homeScore)"
+        }
+        return liveClockLabel ?? "In Progress"
+    }
+
+    private nonisolated static func cleanedStatusText(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private nonisolated static func periodLabel(_ period: Int) -> String {
+        switch period {
+        case 1: return "1st"
+        case 2: return "2nd"
+        case 3: return "3rd"
+        case 4: return "4th"
+        default: return "OT"
         }
     }
 
@@ -410,7 +463,14 @@ actor ESPNService {
                 broadcasts: competition.broadcasts,
                 geoBroadcasts: competition.geoBroadcasts
             ),
-            isNeutralSite: competition.neutralSite == true
+            isNeutralSite: competition.neutralSite == true,
+            liveClockLabel: Self.liveClockLabel(
+                shortDetail: competition.status?.type.shortDetail,
+                detail: competition.status?.type.detail,
+                period: competition.status?.period,
+                displayClock: competition.status?.displayClock,
+                isInProgress: status == .inProgress
+            )
         )
     }
 

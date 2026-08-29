@@ -82,6 +82,7 @@ enum PickemsHelp {
             "Before lock, this screen shows a countdown — picks stay hidden.",
             "An asterisk next to a team means that team is favored — the spread applies to them.",
             "A lock is the Pickems line. The number in parentheses is ESPN’s live line, for reference.",
+            "Tap the expand arrows to view the chart fullscreen in landscape.",
             "After lock, open Season History to browse past weeks' charts."
         ]
     )
@@ -172,7 +173,9 @@ enum PickemsHelp {
         tips: [
             "Share your invite code so friends can join.",
             "Toggle between weekly and season standings.",
-            "View League Pickems opens the chart after lock, or a countdown until then."
+            "View League Pickems opens the chart after lock, or a countdown until then.",
+            "Rivalry compares your weekly record with another member.",
+            "Dynasty opens champions and career records."
         ]
     )
 

@@ -359,6 +359,14 @@ struct GroupsView: View {
                 .accessibilityHint("View league members and season records")
 
                 GroupChatEntryButton(group: group)
+
+                NavigationLink {
+                    RivalryView()
+                } label: {
+                    gridActionLabel("Rivalry", systemImage: "person.2.fill")
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Compare your record head-to-head with another member")
             }
 
             InviteShareButton(group: group)

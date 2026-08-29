@@ -26,6 +26,8 @@ struct ESPNGame: Identifiable, Equatable {
     let awayConferenceId: String?
     var broadcastLabel: String? = nil
     var isNeutralSite: Bool = false
+    /// ESPN live clock, e.g. `2nd 7:12` or `Halftime`. Nil when the game is not in progress.
+    var liveClockLabel: String? = nil
 
     var isTop25: Bool { homeCuratedRank != nil || awayCuratedRank != nil }
 
@@ -107,11 +109,15 @@ struct ESPNScoreboardResponse: Decodable {
 
     struct ESPNStatus: Decodable {
         let type: ESPNStatusType
+        let displayClock: String?
+        let period: Int?
     }
 
     struct ESPNStatusType: Decodable {
         let completed: Bool
         let state: String
+        let shortDetail: String?
+        let detail: String?
     }
 
     struct ESPNOdds: Decodable {
