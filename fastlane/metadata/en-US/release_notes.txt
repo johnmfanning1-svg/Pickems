@@ -1,7 +1,5 @@
-What's new in 3.2.8
+What's new in 3.2.9
 
-• Full ranking sits under the This Week / Season picker on Leagues and includes every member
-• Pickems Admin shows each member’s made/needed count and submitted state
-• See who’s in is gone from Commissioner Settings — those counts live on the member rows
+• The large standings widget lists up to 13 members so bigger leagues fill the tile
 
 Thanks for helping us UAT this build.

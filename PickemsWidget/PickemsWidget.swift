@@ -360,8 +360,8 @@ struct PickemsWidgetEntryView: View {
             Text("\(snapshot.groupName) · Week \(snapshot.weekNumber)")
                 .font(.headline)
                 .foregroundStyle(.primary)
-            VStack(alignment: .leading, spacing: 5) {
-                ForEach(Array(snapshot.topEntries.prefix(10))) { row in
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(snapshot.topEntries.prefix(13))) { row in
                     let isYou = row.id == snapshot.userId
                     HStack {
                         Text("#\(row.rank)")

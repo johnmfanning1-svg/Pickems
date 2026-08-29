@@ -3,8 +3,8 @@ import WidgetKit
 
 @MainActor
 enum WidgetSnapshotService {
-    /// Large Home Screen widgets can show ~10 names; keep a couple extra for bigger families.
-    static let maxListedEntries = 12
+    /// Large Home Screen widgets can show ~13 names; keep a couple extra for bigger families.
+    static let maxListedEntries = 15
 
     private static var fetchGeneration = 0
 
