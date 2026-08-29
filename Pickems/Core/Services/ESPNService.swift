@@ -174,9 +174,7 @@ actor ESPNService {
                 homeTeamLogoURL: game.homeTeamLogoURL,
                 awayScore: game.awayScore,
                 homeScore: game.homeScore,
-                spreadLabel: game.spreadDisplayLabel ?? slateGame.map { g in
-                    g.spreadLabel(for: g.spreadTeamId)
-                },
+                spreadLabel: Self.resolvedSpreadLabel(espnGame: game, slateGame: slateGame),
                 status: game.status,
                 statusDetail: statusDetail(for: game),
                 kickoff: game.kickoff,
@@ -287,12 +285,7 @@ actor ESPNService {
             homeTeamLogoURL: slate.homeTeamLogoURL,
             awayScore: slate.awayScore,
             homeScore: slate.homeScore,
-            spreadLabel: {
-                let abbr = slate.spreadTeamId == slate.homeTeamId
-                    ? slate.homeTeamAbbreviation
-                    : slate.awayTeamAbbreviation
-                return "\(abbr) \(slate.spreadLabel(for: slate.spreadTeamId))"
-            }(),
+            spreadLabel: slate.favoriteSpreadDisplay,
             status: slate.status,
             statusDetail: statusDetail,
             kickoff: slate.kickoff,
@@ -409,7 +402,8 @@ actor ESPNService {
         return current
     }
 
-    /// Favorite from odds flags when present; otherwise derive from details (e.g. "BAMA -7.5"), then home.
+    /// Favorite from odds flags when present; otherwise derive from details (e.g. "BAMA -7.5"),
+    /// then ESPN's home-centric spread (positive = away favored). Never invert a named favorite.
     static func parseSpreadTeamId(
         from odds: ESPNScoreboardResponse.ESPNOdds?,
         homeId: String,
@@ -429,7 +423,14 @@ actor ESPNService {
             }
         }
 
+        if let spread = odds?.spread, spread > 0 { return awayId }
         return homeId
+    }
+
+    /// Slate line is what Pickems scores against — Home must show the same number.
+    nonisolated static func resolvedSpreadLabel(espnGame: ESPNGame, slateGame: SlateGame?) -> String? {
+        if let slateGame { return slateGame.favoriteSpreadDisplay }
+        return espnGame.spreadDisplayLabel
     }
 
     /// National `broadcasts.names[0]`, else first geo short name. Hides empty / TBD.

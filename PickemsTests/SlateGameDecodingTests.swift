@@ -219,4 +219,48 @@ struct SlateGameDecodingTests {
         #expect(merged[0].id == "401")
         #expect(merged[0].spread == 4.5)
     }
+
+    @Test func spreadRepairRewritesInvertedScheduledFavorite() {
+        let stored = game(spread: 5.5, spreadTeamId: "a", status: .scheduled)
+        let espn = game(spread: 4, spreadTeamId: "h", status: .scheduled)
+        let repair = SlateGameDecoding.spreadRepair(existing: stored, espn: espn)
+        #expect(repair?.spread == 4)
+        #expect(repair?.spreadTeamId == "h")
+    }
+
+    @Test func spreadRepairSkipsLiveAndMatchingRows() {
+        let live = game(spread: 5.5, spreadTeamId: "a", status: .inProgress)
+        let espn = game(spread: 4, spreadTeamId: "h", status: .scheduled)
+        #expect(SlateGameDecoding.spreadRepair(existing: live, espn: espn) == nil)
+
+        let matching = game(spread: 4, spreadTeamId: "h", status: .scheduled)
+        #expect(SlateGameDecoding.spreadRepair(existing: matching, espn: espn) == nil)
+    }
+
+    @Test func favoriteSpreadDisplayLeadsWithFavoriteAbbreviation() {
+        #expect(game(spread: 4, spreadTeamId: "h", status: .scheduled).favoriteSpreadDisplay == "HOM -4.0")
+        #expect(game(spread: 5.5, spreadTeamId: "a", status: .scheduled).favoriteSpreadDisplay == "AWY -5.5")
+    }
+
+    private func game(spread: Double, spreadTeamId: String, status: SlateGame.GameStatus) -> SlateGame {
+        SlateGame(
+            id: "401",
+            espnEventId: "401",
+            homeTeamId: "h",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "a",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: spread,
+            spreadTeamId: spreadTeamId,
+            kickoff: Date(),
+            status: status,
+            homeScore: nil,
+            awayScore: nil,
+            winnerTeamId: nil
+        )
+    }
 }

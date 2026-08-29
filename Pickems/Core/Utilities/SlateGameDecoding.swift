@@ -119,6 +119,16 @@ enum SlateGameDecoding {
             isNeutralSite: boolValue(data["isNeutralSite"])
         )
     }
+
+    /// Week 0 rows were seeded with an inverted favorite. Repair scheduled games
+    /// from ESPN until kickoff; never rewrite a live or final line.
+    static func spreadRepair(existing: SlateGame, espn: SlateGame) -> (spread: Double, spreadTeamId: String)? {
+        guard existing.status == .scheduled else { return nil }
+        if existing.spread == espn.spread && existing.spreadTeamId == espn.spreadTeamId {
+            return nil
+        }
+        return (espn.spread, espn.spreadTeamId)
+    }
 }
 
 extension SlateGame {

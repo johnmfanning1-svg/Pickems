@@ -373,14 +373,27 @@ final class GroupService {
                 .collection("weeks").document(weekId)
             let gamesRef = weekRef.collection("games")
             let existingSnap = try await gamesRef.getDocuments()
+            let existingByEventId: [String: (documentId: String, game: SlateGame)] = Dictionary(
+                existingSnap.documents.compactMap { doc in
+                    guard let game = SlateGame.fromDocument(id: doc.documentID, data: doc.data()) else {
+                        return nil
+                    }
+                    return (game.espnEventId, (doc.documentID, game))
+                },
+                uniquingKeysWith: { first, _ in first }
+            )
             let existingIds = Set(existingSnap.documents.map(\.documentID))
-            var kickoffs: [Date] = existingSnap.documents.compactMap { doc in
-                SlateGame.fromDocument(id: doc.documentID, data: doc.data())?.kickoff
-            }
+            var kickoffs: [Date] = existingByEventId.values.map(\.game.kickoff)
             for game in games {
                 let slate = game.toSlateGame()
                 if !existingIds.contains(slate.espnEventId) {
                     try await gamesRef.document(slate.espnEventId).setData(from: slate)
+                } else if let existing = existingByEventId[slate.espnEventId],
+                          let repair = SlateGameDecoding.spreadRepair(existing: existing.game, espn: slate) {
+                    try await gamesRef.document(existing.documentId).updateData([
+                        FirestoreField.spread: repair.spread,
+                        FirestoreField.spreadTeamId: repair.spreadTeamId,
+                    ])
                 }
                 kickoffs.append(slate.kickoff)
             }

@@ -5,6 +5,7 @@ import {
   nextGameStatus,
   slateGameNeedsWrite,
   scoreboardURL,
+  resolveSpreadTeamId,
   type EspnEvent,
 } from "./espn";
 
@@ -103,5 +104,50 @@ describe("slateGameNeedsWrite", () => {
         parsed
       )
     ).toBe(false);
+  });
+});
+
+describe("resolveSpreadTeamId", () => {
+  it("uses home favorite flag even when spread is negative", () => {
+    expect(
+      resolveSpreadTeamId({
+        homeTeamId: "30",
+        awayTeamId: "23",
+        spread: -38.5,
+        homeFavorite: true,
+        awayFavorite: false,
+      })
+    ).toBe("30");
+  });
+
+  it("uses away favorite flag when home flag is absent", () => {
+    expect(
+      resolveSpreadTeamId({
+        homeTeamId: "home",
+        awayTeamId: "away",
+        spread: 3.5,
+        awayFavorite: true,
+      })
+    ).toBe("away");
+  });
+
+  it("does not default to away when favorite flags are missing and spread is negative", () => {
+    expect(
+      resolveSpreadTeamId({
+        homeTeamId: "30",
+        awayTeamId: "23",
+        spread: -38.5,
+      })
+    ).toBe("30");
+  });
+
+  it("treats a positive home-centric spread as away favored", () => {
+    expect(
+      resolveSpreadTeamId({
+        homeTeamId: "home",
+        awayTeamId: "away",
+        spread: 7.5,
+      })
+    ).toBe("away");
   });
 });

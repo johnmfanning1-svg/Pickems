@@ -165,6 +165,12 @@ struct SlateGame: Codable, Identifiable, Equatable {
         return "\(sign)\(value.formatted(.number.precision(.fractionLength(1))))"
     }
 
+    /// Home scoreboard format: `UVA -4.0`.
+    var favoriteSpreadDisplay: String {
+        let abbr = spreadTeamId == homeTeamId ? homeTeamAbbreviation : awayTeamAbbreviation
+        return "\(abbr) \(spreadLabel(for: spreadTeamId))"
+    }
+
     func coveredTeamId(homeScore: Int, awayScore: Int) -> String? {
         let spreadMagnitude = abs(spread)
         let margin = Double(homeScore - awayScore)
@@ -225,7 +231,7 @@ struct Nomination: Codable, Identifiable, Equatable {
             submittedBy: submittedBy,
             submitterName: submitterName,
             espnEventId: game.espnEventId,
-            spread: game.spread ?? 0,
+            spread: abs(game.spread ?? 0),
             spreadTeamId: game.spreadTeamId ?? game.homeTeamId,
             homeTeamId: game.homeTeamId,
             homeTeamName: game.homeTeamName,

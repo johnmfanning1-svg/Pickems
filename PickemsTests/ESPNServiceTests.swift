@@ -136,6 +136,79 @@ struct ESPNServiceTests {
         #expect(teamId == "away")
     }
 
+    @Test func parseSpreadTeamIdUsesHomeCentricSpreadWhenFlagsAndDetailsMissing() {
+        let homeFavorite = ESPNScoreboardResponse.ESPNOdds(
+            spread: -4,
+            details: nil,
+            homeTeamOdds: nil,
+            awayTeamOdds: nil
+        )
+        #expect(
+            ESPNService.parseSpreadTeamId(
+                from: homeFavorite,
+                homeId: "uva",
+                awayId: "ncsu",
+                homeAbbreviation: "UVA",
+                awayAbbreviation: "NCSU"
+            ) == "uva"
+        )
+
+        let awayFavorite = ESPNScoreboardResponse.ESPNOdds(
+            spread: 7.5,
+            details: nil,
+            homeTeamOdds: nil,
+            awayTeamOdds: nil
+        )
+        #expect(
+            ESPNService.parseSpreadTeamId(
+                from: awayFavorite,
+                homeId: "home",
+                awayId: "away",
+                homeAbbreviation: "HOM",
+                awayAbbreviation: "AWY"
+            ) == "away"
+        )
+    }
+
+    @Test func resolvedSpreadLabelPrefersSlateOverLiveESPN() {
+        let espn = ESPNGame(
+            id: "401864219",
+            espnEventId: "401864219",
+            competitionId: "c1",
+            homeTeamId: "258",
+            homeTeamName: "Virginia Cavaliers",
+            homeTeamAbbreviation: "UVA",
+            homeTeamLogoURL: nil,
+            awayTeamId: "152",
+            awayTeamName: "NC State Wolfpack",
+            awayTeamAbbreviation: "NCSU",
+            awayTeamLogoURL: nil,
+            kickoff: Date(),
+            spread: -4,
+            spreadTeamId: "258",
+            status: .scheduled,
+            homeScore: nil,
+            awayScore: nil,
+            homeCuratedRank: nil,
+            awayCuratedRank: nil,
+            homeConferenceId: nil,
+            awayConferenceId: nil
+        )
+        let invertedSlate = makeSlate(
+            id: "401864219",
+            espnEventId: "401864219",
+            spread: 5.5,
+            spreadTeamId: "away",
+            homeAbbreviation: "UVA",
+            awayAbbreviation: "NCSU"
+        )
+        #expect(espn.spreadDisplayLabel == "UVA -4.0")
+        #expect(
+            ESPNService.resolvedSpreadLabel(espnGame: espn, slateGame: invertedSlate) == "NCSU -5.5"
+        )
+        #expect(ESPNService.resolvedSpreadLabel(espnGame: espn, slateGame: nil) == "UVA -4.0")
+    }
+
     @Test func parseBroadcastLabelPrefersNationalName() {
         let broadcasts = [
             ESPNScoreboardResponse.ESPNBroadcast(market: "local", names: ["TBD"]),
@@ -216,6 +289,96 @@ struct ESPNServiceTests {
         #expect(negativeSpread.spreadDisplayLabel == "AWY -3.0")
     }
 
+    @Test func toSlateGameKeepsHomeFavoriteWhenESPNSpreadIsNegative() {
+        // Live ESPN: SJSU @ USC, spread -38.5, homeTeamOdds.favorite = true.
+        let uscAtHome = ESPNGame(
+            id: "401864494",
+            espnEventId: "401864494",
+            competitionId: "c1",
+            homeTeamId: "30",
+            homeTeamName: "USC Trojans",
+            homeTeamAbbreviation: "USC",
+            homeTeamLogoURL: nil,
+            awayTeamId: "23",
+            awayTeamName: "San José State Spartans",
+            awayTeamAbbreviation: "SJSU",
+            awayTeamLogoURL: nil,
+            kickoff: Date(),
+            spread: -38.5,
+            spreadTeamId: "30",
+            status: .scheduled,
+            homeScore: nil,
+            awayScore: nil,
+            homeCuratedRank: nil,
+            awayCuratedRank: nil,
+            homeConferenceId: nil,
+            awayConferenceId: nil
+        )
+        let slate = uscAtHome.toSlateGame()
+        #expect(slate.spread == 38.5)
+        #expect(slate.spreadTeamId == "30")
+        #expect(slate.spreadLabel(for: slate.spreadTeamId) == "-38.5")
+    }
+
+    @Test func toSlateGameKeepsAwayFavoriteWhenSpreadIsPositive() {
+        let awayFavorite = ESPNGame(
+            id: "2",
+            espnEventId: "2",
+            competitionId: "c2",
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            kickoff: Date(),
+            spread: 3.5,
+            spreadTeamId: "away",
+            status: .scheduled,
+            homeScore: nil,
+            awayScore: nil,
+            homeCuratedRank: nil,
+            awayCuratedRank: nil,
+            homeConferenceId: nil,
+            awayConferenceId: nil
+        )
+        let slate = awayFavorite.toSlateGame()
+        #expect(slate.spread == 3.5)
+        #expect(slate.spreadTeamId == "away")
+    }
+
+    @Test func nominationFromESPNGameStoresAbsoluteSpread() {
+        let espn = ESPNGame(
+            id: "1",
+            espnEventId: "1",
+            competitionId: "c1",
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            kickoff: Date(),
+            spread: -4,
+            spreadTeamId: "home",
+            status: .scheduled,
+            homeScore: nil,
+            awayScore: nil,
+            homeCuratedRank: nil,
+            awayCuratedRank: nil,
+            homeConferenceId: nil,
+            awayConferenceId: nil
+        )
+        let nom = Nomination.fromESPNGame(espn, submittedBy: "u", submitterName: "Pat")
+        #expect(nom.spread == 4)
+        #expect(nom.spreadTeamId == "home")
+        #expect(nom.asSlateGame().favoriteSpreadDisplay == "HOM -4.0")
+    }
+
     @Test func parseKickoffDateHandlesNewsTimestamps() {
         #expect(ESPNService.parseKickoffDate("2026-08-12T21:10:17Z") != nil)
         #expect(ESPNService.parseKickoffDate("2026-08-12T21:10:17.123Z") != nil)
@@ -263,6 +426,7 @@ struct ESPNServiceTests {
         #expect(card.isSlateGame)
         #expect(card.hasUserPick)
         #expect(card.userPickTeamAbbreviation == "HOM")
+        #expect(card.spreadLabel == "HOM -7.0")
         #expect(card.matches(.groupSlate))
         #expect(card.matches(.myPicks))
         #expect(card.homeCuratedRank == nil)
@@ -292,20 +456,27 @@ struct ESPNServiceTests {
         #expect(!unranked.isTop25)
     }
 
-    private func makeSlate(id: String, espnEventId: String) -> SlateGame {
+    private func makeSlate(
+        id: String,
+        espnEventId: String,
+        spread: Double = 7,
+        spreadTeamId: String = "home",
+        homeAbbreviation: String = "HOM",
+        awayAbbreviation: String = "AWY"
+    ) -> SlateGame {
         SlateGame(
             id: id,
             espnEventId: espnEventId,
             homeTeamId: "home",
             homeTeamName: "Home",
-            homeTeamAbbreviation: "HOM",
+            homeTeamAbbreviation: homeAbbreviation,
             homeTeamLogoURL: nil,
             awayTeamId: "away",
             awayTeamName: "Away",
-            awayTeamAbbreviation: "AWY",
+            awayTeamAbbreviation: awayAbbreviation,
             awayTeamLogoURL: nil,
-            spread: 7,
-            spreadTeamId: "home",
+            spread: spread,
+            spreadTeamId: spreadTeamId,
             kickoff: Date(),
             status: .scheduled,
             homeScore: nil,

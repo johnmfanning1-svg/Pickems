@@ -197,10 +197,10 @@ struct ESPNLiveGameCard: Identifiable, Equatable {
 extension ESPNGame {
     func toSlateGame(spreadOverride: Double? = nil, spreadTeamOverride: String? = nil) -> SlateGame {
         let rawSpread = spreadOverride ?? spread ?? 0
-        var spreadTeam = spreadTeamOverride ?? spreadTeamId ?? homeTeamId
-        if rawSpread < 0 {
-            spreadTeam = spreadTeam == homeTeamId ? awayTeamId : homeTeamId
-        }
+        // ESPN's numeric spread is home-centric (negative = home favored). `spreadTeamId`
+        // already names the favorite from odds flags / details — do not invert it when
+        // the number is negative or every home favorite becomes the away team.
+        let spreadTeam = spreadTeamOverride ?? spreadTeamId ?? homeTeamId
         return SlateGame(
             id: espnEventId,
             espnEventId: espnEventId,

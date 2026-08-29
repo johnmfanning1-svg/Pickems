@@ -20,6 +20,7 @@ export interface EspnEvent {
     status?: { type?: { completed?: boolean; state?: string } };
     odds?: Array<{
       spread?: number;
+      details?: string;
       homeTeamOdds?: { favorite?: boolean };
       awayTeamOdds?: { favorite?: boolean };
     }>;
@@ -67,6 +68,24 @@ export async function fetchScoreboard(options?: {
   }
   const json = (await res.json()) as { events?: EspnEvent[] };
   return json.events ?? [];
+}
+
+/**
+ * Favorite for a stored slate: flags first, then ESPN's home-centric spread
+ * (negative = home favored, positive = away favored). Never default to away
+ * just because `homeTeamOdds.favorite` is missing.
+ */
+export function resolveSpreadTeamId(options: {
+  homeTeamId: string;
+  awayTeamId: string;
+  spread?: number;
+  homeFavorite?: boolean;
+  awayFavorite?: boolean;
+}): string {
+  if (options.homeFavorite === true) return options.homeTeamId;
+  if (options.awayFavorite === true) return options.awayTeamId;
+  if (typeof options.spread === "number" && options.spread > 0) return options.awayTeamId;
+  return options.homeTeamId;
 }
 
 export function parseEventScores(event: EspnEvent): ParsedEventScores | null {

@@ -1,5 +1,5 @@
 import * as admin from "firebase-admin";
-import { fetchScoreboard, type EspnEvent } from "./espn";
+import { fetchScoreboard, resolveSpreadTeamId, type EspnEvent } from "./espn";
 import {
   WEEK_ONE_ID,
   WEEK_ZERO_ID,
@@ -68,9 +68,15 @@ function slatePayloadFromEspn(event: EspnEvent): Record<string, unknown> | null 
   if (!home || !away || !kickoff) return null;
   const competition = event.competitions?.[0];
   const odds = competition?.odds?.[0];
-  const rawSpread = typeof odds?.spread === "number" ? Math.abs(odds.spread) : 0;
-  const favoriteHome = odds?.homeTeamOdds?.favorite === true;
-  const spreadTeamId = favoriteHome ? home.team.id : away.team.id;
+  const signedSpread = typeof odds?.spread === "number" ? odds.spread : 0;
+  const rawSpread = Math.abs(signedSpread);
+  const spreadTeamId = resolveSpreadTeamId({
+    homeTeamId: home.team.id,
+    awayTeamId: away.team.id,
+    spread: odds?.spread,
+    homeFavorite: odds?.homeTeamOdds?.favorite,
+    awayFavorite: odds?.awayTeamOdds?.favorite,
+  });
   const national = competition?.broadcasts?.find((b) => (b.market ?? "").toLowerCase() === "national");
   const broadcast =
     national?.names?.[0] ??
