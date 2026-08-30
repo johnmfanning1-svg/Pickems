@@ -3,6 +3,7 @@ import SwiftUI
 struct SocialShareCard: View {
     let group: PickemGroup
     let standings: GroupStandings?
+    var includeInviteCode: Bool = true
     @Environment(\.themePalette) private var theme
 
     var body: some View {
@@ -22,11 +23,11 @@ struct SocialShareCard: View {
     }
 
     private var shareText: String {
-        var lines = [
-            "🏈 \(group.name)",
-            "Invite code: \(group.inviteCode)",
-            "Join: pickems://join?code=\(group.inviteCode)"
-        ]
+        var lines = ["🏈 \(group.name)"]
+        if includeInviteCode {
+            lines.append("Invite code: \(group.inviteCode)")
+            lines.append("Join: pickems://join?code=\(group.inviteCode)")
+        }
         if let leader = standings?.entries.first {
             lines.append("Leader: \(leader.displayName) (\(leader.weeklyWins)-\(leader.weeklyLosses))")
         }

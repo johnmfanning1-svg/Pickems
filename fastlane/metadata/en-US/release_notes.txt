@@ -1,5 +1,6 @@
-What's new in 3.2.9
+What's new in 3.3.0
 
-• The large standings widget lists up to 13 members so bigger leagues fill the tile
+• Private leagues can lock invites so only the commissioner can add members
+• Members see a message to ask the commissioner instead of Invite Friends
 
 Thanks for helping us UAT this build.

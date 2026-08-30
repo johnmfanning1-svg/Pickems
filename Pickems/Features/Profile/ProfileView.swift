@@ -393,9 +393,11 @@ struct ProfileView: View {
                     Text(group.name)
                         .font(.headline)
                         .foregroundStyle(PickemsColors.textPrimary)
-                    Text("Invite code \(group.inviteCode)")
-                        .font(.caption.monospaced())
-                        .foregroundStyle(PickemsColors.textSecondary)
+                    if group.canShareInvite(asCommissioner: appState.isCommissioner) {
+                        Text("Invite code \(group.inviteCode)")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(PickemsColors.textSecondary)
+                    }
                 }
                 .listRowBackground(PickemsColors.cardBackground)
 
@@ -409,8 +411,17 @@ struct ProfileView: View {
                     .accessibilityHint("Switch which league is active")
                 }
 
-                InviteShareButton(group: group)
+                if group.canShareInvite(asCommissioner: appState.isCommissioner) {
+                    InviteShareButton(group: group)
+                        .listRowBackground(PickemsColors.cardBackground)
+                } else {
+                    CommissionerOnlyInviteNotice(
+                        commissionerName: appState.groupService.members
+                            .first { $0.id == group.commissionerId }?.displayName
+                    )
                     .listRowBackground(PickemsColors.cardBackground)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                }
             }
 
             Button {

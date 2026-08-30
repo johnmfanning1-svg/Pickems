@@ -55,8 +55,19 @@ struct PickemGroup: Codable, Identifiable, Equatable {
     var createdAt: Date
     /// When true, league appears in Discover for anyone signed in.
     var isPublic: Bool = false
+    /// Private-league lock so only the commissioner can share the invite. Nil/missing means off.
+    var commissionerOnlyInvites: Bool? = nil
 
     var memberCount: Int { memberIds.count }
+
+    /// Private league whose commissioner turned on commissioner-only invites.
+    var restrictsMemberInvites: Bool {
+        !isPublic && commissionerOnlyInvites == true
+    }
+
+    func canShareInvite(asCommissioner isCommissioner: Bool) -> Bool {
+        isCommissioner || !restrictsMemberInvites
+    }
 }
 
 struct GroupMember: Codable, Identifiable, Equatable {

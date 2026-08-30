@@ -171,7 +171,7 @@ enum PickemsHelp {
         title: "Leagues",
         message: "Your private pick'em league. Switch leagues using the chips at the top. Selections and Pickems live on their own tabs.",
         tips: [
-            "Share your invite code so friends can join.",
+            "Share your invite code so friends can join — unless the commissioner locked invites to themselves.",
             "Toggle between weekly and season standings.",
             "View League Pickems opens the chart after lock, or a countdown until then.",
             "Rivalry compares your weekly record with another member.",
@@ -183,7 +183,10 @@ enum PickemsHelp {
         id: "groups.invite",
         title: "Invite Friends",
         message: "Send your league's 4–8 character invite code. Friends join from onboarding or when they sign in.",
-        tips: ["Only people with the code can join your private league."]
+        tips: [
+            "Only people with the code can join your private league.",
+            "On a private league, the commissioner can turn on Only commissioner can invite so members ask them to share the code."
+        ]
     )
 
     static let leaderboard = HelpTopic(
@@ -204,7 +207,8 @@ enum PickemsHelp {
         tips: [
             "Members Select: set how many games each person submits.",
             "Commissioner Selects: set total games per week and build the slate yourself.",
-            "Changes apply to future weeks. Set a Selection deadline each week in member mode."
+            "Changes apply to future weeks. Set a Selection deadline each week in member mode.",
+            "On a private league, Only commissioner can invite hides Invite Friends for members."
         ]
     )
 

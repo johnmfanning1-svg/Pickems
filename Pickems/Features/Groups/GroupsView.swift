@@ -40,7 +40,10 @@ struct GroupsView: View {
 
                             SocialShareCard(
                                 group: group,
-                                standings: appState.groupService.standings
+                                standings: appState.groupService.standings,
+                                includeInviteCode: group.canShareInvite(
+                                    asCommissioner: appState.isCommissioner
+                                )
                             )
                             .padding(.horizontal)
                         }
@@ -369,8 +372,15 @@ struct GroupsView: View {
                 .accessibilityHint("Compare your record head-to-head with another member")
             }
 
-            InviteShareButton(group: group)
-                .accessibilityHint("Share your invite code with friends")
+            if group.canShareInvite(asCommissioner: appState.isCommissioner) {
+                InviteShareButton(group: group)
+                    .accessibilityHint("Share your invite code with friends")
+            } else {
+                CommissionerOnlyInviteNotice(
+                    commissionerName: appState.groupService.members
+                        .first { $0.id == group.commissionerId }?.displayName
+                )
+            }
         }
         .padding(.horizontal)
     }
@@ -550,7 +560,9 @@ struct GroupsView: View {
                         showCreateLeague = true
                     }
 
-                    ShareAppButton(leagueName: group.name, label: "Invite via X")
+                    if group.canShareInvite(asCommissioner: appState.isCommissioner) {
+                        ShareAppButton(leagueName: group.name, label: "Invite via X")
+                    }
 
                     if !appState.isCommissioner {
                         manageRow(

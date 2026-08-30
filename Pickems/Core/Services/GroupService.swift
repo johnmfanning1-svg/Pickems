@@ -1112,6 +1112,27 @@ final class GroupService {
         }
     }
 
+    func setCommissionerOnlyInvites(groupId: String, enabled: Bool) async throws {
+        guard let group = groups.first(where: { $0.id == groupId }) ?? selectedGroup,
+              group.id == groupId else {
+            throw GroupError.groupNotFound
+        }
+        guard group.commissionerId == Auth.auth().currentUser?.uid else {
+            throw GroupError.notCommissioner
+        }
+
+        try await db.collection("groups").document(groupId)
+            .updateData(["commissionerOnlyInvites": enabled])
+
+        if var g = selectedGroup, g.id == groupId {
+            g.commissionerOnlyInvites = enabled
+            selectedGroup = g
+        }
+        if let idx = groups.firstIndex(where: { $0.id == groupId }) {
+            groups[idx].commissionerOnlyInvites = enabled
+        }
+    }
+
     func lockSlateEarly(groupId: String, weekId: String, rules: GroupRules, kickoffs: [Date]) async throws {
         let updates = WeekTransition.lockEarlyUpdates(rules: rules, kickoffs: kickoffs)
         try await db.week(groupId: groupId, weekId: weekId).updateData(updates)

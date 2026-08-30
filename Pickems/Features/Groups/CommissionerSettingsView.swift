@@ -8,6 +8,7 @@ struct CommissionerSettingsView: View {
     let group: PickemGroup
     @State private var rules: GroupRules
     @State private var isPublic: Bool
+    @State private var commissionerOnlyInvites: Bool
     @State private var groupName: String
     @State private var isSaving = false
     @State private var showCloseSeasonConfirm = false
@@ -32,6 +33,7 @@ struct CommissionerSettingsView: View {
         self.group = group
         _rules = State(initialValue: group.rules)
         _isPublic = State(initialValue: group.isPublic)
+        _commissionerOnlyInvites = State(initialValue: group.commissionerOnlyInvites == true)
         _groupName = State(initialValue: group.name)
     }
 
@@ -55,6 +57,13 @@ struct CommissionerSettingsView: View {
 
     private var seasonAlreadyClosed: Bool {
         appState.groupService.seasonArchives.contains { $0.seasonYear == seasonYearToClose }
+    }
+
+    private var visibilityFooter: String {
+        if isPublic {
+            return "Public leagues appear in Discover. See who's in is on the Pickems tab."
+        }
+        return "Private leagues stay off Discover. Turn on Only commissioner can invite to hide Invite Friends for members — they will be asked to contact you instead. You still share the code from Invite Friends on the Leagues tab."
     }
 
     var body: some View {
@@ -127,10 +136,14 @@ struct CommissionerSettingsView: View {
                 Section {
                     Toggle("List in Discover", isOn: $isPublic)
                         .listRowBackground(PickemsColors.cardBackground)
+                    if !isPublic {
+                        Toggle("Only commissioner can invite", isOn: $commissionerOnlyInvites)
+                            .listRowBackground(PickemsColors.cardBackground)
+                    }
                 } header: {
                     Text("Visibility")
                 } footer: {
-                    Text("Public leagues appear in Discover. See who's in is on the Pickems tab.")
+                    Text(visibilityFooter)
                 }
 
                 Section {
@@ -495,6 +508,10 @@ struct CommissionerSettingsView: View {
                 }
                 try await appState.groupService.updateRules(groupId: group.id, rules: rules)
                 try await appState.groupService.setPublic(groupId: group.id, isPublic: isPublic)
+                try await appState.groupService.setCommissionerOnlyInvites(
+                    groupId: group.id,
+                    enabled: commissionerOnlyInvites
+                )
                 PickemsHaptics.success()
                 dismiss()
             } catch {
