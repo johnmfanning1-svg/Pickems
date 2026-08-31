@@ -370,34 +370,51 @@ struct StandingEntry: Codable, Identifiable, Equatable {
     }
 }
 
-/// Standings documents can lag new members. Always rank the live roster.
+/// Standings documents can lag new members and keep people who left.
+/// Rank the live roster: current members, with standings stats overlaid when present.
 enum StandingBoard {
-    static func baseEntries(standingsEntries: [StandingEntry]?, members: [GroupMember]) -> [StandingEntry] {
-        let joinedAtById = Dictionary(uniqueKeysWithValues: members.map { ($0.id, $0.joinedAt) })
-        let avatarURLById = Dictionary(uniqueKeysWithValues: members.compactMap { member -> (String, String)? in
+    /// `memberIds` on the group doc is membership. Drop orphan member docs.
+    static func roster(members: [GroupMember], memberIds: [String]) -> [GroupMember] {
+        guard !memberIds.isEmpty else { return members }
+        let allowed = Set(memberIds)
+        return members.filter { allowed.contains($0.id) }
+    }
+
+    static func baseEntries(
+        standingsEntries: [StandingEntry]?,
+        members: [GroupMember],
+        memberIds: [String] = []
+    ) -> [StandingEntry] {
+        let roster = Self.roster(members: members, memberIds: memberIds)
+        if roster.isEmpty {
+            let entries = standingsEntries ?? []
+            guard !memberIds.isEmpty else { return entries }
+            let allowed = Set(memberIds)
+            return entries.filter { allowed.contains($0.id) }
+        }
+
+        let joinedAtById = Dictionary(uniqueKeysWithValues: roster.map { ($0.id, $0.joinedAt) })
+        let avatarURLById = Dictionary(uniqueKeysWithValues: roster.compactMap { member -> (String, String)? in
             guard let url = member.avatarImageURL, !url.isEmpty else { return nil }
             return (member.id, url)
         })
+        let standingsById = Dictionary(
+            (standingsEntries ?? []).map { ($0.id, $0) },
+            uniquingKeysWith: { _, last in last }
+        )
 
-        guard let standingsEntries, !standingsEntries.isEmpty else {
-            return members.map { .placeholder(from: $0) }
-        }
-
-        let known = Set(standingsEntries.map(\.id))
-        var entries = standingsEntries.map { entry -> StandingEntry in
-            var copy = entry
-            if copy.joinedAt == nil {
-                copy.joinedAt = joinedAtById[entry.id]
+        return roster.map { member in
+            guard var entry = standingsById[member.id] else {
+                return .placeholder(from: member)
             }
-            if copy.avatarImageURL == nil {
-                copy.avatarImageURL = avatarURLById[entry.id]
+            if entry.joinedAt == nil {
+                entry.joinedAt = joinedAtById[member.id]
             }
-            return copy
+            if entry.avatarImageURL == nil {
+                entry.avatarImageURL = avatarURLById[member.id]
+            }
+            return entry
         }
-        for member in members where !known.contains(member.id) {
-            entries.append(.placeholder(from: member))
-        }
-        return entries
     }
 }
 

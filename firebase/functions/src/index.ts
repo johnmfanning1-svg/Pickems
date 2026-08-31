@@ -20,6 +20,7 @@ import {
   rankEntries,
   computeWeekAwards,
   applyLatePickPenalty,
+  membersOnRoster,
 } from "./scoring";
 import { materializeNominations } from "./materialize";
 
@@ -475,7 +476,10 @@ async function refreshLiveStandings(
   const prev = standingsSnap.data()?.entries as Array<{ id: string; rank: number }> | undefined;
   prev?.forEach((e) => previousRanks.set(e.id, e.rank));
 
-  const members = membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc));
+  const members = membersOnRoster(
+    membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc)),
+    groupSnap.data()?.memberIds as string[] | undefined
+  );
   const picks = picksSnap.docs.map((d) => ({ ...(d.data() as PickDoc), userId: d.id }));
   const rules = (groupSnap.data()?.rules ?? {}) as {
     allowLatePicks?: boolean;
@@ -572,7 +576,10 @@ async function scoreWeek(
     };
     const deadline = week?.pickDeadline;
 
-    const members = membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc));
+    const members = membersOnRoster(
+      membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc)),
+      (groupSnap.data()?.memberIds as string[] | undefined) ?? memberIds
+    );
     const picks = picksSnap.docs.map((d) => ({ ...(d.data() as PickDoc), userId: d.id }));
     awards = computeWeekAwards(picks, games);
 
@@ -621,7 +628,6 @@ async function scoreWeek(
     return;
   }
   logger.info(`Scored week ${weekId} for group ${groupId}`, awards);
-  void memberIds;
 }
 
 /** Auto-close seasons after CFB championship window (early January). */

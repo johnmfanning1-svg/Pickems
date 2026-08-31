@@ -9,6 +9,8 @@ final class GroupService {
     var groups: [PickemGroup] = []
     var selectedGroup: PickemGroup?
     var members: [GroupMember] = []
+    /// League `members` currently belong to. Nil while loading or after a switch.
+    var membersGroupId: String?
     var standings: GroupStandings?
     var currentWeek: WeekSummary?
     /// Weeks available for the selected group (Picks tab week bar). Ascending by season/week.
@@ -32,6 +34,8 @@ final class GroupService {
     private var weekListener: ListenerRegistration?
     @ObservationIgnored
     private var standingsListener: ListenerRegistration?
+    @ObservationIgnored
+    private var membersListener: ListenerRegistration?
     @ObservationIgnored
     private var seasonsListener: ListenerRegistration?
     @ObservationIgnored
@@ -95,12 +99,19 @@ final class GroupService {
                        let pending = self.groups.first(where: { $0.id == pendingId }) {
                         self.pendingGroupId = nil
                         self.selectedGroup = pending
-                    } else if let selected = self.selectedGroup,
-                       !self.groups.contains(where: { $0.id == selected.id }) {
+                    } else if let selected = self.selectedGroup {
+                        if let latest = self.groups.first(where: { $0.id == selected.id }) {
+                            self.selectedGroup = latest
+                            self.trimMembersToSelectedRoster()
+                        } else {
+                            self.selectedGroup = self.groups.first
+                            self.clearWeekObservationIfNeeded()
+                        }
+                    } else {
                         self.selectedGroup = self.groups.first
-                        self.clearWeekObservationIfNeeded()
-                    } else if self.selectedGroup == nil {
-                        self.selectedGroup = self.groups.first
+                    }
+                    if previousSelectedId != self.selectedGroup?.id {
+                        self.resetRosterForGroupChange()
                     }
                     if let groupId = self.selectedGroup?.id {
                         // Avoid re-entrant ESPN/week observe on every membership metadata tick.
@@ -118,7 +129,7 @@ final class GroupService {
 
     func selectGroup(_ group: PickemGroup) {
         pendingGroupId = nil
-        selectedGroup = group
+        adoptSelectedGroup(group)
         weekSelectionPinned = false
         availableWeeks = []
         seasonDateRangeByWeekId = [:]
@@ -606,7 +617,7 @@ final class GroupService {
 
         var group = try doc.data(as: PickemGroup.self)
         guard !group.memberIds.contains(userId) else {
-            selectedGroup = group
+            adoptSelectedGroup(group)
             await syncCurrentWeekFromESPN(groupId: group.id)
             return
         }
@@ -627,7 +638,7 @@ final class GroupService {
             avatarImageURL: avatarImageURL
         )
         try await doc.reference.collection("members").document(userId).setData(from: member)
-        selectedGroup = group
+        adoptSelectedGroup(group)
         await syncCurrentWeekFromESPN(groupId: group.id)
         await reconcileSelectionWeekSnapshot(groupId: group.id, rules: group.rules)
     }
@@ -1292,13 +1303,18 @@ final class GroupService {
 
         weekListener?.remove()
         standingsListener?.remove()
-        if observedGroupId != groupId {
+        let groupChanged = observedGroupId != groupId
+        if groupChanged {
             seasonsListener?.remove()
             careerListener?.remove()
-            observeDynasty(groupId: groupId)
+            membersListener?.remove()
         }
         observedWeekId = weekId
         observedGroupId = groupId
+        if groupChanged {
+            observeDynasty(groupId: groupId)
+            observeMembers(groupId: groupId)
+        }
 
         weekListener = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
@@ -1336,6 +1352,8 @@ final class GroupService {
             .collection("standings").document("current")
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
+                    guard let self else { return }
+                    guard self.selectedGroup?.id == groupId, self.observedGroupId == groupId else { return }
                     if let error {
                         AppEvents.failure(.weekListenerError, error: error, metadata: [
                             "listener": "standings",
@@ -1344,23 +1362,37 @@ final class GroupService {
                         return
                     }
                     guard let snapshot, snapshot.exists else { return }
-                    self?.standings = try? snapshot.data(as: GroupStandings.self)
+                    self.standings = try? snapshot.data(as: GroupStandings.self)
                 }
             }
+    }
 
-        Task {
-            do {
-                let membersSnapshot = try await db.collection("groups").document(groupId)
-                    .collection("members").getDocuments()
-                var loaded = membersSnapshot.documents.compactMap { try? $0.data(as: GroupMember.self) }
-                loaded = await hydrateMemberAvatars(loaded)
-                members = loaded
-            } catch {
-                AppLog.error(AppLog.firestore, "members fetch failed", error: error, metadata: [
-                    "group_id": groupId,
-                ])
+    private func observeMembers(groupId: String) {
+        membersListener = db.collection("groups").document(groupId)
+            .collection("members")
+            .addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor in
+                    guard let self else { return }
+                    guard self.selectedGroup?.id == groupId, self.observedGroupId == groupId else { return }
+                    if let error {
+                        AppLog.error(AppLog.firestore, "members listener failed", error: error, metadata: [
+                            "group_id": groupId,
+                        ])
+                        return
+                    }
+                    var loaded = snapshot?.documents.compactMap { try? $0.data(as: GroupMember.self) } ?? []
+                    loaded = await self.hydrateMemberAvatars(loaded)
+                    guard self.selectedGroup?.id == groupId, self.observedGroupId == groupId else { return }
+                    let allowed = Set(
+                        (self.groups.first(where: { $0.id == groupId }) ?? self.selectedGroup)?.memberIds ?? []
+                    )
+                    if !allowed.isEmpty {
+                        loaded = loaded.filter { allowed.contains($0.id) }
+                    }
+                    self.members = loaded
+                    self.membersGroupId = groupId
+                }
             }
-        }
     }
 
     /// Standings and current week for another league. Does not change `selectedGroup`.
@@ -1400,15 +1432,13 @@ final class GroupService {
         }
 
         var members: [GroupMember] = []
-        if standings?.entries.isEmpty ?? true {
-            do {
-                let membersSnapshot = try await groupRef.collection("members").getDocuments()
-                members = membersSnapshot.documents.compactMap { try? $0.data(as: GroupMember.self) }
-            } catch {
-                AppLog.error(AppLog.firestore, "display members fetch failed", error: error, metadata: [
-                    "group_id": groupId,
-                ])
-            }
+        do {
+            let membersSnapshot = try await groupRef.collection("members").getDocuments()
+            members = membersSnapshot.documents.compactMap { try? $0.data(as: GroupMember.self) }
+        } catch {
+            AppLog.error(AppLog.firestore, "display members fetch failed", error: error, metadata: [
+                "group_id": groupId,
+            ])
         }
 
         return (standings, week, members)
@@ -1456,7 +1486,7 @@ final class GroupService {
                 let standingsSnap = try await db.collection("groups").document(groupId)
                     .collection("standings").document("current")
                     .getDocument(source: .server)
-                if standingsSnap.exists {
+                if standingsSnap.exists, selectedGroup?.id == groupId {
                     standings = try? standingsSnap.data(as: GroupStandings.self)
                 }
             } catch {
@@ -1472,7 +1502,13 @@ final class GroupService {
                 .getDocuments(source: .server)
             var loaded = membersSnapshot.documents.compactMap { try? $0.data(as: GroupMember.self) }
             loaded = await hydrateMemberAvatars(loaded)
+            guard selectedGroup?.id == groupId else { return }
+            let allowed = Set(selectedGroup?.memberIds ?? [])
+            if !allowed.isEmpty {
+                loaded = loaded.filter { allowed.contains($0.id) }
+            }
             members = loaded
+            membersGroupId = groupId
         } catch {
             AppLog.error(AppLog.firestore, "members refresh failed", error: error, metadata: [
                 "group_id": groupId,
@@ -1482,11 +1518,41 @@ final class GroupService {
         await loadAvailableWeeks(groupId: groupId)
     }
 
+    private func adoptSelectedGroup(_ group: PickemGroup) {
+        if selectedGroup?.id != group.id {
+            resetRosterForGroupChange()
+        }
+        selectedGroup = group
+    }
+
+    /// Drop the previous league's roster immediately so standings/widgets cannot mix members.
+    private func resetRosterForGroupChange() {
+        members = []
+        membersGroupId = nil
+        standings = nil
+        membersListener?.remove()
+        membersListener = nil
+        standingsListener?.remove()
+        standingsListener = nil
+    }
+
+    private func trimMembersToSelectedRoster() {
+        guard let group = selectedGroup, membersGroupId == group.id else { return }
+        let allowed = Set(group.memberIds)
+        guard !allowed.isEmpty else { return }
+        let trimmed = members.filter { allowed.contains($0.id) }
+        if trimmed.count != members.count {
+            members = trimmed
+        }
+    }
+
     private func clearWeekObservationIfNeeded() {
         weekListener?.remove()
         standingsListener?.remove()
+        membersListener?.remove()
         weekListener = nil
         standingsListener = nil
+        membersListener = nil
         observedWeekId = nil
         observedGroupId = nil
         weekSelectionPinned = false
@@ -1496,6 +1562,7 @@ final class GroupService {
         cfbWeek = nil
         standings = nil
         members = []
+        membersGroupId = nil
     }
 
     private func observeDynasty(groupId: String) {

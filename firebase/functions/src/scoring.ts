@@ -32,6 +32,16 @@ export interface PickDoc {
   submittedAt?: unknown;
 }
 
+/** Keep scoring on `groups.memberIds` so leftover member docs cannot stay on the board. */
+export function membersOnRoster<T extends { id: string }>(
+  members: T[],
+  memberIds: string[] | undefined
+): T[] {
+  if (!memberIds || memberIds.length === 0) return members;
+  const allowed = new Set(memberIds);
+  return members.filter((member) => allowed.has(member.id));
+}
+
 export function toMillis(value: unknown): number | null {
   if (value == null) return null;
   if (typeof value === "number" && Number.isFinite(value)) return value;

@@ -6,6 +6,7 @@ import {
   computeWeekAwards,
   applyLatePickPenalty,
   toMillis,
+  membersOnRoster,
   type SlateGameDoc,
   type PickDoc,
 } from "./scoring";
@@ -145,5 +146,21 @@ describe("computeWeekAwards", () => {
       { userId: "b", displayName: "Blake", picks: { "1": "away" } },
     ];
     expect(computeWeekAwards(picks, games).sharpshooterUserId).toBe("a");
+  });
+});
+
+describe("membersOnRoster", () => {
+  it("drops leftover member docs who are not in memberIds", () => {
+    const members = [
+      { id: "a", displayName: "Alex" },
+      { id: "jack", displayName: "JBanda" },
+    ];
+    expect(membersOnRoster(members, ["a"]).map((m) => m.id)).toEqual(["a"]);
+  });
+
+  it("keeps the full list when memberIds is empty", () => {
+    const members = [{ id: "a" }, { id: "b" }];
+    expect(membersOnRoster(members, []).map((m) => m.id)).toEqual(["a", "b"]);
+    expect(membersOnRoster(members, undefined).map((m) => m.id)).toEqual(["a", "b"]);
   });
 });

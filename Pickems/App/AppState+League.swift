@@ -119,14 +119,22 @@ extension AppState {
     }
 
     func rankedStandings(weekly: Bool) -> [StandingEntry] {
-        let members = groupService.members
+        let group = groupService.selectedGroup
+        // Ignore a roster still attached to the previous league after a switch.
+        let members: [GroupMember]
+        if let groupId = group?.id, groupService.membersGroupId == groupId {
+            members = groupService.members
+        } else {
+            members = []
+        }
         let baseEntries = StandingBoard.baseEntries(
             standingsEntries: groupService.standings?.entries,
-            members: members
+            members: members,
+            memberIds: group?.memberIds ?? []
         )
         guard !baseEntries.isEmpty else { return [] }
 
-        let tieBreaker = groupService.selectedGroup?.rules.tieBreaker ?? .commissionerOverride
+        let tieBreaker = group?.rules.tieBreaker ?? .commissionerOverride
         return ScoringEngine.rankedStandings(
             entries: baseEntries,
             weekly: weekly,
