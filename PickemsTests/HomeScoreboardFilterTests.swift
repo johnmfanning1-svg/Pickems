@@ -3,6 +3,13 @@ import Testing
 @testable import Pickems
 
 struct HomeScoreboardFilterTests {
+    @Test func homeScoreboardDefaultsToTop25ThenMyPicksGroupAllPower4() {
+        #expect(HomeScoreboardFilter.default == .top25)
+        #expect(HomeScoreboardFilter.primaryChips == [
+            .top25, .myPicks, .groupSlate, .all, .power4
+        ])
+    }
+
     @Test func power4IdsMatchCatalogHead() {
         #expect(ESPNConferenceCatalog.power4Ids == Set(["8", "5", "4", "1"]))
         #expect(ESPNConferenceCatalog.isPower4("8"))

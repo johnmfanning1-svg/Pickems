@@ -6,7 +6,7 @@ struct HomeView: View {
     @Environment(\.themePalette) private var theme
     @State private var viewModel = HomeViewModel()
     @State private var coverMoment = CoverMomentPresenter()
-    @State private var scoreboardFilter: HomeScoreboardFilter = .power4
+    @State private var scoreboardFilter: HomeScoreboardFilter = .default
     @State private var isRefreshing = false
 
     var body: some View {

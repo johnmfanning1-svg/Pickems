@@ -22,6 +22,7 @@ enum PickemsHelp {
         title: "Home",
         message: "Your command center for the current CFB week. Scores refresh automatically on game days.",
         tips: [
+            "The board opens on Top 25. Swipe the chips for My Picks, Group, All, Power 4, or a conference.",
             "Pull down to refresh scores and week data.",
             "Tap Make Selections or Make Pickems to jump to this week's action.",
             "Your slate games show Pickem results once games finish."

@@ -296,11 +296,9 @@ struct LiveScoreboardSection: View {
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                filterChip(.power4)
-                filterChip(.top25)
-                filterChip(.myPicks)
-                filterChip(.groupSlate)
-                filterChip(.all)
+                ForEach(HomeScoreboardFilter.primaryChips, id: \.self) { filter in
+                    filterChip(filter)
+                }
                 ForEach(ESPNConferenceCatalog.fbs) { conference in
                     filterChip(.conference(id: conference.id))
                 }

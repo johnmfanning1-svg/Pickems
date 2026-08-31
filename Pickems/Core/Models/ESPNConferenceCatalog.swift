@@ -45,7 +45,7 @@ enum GameSlateFilter: Hashable {
     case conference(id: String)
 }
 
-/// Filters for the Home "CFB This Week" scoreboard. Defaults to Power 4.
+/// Filters for the Home "CFB This Week" scoreboard. Defaults to Top 25.
 enum HomeScoreboardFilter: Hashable {
     case power4
     case top25
@@ -53,6 +53,13 @@ enum HomeScoreboardFilter: Hashable {
     case myPicks
     case groupSlate
     case conference(id: String)
+
+    static let `default`: HomeScoreboardFilter = .top25
+
+    /// Leading chips, left to right. Individual conferences follow from the FBS catalog.
+    static let primaryChips: [HomeScoreboardFilter] = [
+        .top25, .myPicks, .groupSlate, .all, .power4
+    ]
 
     var title: String {
         switch self {

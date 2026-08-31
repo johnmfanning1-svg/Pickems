@@ -1,6 +1,6 @@
-What's new in 3.3.1
+What's new in 3.3.2
 
-• Home Screen widget standings stay on the selected league after you switch
-• CTA sheets no longer flash open and dismiss themselves
+• CFB This Week on Home opens on Top 25
+• Filter chips are Top 25, My Picks, Group, All, then Power 4 and conferences
 
 Thanks for helping us UAT this build.
