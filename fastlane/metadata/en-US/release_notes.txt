@@ -1,6 +1,6 @@
-What's new in 3.3.0
+What's new in 3.3.1
 
-• Private leagues can lock invites so only the commissioner can add members
-• Members see a message to ask the commissioner instead of Invite Friends
+• Home Screen widget standings stay on the selected league after you switch
+• CTA sheets no longer flash open and dismiss themselves
 
 Thanks for helping us UAT this build.
