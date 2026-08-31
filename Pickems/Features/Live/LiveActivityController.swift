@@ -71,6 +71,7 @@ enum LiveActivityController {
             ranked = WidgetSnapshotService.rankedDisplayEntries(
                 standings: fetched.standings,
                 members: fetched.members,
+                memberIds: group.memberIds,
                 tieBreaker: group.rules.tieBreaker
             )
             nextLabel = "This week's slate"

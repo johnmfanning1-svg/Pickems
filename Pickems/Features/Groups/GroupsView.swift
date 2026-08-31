@@ -649,11 +649,10 @@ struct LeaderboardView: View {
     }
 
     private var rosterCount: Int {
-        max(
-            allEntries.count,
-            appState.groupService.members.count,
-            appState.groupService.selectedGroup?.memberCount ?? 0
-        )
+        if let count = appState.groupService.selectedGroup?.memberCount, count > 0 {
+            return count
+        }
+        return max(allEntries.count, appState.groupService.members.count)
     }
 
     private var showsFullRanking: Bool {

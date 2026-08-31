@@ -100,7 +100,8 @@ enum WidgetSnapshotService {
         }
 
         if group.id == appState.groupService.selectedGroup?.id {
-            let ranked = appState.rankedStandings(weekly: true)
+            let ranked = selectedGroupRankedStandings(from: appState, group: group)
+            guard let ranked else { return }
             saveStandingsSnapshot(
                 group: group,
                 userId: user.id,
@@ -142,6 +143,7 @@ enum WidgetSnapshotService {
         let ranked = rankedDisplayEntries(
             standings: fetched.standings,
             members: fetched.members,
+            memberIds: group.memberIds,
             tieBreaker: group.rules.tieBreaker
         )
         saveStandingsSnapshot(
@@ -154,14 +156,34 @@ enum WidgetSnapshotService {
         )
     }
 
+    /// Selected-league snapshot. Nil when this league's roster/standings are not loaded yet —
+    /// keep the last good App Group payload instead of mixing in another league's members.
+    static func selectedGroupRankedStandings(
+        from appState: AppState,
+        group: PickemGroup
+    ) -> [StandingEntry]? {
+        if appState.groupService.membersGroupId == group.id {
+            return appState.rankedStandings(weekly: true)
+        }
+        guard appState.groupService.standings != nil else { return nil }
+        return rankedDisplayEntries(
+            standings: appState.groupService.standings,
+            members: [],
+            memberIds: group.memberIds,
+            tieBreaker: group.rules.tieBreaker
+        )
+    }
+
     static func rankedDisplayEntries(
         standings: GroupStandings?,
         members: [GroupMember],
+        memberIds: [String] = [],
         tieBreaker: TieBreakerPolicy
     ) -> [StandingEntry] {
         let base = StandingBoard.baseEntries(
             standingsEntries: standings?.entries,
-            members: members
+            members: members,
+            memberIds: memberIds
         )
         guard !base.isEmpty else { return [] }
         return ScoringEngine.rankedStandings(entries: base, weekly: true, tieBreaker: tieBreaker)

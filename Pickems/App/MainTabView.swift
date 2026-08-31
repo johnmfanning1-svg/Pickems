@@ -36,6 +36,15 @@ struct MainTabView: View {
         .onChange(of: appState.groupService.groups.map(\.id)) { _, _ in
             appState.publishSurfaces()
         }
+        .onChange(of: appState.groupService.selectedGroup?.id) { _, _ in
+            appState.publishSurfaces()
+        }
+        .onChange(of: appState.groupService.members.map(\.id)) { _, _ in
+            appState.publishSurfaces()
+        }
+        .onChange(of: appState.groupService.standings) { _, _ in
+            appState.publishSurfaces()
+        }
     }
 }
 
