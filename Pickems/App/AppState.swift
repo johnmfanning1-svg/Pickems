@@ -26,16 +26,26 @@ final class AppState {
 
     var selectedTab: AppTab = .home
     var pendingInviteCode: String?
-    var showJoinGroupSheet = false
-    var showFavoriteTeamPicker = false
+    /// Single app-level sheet. Do not add competing `.sheet` modifiers on tabs.
+    var presentedSheet: AppSheet?
     /// Set by selection-deadline push; Leagues tab opens Commissioner Settings.
     var pendingCommissionerSettings = false
     /// League to select when a push/deep link includes `groupId`.
     var pendingDeepLinkGroupId: String?
     /// Set when Firebase failed to boot; RootView can show a non-crash error screen.
     var firebaseBootFailed = false
-    /// In-app “Stay on time” prompt before the iOS notification permission sheet.
-    var showNotificationOnboarding = false
+
+    func present(_ sheet: AppSheet, policy: AppSheetPresentPolicy = .replace) {
+        presentedSheet = AppSheetRouting.nextPresented(
+            current: presentedSheet,
+            incoming: sheet,
+            policy: policy
+        )
+    }
+
+    func dismissSheet() {
+        presentedSheet = nil
+    }
 
     /// Bumps on each `onAuthStateReady` so overlapping login callbacks cannot finish out of order.
     private var authReadyGeneration = 0
@@ -174,7 +184,7 @@ final class AppState {
             guard !authService.hasDismissedNotificationOnboarding(for: userId) else { return }
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !needsOnboarding else { return }
-            showNotificationOnboarding = true
+            present(.stayOnTime, policy: .ifIdle)
         }
     }
 
@@ -184,7 +194,7 @@ final class AppState {
         case .joinGroup(let code):
             pendingInviteCode = code
             if authService.isAuthenticated {
-                showJoinGroupSheet = true
+                present(.joinGroup)
             }
         case .openPickems(let groupId), .openLiveSlate(let groupId):
             selectDeepLinkGroup(groupId)
@@ -214,10 +224,11 @@ final class AppState {
 
     func processPendingInviteIfNeeded() {
         guard pendingInviteCode != nil, authService.isAuthenticated else { return }
-        showJoinGroupSheet = true
+        present(.joinGroup)
     }
 
     func resetSession() {
+        presentedSheet = nil
         groupService.resetSession()
         pickService.resetSession()
         picksViewModel.resetForSession()

@@ -100,6 +100,8 @@ struct RootView: View {
         let authenticated = appState.authService.isAuthenticated
         let determined = appState.authService.authStateDetermined
         if determined, authenticated, !appState.groupService.hasCompletedInitialGroupLoad {
+            // Must not flicker this flag after the first snapshot — swapping away
+            // from `.main` unmounts every tab (sheets are hosted above RootView).
             return .loading
         }
 

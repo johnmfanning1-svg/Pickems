@@ -6,9 +6,6 @@ struct HomeView: View {
     @Environment(\.themePalette) private var theme
     @State private var viewModel = HomeViewModel()
     @State private var coverMoment = CoverMomentPresenter()
-    @State private var showFavoriteTeamPicker = false
-    @State private var showJoinSheet = false
-    @State private var showCreateWizard = false
     @State private var scoreboardFilter: HomeScoreboardFilter = .power4
     @State private var isRefreshing = false
 
@@ -104,28 +101,6 @@ struct HomeView: View {
             .onChange(of: appState.groupService.standings) { _, _ in
                 appState.publishSurfaces()
             }
-            .sheet(isPresented: $coverMoment.isPresented) {
-                CoverMomentView(
-                    gameLabel: coverMoment.gameLabel,
-                    resultTitle: coverMoment.resultTitle,
-                    recordText: coverMoment.recordText,
-                    rankText: coverMoment.rankText,
-                    shareSource: coverMoment.shareSource
-                )
-                .pickemsEnvironment(appState)
-            }
-            .sheet(isPresented: $showFavoriteTeamPicker) {
-                FavoriteTeamPickerView()
-                    .pickemsEnvironment(appState)
-            }
-            .sheet(isPresented: $showJoinSheet) {
-                JoinGroupSheet(initialCode: "")
-                    .pickemsEnvironment(appState)
-            }
-            .sheet(isPresented: $showCreateWizard) {
-                CreateGroupWizardView()
-                    .pickemsEnvironment(appState)
-            }
         }
     }
 
@@ -144,7 +119,7 @@ struct HomeView: View {
 
             if appState.authService.currentUser?.favoriteTeam == nil {
                 Button {
-                    showFavoriteTeamPicker = true
+                    appState.present(.favoriteTeam(isOnboardingPrompt: false))
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "shield.lefthalf.filled")
@@ -228,14 +203,14 @@ struct HomeView: View {
                     )
                     HStack(spacing: 12) {
                         Button {
-                            showJoinSheet = true
+                            appState.present(.joinGroup)
                         } label: {
                             Label("Join / Search", systemImage: "magnifyingglass")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
                         Button {
-                            showCreateWizard = true
+                            appState.present(.createLeague)
                         } label: {
                             Label("Create", systemImage: "plus.circle")
                                 .frame(maxWidth: .infinity)
@@ -346,12 +321,12 @@ struct HomeView: View {
             }
             Section {
                 Button {
-                    showJoinSheet = true
+                    appState.present(.joinGroup)
                 } label: {
                     Label("Join / Search", systemImage: "magnifyingglass")
                 }
                 Button {
-                    showCreateWizard = true
+                    appState.present(.createLeague)
                 } label: {
                     Label("Create league", systemImage: "plus.circle")
                 }

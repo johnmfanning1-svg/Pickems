@@ -49,7 +49,8 @@ final class GroupService {
 
     func loadGroups(for userId: String) {
         groupListener?.remove()
-        hasCompletedInitialGroupLoad = false
+        // Do not clear `hasCompletedInitialGroupLoad`. RootView unmounts MainTabView
+        // (and every sheet) when this flag goes false after the first snapshot.
         AppLog.info(AppLog.firestore, "loadGroups listener attached", metadata: [
             "uid": AppEvents.shortUID(userId),
         ])

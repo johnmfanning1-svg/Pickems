@@ -36,10 +36,6 @@ struct MainTabView: View {
         .onChange(of: appState.groupService.groups.map(\.id)) { _, _ in
             appState.publishSurfaces()
         }
-        .sheet(isPresented: $appState.showNotificationOnboarding) {
-            StayOnTimeSheet()
-                .pickemsEnvironment(appState)
-        }
     }
 }
 

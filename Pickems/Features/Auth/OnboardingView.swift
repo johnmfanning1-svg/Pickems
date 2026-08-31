@@ -7,8 +7,6 @@ struct OnboardingView: View {
     @State private var mode: OnboardingMode = .join
     @State private var isWorking = false
     @State private var localError: String?
-    @State private var showCreateWizard = false
-    @State private var showFavoriteTeamPicker = false
     @State private var showScrimmage = false
 
     enum OnboardingMode: String, CaseIterable {
@@ -85,14 +83,6 @@ struct OnboardingView: View {
             .pickemsScreenBackground()
             .navigationTitle("Get Started")
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showCreateWizard) {
-                CreateGroupWizardView()
-                    .pickemsEnvironment(appState)
-            }
-            .sheet(isPresented: $showFavoriteTeamPicker) {
-                FavoriteTeamPickerView()
-                    .pickemsEnvironment(appState)
-            }
             .fullScreenCover(isPresented: $showScrimmage) {
                 ScrimmageView(context: .onboarding)
                     .pickemsEnvironment(appState)
@@ -113,7 +103,7 @@ struct OnboardingView: View {
                 .foregroundStyle(PickemsColors.textPrimary)
 
             Button {
-                showFavoriteTeamPicker = true
+                appState.present(.favoriteTeam(isOnboardingPrompt: false))
             } label: {
                 HStack(spacing: 12) {
                     if let team = appState.authService.currentUser?.favoriteTeam {
@@ -212,7 +202,7 @@ struct OnboardingView: View {
                 .foregroundStyle(PickemsColors.textSecondary)
 
             PrimaryButton(title: "Start League Wizard") {
-                showCreateWizard = true
+                appState.present(.createLeague)
             }
         }
     }

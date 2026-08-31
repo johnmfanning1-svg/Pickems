@@ -21,6 +21,7 @@ struct PickemsApp: App {
                 RootView()
                     .environment(appState)
                     .environment(\.themePalette, appState.appTheme.palette)
+                    .appSheetHost(appState)
                     .onAppear {
                         appDelegate.setDeepLinkHandler { action in
                             appState.handleDeepLink(action)
@@ -60,20 +61,6 @@ struct PickemsApp: App {
                             appState.selectedTab = .home
                             appState.scheduleFavoriteTeamPrompt()
                         }
-                    }
-                    .sheet(isPresented: Binding(
-                        get: { appState.showJoinGroupSheet && !appState.liveConfig.requiresUpdate },
-                        set: { appState.showJoinGroupSheet = $0 }
-                    )) {
-                        JoinGroupSheet(initialCode: appState.pendingInviteCode ?? "")
-                            .pickemsEnvironment(appState)
-                    }
-                    .sheet(isPresented: Binding(
-                        get: { appState.showFavoriteTeamPicker && !appState.liveConfig.requiresUpdate },
-                        set: { appState.showFavoriteTeamPicker = $0 }
-                    )) {
-                        FavoriteTeamPickerView(isOnboardingPrompt: true)
-                            .pickemsEnvironment(appState)
                     }
             }
         }

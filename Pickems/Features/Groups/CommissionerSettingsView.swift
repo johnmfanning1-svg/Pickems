@@ -284,15 +284,7 @@ struct CommissionerSettingsView: View {
             }
             .sheet(isPresented: $showAdminGameBrowse) {
                 GameBrowseView(
-                    games: appState.picksViewModel.espnGames,
-                    nominatedEventIds: Set(
-                        appState.pickService.nominations.map(\.espnEventId)
-                            + appState.pickService.slateGames.map(\.espnEventId)
-                    ),
-                    nominatorNamesByEventId: Dictionary(
-                        appState.pickService.nominations.map { ($0.espnEventId, $0.submitterName) },
-                        uniquingKeysWith: { first, _ in first }
-                    )
+                    seedGames: appState.picksViewModel.espnGames
                 ) { game in
                     appState.picksViewModel.handleGameSelection(game, appState: appState)
                     showAdminGameBrowse = false

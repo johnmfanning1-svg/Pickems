@@ -66,12 +66,6 @@ struct CoverMomentView: View {
 @MainActor
 @Observable
 final class CoverMomentPresenter {
-    var isPresented = false
-    var gameLabel = ""
-    var resultTitle = ""
-    var recordText = ""
-    var rankText = ""
-    var shareSource: ShareSource?
     private var seenFinalGameIds = Set<String>()
 
     func observe(appState: AppState) {
@@ -86,8 +80,9 @@ final class CoverMomentPresenter {
                 continue
             }
             let label = "\(game.awayTeamAbbreviation) @ \(game.homeTeamAbbreviation)"
-            gameLabel = label
-            resultTitle = correct ? "Covered" : "Missed"
+            let resultTitle = correct ? "Covered" : "Missed"
+            let recordText: String
+            let rankText: String
             if let entry = appState.rankedStandings(weekly: true).first(where: { $0.id == userId }) {
                 recordText = "\(entry.weeklyWins)–\(entry.weeklyLosses) today"
                 rankText = "You're #\(entry.rank) live"
@@ -95,8 +90,12 @@ final class CoverMomentPresenter {
                 recordText = "Pick settled"
                 rankText = ""
             }
-            shareSource = appState.weeklyShareSource()
-            isPresented = true
+            appState.present(.coverMoment(
+                gameLabel: label,
+                resultTitle: resultTitle,
+                recordText: recordText,
+                rankText: rankText
+            ))
             break
         }
     }

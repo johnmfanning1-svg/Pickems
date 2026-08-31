@@ -5,7 +5,6 @@ import SwiftUI
 final class PicksViewModel {
     var draftPicks: [String: String] = [:]
     var confidenceGameId: String?
-    var showGameBrowse = false
     var espnGames: [ESPNGame] = []
     var isLoadingGames = false
     var livePickCards: [String: ESPNLiveGameCard] = [:]
@@ -36,7 +35,6 @@ final class PicksViewModel {
         confidenceGameId = nil
         resetPendingWrite()
         stopLiveRefresh()
-        showGameBrowse = false
         showConfirmSubmit = false
         showConfirmNominations = false
         spreadEditGame = nil
@@ -186,22 +184,14 @@ final class PicksViewModel {
         }
     }
 
-    func browseGames(appState: AppState, present: Bool = true) async {
-        await loadESPNGames(appState: appState)
-        if espnGames.isEmpty, appState.pickService.errorMessage != nil {
-            return
-        }
-        if present { showGameBrowse = true }
-    }
-
     func beginAddSelection(for member: GroupMember, appState: AppState) {
         selectionBrowseIntent = .addFor(memberId: member.id, displayName: member.displayName)
-        Task { await browseGames(appState: appState) }
+        appState.present(.gameBrowse)
     }
 
     func beginReplaceSelection(_ nomination: Nomination, appState: AppState) {
         selectionBrowseIntent = .replace(nomination)
-        Task { await browseGames(appState: appState) }
+        appState.present(.gameBrowse)
     }
 
     func handleGameSelection(_ game: ESPNGame, appState: AppState) {
@@ -224,7 +214,9 @@ final class PicksViewModel {
                 )
                 PickemsHaptics.success()
                 selectionBrowseIntent = .own
-                showGameBrowse = false
+                if appState.presentedSheet == .gameBrowse {
+                    appState.dismissSheet()
+                }
             } catch {
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }

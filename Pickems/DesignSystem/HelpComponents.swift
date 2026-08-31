@@ -91,29 +91,41 @@ struct HelpInfoButton: View {
     var isToolbar: Bool = false
     @Environment(\.themePalette) private var theme
 
+    @Environment(\.helpPresenter) private var helpPresenter
     @State private var showHelp = false
 
     var body: some View {
+        if helpPresenter == nil, presentedTopic == nil {
+            helpButton
+                .sheet(isPresented: $showHelp) {
+                    HelpDetailView(topic: topic)
+                        .environment(\.themePalette, theme)
+                        .pickemsSheetChrome()
+                }
+        } else {
+            helpButton
+        }
+    }
+
+    private var helpButton: some View {
         Button {
             PickemsHaptics.lightImpact()
-            if let presentedTopic {
-                presentedTopic.wrappedValue = topic
-            } else {
-                showHelp = true
+            PickemsPresentation.afterTap {
+                if let presentedTopic {
+                    presentedTopic.wrappedValue = topic
+                } else if let helpPresenter {
+                    helpPresenter.topic = topic
+                } else {
+                    showHelp = true
+                }
             }
         } label: {
             glyph
         }
-        // `.borderless` is required for tappable buttons inside Form/List headers & rows.
         .buttonStyle(.borderless)
         .controlSize(isToolbar ? .mini : .regular)
         .accessibilityLabel("Help")
         .accessibilityHint(topic.title)
-        .sheet(isPresented: $showHelp) {
-            HelpDetailView(topic: topic)
-                .environment(\.themePalette, theme)
-                .pickemsSheetChrome()
-        }
     }
 
     @ViewBuilder

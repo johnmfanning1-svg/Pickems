@@ -101,10 +101,10 @@ extension AppState {
     func presentFavoriteTeamPromptIfNeeded() {
         guard let userId = currentUserId else { return }
         guard !needsOnboarding else { return }
-        guard !showJoinGroupSheet else { return }
+        guard presentedSheet == nil else { return }
         guard authService.currentUser?.favoriteTeamId == nil else { return }
         guard !authService.hasDismissedFavoriteTeamPrompt(for: userId) else { return }
-        showFavoriteTeamPicker = true
+        present(.favoriteTeam(isOnboardingPrompt: true), policy: .ifIdle)
         AppEvents.track(.favoriteTeamPromptPresented, metadata: [
             "uid": AppEvents.shortUID(userId),
         ])

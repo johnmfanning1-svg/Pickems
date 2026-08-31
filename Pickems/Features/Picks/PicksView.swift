@@ -12,7 +12,6 @@ struct PicksView: View {
     @State private var showIncompletePickemsAlert = false
     @State private var incompletePickemsAlertText = ""
     @State private var isRefreshing = false
-    @State private var showSubmissionStatus = false
     @State private var picksExpanded = false
 
     private var viewModel: PicksViewModel { appState.picksViewModel }
@@ -75,40 +74,6 @@ struct PicksView: View {
             }
             .pickemsRefreshable(isRefreshing: $isRefreshing) {
                 await reloadPicks()
-            }
-            .sheet(isPresented: $showSubmissionStatus) {
-                SubmissionStatusView()
-                    .pickemsEnvironment(appState)
-            }
-            .sheet(isPresented: $viewModel.showGameBrowse, onDismiss: {
-                viewModel.selectionBrowseIntent = .own
-            }) {
-                GameBrowseView(
-                    games: viewModel.espnGames,
-                    nominatedEventIds: {
-                        var ids = Set(
-                            appState.pickService.nominations.map(\.espnEventId)
-                                + appState.pickService.slateGames.map(\.espnEventId)
-                        )
-                        if case .replace(let nom) = viewModel.selectionBrowseIntent {
-                            ids.remove(nom.espnEventId)
-                        }
-                        return ids
-                    }(),
-                    nominatorNamesByEventId: {
-                        var names = Dictionary(
-                            appState.pickService.nominations.map { ($0.espnEventId, $0.submitterName) },
-                            uniquingKeysWith: { first, _ in first }
-                        )
-                        for game in appState.pickService.slateGames where names[game.espnEventId] == nil {
-                            names[game.espnEventId] = "the slate"
-                        }
-                        return names
-                    }()
-                ) { game in
-                    viewModel.handleGameSelection(game, appState: appState)
-                }
-                .pickemsEnvironment(appState)
             }
             .alert("Submit your Pickems?", isPresented: $viewModel.showConfirmSubmit) {
                 Button("Submit Pickems") {
@@ -321,7 +286,7 @@ struct PicksView: View {
                     }
                     if picksMatchWeek(week) {
                         SecondaryButton("See who's in", icon: "person.crop.circle.badge.clock") {
-                            showSubmissionStatus = true
+                            appState.present(.submissionStatus)
                         }
                         .padding(.horizontal)
                         .accessibilityHint("Shows how many Pickems each member has made, without revealing their picks")
@@ -374,7 +339,8 @@ struct PicksView: View {
             )
 
             PrimaryButton(title: "Add Game") {
-                viewModel.showGameBrowse = true
+                viewModel.selectionBrowseIntent = .own
+                appState.present(.gameBrowse)
             }
             .padding(.horizontal)
 
@@ -423,7 +389,7 @@ struct PicksView: View {
             } else if WeekTransition.canRemakeSelections(week) {
                 PrimaryButton(title: "Select Game") {
                     viewModel.selectionBrowseIntent = .own
-                    viewModel.showGameBrowse = true
+                    appState.present(.gameBrowse)
                 }
                 .padding(.horizontal)
             }

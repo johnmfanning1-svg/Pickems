@@ -8,16 +8,10 @@ struct ProfileView: View {
 
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isUploadingAvatar = false
-    @State private var showEditProfile = false
-    @State private var showJoinSheet = false
-    @State private var showCreateWizard = false
     @State private var showLeaveConfirm = false
     @State private var showSignOutConfirm = false
     @State private var showDeleteAccountConfirm = false
-    @State private var showDeleteAccountSheet = false
-    @State private var showTeamPicker = false
     @State private var managementError: String?
-    @State private var presentedHelp: HelpTopic?
     @State private var isRefreshing = false
     @State private var showScrimmage = false
 
@@ -50,7 +44,7 @@ struct ProfileView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 12) {
                         Button {
-                            showTeamPicker = true
+                            appState.present(.favoriteTeam(isOnboardingPrompt: false))
                         } label: {
                             teamThemeToolbarLabel
                         }
@@ -60,36 +54,11 @@ struct ProfileView: View {
                         HelpInfoButton(
                             topic: PickemsHelp.profileOverview,
                             alignment: .center,
-                            presentedTopic: $presentedHelp,
                             isToolbar: true
                         )
                     }
                 }
                 .sharedBackgroundVisibility(.hidden)
-            }
-            .sheet(item: $presentedHelp) { topic in
-                HelpDetailView(topic: topic)
-                    .environment(\.themePalette, theme)
-            }
-            .sheet(isPresented: $showEditProfile) {
-                EditProfileSheet()
-                    .pickemsEnvironment(appState)
-            }
-            .sheet(isPresented: $showJoinSheet) {
-                JoinGroupSheet(initialCode: "")
-                    .pickemsEnvironment(appState)
-            }
-            .sheet(isPresented: $showCreateWizard) {
-                CreateGroupWizardView()
-                    .pickemsEnvironment(appState)
-            }
-            .sheet(isPresented: $showTeamPicker) {
-                FavoriteTeamPickerView()
-                    .pickemsEnvironment(appState)
-            }
-            .sheet(isPresented: $showDeleteAccountSheet) {
-                DeleteAccountConfirmSheet()
-                    .pickemsEnvironment(appState)
             }
             .fullScreenCover(isPresented: $showScrimmage) {
                 ScrimmageView(context: .replay)
@@ -109,7 +78,7 @@ struct ProfileView: View {
                 Button("Cancel", role: .cancel) {}
             }
             .alert("Delete your Pickems account?", isPresented: $showDeleteAccountConfirm) {
-                Button("Continue", role: .destructive) { showDeleteAccountSheet = true }
+                Button("Continue", role: .destructive) { appState.present(.deleteAccount) }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This permanently deletes your profile, avatar, and league memberships. You’ll confirm your identity next. This cannot be undone.")
@@ -177,7 +146,7 @@ struct ProfileView: View {
                 .listRowBackground(PickemsColors.cardBackground)
 
                 Button {
-                    showEditProfile = true
+                    appState.present(.editProfile)
                 } label: {
                     HStack {
                         Label("Edit Name & Username", systemImage: "pencil")
@@ -259,8 +228,7 @@ struct ProfileView: View {
                 Spacer()
                 HelpInfoButton(
                     topic: PickemsHelp.notifications,
-                    size: .callout,
-                    presentedTopic: $presentedHelp
+                    size: .callout
                 )
             }
         } footer: {
@@ -425,7 +393,7 @@ struct ProfileView: View {
             }
 
             Button {
-                showJoinSheet = true
+                appState.present(.joinGroup)
             } label: {
                 Label("Join a League", systemImage: "person.badge.plus")
             }
@@ -433,7 +401,7 @@ struct ProfileView: View {
             .listRowBackground(PickemsColors.cardBackground)
 
             Button {
-                showCreateWizard = true
+                appState.present(.createLeague)
             } label: {
                 Label("Create a League", systemImage: "plus.circle")
             }
@@ -455,8 +423,7 @@ struct ProfileView: View {
                 Spacer()
                 HelpInfoButton(
                     topic: PickemsHelp.inviteFriends,
-                    size: .callout,
-                    presentedTopic: $presentedHelp
+                    size: .callout
                 )
             }
         }
@@ -477,8 +444,7 @@ struct ProfileView: View {
                 Spacer()
                 HelpInfoButton(
                     topic: PickemsHelp.widgetAndLiveActivity,
-                    size: .callout,
-                    presentedTopic: $presentedHelp
+                    size: .callout
                 )
             }
         } footer: {

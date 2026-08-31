@@ -3,8 +3,6 @@ import SwiftUI
 struct GroupsView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
-    @State private var showCommissionerSettings = false
-    @State private var showCreateLeague = false
     @State private var manageExpanded = false
     @State private var showLeaveConfirm = false
     @State private var leagueActionError: String?
@@ -60,33 +58,6 @@ struct GroupsView: View {
             .pickemsRefreshable(isRefreshing: $isRefreshing) {
                 await appState.refreshLeagueData()
             }
-            .sheet(isPresented: $showCommissionerSettings) {
-                // Always emit a concrete root view + explicit environment.
-                // Empty `if let` sheet content crashed App Review 1.0 (EXC_BREAKPOINT in SheetBridge).
-                Group {
-                    if let group = appState.groupService.selectedGroup {
-                        CommissionerSettingsView(group: group)
-                    } else {
-                        NavigationStack {
-                            ContentUnavailableView(
-                                "No League Selected",
-                                systemImage: "person.3",
-                                description: Text("Select a league, then open Commissioner Settings again.")
-                            )
-                            .toolbar {
-                                ToolbarItem(placement: .cancellationAction) {
-                                    Button("Close") { showCommissionerSettings = false }
-                                }
-                            }
-                        }
-                    }
-                }
-                .pickemsEnvironment(appState)
-            }
-            .sheet(isPresented: $showCreateLeague) {
-                CreateGroupWizardView()
-                    .pickemsEnvironment(appState)
-            }
             .task(id: appState.groupService.selectedGroup?.id) {
                 await appState.syncSelectedWeek()
             }
@@ -108,7 +79,7 @@ struct GroupsView: View {
     private func presentPendingCommissionerSettings(_ pending: Bool) {
         guard pending else { return }
         if appState.isCommissioner, appState.groupService.selectedGroup != nil {
-            showCommissionerSettings = true
+            appState.present(.commissionerSettings)
         }
         appState.pendingCommissionerSettings = false
     }
@@ -532,7 +503,7 @@ struct GroupsView: View {
                             systemImage: "gearshape.fill",
                             hint: "Configure slate rules, deadlines, and tie-breakers"
                         ) {
-                            showCommissionerSettings = true
+                            appState.present(.commissionerSettings)
                         }
                     }
 
@@ -549,7 +520,7 @@ struct GroupsView: View {
                         systemImage: "person.badge.plus",
                         hint: "Enter an invite code for a different league"
                     ) {
-                        appState.showJoinGroupSheet = true
+                        appState.present(.joinGroup)
                     }
 
                     manageRow(
@@ -557,7 +528,7 @@ struct GroupsView: View {
                         systemImage: "plus.circle",
                         hint: "Start a brand new league you commission"
                     ) {
-                        showCreateLeague = true
+                        appState.present(.createLeague)
                     }
 
                     if group.canShareInvite(asCommissioner: appState.isCommissioner) {

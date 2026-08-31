@@ -107,7 +107,7 @@ struct PrimaryButton: View {
     var body: some View {
         Button {
             PickemsHaptics.lightImpact()
-            action()
+            PickemsPresentation.afterTap(action)
         } label: {
             HStack(spacing: 8) {
                 if isLoading {
@@ -123,6 +123,7 @@ struct PrimaryButton: View {
             .foregroundStyle(theme.onAccent)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
+        .buttonStyle(.plain)
         .disabled(isLoading)
         .accessibilityHint(accessibilityHint ?? "")
     }
@@ -143,7 +144,7 @@ struct SecondaryButton: View {
     var body: some View {
         Button {
             PickemsHaptics.selection()
-            action()
+            PickemsPresentation.afterTap(action)
         } label: {
             HStack(spacing: 6) {
                 if let icon {

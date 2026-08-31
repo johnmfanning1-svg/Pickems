@@ -13,9 +13,7 @@ struct GameBrowseView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themePalette) private var theme
-    let games: [ESPNGame]
-    var nominatedEventIds: Set<String> = []
-    var nominatorNamesByEventId: [String: String] = [:]
+    var replacingEventId: String? = nil
     let onSelect: (ESPNGame) -> Void
 
     @State private var searchText = ""
@@ -26,17 +24,14 @@ struct GameBrowseView: View {
     @State private var loadError: String?
 
     init(
-        games: [ESPNGame],
-        nominatedEventIds: Set<String> = [],
-        nominatorNamesByEventId: [String: String] = [:],
+        seedGames: [ESPNGame] = [],
+        replacingEventId: String? = nil,
         onSelect: @escaping (ESPNGame) -> Void
     ) {
-        self.games = games
-        self.nominatedEventIds = nominatedEventIds
-        self.nominatorNamesByEventId = nominatorNamesByEventId
+        self.replacingEventId = replacingEventId
         self.onSelect = onSelect
-        _loadedGames = State(initialValue: games)
-        _loading = State(initialValue: games.isEmpty)
+        _loadedGames = State(initialValue: seedGames)
+        _loading = State(initialValue: seedGames.isEmpty)
     }
 
     private var favoriteTeamId: String? {
@@ -44,6 +39,33 @@ struct GameBrowseView: View {
     }
 
     private var board: [ESPNGame] { loadedGames }
+
+    private var resolvedReplacingEventId: String? {
+        if let replacingEventId { return replacingEventId }
+        if case .replace(let nom) = appState.picksViewModel.selectionBrowseIntent {
+            return nom.espnEventId
+        }
+        return nil
+    }
+
+    private var nominatedEventIds: Set<String> {
+        GameBrowseTakenIds.make(
+            nominationEventIds: appState.pickService.nominations.map(\.espnEventId),
+            slateEventIds: appState.pickService.slateGames.map(\.espnEventId),
+            replacingEventId: resolvedReplacingEventId
+        )
+    }
+
+    private var nominatorNamesByEventId: [String: String] {
+        var names = Dictionary(
+            appState.pickService.nominations.map { ($0.espnEventId, $0.submitterName) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for game in appState.pickService.slateGames where names[game.espnEventId] == nil {
+            names[game.espnEventId] = "the slate"
+        }
+        return names
+    }
 
     private var filteredGames: [ESPNGame] {
         let base = board
@@ -133,10 +155,11 @@ struct GameBrowseView: View {
             }
             .task { await refreshBoard() }
         }
+        .interactiveDismissDisabled(loading)
     }
 
     private func refreshBoard() async {
-        loading = loadedGames.isEmpty && games.isEmpty
+        loading = loadedGames.isEmpty
         do {
             let fetched: [ESPNGame]
             if let week = appState.groupService.currentWeek {
@@ -151,7 +174,6 @@ struct GameBrowseView: View {
             }
             loadedGames = fetched
             loadError = nil
-            appState.picksViewModel.espnGames = fetched
         } catch is CancellationError {
             return
         } catch {

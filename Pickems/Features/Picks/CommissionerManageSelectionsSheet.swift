@@ -113,21 +113,8 @@ struct CommissionerManageSelectionsSheet: View {
         }
         .sheet(isPresented: $showBrowse) {
             GameBrowseView(
-                games: appState.picksViewModel.espnGames,
-                nominatedEventIds: {
-                    var ids = Set(
-                        appState.pickService.nominations.map(\.espnEventId)
-                            + appState.pickService.slateGames.map(\.espnEventId)
-                    )
-                    if let replacing {
-                        ids.remove(replacing.espnEventId)
-                    }
-                    return ids
-                }(),
-                nominatorNamesByEventId: Dictionary(
-                    appState.pickService.nominations.map { ($0.espnEventId, $0.submitterName) },
-                    uniquingKeysWith: { first, _ in first }
-                )
+                seedGames: appState.picksViewModel.espnGames,
+                replacingEventId: replacing?.espnEventId
             ) { game in
                 applyBrowse(game)
             }
