@@ -99,8 +99,9 @@ export function ConfigPage() {
           {minimumBuild != null ? (
             <p className="mt-2 text-amber-300">
               <code className="font-mono">minimumBuild {minimumBuild}</code> can force-update every
-              user below that build. Confirm the build number is actually live in TestFlight or the App
-              Store first.
+              user below that build. Confirm that build is the one currently downloadable on the{" "}
+              <strong>App Store</strong> (not TestFlight). The update button opens the public listing;
+              a TestFlight-only minimum traps store users.
             </p>
           ) : null}
         </>
@@ -217,7 +218,7 @@ export function ConfigPage() {
           <div className="mt-4">
             <Field
               label="minimumBuild"
-              hint="Blank means no minimum. Never set this above the newest build actually available."
+              hint="Blank means no minimum. Never set this above the App Store build (not TestFlight). Full SOP: docs/MINIMUM_BUILD.md."
             >
               <TextInput
                 type="number"

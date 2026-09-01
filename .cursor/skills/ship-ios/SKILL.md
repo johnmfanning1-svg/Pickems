@@ -21,7 +21,7 @@ Read the matching SOP before acting (repo root):
 |--|--|--|
 | bump / TestFlight / new build | Follow TESTFLIGHT.md | Submit for App Review or raise `minimumBuild` |
 | submit / App Store review / Apple | Follow APP_STORE.md | Raise `minimumBuild` |
-| force update / minimum build / force users onto a build | Follow MINIMUM_BUILD.md | Set it above the live App Store build |
+| force update / minimum build / force users onto a build | Follow `docs/MINIMUM_BUILD.md` (worked example: force 332) | Set it above the live App Store build, or treat Apple Approved / TestFlight as store-live |
 | none of the above | Stop and ask | Ship or change the gate |
 
 Never raise `appConfig/live.minimumBuild` unless the user explicitly asked. Ceiling is the **App Store** build (not TestFlight-only). Never set `resetRatingsRequest`. Never commit demo passwords. Never leave review credentials in `/tmp` JS files.
