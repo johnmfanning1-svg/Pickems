@@ -150,7 +150,7 @@ struct OnboardingView: View {
             Text("Stay on time")
                 .font(.headline)
                 .foregroundStyle(PickemsColors.textPrimary)
-            Text("Allow notifications for Selection and Pickems deadlines. You can change this later in Profile.")
+            Text("Allow notifications for deadlines, game results, and chat. You can choose which alerts you get later in Profile.")
                 .font(.subheadline)
                 .foregroundStyle(PickemsColors.textSecondary)
             Button {

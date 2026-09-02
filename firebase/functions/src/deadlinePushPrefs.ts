@@ -12,29 +12,37 @@ export type DeadlinePushType =
   | "season_closed"
   | "chat_message";
 
-const SELECTION_DEADLINE_TYPES: DeadlinePushType[] = [
-  "set_selection_deadline",
-  "selection_deadline_passed",
-  "selection_deadline_reminder",
-];
+export type PushPrefFields = {
+  notifySelectionDeadlines?: boolean;
+  notifyPickemsDeadlines?: boolean;
+  notifyGameFinals?: boolean;
+  notifyTookTheLead?: boolean;
+  notifyWeekScored?: boolean;
+  notifySeasonClosed?: boolean;
+  notifyChatMessages?: boolean;
+};
 
-const PICKEMS_DEADLINE_TYPES: DeadlinePushType[] = [
-  "deadline_reminder",
-  "deadline_locked",
-  "deadline_passed",
-  "pickems_open",
-];
+const PREF_FOR_TYPE: Record<DeadlinePushType, keyof PushPrefFields> = {
+  set_selection_deadline: "notifySelectionDeadlines",
+  selection_deadline_passed: "notifySelectionDeadlines",
+  selection_deadline_reminder: "notifySelectionDeadlines",
+  deadline_reminder: "notifyPickemsDeadlines",
+  deadline_locked: "notifyPickemsDeadlines",
+  deadline_passed: "notifyPickemsDeadlines",
+  pickems_open: "notifyPickemsDeadlines",
+  game_final: "notifyGameFinals",
+  took_the_lead: "notifyTookTheLead",
+  week_scored: "notifyWeekScored",
+  season_closed: "notifySeasonClosed",
+  chat_message: "notifyChatMessages",
+};
 
-/** Missing prefs default to on so existing users keep receiving deadline alerts. */
+/** Missing prefs default to on so existing users keep receiving alerts. */
 export function shouldSendDeadlinePush(
-  data: { notifySelectionDeadlines?: boolean; notifyPickemsDeadlines?: boolean } | undefined,
+  data: PushPrefFields | undefined,
   type: string
 ): boolean {
-  if (SELECTION_DEADLINE_TYPES.includes(type as DeadlinePushType)) {
-    return data?.notifySelectionDeadlines !== false;
-  }
-  if (PICKEMS_DEADLINE_TYPES.includes(type as DeadlinePushType)) {
-    return data?.notifyPickemsDeadlines !== false;
-  }
-  return true;
+  const key = PREF_FOR_TYPE[type as DeadlinePushType];
+  if (!key) return true;
+  return data?.[key] !== false;
 }

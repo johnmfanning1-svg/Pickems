@@ -7,6 +7,8 @@ struct AppSheetPresentationTests {
         #expect(AppSheet.gameBrowse.id == AppSheet.gameBrowse.id)
         #expect(AppSheet.joinGroup.id != AppSheet.gameBrowse.id)
         #expect(AppSheet.createLeague.id != AppSheet.commissionerSettings.id)
+        #expect(AppSheet.notificationSettings.id == "notificationSettings")
+        #expect(AppSheet.notificationSettings.id != AppSheet.editProfile.id)
         #expect(
             AppSheet.favoriteTeam(isOnboardingPrompt: true).id
                 != AppSheet.favoriteTeam(isOnboardingPrompt: false).id

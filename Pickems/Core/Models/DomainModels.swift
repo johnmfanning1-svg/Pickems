@@ -15,12 +15,45 @@ struct UserProfile: Codable, Identifiable, Equatable {
     var favoriteTeamAbbreviation: String? = nil
     var favoriteTeamLogoURL: String? = nil
     var createdAt: Date
-    /// Opt-in deadline alerts. Nil (legacy docs) means on.
+    /// Opt-in alerts. Nil (legacy docs) means on so existing users keep receiving them.
     var notifySelectionDeadlines: Bool? = true
     var notifyPickemsDeadlines: Bool? = true
+    var notifyGameFinals: Bool? = true
+    var notifyTookTheLead: Bool? = true
+    var notifyWeekScored: Bool? = true
+    var notifySeasonClosed: Bool? = true
+    var notifyChatMessages: Bool? = true
 
-    var wantsSelectionDeadlineAlerts: Bool { notifySelectionDeadlines ?? true }
-    var wantsPickemsDeadlineAlerts: Bool { notifyPickemsDeadlines ?? true }
+    var wantsSelectionDeadlineAlerts: Bool { wants(.selectionDeadlines) }
+    var wantsPickemsDeadlineAlerts: Bool { wants(.pickemsDeadlines) }
+
+    func wants(_ category: NotificationPrefCategory) -> Bool {
+        switch category {
+        case .selectionDeadlines: return notifySelectionDeadlines ?? true
+        case .pickemsDeadlines: return notifyPickemsDeadlines ?? true
+        case .gameFinals: return notifyGameFinals ?? true
+        case .tookTheLead: return notifyTookTheLead ?? true
+        case .weekScored: return notifyWeekScored ?? true
+        case .seasonClosed: return notifySeasonClosed ?? true
+        case .chatMessages: return notifyChatMessages ?? true
+        }
+    }
+
+    mutating func set(_ category: NotificationPrefCategory, enabled: Bool) {
+        switch category {
+        case .selectionDeadlines: notifySelectionDeadlines = enabled
+        case .pickemsDeadlines: notifyPickemsDeadlines = enabled
+        case .gameFinals: notifyGameFinals = enabled
+        case .tookTheLead: notifyTookTheLead = enabled
+        case .weekScored: notifyWeekScored = enabled
+        case .seasonClosed: notifySeasonClosed = enabled
+        case .chatMessages: notifyChatMessages = enabled
+        }
+    }
+
+    var enabledNotificationPrefCount: Int {
+        NotificationPrefCategory.allCases.filter { wants($0) }.count
+    }
 
     var fullName: String? {
         let first = firstName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
