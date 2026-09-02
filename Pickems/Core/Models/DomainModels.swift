@@ -23,7 +23,8 @@ struct UserProfile: Codable, Identifiable, Equatable {
     var notifyWeekScored: Bool? = true
     var notifySeasonClosed: Bool? = true
     var notifyChatMessages: Bool? = true
-    var notifyCommissionerDeadlines: Bool? = true
+    /// Nil until the user sets it so legacy Selection-deadline opt-outs still suppress commissioner nudges.
+    var notifyCommissionerDeadlines: Bool? = nil
 
     var wantsSelectionDeadlineAlerts: Bool { wants(.selectionDeadlines) }
     var wantsPickemsDeadlineAlerts: Bool { wants(.pickemsDeadlines) }

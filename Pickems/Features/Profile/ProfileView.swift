@@ -238,14 +238,24 @@ struct ProfileView: View {
         case .notDetermined:
             return "Not enabled"
         case .authorized, .provisional, .ephemeral:
-            let total = NotificationPrefCategory.allCases.count
-            let onCount = appState.authService.currentUser?.enabledNotificationPrefCount ?? total
+            let categories = notificationPrefCategoriesForCaption
+            let onCount = categories.filter { appState.authService.currentUser?.wants($0) ?? true }.count
+            let total = categories.count
             if onCount == total { return "All on" }
             if onCount == 0 { return "All off" }
             return "\(onCount) of \(total) on"
         @unknown default:
             return "Settings"
         }
+    }
+
+    /// Member types always; commissioner type only when this account runs a league.
+    private var notificationPrefCategoriesForCaption: [NotificationPrefCategory] {
+        guard let userId = appState.currentUserId,
+              appState.groupService.groups.contains(where: { $0.commissionerId == userId }) else {
+            return NotificationPrefCategory.memberFacing
+        }
+        return NotificationPrefCategory.allCases
     }
 
     private var notificationFooter: String {

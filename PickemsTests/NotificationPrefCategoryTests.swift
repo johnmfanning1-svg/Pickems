@@ -14,6 +14,7 @@ struct NotificationPrefCategoryTests {
         for category in NotificationPrefCategory.allCases {
             #expect(profile.wants(category))
         }
+        #expect(profile.storedPref(.commissionerDeadlines) == nil)
         #expect(profile.enabledNotificationPrefCount == NotificationPrefCategory.memberFacing.count)
     }
 
