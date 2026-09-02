@@ -1,13 +1,6 @@
-What's new in 3.3.2
+What's new in 3.3.3
 
-• League Pickems after lock — full board, favored teams marked, landscape expand for bigger crews
-• Locked spreads stay on the card, with ESPN’s live line in parentheses
-• Choose which league drives the Home Screen widget and Live Activity
-• Live Home tiles show quarter and game clock
-• CFB This Week opens on Top 25, then My Picks, Group, All, and Power 4
-• Leagues larger than 10 members get a Full ranking under This Week / Season
-• Private leagues can lock invites so only the commissioner can add members
-• Home tiles show the broadcast network and cleaner MM/DD kickoff times
-• Rivalry is back on Leagues; the large widget lists more of your league and stays on the one you picked
+• Push alerts register again for returning members
+• Notification settings: per type, per league, and commissioner-only alerts
 
-Thanks for playing with us.
+Thanks for helping us UAT this build.
