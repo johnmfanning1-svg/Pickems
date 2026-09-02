@@ -61,6 +61,8 @@ struct AppSheetHostModifier: ViewModifier {
             SubmissionStatusView()
         case .editProfile:
             EditProfileSheet()
+        case .notificationSettings:
+            NotificationSettingsSheet()
         case .deleteAccount:
             DeleteAccountConfirmSheet()
         case .stayOnTime:
