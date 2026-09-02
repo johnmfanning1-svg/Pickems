@@ -3,11 +3,19 @@ import UserNotifications
 
 /// Chooses which FCM alerts the signed-in user receives. Presented from Profile
 /// so the tab stays a single row instead of a stack of toggles.
+///
+/// `All leagues` writes account defaults on `users/{uid}`. A specific league
+/// writes overrides on that membership doc. Commissioner alerts only appear
+/// for leagues the user actually commissions (or as defaults if they commission any).
 struct NotificationSettingsSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
     @Environment(\.dismiss) private var dismiss
 
+    /// `nil` = account defaults for every league.
+    @State private var scopeGroupId: String?
+    @State private var leagueMember: GroupMember?
+    @State private var isLoadingLeague = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -22,29 +30,37 @@ struct NotificationSettingsSheet: View {
                     Text(systemPermissionFooter)
                 }
 
-                ForEach(NotificationPrefCategory.Group.allCases) { group in
+                if !appState.groupService.groups.isEmpty {
                     Section {
-                        ForEach(NotificationPrefCategory.categories(in: group)) { category in
-                            Toggle(isOn: binding(for: category)) {
-                                Label {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(category.title)
-                                            .foregroundStyle(PickemsColors.textPrimary)
-                                        Text(category.subtitle)
-                                            .font(.caption)
-                                            .foregroundStyle(PickemsColors.textSecondary)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                    }
-                                } icon: {
-                                    Image(systemName: category.systemImage)
-                                        .foregroundStyle(theme.accent)
-                                }
+                        Picker("League", selection: $scopeGroupId) {
+                            Text("All leagues (defaults)").tag(String?.none)
+                            ForEach(appState.groupService.groups) { group in
+                                Text(group.name).tag(Optional(group.id))
                             }
-                            .listRowBackground(PickemsColors.cardBackground)
-                            .accessibilityHint(category.subtitle)
                         }
+                        .listRowBackground(PickemsColors.cardBackground)
+                        .accessibilityHint("Choose account defaults or a single league override")
                     } header: {
-                        Text(group.title)
+                        Text("Applies to")
+                    } footer: {
+                        Text(scopeFooter)
+                    }
+                }
+
+                if isLoadingLeague {
+                    Section {
+                        ProgressView("Loading league settings…")
+                            .listRowBackground(PickemsColors.cardBackground)
+                    }
+                } else {
+                    ForEach(visibleGroups) { group in
+                        Section {
+                            ForEach(NotificationPrefCategory.categories(in: group)) { category in
+                                prefToggle(category)
+                            }
+                        } header: {
+                            Text(group.title)
+                        }
                     }
                 }
 
@@ -67,12 +83,70 @@ struct NotificationSettingsSheet: View {
                 }
             }
             .task {
+                if scopeGroupId == nil {
+                    scopeGroupId = appState.groupService.selectedGroup?.id
+                }
                 await appState.notificationService.syncWithSystem()
                 if let uid = appState.currentUserId {
                     await appState.notificationService.saveToken(for: uid)
                 }
+                await loadLeagueMember()
+            }
+            .onChange(of: scopeGroupId) { _, _ in
+                Task { await loadLeagueMember() }
             }
         }
+    }
+
+    private var visibleGroups: [NotificationPrefCategory.Group] {
+        NotificationPrefCategory.Group.allCases.filter { group in
+            if group == .commissioner { return showsCommissionerSection }
+            return true
+        }
+    }
+
+    private var showsCommissionerSection: Bool {
+        guard let userId = appState.currentUserId else { return false }
+        if let groupId = scopeGroupId {
+            return appState.groupService.groups.first(where: { $0.id == groupId })?.commissionerId == userId
+        }
+        return appState.groupService.groups.contains { $0.commissionerId == userId }
+    }
+
+    private var scopedGroup: PickemGroup? {
+        guard let scopeGroupId else { return nil }
+        return appState.groupService.groups.first { $0.id == scopeGroupId }
+    }
+
+    private var scopeFooter: String {
+        if let group = scopedGroup {
+            if showsCommissionerSection {
+                return "These switches apply only to \(group.name). Commissioner alerts are included because you run this league."
+            }
+            return "These switches apply only to \(group.name). Account defaults still apply to your other leagues."
+        }
+        return "Defaults for every league. Open a league here to override one without changing the others."
+    }
+
+    @ViewBuilder
+    private func prefToggle(_ category: NotificationPrefCategory) -> some View {
+        Toggle(isOn: binding(for: category)) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(category.title)
+                        .foregroundStyle(PickemsColors.textPrimary)
+                    Text(category.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } icon: {
+                Image(systemName: category.systemImage)
+                    .foregroundStyle(theme.accent)
+            }
+        }
+        .listRowBackground(PickemsColors.cardBackground)
+        .accessibilityHint(category.subtitle)
     }
 
     @ViewBuilder
@@ -137,13 +211,36 @@ struct NotificationSettingsSheet: View {
         }
     }
 
+    private func isEnabled(_ category: NotificationPrefCategory) -> Bool {
+        let defaults = appState.authService.currentUser
+        if let leagueMember, scopeGroupId != nil {
+            return leagueMember.wants(category, defaults: defaults)
+        }
+        return defaults?.wants(category) ?? true
+    }
+
     private func binding(for category: NotificationPrefCategory) -> Binding<Bool> {
         Binding(
-            get: { appState.authService.currentUser?.wants(category) ?? true },
+            get: { isEnabled(category) },
             set: { enabled in
                 Task { await setPref(category, enabled: enabled) }
             }
         )
+    }
+
+    private func loadLeagueMember() async {
+        errorMessage = nil
+        guard let groupId = scopeGroupId, let userId = appState.currentUserId else {
+            leagueMember = nil
+            isLoadingLeague = false
+            return
+        }
+        isLoadingLeague = true
+        leagueMember = await appState.groupService.fetchMember(groupId: groupId, userId: userId)
+        isLoadingLeague = false
+        if leagueMember == nil {
+            errorMessage = "Couldn’t load settings for this league."
+        }
     }
 
     private func setPref(_ category: NotificationPrefCategory, enabled: Bool) async {
@@ -162,8 +259,28 @@ struct NotificationSettingsSheet: View {
             }
         }
         do {
-            try await appState.authService.updateNotificationPref(category, enabled: enabled)
+            if let groupId = scopeGroupId, let userId = appState.currentUserId {
+                if var member = leagueMember {
+                    member.set(category, enabled: enabled)
+                    leagueMember = member
+                }
+                try await appState.groupService.updateNotificationPref(
+                    groupId: groupId,
+                    userId: userId,
+                    category: category,
+                    enabled: enabled
+                )
+                if category == .chatMessages,
+                   groupId == appState.groupService.selectedGroup?.id {
+                    appState.chatService.isMuted = !enabled
+                }
+            } else {
+                try await appState.authService.updateNotificationPref(category, enabled: enabled)
+            }
         } catch {
+            if let groupId = scopeGroupId, let userId = appState.currentUserId {
+                leagueMember = await appState.groupService.fetchMember(groupId: groupId, userId: userId)
+            }
             errorMessage = UserFacingError.message(for: error, context: .write)
                 ?? error.localizedDescription
         }

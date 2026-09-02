@@ -307,8 +307,10 @@ final class ChatService {
     func setMuted(_ muted: Bool, groupId: String, userId: String) async {
         isMuted = muted
         do {
-            try await db.group(groupId).members.document(userId)
-                .setData([FirestoreField.chatMuted: muted], merge: true)
+            try await db.group(groupId).members.document(userId).setData([
+                FirestoreField.chatMuted: muted,
+                NotificationPrefCategory.chatMessages.firestoreField: !muted,
+            ], merge: true)
         } catch {
             isMuted = !muted
             UserFacingError.apply(error, to: &errorMessage, context: .write)

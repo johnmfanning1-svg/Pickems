@@ -251,7 +251,7 @@ struct ProfileView: View {
     private var notificationFooter: String {
         switch appState.notificationService.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
-            return "Choose which alerts you get. Turn iOS alerts off in Settings if you want none."
+            return "Choose which alerts you get, including per-league overrides. Turn iOS alerts off in Settings if you want none."
         case .denied:
             return "iOS blocked alerts for Pickems. Open Notification settings to enable them."
         default:

@@ -29,4 +29,33 @@ describe("deadline notification prefs", () => {
     expect(shouldSendDeadlinePush({ notifyChatMessages: false }, "chat_message")).toBe(false);
     expect(shouldSendDeadlinePush({ notifyGameFinals: false }, "week_scored")).toBe(true);
   });
+
+  it("lets a league override win over the account default", () => {
+    const user = { notifyGameFinals: false, notifyChatMessages: true };
+    expect(shouldSendDeadlinePush(user, "game_final", { notifyGameFinals: true })).toBe(true);
+    expect(shouldSendDeadlinePush(user, "chat_message", { notifyChatMessages: false })).toBe(false);
+    expect(shouldSendDeadlinePush(user, "week_scored", { notifyWeekScored: false })).toBe(false);
+  });
+
+  it("suppresses chat when the league membership is muted", () => {
+    expect(
+      shouldSendDeadlinePush({ notifyChatMessages: true }, "chat_message", { chatMuted: true })
+    ).toBe(false);
+  });
+
+  it("falls commissioner alerts back to the legacy Selection pref until set", () => {
+    expect(shouldSendDeadlinePush({ notifySelectionDeadlines: false }, "set_selection_deadline")).toBe(
+      false
+    );
+    expect(
+      shouldSendDeadlinePush(
+        { notifySelectionDeadlines: false },
+        "set_selection_deadline",
+        { notifyCommissionerDeadlines: true }
+      )
+    ).toBe(true);
+    expect(
+      shouldSendDeadlinePush({ notifyCommissionerDeadlines: false }, "selection_deadline_passed")
+    ).toBe(false);
+  });
 });

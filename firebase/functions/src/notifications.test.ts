@@ -55,6 +55,16 @@ describe("resolvePushDelivery", () => {
     });
   });
 
+  it("lets a league membership override skip a globally enabled alert", () => {
+    expect(
+      resolvePushDelivery(
+        { fcmToken: "tok", notifyGameFinals: true },
+        "game_final",
+        { notifyGameFinals: false }
+      )
+    ).toEqual({ action: "skip", reason: "pref_disabled" });
+  });
+
   it("skips game, chat, and scored-week pushes when those prefs are off", () => {
     expect(
       resolvePushDelivery(

@@ -166,7 +166,21 @@ service cloud.firestore {
           || (isSignedIn()
               && request.auth.uid == memberId
               && request.resource.data.diff(resource.data).affectedKeys()
-                   .hasOnly(['displayName', 'avatarColorHex', 'avatarImageURL', 'chatMuted', 'lastReadChatAt']));
+                   .hasOnly([
+                     'displayName',
+                     'avatarColorHex',
+                     'avatarImageURL',
+                     'chatMuted',
+                     'lastReadChatAt',
+                     'notifySelectionDeadlines',
+                     'notifyPickemsDeadlines',
+                     'notifyGameFinals',
+                     'notifyTookTheLead',
+                     'notifyWeekScored',
+                     'notifySeasonClosed',
+                     'notifyChatMessages',
+                     'notifyCommissionerDeadlines'
+                   ]));
         allow delete: if isCommissioner(groupId)
           || (isSignedIn() && request.auth.uid == memberId);
       }

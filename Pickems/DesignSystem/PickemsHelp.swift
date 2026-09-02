@@ -240,12 +240,12 @@ enum PickemsHelp {
     static let notifications = HelpTopic(
         id: "profile.notifications",
         title: "Notifications",
-        message: "Open Notification settings to choose which alerts you get: deadlines, game results, lead changes, scored weeks, season close, and chat.",
+        message: "Open Notification settings to choose which alerts you get. Set account defaults, then override them per league. Commissioner deadline nudges only appear for leagues you run.",
         tips: [
-            "Each toggle is on by default. Turning one off stops that alert only.",
-            "Turning a toggle on asks for iOS permission if you have not allowed it yet.",
-            "If iOS blocked alerts, Enable in Settings to re-enable them for Pickems.",
-            "You can mute chat for a single league from that league’s chat thread."
+            "All leagues (defaults) applies to every membership until a league override is set.",
+            "Open a league in the picker to change alerts for that league only.",
+            "Commissioner deadline alerts show only when you are commissioner of the selected league — or as defaults if you run at least one.",
+            "Muting chat in a league thread also turns off chat pushes for that league."
         ]
     )
 

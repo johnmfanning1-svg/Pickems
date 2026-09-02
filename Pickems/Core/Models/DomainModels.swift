@@ -23,20 +23,26 @@ struct UserProfile: Codable, Identifiable, Equatable {
     var notifyWeekScored: Bool? = true
     var notifySeasonClosed: Bool? = true
     var notifyChatMessages: Bool? = true
+    var notifyCommissionerDeadlines: Bool? = true
 
     var wantsSelectionDeadlineAlerts: Bool { wants(.selectionDeadlines) }
     var wantsPickemsDeadlineAlerts: Bool { wants(.pickemsDeadlines) }
 
-    func wants(_ category: NotificationPrefCategory) -> Bool {
+    func storedPref(_ category: NotificationPrefCategory) -> Bool? {
         switch category {
-        case .selectionDeadlines: return notifySelectionDeadlines ?? true
-        case .pickemsDeadlines: return notifyPickemsDeadlines ?? true
-        case .gameFinals: return notifyGameFinals ?? true
-        case .tookTheLead: return notifyTookTheLead ?? true
-        case .weekScored: return notifyWeekScored ?? true
-        case .seasonClosed: return notifySeasonClosed ?? true
-        case .chatMessages: return notifyChatMessages ?? true
+        case .selectionDeadlines: return notifySelectionDeadlines
+        case .pickemsDeadlines: return notifyPickemsDeadlines
+        case .gameFinals: return notifyGameFinals
+        case .tookTheLead: return notifyTookTheLead
+        case .weekScored: return notifyWeekScored
+        case .seasonClosed: return notifySeasonClosed
+        case .chatMessages: return notifyChatMessages
+        case .commissionerDeadlines: return notifyCommissionerDeadlines
         }
+    }
+
+    func wants(_ category: NotificationPrefCategory) -> Bool {
+        NotificationPrefCategory.isEnabled(category, stored: { storedPref($0) })
     }
 
     mutating func set(_ category: NotificationPrefCategory, enabled: Bool) {
@@ -48,11 +54,12 @@ struct UserProfile: Codable, Identifiable, Equatable {
         case .weekScored: notifyWeekScored = enabled
         case .seasonClosed: notifySeasonClosed = enabled
         case .chatMessages: notifyChatMessages = enabled
+        case .commissionerDeadlines: notifyCommissionerDeadlines = enabled
         }
     }
 
     var enabledNotificationPrefCount: Int {
-        NotificationPrefCategory.allCases.filter { wants($0) }.count
+        NotificationPrefCategory.memberFacing.filter { wants($0) }.count
     }
 
     var fullName: String? {
@@ -113,10 +120,64 @@ struct GroupMember: Codable, Identifiable, Equatable {
     var seasonLosses: Int
     /// Profile photo URL mirrored from `users/{uid}.avatarImageURL` when set.
     var avatarImageURL: String? = nil
+    /// Per-league chat mute. When true, this league's chat pushes are suppressed.
+    var chatMuted: Bool? = nil
+    var notifySelectionDeadlines: Bool? = nil
+    var notifyPickemsDeadlines: Bool? = nil
+    var notifyGameFinals: Bool? = nil
+    var notifyTookTheLead: Bool? = nil
+    var notifyWeekScored: Bool? = nil
+    var notifySeasonClosed: Bool? = nil
+    var notifyChatMessages: Bool? = nil
+    var notifyCommissionerDeadlines: Bool? = nil
 
     enum MemberRole: String, Codable {
         case commissioner
         case member
+    }
+
+    func storedPref(_ category: NotificationPrefCategory) -> Bool? {
+        switch category {
+        case .selectionDeadlines: return notifySelectionDeadlines
+        case .pickemsDeadlines: return notifyPickemsDeadlines
+        case .gameFinals: return notifyGameFinals
+        case .tookTheLead: return notifyTookTheLead
+        case .weekScored: return notifyWeekScored
+        case .seasonClosed: return notifySeasonClosed
+        case .chatMessages: return notifyChatMessages
+        case .commissionerDeadlines: return notifyCommissionerDeadlines
+        }
+    }
+
+    func wants(_ category: NotificationPrefCategory, defaults: UserProfile?) -> Bool {
+        let inherited: ((NotificationPrefCategory) -> Bool)?
+        if let defaults {
+            inherited = { defaults.wants($0) }
+        } else {
+            inherited = nil
+        }
+        return NotificationPrefCategory.isEnabled(
+            category,
+            stored: { storedPref($0) },
+            inherited: inherited,
+            chatMuted: chatMuted
+        )
+    }
+
+    mutating func set(_ category: NotificationPrefCategory, enabled: Bool) {
+        switch category {
+        case .selectionDeadlines: notifySelectionDeadlines = enabled
+        case .pickemsDeadlines: notifyPickemsDeadlines = enabled
+        case .gameFinals: notifyGameFinals = enabled
+        case .tookTheLead: notifyTookTheLead = enabled
+        case .weekScored: notifyWeekScored = enabled
+        case .seasonClosed: notifySeasonClosed = enabled
+        case .chatMessages: notifyChatMessages = enabled
+        case .commissionerDeadlines: notifyCommissionerDeadlines = enabled
+        }
+        if category == .chatMessages {
+            chatMuted = !enabled
+        }
     }
 
     var battingAverage: Double {
