@@ -36,7 +36,7 @@ struct ProfileView: View {
             .pickemsRefreshable(isRefreshing: $isRefreshing) {
                 await appState.authService.refreshSession()
                 await appState.refreshLeagueData()
-                await appState.notificationService.refreshAuthorizationStatus()
+                await syncNotificationRegistration()
             }
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
@@ -95,7 +95,7 @@ struct ProfileView: View {
                 uploadAvatar(from: item)
             }
             .onAppear {
-                Task { await appState.notificationService.refreshAuthorizationStatus() }
+                Task { await syncNotificationRegistration() }
             }
         }
     }
@@ -261,7 +261,9 @@ struct ProfileView: View {
             case .denied:
                 appState.notificationService.openSystemSettings()
             default:
-                break
+                if let uid = appState.currentUserId {
+                    await appState.notificationService.saveToken(for: uid)
+                }
             }
         }
         do {
@@ -569,12 +571,22 @@ struct ProfileView: View {
     }
 
     private func signOut() {
-        do {
-            try appState.authService.signOut()
-            appState.groupService.resetSession()
-            appState.publishSurfaces()
-        } catch {
-            managementError = UserFacingError.message(for: error, context: .write) ?? "Something went wrong. Please try again."
+        Task {
+            do {
+                try await appState.signOut()
+                appState.publishSurfaces()
+            } catch {
+                managementError = UserFacingError.message(for: error, context: .write)
+                    ?? "Something went wrong. Please try again."
+            }
+        }
+    }
+
+    private func syncNotificationRegistration() async {
+        if let uid = appState.currentUserId {
+            await appState.notificationService.saveToken(for: uid)
+        } else {
+            await appState.notificationService.syncWithSystem()
         }
     }
 }

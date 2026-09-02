@@ -233,5 +233,14 @@ final class AppState {
         pickService.resetSession()
         picksViewModel.resetForSession()
         chatService.stopObserving()
+        notificationService.forgetPendingUser()
+    }
+
+    func signOut() async throws {
+        if let uid = currentUserId {
+            await notificationService.clearStoredToken(for: uid)
+        }
+        try authService.signOut()
+        resetSession()
     }
 }

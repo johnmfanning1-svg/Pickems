@@ -1,5 +1,7 @@
 import UIKit
 import UserNotifications
+import FirebaseCore
+import FirebaseMessaging
 
 /// UIKit launch hook. Firebase *must* be configured here before Messaging's App Delegate
 /// Proxy runs other swizzled callbacks. Keep notification delegate methods on the
@@ -25,7 +27,42 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // First line on purpose: swizzled Messaging / Analytics code may run around launch.
         _ = FirebaseBootstrap.configureIfNeeded()
         UNUserNotificationCenter.current().delegate = self
+        // Completion-handler API — the async `notificationSettings()` hop can trap under
+        // Swift 6 if this callback is invoked off-main. Returning users already granted
+        // permission, so this is the launch path that actually registers for APNs.
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            DispatchQueue.main.async {
+                guard PushRegistrationPolicy.shouldRegisterForRemoteNotifications(settings.authorizationStatus) else {
+                    return
+                }
+                application.registerForRemoteNotifications()
+            }
+        }
         return true
+    }
+
+    /// SwiftUI's `UIApplicationDelegateAdaptor` does not always receive Firebase's
+    /// swizzled APNs callback, so assign the token explicitly.
+    nonisolated func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        Task { @MainActor in
+            guard FirebaseApp.app() != nil else { return }
+            Messaging.messaging().apnsToken = deviceToken
+            AppLog.info(AppLog.notifications, "APNs token received", metadata: [
+                "bytes": "\(deviceToken.count)",
+            ])
+        }
+    }
+
+    nonisolated func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        Task { @MainActor in
+            AppEvents.failure(.notificationsAPNsFailed, error: error, recordNonFatal: false)
+        }
     }
 
     func application(
