@@ -1,4 +1,4 @@
-import { shouldSendDeadlinePush } from "./deadlinePushPrefs";
+import { shouldSendDeadlinePush, type PushPrefFields, type MemberPushPrefFields } from "./deadlinePushPrefs";
 
 export type PushDeliveryDecision =
   | { action: "send"; token: string }
@@ -6,20 +6,15 @@ export type PushDeliveryDecision =
 
 /** Decide whether a user doc can receive this push. Missing prefs default to on. */
 export function resolvePushDelivery(
-  data:
-    | {
-        fcmToken?: unknown;
-        notifySelectionDeadlines?: boolean;
-        notifyPickemsDeadlines?: boolean;
-      }
-    | undefined,
-  type: string
+  data: ({ fcmToken?: unknown } & PushPrefFields) | undefined,
+  type: string,
+  member?: MemberPushPrefFields
 ): PushDeliveryDecision {
   const token = data?.fcmToken;
   if (typeof token !== "string" || token.length === 0) {
     return { action: "skip", reason: "missing_token" };
   }
-  if (!shouldSendDeadlinePush(data, type)) {
+  if (!shouldSendDeadlinePush(data, type, member)) {
     return { action: "skip", reason: "pref_disabled" };
   }
   return { action: "send", token };

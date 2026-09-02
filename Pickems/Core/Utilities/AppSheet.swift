@@ -17,6 +17,7 @@ enum AppSheet: Identifiable, Equatable {
     case commissionerSettings
     case submissionStatus
     case editProfile
+    case notificationSettings
     case deleteAccount
     case stayOnTime
     case coverMoment(gameLabel: String, resultTitle: String, recordText: String, rankText: String)
@@ -30,6 +31,7 @@ enum AppSheet: Identifiable, Equatable {
         case .commissionerSettings: return "commissionerSettings"
         case .submissionStatus: return "submissionStatus"
         case .editProfile: return "editProfile"
+        case .notificationSettings: return "notificationSettings"
         case .deleteAccount: return "deleteAccount"
         case .stayOnTime: return "stayOnTime"
         case .coverMoment(let game, let result, _, _):

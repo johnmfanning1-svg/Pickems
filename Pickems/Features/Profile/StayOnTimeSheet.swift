@@ -18,7 +18,7 @@ struct StayOnTimeSheet: View {
                     .font(.title2.bold())
                     .foregroundStyle(PickemsColors.textPrimary)
 
-                Text("Allow notifications so Pickems can remind you before Selection and Pickems deadlines. You can change this later in Profile.")
+                Text("Allow notifications so Pickems can remind you before deadlines and when games finish. You can choose which alerts you get later in Profile.")
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

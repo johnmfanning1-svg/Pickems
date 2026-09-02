@@ -54,6 +54,37 @@ describe("resolvePushDelivery", () => {
       token: "tok",
     });
   });
+
+  it("lets a league membership override skip a globally enabled alert", () => {
+    expect(
+      resolvePushDelivery(
+        { fcmToken: "tok", notifyGameFinals: true },
+        "game_final",
+        { notifyGameFinals: false }
+      )
+    ).toEqual({ action: "skip", reason: "pref_disabled" });
+  });
+
+  it("skips game, chat, and scored-week pushes when those prefs are off", () => {
+    expect(
+      resolvePushDelivery(
+        { fcmToken: "tok", notifyGameFinals: false },
+        "game_final"
+      )
+    ).toEqual({ action: "skip", reason: "pref_disabled" });
+    expect(
+      resolvePushDelivery(
+        { fcmToken: "tok", notifyChatMessages: false },
+        "chat_message"
+      )
+    ).toEqual({ action: "skip", reason: "pref_disabled" });
+    expect(
+      resolvePushDelivery(
+        { fcmToken: "tok", notifyWeekScored: false },
+        "week_scored"
+      )
+    ).toEqual({ action: "skip", reason: "pref_disabled" });
+  });
 });
 
 describe("isUnregisteredFcmTokenError", () => {

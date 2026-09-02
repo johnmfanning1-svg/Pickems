@@ -492,6 +492,14 @@ describe("audit hardening (inviteCodes, member fields, pick delete, group create
         displayName: "Updated",
       })
     );
+    await assertSucceeds(
+      updateDoc(doc(memberDb, "groups", GROUP_ID, "members", MEMBER), {
+        notifyGameFinals: false,
+        notifyCommissionerDeadlines: true,
+        chatMuted: true,
+        notifyChatMessages: false,
+      })
+    );
   });
 
   it("blocks self-delete of picks after the deadline", async () => {

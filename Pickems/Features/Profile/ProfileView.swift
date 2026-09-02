@@ -199,29 +199,24 @@ struct ProfileView: View {
 
     private var notificationsSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Deadline reminders")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(PickemsColors.textPrimary)
-                Text(notificationExplanation)
-                    .font(.subheadline)
-                    .foregroundStyle(PickemsColors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            Button {
+                appState.present(.notificationSettings)
+            } label: {
+                HStack {
+                    Label("Notification settings", systemImage: "bell.badge")
+                        .foregroundStyle(theme.accent)
+                    Spacer()
+                    Text(notificationStatusCaption)
+                        .font(.subheadline)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
             }
+            .buttonStyle(.borderless)
             .listRowBackground(PickemsColors.cardBackground)
-
-            Toggle(isOn: selectionDeadlineToggle) {
-                Label("Selection deadlines", systemImage: "american.football.fill")
-            }
-            .listRowBackground(PickemsColors.cardBackground)
-
-            Toggle(isOn: pickemsDeadlineToggle) {
-                Label("Pickems deadlines", systemImage: "checkmark.circle")
-            }
-            .listRowBackground(PickemsColors.cardBackground)
-
-            notificationActionControls
-                .listRowBackground(PickemsColors.cardBackground)
+            .accessibilityHint("Opens a sheet to choose which alerts you get")
         } header: {
             HStack {
                 Text("Notifications")
@@ -236,105 +231,41 @@ struct ProfileView: View {
         }
     }
 
-    private var selectionDeadlineToggle: Binding<Bool> {
-        Binding(
-            get: { appState.authService.currentUser?.wantsSelectionDeadlineAlerts ?? true },
-            set: { enabled in Task { await setDeadlinePref(selection: enabled, pickems: nil) } }
-        )
-    }
-
-    private var pickemsDeadlineToggle: Binding<Bool> {
-        Binding(
-            get: { appState.authService.currentUser?.wantsPickemsDeadlineAlerts ?? true },
-            set: { enabled in Task { await setDeadlinePref(selection: nil, pickems: enabled) } }
-        )
-    }
-
-    private func setDeadlinePref(selection: Bool?, pickems: Bool?) async {
-        let nextSelection = selection ?? (appState.authService.currentUser?.wantsSelectionDeadlineAlerts ?? true)
-        let nextPickems = pickems ?? (appState.authService.currentUser?.wantsPickemsDeadlineAlerts ?? true)
-        if selection == true || pickems == true {
-            await appState.notificationService.refreshAuthorizationStatus()
-            switch appState.notificationService.authorizationStatus {
-            case .notDetermined:
-                await appState.notificationService.requestPermission()
-            case .denied:
-                appState.notificationService.openSystemSettings()
-            default:
-                if let uid = appState.currentUserId {
-                    await appState.notificationService.saveToken(for: uid)
-                }
-            }
-        }
-        do {
-            try await appState.authService.updateNotificationPrefs(
-                selectionDeadlines: nextSelection,
-                pickemsDeadlines: nextPickems
-            )
-        } catch {
-            managementError = UserFacingError.message(for: error, context: .write)
-                ?? error.localizedDescription
-        }
-    }
-
-    @ViewBuilder
-    private var notificationActionControls: some View {
+    private var notificationStatusCaption: String {
         switch appState.notificationService.authorizationStatus {
-        case .authorized, .provisional, .ephemeral:
-            HStack {
-                Label("Enabled", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(PickemsColors.success)
-                Spacer()
-                Button("Open Settings") {
-                    appState.notificationService.openSystemSettings()
-                }
-                .buttonStyle(.borderless)
-                .font(.subheadline.weight(.semibold))
-            }
         case .denied:
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Off — blocked in iOS Settings", systemImage: "bell.slash.fill")
-                    .foregroundStyle(PickemsColors.warning)
-                Button {
-                    appState.notificationService.openSystemSettings()
-                } label: {
-                    Text("Enable in Settings")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(theme.accent)
-            }
+            return "Off in iOS"
         case .notDetermined:
-            Button {
-                Task { await appState.notificationService.requestPermission() }
-            } label: {
-                Text("Allow notifications")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(theme.accent)
+            return "Not enabled"
+        case .authorized, .provisional, .ephemeral:
+            let categories = notificationPrefCategoriesForCaption
+            let onCount = categories.filter { appState.authService.currentUser?.wants($0) ?? true }.count
+            let total = categories.count
+            if onCount == total { return "All on" }
+            if onCount == 0 { return "All off" }
+            return "\(onCount) of \(total) on"
         @unknown default:
-            Button("Refresh status") {
-                Task { await appState.notificationService.refreshAuthorizationStatus() }
-            }
-            .buttonStyle(.borderless)
+            return "Settings"
         }
     }
 
-    private var notificationExplanation: String {
-        "Get a nudge before Selection and Pickems deadlines. Game-final and scored-week alerts still follow iOS permission."
+    /// Member types always; commissioner type only when this account runs a league.
+    private var notificationPrefCategoriesForCaption: [NotificationPrefCategory] {
+        guard let userId = appState.currentUserId,
+              appState.groupService.groups.contains(where: { $0.commissionerId == userId }) else {
+            return NotificationPrefCategory.memberFacing
+        }
+        return NotificationPrefCategory.allCases
     }
 
     private var notificationFooter: String {
         switch appState.notificationService.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
-            return "To turn alerts off, use Open Settings → Notifications."
+            return "Choose which alerts you get, including per-league overrides. Turn iOS alerts off in Settings if you want none."
         case .denied:
-            return "iOS blocked alerts for Pickems. Use Enable in Settings to change that."
+            return "iOS blocked alerts for Pickems. Open Notification settings to enable them."
         default:
-            return "You’ll get an iOS permission prompt when you tap Allow notifications."
+            return "Open Notification settings to allow alerts and choose which ones you get."
         }
     }
 

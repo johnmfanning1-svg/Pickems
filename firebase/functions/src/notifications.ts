@@ -1,6 +1,6 @@
 import * as admin from "firebase-admin";
 import { logger } from "firebase-functions";
-import { shouldSendDeadlinePush, type DeadlinePushType } from "./deadlinePushPrefs";
+import { shouldSendDeadlinePush, type DeadlinePushType, type MemberPushPrefFields } from "./deadlinePushPrefs";
 import { isUnregisteredFcmTokenError, resolvePushDelivery } from "./pushDelivery";
 
 export type PushType = DeadlinePushType;
@@ -11,13 +11,25 @@ export async function sendToUser(
   title: string,
   body: string,
   type: PushType,
-  extra: Record<string, string> = {}
+  extra: Record<string, string> = {},
+  member?: MemberPushPrefFields
 ): Promise<void> {
   try {
     const snap = await admin.firestore().collection("users").doc(userId).get();
-    const decision = resolvePushDelivery(snap.data(), type);
+    let memberPrefs = member;
+    if (memberPrefs === undefined && extra.groupId) {
+      const memberSnap = await admin
+        .firestore()
+        .collection("groups")
+        .doc(extra.groupId)
+        .collection("members")
+        .doc(userId)
+        .get();
+      memberPrefs = memberSnap.data() as MemberPushPrefFields | undefined;
+    }
+    const decision = resolvePushDelivery(snap.data(), type, memberPrefs);
     if (decision.action === "skip") {
-      logger.info("push skipped", { userId, type, reason: decision.reason });
+      logger.info("push skipped", { userId, type, reason: decision.reason, groupId: extra.groupId });
       return;
     }
 
@@ -63,7 +75,28 @@ export async function sendToUsers(
   type: PushType,
   extra: Record<string, string> = {}
 ): Promise<void> {
+  let membersById = new Map<string, MemberPushPrefFields>();
+  if (extra.groupId) {
+    const membersSnap = await admin
+      .firestore()
+      .collection("groups")
+      .doc(extra.groupId)
+      .collection("members")
+      .get();
+    membersById = new Map(
+      membersSnap.docs.map((doc) => [doc.id, doc.data() as MemberPushPrefFields])
+    );
+  }
   await Promise.all(
-    userIds.map((id) => sendToUser(id, title, body, type, extra).catch(() => undefined))
+    userIds.map((id) =>
+      sendToUser(
+        id,
+        title,
+        body,
+        type,
+        extra,
+        extra.groupId ? (membersById.get(id) ?? {}) : undefined
+      ).catch(() => undefined)
+    )
   );
 }

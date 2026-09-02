@@ -659,6 +659,35 @@ final class GroupService {
         await syncMemberProfileFields(userId: userId, fields: fields)
     }
 
+    func fetchMember(groupId: String, userId: String) async -> GroupMember? {
+        do {
+            let snap = try await db.group(groupId).members.document(userId).getDocument()
+            return try snap.data(as: GroupMember.self)
+        } catch {
+            AppLog.error(AppLog.firestore, "member notification prefs fetch failed", error: error, metadata: [
+                "group_id": groupId,
+                "uid": AppEvents.shortUID(userId),
+            ])
+            return nil
+        }
+    }
+
+    func updateNotificationPref(
+        groupId: String,
+        userId: String,
+        category: NotificationPrefCategory,
+        enabled: Bool
+    ) async throws {
+        var fields: [String: Any] = [category.firestoreField: enabled]
+        if category == .chatMessages {
+            fields[FirestoreField.chatMuted] = !enabled
+        }
+        try await db.group(groupId).members.document(userId).setData(fields, merge: true)
+        if membersGroupId == groupId, let idx = members.firstIndex(where: { $0.id == userId }) {
+            members[idx].set(category, enabled: enabled)
+        }
+    }
+
     private func syncMemberProfileFields(userId: String, fields: [String: Any]) async {
         for group in groups {
             let ref = db.collection("groups").document(group.id)

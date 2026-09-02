@@ -688,14 +688,22 @@ final class AuthService {
         UserDefaults.standard.set(true, forKey: Self.notificationOnboardingKey(for: userId))
     }
 
-    func updateNotificationPrefs(selectionDeadlines: Bool, pickemsDeadlines: Bool) async throws {
+    func updateNotificationPref(_ category: NotificationPrefCategory, enabled: Bool) async throws {
         guard let uid = currentUserId else { return }
-        try await db.user(uid).updateData([
-            "notifySelectionDeadlines": selectionDeadlines,
-            "notifyPickemsDeadlines": pickemsDeadlines,
-        ])
-        currentUser?.notifySelectionDeadlines = selectionDeadlines
-        currentUser?.notifyPickemsDeadlines = pickemsDeadlines
+        let previous = currentUser?.wants(category)
+        if var profile = currentUser {
+            profile.set(category, enabled: enabled)
+            currentUser = profile
+        }
+        do {
+            try await db.user(uid).updateData([category.firestoreField: enabled])
+        } catch {
+            if let previous, var profile = currentUser {
+                profile.set(category, enabled: previous)
+                currentUser = profile
+            }
+            throw error
+        }
     }
 
     func signOut() throws {
