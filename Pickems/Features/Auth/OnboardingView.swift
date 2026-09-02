@@ -158,6 +158,7 @@ struct OnboardingView: View {
                     await appState.notificationService.requestPermission()
                     if let uid = appState.currentUserId {
                         appState.authService.markNotificationOnboardingDismissed(for: uid)
+                        await appState.notificationService.saveToken(for: uid)
                     }
                 }
             } label: {

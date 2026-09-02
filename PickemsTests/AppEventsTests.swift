@@ -29,5 +29,7 @@ struct AppEventsTests {
         #expect(AppEvent.rootDestinationChanged.rawValue == "root.destination_changed")
         #expect(AppEvent.onboardingJoinSucceeded.rawValue == "onboarding.join_succeeded")
         #expect(AppEvent.sessionBootstrapFailed.rawValue == "session.bootstrap_failed")
+        #expect(AppEvent.notificationsTokenSaved.rawValue == "notifications.token_saved")
+        #expect(AppEvent.notificationsAPNsFailed.rawValue == "notifications.apns_failed")
     }
 }

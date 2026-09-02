@@ -3,6 +3,7 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -19,6 +20,18 @@ struct RootView: View {
         }
         .preferredColorScheme(.dark)
         .background(PickemsAtmosphericBackground(palette: theme))
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await syncPushRegistration() }
+        }
+    }
+
+    private func syncPushRegistration() async {
+        if let uid = appState.currentUserId {
+            await appState.notificationService.saveToken(for: uid)
+        } else {
+            await appState.notificationService.syncWithSystem()
+        }
     }
 
     @ViewBuilder

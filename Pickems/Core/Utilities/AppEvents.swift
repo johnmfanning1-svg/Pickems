@@ -53,7 +53,9 @@ enum AppEvent: String, CaseIterable {
     case weekListenerError = "week.listener_error"
     case picksListenerError = "picks.listener_error"
     case notificationsPermission = "notifications.permission"
+    case notificationsTokenSaved = "notifications.token_saved"
     case notificationsTokenSaveFailed = "notifications.token_save_failed"
+    case notificationsAPNsFailed = "notifications.apns_failed"
 
     // Chat
     case chatListenerError = "chat.listener_error"
