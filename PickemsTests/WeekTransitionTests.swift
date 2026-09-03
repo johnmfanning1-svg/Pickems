@@ -226,7 +226,7 @@ struct WeekTransitionTests {
         #expect(WeekTransition.pickemsAreFullyPublic(rolling))
     }
 
-    @Test func remainingLockAtFreezesOpenRollingGames() {
+    @Test func remainingLockAtFreezesOpenRollingGamesWithoutMovingWeekLock() {
         let first = Date().addingTimeInterval(-60)
         let last = Date().addingTimeInterval(3600)
         var rolling = week(
@@ -238,6 +238,7 @@ struct WeekTransitionTests {
         rolling.remainingLockAt = Date().addingTimeInterval(-1)
         #expect(WeekTransition.arePicksFullyLocked(rolling))
         #expect(WeekTransition.isGameLocked(gameId: "sun", kickoff: last, week: rolling))
+        #expect(rolling.weekLockAt == last)
     }
 
     @Test func earlyLockSetsLockedAtAndDeadline() {

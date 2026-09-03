@@ -761,6 +761,10 @@ describe("rolling pick lock", () => {
         isLocked: false,
       })
     );
+    const saved = await getDoc(pick);
+    if (saved.data()?.picks?.game1 !== "home" || saved.data()?.picks?.game2 !== "home") {
+      throw new Error("rolling update did not keep the locked pick and write the open game");
+    }
   });
 
   it("lets a member create a pick doc with only remaining open games", async () => {

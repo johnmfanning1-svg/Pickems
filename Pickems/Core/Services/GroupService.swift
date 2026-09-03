@@ -486,7 +486,7 @@ final class GroupService {
             "pickDeadline": Timestamp(date: deadline),
         ]
         if currentWeek?.id == weekId, currentWeek?.isRollingLock == true {
-            updates = rollingRemainingLockUpdates(deadline: deadline, week: currentWeek)
+            updates = rollingRemainingLockUpdates(deadline: deadline)
         }
         try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
         applyDeadlineLocally(weekId: weekId, deadline: deadline, remainingLockAt: currentWeek?.isRollingLock == true ? deadline : nil)
@@ -496,30 +496,21 @@ final class GroupService {
     func lockRemainingGamesNow(groupId: String, weekId: String) async throws {
         let now = Date()
         try await db.week(groupId: groupId, weekId: weekId).updateData(
-            rollingRemainingLockUpdates(deadline: now, week: currentWeek)
+            rollingRemainingLockUpdates(deadline: now)
         )
         applyDeadlineLocally(weekId: weekId, deadline: now, remainingLockAt: now)
     }
 
-    private func rollingRemainingLockUpdates(deadline: Date, week: WeekSummary?) -> [String: Any] {
-        var updates: [String: Any] = [
+    private func rollingRemainingLockUpdates(deadline: Date) -> [String: Any] {
+        [
             "remainingLockAt": Timestamp(date: deadline),
         ]
-        if let last = week?.weekLockAt {
-            updates["weekLockAt"] = Timestamp(date: min(last, deadline))
-        } else {
-            updates["weekLockAt"] = Timestamp(date: deadline)
-        }
-        return updates
     }
 
     private func applyDeadlineLocally(weekId: String, deadline: Date, remainingLockAt: Date?) {
         if var week = currentWeek, week.id == weekId {
             if week.isRollingLock {
                 week.remainingLockAt = remainingLockAt
-                if let remainingLockAt {
-                    week.weekLockAt = week.weekLockAt.map { min($0, remainingLockAt) } ?? remainingLockAt
-                }
             } else {
                 week.pickDeadline = deadline
             }
@@ -528,9 +519,6 @@ final class GroupService {
         if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
             if availableWeeks[idx].isRollingLock {
                 availableWeeks[idx].remainingLockAt = remainingLockAt
-                if let remainingLockAt {
-                    availableWeeks[idx].weekLockAt = availableWeeks[idx].weekLockAt.map { min($0, remainingLockAt) } ?? remainingLockAt
-                }
             } else {
                 availableWeeks[idx].pickDeadline = deadline
             }
@@ -584,16 +572,12 @@ final class GroupService {
     ) async throws {
         var updates: [String: Any] = [
             "status": WeekStatus.picking.rawValue,
-            "pickDeadline": Timestamp(date: deadline),
             "lockedAt": FieldValue.delete(),
         ]
         if currentWeek?.id == weekId, currentWeek?.isRollingLock == true {
             updates["remainingLockAt"] = Timestamp(date: deadline)
-            if let last = currentWeek?.weekLockAt {
-                updates["weekLockAt"] = Timestamp(date: min(last, deadline))
-            } else {
-                updates["weekLockAt"] = Timestamp(date: deadline)
-            }
+        } else {
+            updates["pickDeadline"] = Timestamp(date: deadline)
         }
         try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
         if var week = currentWeek, week.id == weekId {
@@ -601,7 +585,6 @@ final class GroupService {
             week.lockedAt = nil
             if week.isRollingLock {
                 week.remainingLockAt = deadline
-                week.weekLockAt = week.weekLockAt.map { min($0, deadline) } ?? deadline
             } else {
                 week.pickDeadline = deadline
             }
@@ -612,7 +595,6 @@ final class GroupService {
             availableWeeks[idx].lockedAt = nil
             if availableWeeks[idx].isRollingLock {
                 availableWeeks[idx].remainingLockAt = deadline
-                availableWeeks[idx].weekLockAt = availableWeeks[idx].weekLockAt.map { min($0, deadline) } ?? deadline
             } else {
                 availableWeeks[idx].pickDeadline = deadline
             }
