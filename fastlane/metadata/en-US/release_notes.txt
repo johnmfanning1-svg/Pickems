@@ -1,6 +1,7 @@
-What's new in 3.3.3
+What's new in 3.3.4
 
-• Push alerts register again for returning members
-• Notification settings: per type, per league, and commissioner-only alerts
+• Rolling Pickems lock: freeze each game at kickoff instead of the whole slate at first kick
+• Later games stay editable (and hidden) until they start
+• Lock remaining / reopen only affect games that have not kicked off
 
 Thanks for helping us UAT this build.
