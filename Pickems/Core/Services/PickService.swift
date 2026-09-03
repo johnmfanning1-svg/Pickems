@@ -20,7 +20,7 @@ final class PickService {
     private(set) var didSubmitNominations = false
     var allPicks: [UserPick] = []
     /// Public per-game pick projection for rolling lock. Empty until games start.
-    var revealedPicksByGameId: [String: RevealedGamePicks] = []
+    var revealedPicksByGameId: [String: RevealedGamePicks] = [:]
     var submissions: [PickSubmission] = []
     var isLoading = false
     var errorMessage: String?
