@@ -28,16 +28,28 @@ struct SeasonPickHistoryView: View {
     }
 
     private var picksByUserId: [String: UserPick] {
-        var map = Dictionary(uniqueKeysWithValues: boardPicks.map { ($0.userId, $0) })
+        var merged = boardPicks
         if isViewingLiveWeek {
-            for pick in appState.pickService.allPicks {
-                map[pick.userId] = pick
-            }
-            if let own = appState.pickService.userPick {
-                map[own.userId] = own
-            }
+            merged = PickService.mergingRevealedPicks(
+                base: appState.pickService.allPicks.isEmpty ? merged : appState.pickService.allPicks,
+                revealed: appState.pickService.revealedPicksByGameId,
+                members: appState.groupService.members
+            )
+        }
+        var map = Dictionary(uniqueKeysWithValues: merged.map { ($0.userId, $0) })
+        if isViewingLiveWeek, let own = appState.pickService.userPick {
+            map[own.userId] = own
         }
         return map
+    }
+
+    private func hiddenGameIds(for week: WeekSummary) -> Set<String> {
+        guard week.isRollingLock, !WeekTransition.pickemsAreFullyPublic(week) else { return [] }
+        return Set(
+            displayGames
+                .filter { !WeekTransition.isGameLocked($0, week: week) }
+                .map(\.id)
+        )
     }
 
     var body: some View {
@@ -158,7 +170,8 @@ struct SeasonPickHistoryView: View {
                     picksByUserId: picksByUserId,
                     liveCards: isViewingLiveWeek ? appState.picksViewModel.livePickCards : [:],
                     teamRanks: appState.picksViewModel.teamRanks,
-                    currentUserId: appState.currentUserId
+                    currentUserId: appState.currentUserId,
+                    hiddenGameIds: hiddenGameIds(for: week)
                 )
                 .padding(.horizontal)
             } else if WeekTransition.pickemsShouldShowLeagueBoard(week) {
@@ -168,9 +181,16 @@ struct SeasonPickHistoryView: View {
                     message: "This week locked without games on the slate.",
                     help: PickemsHelp.seasonHistory
                 )
-            } else if let deadline = week.pickDeadline {
-                PickDeadlineBanner(deadline: deadline)
-                Text("League Pickems show here after lock.")
+            } else if let next = PickDeadlineCalculator.nextLockDate(week: week, games: displayGames) {
+                PickDeadlineBanner(
+                    deadline: next,
+                    isRolling: week.isRollingLock,
+                    openCount: PickDeadlineCalculator.openGameCount(week: week, games: displayGames),
+                    totalCount: displayGames.count
+                )
+                Text(week.isRollingLock
+                    ? "Locked games show on the chart. Later picks stay hidden until kickoff."
+                    : "League Pickems show here after lock.")
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .multilineTextAlignment(.center)

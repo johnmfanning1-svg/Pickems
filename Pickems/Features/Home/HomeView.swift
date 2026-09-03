@@ -376,7 +376,7 @@ struct HomeView: View {
             userNominationCount: userNoms,
             pickCount: appState.pickService.userPick?.picks.count ?? 0,
             slateCount: appState.pickService.slateGames.count,
-            pickemsLocked: PickDeadlineCalculator.isPast(week?.pickDeadline),
+            pickemsLocked: week.map { WeekTransition.arePicksFullyLocked($0) } ?? false,
             picksSubmitted: appState.pickService.userPick?.isLocked == true
         )
     }

@@ -10,6 +10,7 @@ enum FirestoreCollection {
     static let games = "games"
     static let picks = "picks"
     static let submissions = "submissions"
+    static let revealedPicks = "revealedPicks"
     static let members = "members"
     static let standings = "standings"
     static let seasons = "seasons"
@@ -78,6 +79,7 @@ extension DocumentReference {
     var nominations: CollectionReference { collection(FirestoreCollection.nominations) }
     var games: CollectionReference { collection(FirestoreCollection.games) }
     var picks: CollectionReference { collection(FirestoreCollection.picks) }
+    var revealedPicks: CollectionReference { collection(FirestoreCollection.revealedPicks) }
 }
 
 /// Chat lives flat under the group doc — `weekId` is a field, not a path segment,

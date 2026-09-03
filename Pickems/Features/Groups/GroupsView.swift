@@ -425,13 +425,17 @@ struct GroupsView: View {
                             Text(PickDeadlineCalculator.countdownLabel(to: deadline))
                                 .font(.title3.weight(.semibold).monospacedDigit())
                                 .foregroundStyle(PickemsColors.textPrimary)
-                            Text("Locks \(PickDeadlineCalculator.lockTimeLabel(for: deadline))")
+                            Text(week?.isRollingLock == true
+                                ? "First lock \(PickDeadlineCalculator.lockTimeLabel(for: deadline))"
+                                : "Locks \(PickDeadlineCalculator.lockTimeLabel(for: deadline))")
                                 .font(.caption)
                                 .foregroundStyle(PickemsColors.textSecondary)
                         }
                     }
                 } else if week?.status == .selection {
-                    Text("Pickems lock after the slate is set. Everyone's picks show here after lock.")
+                    Text(week?.isRollingLock == true
+                        ? "Games lock at each kickoff. Everyone's picks show here as each game starts."
+                        : "Pickems lock after the slate is set. Everyone's picks show here after lock.")
                         .font(.caption)
                         .foregroundStyle(PickemsColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

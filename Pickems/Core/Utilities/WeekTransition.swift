@@ -7,7 +7,7 @@ enum WeekTransition {
     /// freeze the slate — games stay swappable until that deadline (or commissioner early lock).
     static func toPickingUpdates(
         rules: GroupRules,
-        kickoffs: [Date],
+        games: [(id: String, kickoff: Date)],
         nominationCount: Int? = nil,
         setDeadline: Bool = true,
         lockSlate: Bool = false
@@ -20,9 +20,10 @@ enum WeekTransition {
             updates[FirestoreField.nominationCount] = nominationCount
         }
 
-        // Product rule: spread picks lock at the earliest slate kickoff.
-        if setDeadline || lockSlate, let deadline = kickoffs.min() {
-            updates["pickDeadline"] = Timestamp(date: deadline)
+        if setDeadline || lockSlate {
+            for (key, value) in lockSnapshotFields(rules: rules, games: games) {
+                updates[key] = value
+            }
         }
 
         if lockSlate {
@@ -34,7 +35,57 @@ enum WeekTransition {
         return updates
     }
 
+    /// Test / kickoff-only convenience. Prefer the `games:` overload in production.
+    static func toPickingUpdates(
+        rules: GroupRules,
+        kickoffs: [Date],
+        nominationCount: Int? = nil,
+        setDeadline: Bool = true,
+        lockSlate: Bool = false
+    ) -> [String: Any] {
+        toPickingUpdates(
+            rules: rules,
+            games: kickoffs.enumerated().map { ("game-\($0.offset)", $0.element) },
+            nominationCount: nominationCount,
+            setDeadline: setDeadline,
+            lockSlate: lockSlate
+        )
+    }
+
+    /// Snapshot lock policy onto the week so later rule changes do not rewrite an in-progress week.
+    static func lockSnapshotFields(
+        rules: GroupRules,
+        games: [(id: String, kickoff: Date)]
+    ) -> [String: Any] {
+        let mode: DeadlinePolicy = rules.pickDeadline == .rolling ? .rolling : .firstKickoff
+        let capped = Array(games.prefix(20))
+        var fields: [String: Any] = [
+            "pickLockMode": mode.rawValue
+        ]
+        guard let first = capped.map(\.kickoff).min(),
+              let last = capped.map(\.kickoff).max() else {
+            return fields
+        }
+
+        var gameKickoffs: [String: Timestamp] = [:]
+        var gameIds: [String] = []
+        for game in capped {
+            gameIds.append(game.id)
+            gameKickoffs[game.id] = Timestamp(date: game.kickoff)
+        }
+
+        fields["pickDeadline"] = Timestamp(date: first)
+        fields["weekLockAt"] = Timestamp(date: mode == .rolling ? last : first)
+        fields["gameIds"] = gameIds
+        fields["gameKickoffs"] = gameKickoffs
+        return fields
+    }
+
     /// Commissioner opens picking early (end nomination) — pick deadline stays first kickoff.
+    static func lockEarlyUpdates(rules: GroupRules, games: [(id: String, kickoff: Date)]) -> [String: Any] {
+        toPickingUpdates(rules: rules, games: games, setDeadline: true, lockSlate: true)
+    }
+
     static func lockEarlyUpdates(rules: GroupRules, kickoffs: [Date]) -> [String: Any] {
         toPickingUpdates(rules: rules, kickoffs: kickoffs, setDeadline: true, lockSlate: true)
     }
@@ -89,14 +140,92 @@ enum WeekTransition {
         }
     }
 
-    /// League Pickems are public: week is locked/scored, or picking after the pick deadline.
-    /// Status can stay `.picking` after lock time; `.selection` never shows the board.
-    static func pickemsShouldShowLeagueBoard(_ week: WeekSummary) -> Bool {
+    /// Game G is frozen for member edits.
+    static func isGameLocked(_ game: SlateGame, week: WeekSummary, now: Date = Date()) -> Bool {
+        isGameLocked(gameId: game.id, kickoff: game.kickoff, week: week, now: now)
+    }
+
+    static func isGameLocked(
+        gameId: String,
+        kickoff: Date,
+        week: WeekSummary,
+        now: Date = Date()
+    ) -> Bool {
+        switch week.status {
+        case .selection, .locked, .scored:
+            return true
+        case .picking:
+            break
+        }
+        if let remaining = week.remainingLockAt, now >= remaining {
+            return true
+        }
+        if week.isRollingLock {
+            if let stamped = week.gameKickoffs?[gameId] {
+                return now >= stamped
+            }
+            return now >= kickoff
+        }
+        if let deadline = week.pickDeadline {
+            return now >= deadline
+        }
+        return false
+    }
+
+    /// True when no remaining games can be edited (rolling: last kickoff / remaining freeze).
+    static func arePicksFullyLocked(_ week: WeekSummary, now: Date = Date()) -> Bool {
+        switch week.status {
+        case .locked, .scored, .selection:
+            return true
+        case .picking:
+            if week.isRollingLock {
+                if let remaining = week.remainingLockAt, now >= remaining { return true }
+                if let weekLockAt = week.weekLockAt { return now >= weekLockAt }
+                return false
+            }
+            return PickDeadlineCalculator.isPast(week.pickDeadline, now: now)
+        }
+    }
+
+    /// League chart is visible: full slate after first-kickoff lock, or partial board
+    /// once any rolling game has locked.
+    static func pickemsShouldShowLeagueBoard(_ week: WeekSummary, now: Date = Date()) -> Bool {
         switch week.status {
         case .locked, .scored:
             return true
         case .picking:
-            return PickDeadlineCalculator.isPast(week.pickDeadline)
+            if week.isRollingLock {
+                if let remaining = week.remainingLockAt, now >= remaining { return true }
+                return PickDeadlineCalculator.isPast(week.pickDeadline, now: now)
+            }
+            return PickDeadlineCalculator.isPast(week.pickDeadline, now: now)
+        case .selection:
+            return false
+        }
+    }
+
+    /// Other members' full pick documents are readable (week fully locked).
+    static func pickemsAreFullyPublic(_ week: WeekSummary, now: Date = Date()) -> Bool {
+        switch week.status {
+        case .locked, .scored:
+            return true
+        case .picking:
+            if week.isRollingLock {
+                return arePicksFullyLocked(week, now: now)
+            }
+            return PickDeadlineCalculator.isPast(week.pickDeadline, now: now)
+        case .selection:
+            return false
+        }
+    }
+
+    /// Abandon the picking UI for the full locked/scored chart.
+    static func pickemsShouldShowFullLockedPhase(_ week: WeekSummary, now: Date = Date()) -> Bool {
+        switch week.status {
+        case .locked, .scored:
+            return true
+        case .picking:
+            return arePicksFullyLocked(week, now: now)
         case .selection:
             return false
         }
@@ -110,6 +239,13 @@ enum WeekTransition {
         case .selection:
             return canRemakeSelections(week, now: now)
         case .picking:
+            if week.isRollingLock {
+                // Adding/removing games after the first kickoff would rewrite lock snapshots.
+                if let deadline = week.pickDeadline {
+                    return now < deadline
+                }
+                return true
+            }
             if let deadline = week.pickDeadline {
                 return now < deadline
             }
@@ -119,14 +255,11 @@ enum WeekTransition {
         }
     }
 
-    /// Spread Pickems can be edited while the week is picking and the pick deadline has not passed.
+    /// Spread Pickems can be edited while the week is picking and at least one game is open.
     static func arePicksEditable(_ week: WeekSummary, now: Date = Date()) -> Bool {
         switch week.status {
         case .picking:
-            if let deadline = week.pickDeadline {
-                return now < deadline
-            }
-            return true
+            return !arePicksFullyLocked(week, now: now)
         case .selection, .locked, .scored:
             return false
         }

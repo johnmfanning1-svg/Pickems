@@ -1,4 +1,5 @@
 import Foundation
+import FirebaseFirestore
 import Testing
 @testable import Pickems
 
@@ -7,7 +8,9 @@ struct WeekTransitionTests {
         status: WeekStatus,
         deadline: Date? = nil,
         lockedAt: Date? = nil,
-        selectionDeadline: Date? = nil
+        selectionDeadline: Date? = nil,
+        pickLockMode: DeadlinePolicy? = nil,
+        weekLockAt: Date? = nil
     ) -> WeekSummary {
         WeekSummary(
             id: "2026-W1",
@@ -19,6 +22,8 @@ struct WeekTransitionTests {
             selectionsPerMember: 1,
             lockedAt: lockedAt,
             pickDeadline: deadline,
+            pickLockMode: pickLockMode,
+            weekLockAt: weekLockAt,
             nominationCount: 5,
             selectionDeadline: selectionDeadline
         )
@@ -157,7 +162,82 @@ struct WeekTransitionTests {
         )
         #expect(updates["status"] as? String == WeekStatus.picking.rawValue)
         #expect(updates["pickDeadline"] != nil)
+        #expect(updates["pickLockMode"] as? String == DeadlinePolicy.firstKickoff.rawValue)
         #expect(updates["lockedAt"] == nil)
+    }
+
+    @Test func rollingSnapshotUsesLastKickoffForWeekLock() {
+        let first = Date().addingTimeInterval(3600)
+        let last = Date().addingTimeInterval(7200)
+        var rules = GroupRules.default
+        rules.pickDeadline = .rolling
+        let updates = WeekTransition.toPickingUpdates(
+            rules: rules,
+            games: [("thu", first), ("sun", last)],
+            setDeadline: true,
+            lockSlate: false
+        )
+        #expect(updates["pickLockMode"] as? String == DeadlinePolicy.rolling.rawValue)
+        let deadline = (updates["pickDeadline"] as? Timestamp)?.dateValue()
+        let weekLock = (updates["weekLockAt"] as? Timestamp)?.dateValue()
+        #expect(deadline == first)
+        #expect(weekLock == last)
+        #expect(updates["gameIds"] as? [String] == ["thu", "sun"])
+    }
+
+    @Test func rollingKeepsPicksEditableAfterFirstKickoff() {
+        let first = Date().addingTimeInterval(-60)
+        let last = Date().addingTimeInterval(3600)
+        let rolling = week(
+            status: .picking,
+            deadline: first,
+            pickLockMode: .rolling,
+            weekLockAt: last
+        )
+        #expect(WeekTransition.arePicksEditable(rolling))
+        #expect(!WeekTransition.arePicksFullyLocked(rolling))
+        #expect(WeekTransition.pickemsShouldShowLeagueBoard(rolling))
+        #expect(!WeekTransition.pickemsShouldShowFullLockedPhase(rolling))
+        #expect(!WeekTransition.pickemsAreFullyPublic(rolling))
+        #expect(WeekTransition.isGameLocked(
+            gameId: "thu",
+            kickoff: first,
+            week: rolling
+        ))
+        #expect(!WeekTransition.isGameLocked(
+            gameId: "sun",
+            kickoff: last,
+            week: rolling
+        ))
+    }
+
+    @Test func rollingFullyLocksAtLastKickoff() {
+        let first = Date().addingTimeInterval(-3600)
+        let last = Date().addingTimeInterval(-60)
+        let rolling = week(
+            status: .picking,
+            deadline: first,
+            pickLockMode: .rolling,
+            weekLockAt: last
+        )
+        #expect(!WeekTransition.arePicksEditable(rolling))
+        #expect(WeekTransition.arePicksFullyLocked(rolling))
+        #expect(WeekTransition.pickemsShouldShowFullLockedPhase(rolling))
+        #expect(WeekTransition.pickemsAreFullyPublic(rolling))
+    }
+
+    @Test func remainingLockAtFreezesOpenRollingGames() {
+        let first = Date().addingTimeInterval(-60)
+        let last = Date().addingTimeInterval(3600)
+        var rolling = week(
+            status: .picking,
+            deadline: first,
+            pickLockMode: .rolling,
+            weekLockAt: last
+        )
+        rolling.remainingLockAt = Date().addingTimeInterval(-1)
+        #expect(WeekTransition.arePicksFullyLocked(rolling))
+        #expect(WeekTransition.isGameLocked(gameId: "sun", kickoff: last, week: rolling))
     }
 
     @Test func earlyLockSetsLockedAtAndDeadline() {

@@ -23,6 +23,8 @@ enum WeekStatus: String, Codable {
 
 enum DeadlinePolicy: String, Codable, CaseIterable, Identifiable {
     case firstKickoff
+    case rolling
+    /// Legacy unused policy. Kept for decode; treated as first-kickoff.
     case custom
 
     var id: String { rawValue }
@@ -30,9 +32,23 @@ enum DeadlinePolicy: String, Codable, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .firstKickoff: return "First Game Kickoff"
+        case .rolling: return "Rolling — each game at kickoff"
         case .custom: return "Custom Time"
         }
     }
+
+    /// Commissioner picker — `custom` stays out of the UI.
+    static var lockModeCases: [DeadlinePolicy] { [.firstKickoff, .rolling] }
+
+    var lockModeDisplayName: String {
+        switch self {
+        case .firstKickoff: return "Entire slate at first kickoff"
+        case .rolling: return "Rolling — each game at kickoff"
+        case .custom: return "Custom Time"
+        }
+    }
+
+    var isRolling: Bool { self == .rolling }
 }
 
 enum TieBreakerPolicy: String, Codable, CaseIterable, Identifiable {
@@ -59,7 +75,8 @@ struct GroupRules: Codable, Equatable {
     /// Commissioner mode only — target games per week. In member mode this value on
     /// `GroupRules` is ignored; the week snapshot stores the derived allowance.
     var slateSize: Int
-    /// Spread-pick deadline policy. Product default is earliest slate kickoff (`firstKickoff`).
+    /// Spread-pick lock policy. Product default is earliest slate kickoff (`firstKickoff`).
+    /// `rolling` locks each game at its own kickoff. `custom` is legacy unused.
     var pickDeadline: DeadlinePolicy
     var tieBreaker: TieBreakerPolicy
     var customDeadlineHour: Int

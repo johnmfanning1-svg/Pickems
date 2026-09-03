@@ -364,7 +364,8 @@ final class PicksViewModel {
                     picks: picks,
                     deadline: week.pickDeadline,
                     confidenceGameId: confidence,
-                    allowLatePicks: group.rules.allowLatePicks
+                    allowLatePicks: group.rules.allowLatePicks,
+                    week: week
                 )
                 if pendingWritePicks == picks {
                     writeInFlight = false
@@ -375,6 +376,22 @@ final class PicksViewModel {
                     pendingWritePicks = nil
                     writeInFlight = false
                 }
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
+            }
+        }
+    }
+
+    func lockRemainingGamesNow(appState: AppState) {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek else { return }
+        Task {
+            do {
+                try await appState.groupService.lockRemainingGamesNow(
+                    groupId: group.id,
+                    weekId: week.id
+                )
+                PickemsHaptics.success()
+            } catch {
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
         }

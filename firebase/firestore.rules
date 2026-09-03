@@ -48,8 +48,13 @@ service cloud.firestore {
         || changed.hasOnly(['spreadTeamId']);
     }
 
+    function lockSnapshotKeys() {
+      return ['pickLockMode', 'weekLockAt', 'gameIds', 'gameKickoffs', 'remainingLockAt'].toSet();
+    }
+
     function memberWeekFieldUpdate() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let changed = request.resource.data.diff(resource.data).affectedKeys()
+        .difference(lockSnapshotKeys());
       // Members may open picking (and set pickDeadline from kickoffs) when the
       // slate fills — but must not set lockedAt (early lock is commissioner-only).
       return changed.hasOnly(['nominationCount'])
@@ -67,8 +72,10 @@ service cloud.firestore {
     }
 
     function commissionerWeekFieldUpdate() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['nominationCount'])
+      let changed = request.resource.data.diff(resource.data).affectedKeys()
+        .difference(lockSnapshotKeys());
+      return changed.size() == 0
+        || changed.hasOnly(['nominationCount'])
         || changed.hasOnly(['status', 'nominationCount'])
         || changed.hasOnly(['status', 'nominationCount', 'pickDeadline'])
         || changed.hasOnly(['status', 'pickDeadline'])
@@ -99,22 +106,133 @@ service cloud.firestore {
     function picksVisibleToAll(groupId, weekId) {
       let week = weekData(groupId, weekId);
       return week.status in ['locked', 'scored']
-        || (week.keys().hasAll(['pickDeadline'])
+        || (isRollingWeek(week) && weekFullyLocked(week))
+        || (!isRollingWeek(week)
+            && week.keys().hasAll(['pickDeadline'])
             && week.pickDeadline != null
             && request.time >= week.pickDeadline);
+    }
+
+    function isRollingWeek(week) {
+      return week.keys().hasAll(['pickLockMode']) && week.pickLockMode == 'rolling';
+    }
+
+    function remainingFrozen(week) {
+      return week.keys().hasAll(['remainingLockAt'])
+        && week.remainingLockAt != null
+        && request.time >= week.remainingLockAt;
+    }
+
+    function weekFullyLocked(week) {
+      return remainingFrozen(week)
+        || (week.keys().hasAll(['weekLockAt'])
+            && week.weekLockAt != null
+            && request.time >= week.weekLockAt);
+    }
+
+    // Only indexes whose game id is in `changed` pay the kickoff lookup.
+    function rollingIndexUnlocked(ids, kicks, changed, i) {
+      return ids.size() <= i
+        || !(ids[i] in kicks)
+        || !changed.hasAny([ids[i]])
+        || request.time < kicks[ids[i]];
+    }
+
+    function rollingChangedUnlocked(week, changed) {
+      let ids = week.get('gameIds', []);
+      let kicks = week.get('gameKickoffs', {});
+      return rollingIndexUnlocked(ids, kicks, changed, 0)
+        && rollingIndexUnlocked(ids, kicks, changed, 1)
+        && rollingIndexUnlocked(ids, kicks, changed, 2)
+        && rollingIndexUnlocked(ids, kicks, changed, 3)
+        && rollingIndexUnlocked(ids, kicks, changed, 4)
+        && rollingIndexUnlocked(ids, kicks, changed, 5)
+        && rollingIndexUnlocked(ids, kicks, changed, 6)
+        && rollingIndexUnlocked(ids, kicks, changed, 7)
+        && rollingIndexUnlocked(ids, kicks, changed, 8)
+        && rollingIndexUnlocked(ids, kicks, changed, 9)
+        && rollingIndexUnlocked(ids, kicks, changed, 10)
+        && rollingIndexUnlocked(ids, kicks, changed, 11)
+        && rollingIndexUnlocked(ids, kicks, changed, 12)
+        && rollingIndexUnlocked(ids, kicks, changed, 13)
+        && rollingIndexUnlocked(ids, kicks, changed, 14)
+        && rollingIndexUnlocked(ids, kicks, changed, 15)
+        && rollingIndexUnlocked(ids, kicks, changed, 16)
+        && rollingIndexUnlocked(ids, kicks, changed, 17)
+        && rollingIndexUnlocked(ids, kicks, changed, 18)
+        && rollingIndexUnlocked(ids, kicks, changed, 19);
+    }
+
+    function gameKickoffPassed(week, gameId) {
+      return gameId is string
+        && week.keys().hasAll(['gameKickoffs'])
+        && gameId in week.gameKickoffs
+        && request.time >= week.gameKickoffs[gameId];
+    }
+
+    function rollingCreateOk(groupId, weekId) {
+      let week = weekData(groupId, weekId);
+      return !isRollingWeek(week)
+        || (
+          rollingChangedUnlocked(week, request.resource.data.get('picks', {}).keys())
+          && !gameKickoffPassed(week, request.resource.data.get('confidenceGameId', null))
+        );
+    }
+
+    function rollingUpdateOk(groupId, weekId) {
+      let week = weekData(groupId, weekId);
+      let newC = request.resource.data.get('confidenceGameId', null);
+      let oldC = resource.data.get('confidenceGameId', null);
+      return !isRollingWeek(week)
+        || (
+          rollingChangedUnlocked(
+            week,
+            request.resource.data.get('picks', {}).diff(resource.data.get('picks', {})).affectedKeys()
+          )
+          && (newC == oldC
+              || (!gameKickoffPassed(week, newC) && !gameKickoffPassed(week, oldC)))
+        );
     }
 
     function pickDeadlineOpen(groupId, weekId) {
       let week = weekData(groupId, weekId);
       let group = get(/databases/$(database)/documents/groups/$(groupId)).data;
-      let lateOk = group.keys().hasAll(['rules'])
+      let lateOk = !isRollingWeek(week)
+        && group.keys().hasAll(['rules'])
         && group.rules.keys().hasAll(['allowLatePicks'])
         && group.rules.allowLatePicks == true;
       return week.status == 'picking'
         && (lateOk
-            || !week.keys().hasAll(['pickDeadline'])
+            || (isRollingWeek(week) && !weekFullyLocked(week))
+            || (!isRollingWeek(week)
+                && (!week.keys().hasAll(['pickDeadline'])
+                    || week.pickDeadline == null
+                    || request.time < week.pickDeadline)));
+    }
+
+    function rollingPickDeleteOpen(week) {
+      return week.status == 'picking'
+        && !remainingFrozen(week)
+        && (!week.keys().hasAll(['pickDeadline'])
             || week.pickDeadline == null
             || request.time < week.pickDeadline);
+    }
+
+    function commissionerPickWrite(groupId, weekId, pickId) {
+      return isCommissioner(groupId)
+        && pickId in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds
+        && weekData(groupId, weekId).status in ['selection', 'picking', 'locked'];
+    }
+
+    function memberPickWrite(groupId, weekId, pickUserId) {
+      return isSignedIn()
+        && request.auth.uid == pickUserId
+        && isGroupMember(groupId)
+        && pickDeadlineOpen(groupId, weekId)
+        && (request.resource.data.isLocked == false
+            || (request.resource.data.isLocked == true
+                && request.resource.data.submittedAt != null
+                && (!resource.exists || resource.data.isLocked == false)));
     }
 
     match /users/{userId} {
@@ -227,24 +345,24 @@ service cloud.firestore {
             || isCommissioner(groupId)
             || (isGroupMember(groupId)
                 && (pickId == request.auth.uid || picksVisibleToAll(groupId, weekId)));
-          allow create, update: if isSuperAdmin()
-            // Commissioner can wipe or force-select picks for any member.
-            || (isCommissioner(groupId)
-                && pickId in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds
-                && weekData(groupId, weekId).status in ['selection', 'picking', 'locked'])
-            || (isSignedIn()
-                && request.auth.uid == pickId
-                && isGroupMember(groupId)
-                && pickDeadlineOpen(groupId, weekId)
-                && (request.resource.data.isLocked == false
-                    || (request.resource.data.isLocked == true
-                        && request.resource.data.submittedAt != null
-                        && (!resource.exists || resource.data.isLocked == false))));
+          allow create: if isSuperAdmin()
+            || commissionerPickWrite(groupId, weekId, pickId)
+            || (memberPickWrite(groupId, weekId, pickId) && rollingCreateOk(groupId, weekId));
+          allow update: if isSuperAdmin()
+            || commissionerPickWrite(groupId, weekId, pickId)
+            || (memberPickWrite(groupId, weekId, pickId) && rollingUpdateOk(groupId, weekId));
           // Members can remove their own pick; commissioner clears picks on league teardown.
           allow delete: if isCommissioner(groupId)
             || (isSignedIn()
                 && request.auth.uid == pickId
-                && pickDeadlineOpen(groupId, weekId));
+                && (isRollingWeek(weekData(groupId, weekId))
+                    ? rollingPickDeleteOpen(weekData(groupId, weekId))
+                    : pickDeadlineOpen(groupId, weekId)));
+        }
+
+        match /revealedPicks/{gameId} {
+          allow read: if isGroupMember(groupId) || isSuperAdmin();
+          allow write: if false;
         }
 
         match /submissions/{userId} {

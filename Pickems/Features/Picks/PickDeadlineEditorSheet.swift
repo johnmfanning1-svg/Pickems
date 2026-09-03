@@ -9,7 +9,9 @@ struct PickDeadlineEditorSheet: View {
     let weekStatus: WeekStatus
     let initialDeadline: Date?
     let isPastDeadline: Bool
+    var isRollingLock: Bool = false
     var onSave: (_ deadline: Date, _ reopenWeek: Bool, _ unlockMemberPicks: Bool) -> Void
+    var onLockRemainingNow: (() -> Void)? = nil
 
     @State private var deadline: Date
     @State private var unlockMemberPicks: Bool
@@ -23,12 +25,16 @@ struct PickDeadlineEditorSheet: View {
         weekStatus: WeekStatus,
         initialDeadline: Date?,
         isPastDeadline: Bool,
+        isRollingLock: Bool = false,
+        onLockRemainingNow: (() -> Void)? = nil,
         onSave: @escaping (_ deadline: Date, _ reopenWeek: Bool, _ unlockMemberPicks: Bool) -> Void
     ) {
         self.weekLabel = weekLabel
         self.weekStatus = weekStatus
         self.initialDeadline = initialDeadline
         self.isPastDeadline = isPastDeadline
+        self.isRollingLock = isRollingLock
+        self.onLockRemainingNow = onLockRemainingNow
         self.onSave = onSave
         let defaultDeadline = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
         let seed = initialDeadline.flatMap { $0 > Date() ? $0 : nil } ?? defaultDeadline
@@ -41,12 +47,20 @@ struct PickDeadlineEditorSheet: View {
             Form {
                 Section {
                     DatePicker(
-                        "Pickems deadline",
+                        isRollingLock ? "Lock remaining at" : "Pickems deadline",
                         selection: $deadline,
                         in: Date()...,
                         displayedComponents: [.date, .hourAndMinute]
                     )
                     .listRowBackground(PickemsColors.cardBackground)
+
+                    if isRollingLock, weekStatus == .picking, let onLockRemainingNow {
+                        Button("Lock remaining now") {
+                            onLockRemainingNow()
+                            dismiss()
+                        }
+                        .listRowBackground(PickemsColors.cardBackground)
+                    }
 
                     if isPastDeadline || needsReopen {
                         Toggle("Unlock submitted Pickems", isOn: $unlockMemberPicks)
@@ -64,7 +78,7 @@ struct PickDeadlineEditorSheet: View {
             }
             .scrollContentBackground(.hidden)
             .pickemsScreenBackground()
-            .navigationTitle(needsReopen ? "Reopen Pickems" : "Pickems Deadline")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -82,7 +96,22 @@ struct PickDeadlineEditorSheet: View {
         }
     }
 
+    private var navigationTitle: String {
+        if needsReopen { return "Reopen Pickems" }
+        if isRollingLock { return "Lock Remaining" }
+        return "Pickems Deadline"
+    }
+
     private var footerText: String {
+        if isRollingLock {
+            if needsReopen {
+                return "Moves this week back to Pickems. Games that already kicked off stay locked. Optionally unlocks member submissions so they can edit remaining games."
+            }
+            if isPastDeadline {
+                return "Sets when remaining open games lock. Games that already started stay locked."
+            }
+            return "Lock remaining open games at this time. Each game that already kicked off stays locked."
+        }
         if needsReopen {
             return "Moves this week back to Pickems with your new deadline. Optionally unlocks member submissions so they can edit again."
         }

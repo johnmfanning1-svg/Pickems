@@ -676,3 +676,128 @@ describe("user profile reads", () => {
     await assertSucceeds(getDoc(doc(adminCtx().firestore(), "users", MEMBER)));
   });
 });
+
+describe("rolling pick lock", () => {
+  const past = () => new Date(Date.now() - 60 * 1000);
+  const future = () => new Date(Date.now() + 60 * 60 * 1000);
+
+  async function seedRolling() {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(
+        doc(db, "groups", GROUP_ID, "weeks", WEEK_ID),
+        {
+          id: WEEK_ID,
+          status: "picking",
+          pickLockMode: "rolling",
+          pickDeadline: past(),
+          weekLockAt: future(),
+          gameIds: ["game1", "game2"],
+          gameKickoffs: {
+            game1: past(),
+            game2: future(),
+          },
+        },
+        { merge: true }
+      );
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", MEMBER), {
+        id: MEMBER,
+        userId: MEMBER,
+        displayName: MEMBER,
+        picks: { game1: "home", game2: "away" },
+        isLocked: false,
+      });
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "revealedPicks", "game1"), {
+        picks: { [MEMBER]: "home", [OTHER_MEMBER]: "away" },
+        confidenceUserIds: [],
+      });
+    });
+  }
+
+  it("keeps other members' pick docs private until the last kickoff", async () => {
+    await seedRolling();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertSucceeds(
+      getDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", MEMBER))
+    );
+    await assertFails(
+      getDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", OTHER_MEMBER))
+    );
+  });
+
+  it("lets members read revealedPicks for locked games", async () => {
+    await seedRolling();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertSucceeds(
+      getDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "revealedPicks", "game1"))
+    );
+    await assertFails(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "revealedPicks", "game2"), {
+        picks: {},
+      })
+    );
+  });
+
+  it("blocks changing a kicked-off game and allows a later game", async () => {
+    await seedRolling();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const pick = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", MEMBER);
+    await assertFails(
+      setDoc(pick, {
+        id: MEMBER,
+        userId: MEMBER,
+        displayName: MEMBER,
+        picks: { game1: "away", game2: "away" },
+        isLocked: false,
+      })
+    );
+    await assertSucceeds(
+      setDoc(pick, {
+        id: MEMBER,
+        userId: MEMBER,
+        displayName: MEMBER,
+        picks: { game1: "home", game2: "home" },
+        isLocked: false,
+      })
+    );
+  });
+
+  it("lets a member create a pick doc with only remaining open games", async () => {
+    await seedRolling();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await deleteDoc(doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID, "picks", OTHER_MEMBER));
+    });
+    const member2Db = testEnv.authenticatedContext(OTHER_MEMBER).firestore();
+    const pick = doc(member2Db, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", OTHER_MEMBER);
+    await assertFails(
+      setDoc(pick, {
+        id: OTHER_MEMBER,
+        userId: OTHER_MEMBER,
+        displayName: OTHER_MEMBER,
+        picks: { game1: "home", game2: "away" },
+        isLocked: false,
+      })
+    );
+    await assertSucceeds(
+      setDoc(pick, {
+        id: OTHER_MEMBER,
+        userId: OTHER_MEMBER,
+        displayName: OTHER_MEMBER,
+        picks: { game2: "away" },
+        isLocked: false,
+      })
+    );
+  });
+
+  it("lets the commissioner freeze remaining games", async () => {
+    await seedRolling();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertSucceeds(
+      updateDoc(doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID), {
+        remainingLockAt: new Date(),
+        weekLockAt: new Date(),
+      })
+    );
+  });
+});

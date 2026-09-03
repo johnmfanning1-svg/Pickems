@@ -122,8 +122,12 @@ export function GroupDetailPage() {
       return;
     }
     await action.run("rules", async () => {
-      await updateDoc(doc(db, "groups", id), { rules });
-      await writeAudit("adminUpdateGroupRules", `groups/${groupId}`, league.rules ?? null, rules);
+      const nextRules = {
+        ...rules,
+        allowLatePicks: rules.pickDeadline === "rolling" ? false : rules.allowLatePicks,
+      };
+      await updateDoc(doc(db, "groups", id), { rules: nextRules });
+      await writeAudit("adminUpdateGroupRules", `groups/${groupId}`, league.rules ?? null, nextRules);
       return "Rules saved.";
     });
   }
@@ -322,13 +326,23 @@ export function GroupDetailPage() {
                 />
               </Field>
             )}
-            <Field label="Deadline policy" hint="Product default: earliest slate kickoff.">
+            <Field label="Deadline policy" hint="firstKickoff locks the whole slate at the earliest kickoff. rolling locks each game at its own kickoff. Applies when the next week opens.">
               <Select
                 value={rules.pickDeadline}
-                onChange={(event) => setRule("pickDeadline", event.target.value as GroupRules["pickDeadline"])}
+                onChange={(event) => {
+                  const next = event.target.value as GroupRules["pickDeadline"];
+                  setRules((previous) => ({
+                    ...previous,
+                    pickDeadline: next,
+                    allowLatePicks: next === "rolling" ? false : previous.allowLatePicks,
+                  }));
+                }}
               >
-                <option value="firstKickoff">firstKickoff</option>
-                <option value="custom">custom (legacy)</option>
+                <option value="firstKickoff">firstKickoff (entire slate)</option>
+                <option value="rolling">rolling (each game at kickoff)</option>
+                {rules.pickDeadline === "custom" && (
+                  <option value="custom">custom (legacy)</option>
+                )}
               </Select>
             </Field>
             <Field label="Custom deadline hour" hint="Only used if policy is custom.">
@@ -358,15 +372,17 @@ export function GroupDetailPage() {
                 <option value="headToHead">headToHead</option>
               </Select>
             </Field>
-            <Field label="Late pick penalty (wins)">
-              <TextInput
-                type="number"
-                min={0}
-                max={10}
-                value={rules.latePickPenaltyWins}
-                onChange={(event) => setRule("latePickPenaltyWins", Number(event.target.value))}
-              />
-            </Field>
+            {rules.pickDeadline !== "rolling" && (
+              <Field label="Late pick penalty (wins)">
+                <TextInput
+                  type="number"
+                  min={0}
+                  max={10}
+                  value={rules.latePickPenaltyWins}
+                  onChange={(event) => setRule("latePickPenaltyWins", Number(event.target.value))}
+                />
+              </Field>
+            )}
             <div className="space-y-1 pt-5">
               <Toggle
                 label="Allow confidence pick"
@@ -374,11 +390,14 @@ export function GroupDetailPage() {
                 checked={rules.allowConfidencePick}
                 onChange={(next) => setRule("allowConfidencePick", next)}
               />
-              <Toggle
-                label="Allow late picks"
-                checked={rules.allowLatePicks}
-                onChange={(next) => setRule("allowLatePicks", next)}
-              />
+              {rules.pickDeadline !== "rolling" && (
+                <Toggle
+                  label="Allow late picks"
+                  hint="After the first kickoff, with a win penalty. Not available in rolling lock."
+                  checked={rules.allowLatePicks}
+                  onChange={(next) => setRule("allowLatePicks", next)}
+                />
+              )}
             </div>
           </div>
           <div className="mt-4">

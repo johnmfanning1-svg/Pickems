@@ -83,7 +83,9 @@ struct PicksView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("You can still edit your Pickems until the lock time shown on this week.")
+                Text(week.isRollingLock
+                    ? "You can still edit until each game kicks off."
+                    : "You can still edit your Pickems until the lock time shown on this week.")
             }
             .alert("Submit your Selections?", isPresented: $viewModel.showConfirmNominations) {
                 Button("Submit Selections") {
@@ -280,10 +282,8 @@ struct PicksView: View {
             }
         case .pickems:
             if WeekTransition.arePickemsOpen(week) {
-                if !WeekTransition.pickemsShouldShowLeagueBoard(week) {
-                    if let deadline = week.pickDeadline {
-                        PickDeadlineBanner(deadline: deadline)
-                    }
+                if !WeekTransition.pickemsShouldShowFullLockedPhase(week) {
+                    pickemsLockBanner(for: week)
                     if picksMatchWeek(week) {
                         SecondaryButton("See who's in", icon: "person.crop.circle.badge.clock") {
                             appState.present(.submissionStatus)
@@ -433,9 +433,24 @@ struct PicksView: View {
     }
 
     @ViewBuilder
+    private func pickemsLockBanner(for week: WeekSummary) -> some View {
+        let games = appState.pickService.slateGames
+        if let next = PickDeadlineCalculator.nextLockDate(week: week, games: games) {
+            PickDeadlineBanner(
+                deadline: next,
+                isRolling: week.isRollingLock,
+                openCount: PickDeadlineCalculator.openGameCount(week: week, games: games),
+                totalCount: games.count
+            )
+        } else if let deadline = week.pickDeadline {
+            PickDeadlineBanner(deadline: deadline)
+        }
+    }
+
+    @ViewBuilder
     private func pickemsGames(for week: WeekSummary) -> some View {
         if picksMatchWeek(week) {
-            if WeekTransition.pickemsShouldShowLeagueBoard(week) {
+            if WeekTransition.pickemsShouldShowFullLockedPhase(week) {
                 lockedPhase(week: week)
             } else if week.status != .selection {
                 pickingPhase(week: week)
@@ -449,9 +464,13 @@ struct PicksView: View {
     }
 
     private func pickingPhase(week: WeekSummary) -> some View {
-        let pastDeadline = PickDeadlineCalculator.isPast(week.pickDeadline)
-        let allowLate = appState.groupService.selectedGroup?.rules.allowLatePicks == true
-        let picksClosed = pastDeadline && !allowLate
+        let rolling = week.isRollingLock
+        let fullyLocked = WeekTransition.arePicksFullyLocked(week)
+        let allowLate = !rolling && appState.groupService.selectedGroup?.rules.allowLatePicks == true
+        let picksClosed = fullyLocked && !allowLate
+        let submittedFrozen = !rolling && appState.pickService.userPick?.isLocked == true
+        let games = appState.pickService.slateGames.sortedByKickoff
+        let openGames = games.filter { !WeekTransition.isGameLocked($0, week: week) }
 
         return VStack(spacing: 16) {
             PickemsSectionHeader(title: "Spread Pickems", subtitle: "Tap a team to pick. Tap again to clear that Pickem — the Selection stays on the slate.", help: PickemsHelp.spreadPicks)
@@ -460,12 +479,16 @@ struct PicksView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     StatusBadge(text: "Submitted", color: PickemsColors.success)
                     if !picksClosed {
-                        Text("Submitted — you can edit until lock")
+                        Text(rolling
+                            ? "You can edit games that haven’t started"
+                            : "Submitted — you can edit until lock")
                             .font(.caption)
                             .foregroundStyle(PickemsColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        SecondaryButton("Edit Pickems", icon: "pencil") {
-                            viewModel.unlockPicksForEditing(appState: appState)
+                        if !rolling {
+                            SecondaryButton("Edit Pickems", icon: "pencil") {
+                                viewModel.unlockPicksForEditing(appState: appState)
+                            }
                         }
                     }
                 }
@@ -473,18 +496,21 @@ struct PicksView: View {
                 .padding(.horizontal)
             }
 
-            ForEach(appState.pickService.slateGames.sortedByKickoff) { game in
+            ForEach(games) { game in
+                let gameLocked = WeekTransition.isGameLocked(game, week: week)
                 GamePickRow(
                     game: game,
                     selectedTeamId: viewModel.draftPicks[game.id],
-                    isDisabled: appState.pickService.userPick?.isLocked == true || picksClosed,
+                    isDisabled: submittedFrozen || picksClosed || gameLocked,
                     liveCard: viewModel.livePickCards[game.espnEventId],
                     homeRank: viewModel.teamRanks.rank(for: game.homeTeamId),
                     awayRank: viewModel.teamRanks.rank(for: game.awayTeamId),
                     showConfidenceToggle: appState.groupService.selectedGroup?.rules.allowConfidencePick == true
-                        && appState.pickService.userPick?.isLocked != true
-                        && !picksClosed,
+                        && !submittedFrozen
+                        && !picksClosed
+                        && !gameLocked,
                     isConfidence: viewModel.confidenceGameId == game.id,
+                    lockedCaption: gameLocked ? "Locked at kickoff" : nil,
                     onConfidenceToggle: {
                         viewModel.confidenceGameId = viewModel.confidenceGameId == game.id ? nil : game.id
                         viewModel.saveDraft(appState: appState)
@@ -503,15 +529,19 @@ struct PicksView: View {
                 .padding(.horizontal)
             }
 
+            if rolling, WeekTransition.pickemsShouldShowLeagueBoard(week) {
+                GroupPicksView(embedded: true)
+            }
+
             if appState.pickService.userPick?.isLocked != true {
                 VStack(alignment: .leading, spacing: 8) {
-                    PrimaryButton(title: pickingSubmitTitle(picksClosed: picksClosed)) {
-                        handlePickingSubmit()
+                    PrimaryButton(title: pickingSubmitTitle(picksClosed: picksClosed, openGames: openGames)) {
+                        handlePickingSubmit(openGames: openGames)
                     }
                     .disabled(picksClosed)
 
-                    if hasIncompletePickems, !picksClosed {
-                        Text(incompletePickemsCaption)
+                    if hasIncompletePickems(openGames: openGames), !picksClosed {
+                        Text(incompletePickemsCaption(openGames: openGames))
                             .font(.caption)
                             .foregroundStyle(PickemsColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -522,31 +552,44 @@ struct PicksView: View {
         }
     }
 
-    private func pickingSubmitTitle(picksClosed: Bool) -> String {
+    private func pickingSubmitTitle(picksClosed: Bool, openGames: [SlateGame]) -> String {
         if picksClosed { return "Deadline Passed" }
-        let count = viewModel.draftPicks.count
+        let openIds = Set(openGames.map(\.id))
+        let openPicked = viewModel.draftPicks.keys.filter { openIds.contains($0) }.count
+        let openTotal = openGames.count
         let slate = appState.pickService.slateGames.count
-        if count == 0 { return "Make Pickems" }
-        if slate > 0, count < slate { return "Finish Pickems (\(count)/\(slate))" }
+        if openTotal < slate {
+            if openPicked == 0 { return "Make remaining Pickems" }
+            if openTotal > 0, openPicked < openTotal {
+                return "Submit remaining (\(openPicked)/\(openTotal) open)"
+            }
+            return "Submit remaining Pickems"
+        }
+        if openPicked == 0 { return "Make Pickems" }
+        if slate > 0, openPicked < slate { return "Finish Pickems (\(openPicked)/\(slate))" }
         return "Submit Pickems"
     }
 
-    private var hasIncompletePickems: Bool {
-        let slate = appState.pickService.slateGames.count
-        return slate > 0 && viewModel.draftPicks.count < slate
+    private func hasIncompletePickems(openGames: [SlateGame]) -> Bool {
+        let openIds = Set(openGames.map(\.id))
+        guard !openIds.isEmpty else { return false }
+        return openIds.contains { viewModel.draftPicks[$0] == nil }
     }
 
-    private var incompletePickemsCaption: String {
-        let count = viewModel.draftPicks.count
-        let slate = appState.pickService.slateGames.count
-        return "You've picked \(count) of \(slate) games. Finish your Pickems to submit."
+    private func incompletePickemsCaption(openGames: [SlateGame]) -> String {
+        let openIds = Set(openGames.map(\.id))
+        let openPicked = viewModel.draftPicks.keys.filter { openIds.contains($0) }.count
+        if openGames.count < appState.pickService.slateGames.count {
+            return "You've picked \(openPicked) of \(openGames.count) open games. Finish remaining Pickems to submit."
+        }
+        return "You've picked \(openPicked) of \(openGames.count) games. Finish your Pickems to submit."
     }
 
-    private func handlePickingSubmit() {
-        if hasIncompletePickems {
-            let count = viewModel.draftPicks.count
-            let slate = appState.pickService.slateGames.count
-            incompletePickemsAlertText = "You've picked \(count) of \(slate) games."
+    private func handlePickingSubmit(openGames: [SlateGame]) {
+        if hasIncompletePickems(openGames: openGames) {
+            let openIds = Set(openGames.map(\.id))
+            let openPicked = viewModel.draftPicks.keys.filter { openIds.contains($0) }.count
+            incompletePickemsAlertText = "You've picked \(openPicked) of \(openGames.count) open games."
             showIncompletePickemsAlert = true
         } else {
             viewModel.showConfirmSubmit = true

@@ -10,7 +10,7 @@ enum PickDeadlineCalculator {
         guard let firstKickoff = kickoffs.min() else { return nil }
 
         switch policy {
-        case .firstKickoff:
+        case .firstKickoff, .rolling:
             return firstKickoff
         case .custom:
             var calendar = Calendar.current
@@ -28,9 +28,9 @@ enum PickDeadlineCalculator {
     }
 
     /// Nil deadline means picks remain open (not locked).
-    static func isPast(_ deadline: Date?) -> Bool {
+    static func isPast(_ deadline: Date?, now: Date = Date()) -> Bool {
         guard let deadline else { return false }
-        return Date() >= deadline
+        return now >= deadline
     }
 
     /// Absolute lock time for UI, e.g. "Sat, Sep 6, 12:00 PM" (includes date so
@@ -56,5 +56,33 @@ enum PickDeadlineCalculator {
             return "\(hours)h \(minutes)m left"
         }
         return "\(minutes)m left"
+    }
+
+    /// Next remaining lock among still-open games (rolling) or the slate deadline.
+    static func nextLockDate(
+        week: WeekSummary,
+        games: [SlateGame],
+        now: Date = Date()
+    ) -> Date? {
+        if !week.isRollingLock {
+            return week.pickDeadline
+        }
+        let openKickoffs = games
+            .filter { !WeekTransition.isGameLocked($0, week: week, now: now) }
+            .map(\.kickoff)
+        let nextKickoff = openKickoffs.min()
+        if let freeze = week.remainingLockAt, freeze > now {
+            if let nextKickoff { return min(nextKickoff, freeze) }
+            return freeze
+        }
+        return nextKickoff ?? week.effectiveWeekLockAt
+    }
+
+    static func openGameCount(
+        week: WeekSummary,
+        games: [SlateGame],
+        now: Date = Date()
+    ) -> Int {
+        games.filter { !WeekTransition.isGameLocked($0, week: week, now: now) }.count
     }
 }

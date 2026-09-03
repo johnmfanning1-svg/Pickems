@@ -23,6 +23,13 @@ import {
   membersOnRoster,
 } from "./scoring";
 import { materializeNominations } from "./materialize";
+import {
+  isRollingLock,
+  lockSnapshotFromGames,
+  effectiveWeekLockMillis,
+  lastKickoffMillis,
+  revealLockedGames,
+} from "./pickLock";
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -189,10 +196,14 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
         const earliest = kickoffs.length ? Math.min(...kickoffs) : undefined;
 
         if (earliest != null) {
+          const snapshot = lockSnapshotFromGames(
+            gamesSnap.docs.map((doc) => ({ id: doc.id, kickoff: doc.data().kickoff })),
+            groupDoc.data().rules?.pickDeadline
+          );
           await weekDoc.ref.update({
             status: "picking",
             selectionDeadlinePassedNotified: true,
-            pickDeadline: admin.firestore.Timestamp.fromMillis(earliest),
+            ...snapshot,
           });
           await sendToUsers(
             memberIds,
@@ -261,6 +272,7 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
       const need1h = in1hWindow && !week.deadlineReminder1hSent;
       if (!need24h && !need1h) continue;
 
+      const rolling = isRollingLock(week.pickLockMode);
       const memberIds = (groupDoc.data().memberIds as string[]) ?? [];
       const submissions = await weekDoc.ref.collection("submissions").get();
       const submitted = new Set(
@@ -273,8 +285,10 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
       if (need24h) {
         await sendToUsers(
           pending,
-          "Pickems lock in 24 hours",
-          `Week ${weekNum} Pickems lock in 24 hours. Submit before the deadline.`,
+          rolling ? "First Pickems lock in 24 hours" : "Pickems lock in 24 hours",
+          rolling
+            ? `Week ${weekNum}: the first game locks in 24 hours. Later games stay open.`
+            : `Week ${weekNum} Pickems lock in 24 hours. Submit before the deadline.`,
           "deadline_reminder",
           data
         );
@@ -284,8 +298,10 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
       if (need1h) {
         await sendToUsers(
           pending,
-          "Pickems lock in 1 hour",
-          `Week ${weekNum} Pickems lock in 1 hour. Submit before the deadline.`,
+          rolling ? "First Pickems lock in 1 hour" : "Pickems lock in 1 hour",
+          rolling
+            ? `Week ${weekNum}: the first game locks in 1 hour. Later games stay open.`
+            : `Week ${weekNum} Pickems lock in 1 hour. Submit before the deadline.`,
           "deadline_reminder",
           data
         );
@@ -353,9 +369,37 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
     for (const weekDoc of activeWeeks.docs) {
       const week = weekDoc.data();
       const weekId = weekDoc.id;
-      const deadline = week.pickDeadline as admin.firestore.Timestamp | undefined;
+      const rolling = isRollingLock(week.pickLockMode);
 
-      if (week.status === "picking" && deadline && deadline.toMillis() <= now) {
+      const gamesSnap = await weekDoc.ref.collection("games").get();
+      if (gamesSnap.empty) {
+        if (week.status === "picking") {
+          await materializeNominations(groupId, weekId);
+        }
+        continue;
+      }
+
+      if (rolling && week.status === "picking") {
+        await revealLockedGames({
+          weekRef: weekDoc.ref,
+          week,
+          games: gamesSnap,
+          now,
+        });
+      }
+
+      let fullLockMs = effectiveWeekLockMillis(week);
+      if (fullLockMs == null && rolling) {
+        fullLockMs = lastKickoffMillis(
+          gamesSnap.docs.map((doc) => ({ kickoff: doc.data().kickoff }))
+        );
+      }
+      if (!rolling) {
+        const deadline = week.pickDeadline as admin.firestore.Timestamp | undefined;
+        fullLockMs = deadline ? deadline.toMillis() : fullLockMs;
+      }
+
+      if (week.status === "picking" && fullLockMs != null && fullLockMs <= now) {
         await weekDoc.ref.update({
           status: "locked",
           lockedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -367,14 +411,6 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
           "deadline_locked",
           { groupId, weekId }
         );
-      }
-
-      const gamesSnap = await weekDoc.ref.collection("games").get();
-      if (gamesSnap.empty) {
-        if (week.status === "picking") {
-          await materializeNominations(groupId, weekId);
-        }
-        continue;
       }
 
       let anyFinalizedThisPass = false;
@@ -492,7 +528,7 @@ async function refreshLiveStandings(
     const scored = applyLatePickPenalty(
       scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId),
       {
-        allowLatePicks: rules.allowLatePicks === true,
+        allowLatePicks: !isRollingLock(weekSnap.data()?.pickLockMode) && rules.allowLatePicks === true,
         latePickPenaltyWins: rules.latePickPenaltyWins,
         submittedAt: pick?.submittedAt,
         deadline,
@@ -589,7 +625,7 @@ async function scoreWeek(
       const scored = applyLatePickPenalty(
         scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId),
         {
-          allowLatePicks: rules.allowLatePicks === true,
+          allowLatePicks: !isRollingLock(week?.pickLockMode) && rules.allowLatePicks === true,
           latePickPenaltyWins: rules.latePickPenaltyWins,
           submittedAt: pick?.submittedAt,
           deadline,
