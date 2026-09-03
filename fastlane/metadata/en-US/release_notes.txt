@@ -4,4 +4,4 @@ What's new in 3.3.4
 • Later games stay editable (and hidden) until they start
 • Lock remaining / reopen only affect games that have not kicked off
 
-Thanks for helping us UAT this build.
+Thanks for playing with us.
