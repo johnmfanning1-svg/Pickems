@@ -43,14 +43,7 @@ struct PicksView: View {
                     if let week = workspaceWeek {
                         statusContent(for: week)
                     } else {
-                        EmptyStateView(
-                            icon: kind == .selections ? "american.football.fill" : "checkmark.circle.fill",
-                            title: "No Active Week",
-                            message: kind == .selections
-                                ? "Join a league to start making Selections."
-                                : "Join a league to start making Pickems.",
-                            help: kind == .selections ? PickemsHelp.nominations : PickemsHelp.picksOverview
-                        )
+                        noActiveWeekEmptyState
                     }
 
                     if kind == .pickems, appState.groupService.selectedGroup != nil {
@@ -83,7 +76,7 @@ struct PicksView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text(week.isRollingLock
+                Text(workspaceWeek?.isRollingLock == true
                     ? "You can still edit until each game kicks off."
                     : "You can still edit your Pickems until the lock time shown on this week.")
             }
@@ -119,6 +112,17 @@ struct PicksView: View {
                 snapToActiveWeek()
             }
         }
+    }
+
+    private var noActiveWeekEmptyState: some View {
+        EmptyStateView(
+            icon: kind == .selections ? "american.football.fill" : "checkmark.circle.fill",
+            title: "No Active Week",
+            message: kind == .selections
+                ? "Join a league to start making Selections."
+                : "Join a league to start making Pickems.",
+            help: kind == .selections ? PickemsHelp.nominations : PickemsHelp.picksOverview
+        )
     }
 
     // MARK: - Group / week chrome
@@ -510,11 +514,11 @@ struct PicksView: View {
                         && !picksClosed
                         && !gameLocked,
                     isConfidence: viewModel.confidenceGameId == game.id,
-                    lockedCaption: gameLocked ? "Locked at kickoff" : nil,
                     onConfidenceToggle: {
                         viewModel.confidenceGameId = viewModel.confidenceGameId == game.id ? nil : game.id
                         viewModel.saveDraft(appState: appState)
-                    }
+                    },
+                    lockedCaption: gameLocked ? "Locked at kickoff" : nil
                 ) { teamId in
                     if teamId.isEmpty {
                         viewModel.draftPicks.removeValue(forKey: game.id)

@@ -240,7 +240,7 @@ struct CommissionerWeekAdminSections: View {
             } header: {
                 Text("Pickems Admin")
             } footer: {
-                Text(week?.isRollingLock == true
+                Text(week.isRollingLock
                     ? "Tap a member to force or clear their Pickems. Lock remaining freezes games that have not kicked off yet."
                     : "Tap a member to force or clear their Pickems. Counts are Pickems made versus the slate. This never removes Selections.")
             }
