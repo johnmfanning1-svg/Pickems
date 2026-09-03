@@ -12,6 +12,7 @@ import {
   computeWeekAwards,
   applyLatePickPenalty,
 } from "./scoring";
+import { isRollingLock } from "./pickLock";
 
 /**
  * Callable surface for the web admin portal (Lane J).
@@ -541,7 +542,8 @@ export const adminRescoreWeek = onCall(async (request) => {
     }
     for (const pick of picks) {
       const scored = applyLatePickPenalty(scorePicks(pick.picks ?? {}, games, pick.confidenceGameId), {
-        ...lateOptions,
+        allowLatePicks: !isRollingLock(weekDoc.data().pickLockMode) && lateOptions.allowLatePicks,
+        latePickPenaltyWins: lateOptions.latePickPenaltyWins,
         submittedAt: pick.submittedAt,
         deadline: weekDoc.data().pickDeadline,
       });
@@ -560,7 +562,8 @@ export const adminRescoreWeek = onCall(async (request) => {
     const scored = applyLatePickPenalty(
       scorePicks(pick?.picks ?? {}, targetGames, pick?.confidenceGameId),
       {
-        ...lateOptions,
+        allowLatePicks: !isRollingLock(week.pickLockMode) && lateOptions.allowLatePicks,
+        latePickPenaltyWins: lateOptions.latePickPenaltyWins,
         submittedAt: pick?.submittedAt,
         deadline: week.pickDeadline,
       }

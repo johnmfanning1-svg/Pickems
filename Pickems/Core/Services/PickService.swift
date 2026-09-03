@@ -19,6 +19,8 @@ final class PickService {
     /// Shared Selections "submitted" ack so Groups and the Picks tab cannot diverge.
     private(set) var didSubmitNominations = false
     var allPicks: [UserPick] = []
+    /// Public per-game pick projection for rolling lock. Empty until games start.
+    var revealedPicksByGameId: [String: RevealedGamePicks] = []
     var submissions: [PickSubmission] = []
     var isLoading = false
     var errorMessage: String?
@@ -32,6 +34,8 @@ final class PickService {
     private var gamesListener: ListenerRegistration?
     @ObservationIgnored
     private var pickListener: ListenerRegistration?
+    @ObservationIgnored
+    private var revealedPicksListener: ListenerRegistration?
     @ObservationIgnored
     private var submissionsListener: ListenerRegistration?
     @ObservationIgnored
@@ -52,6 +56,7 @@ final class PickService {
         nominationsListener?.remove()
         gamesListener?.remove()
         pickListener?.remove()
+        revealedPicksListener?.remove()
         submissionsListener?.remove()
         nominations = []
         slateGames = []
@@ -62,6 +67,7 @@ final class PickService {
         userPick = nil
         userPickEpoch += 1
         allPicks = []
+        revealedPicksByGameId = [:]
         submissions = []
         refreshNominationSubmissionState(groupId: groupId, weekId: weekId, userId: userId)
 
@@ -136,6 +142,36 @@ final class PickService {
                 }
             }
 
+        revealedPicksListener = db.week(groupId: groupId, weekId: weekId)
+            .revealedPicks
+            .addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor in
+                    guard let self else { return }
+                    guard self.observedWeekId == weekId else { return }
+                    if let error {
+                        UserFacingError.apply(error, to: &self.errorMessage, context: .listener)
+                        AppEvents.failure(.picksListenerError, error: error, metadata: [
+                            "listener": "revealed_picks",
+                            "group_id": groupId,
+                            "week_id": weekId,
+                        ], recordNonFatal: false)
+                        return
+                    }
+                    var map: [String: RevealedGamePicks] = [:]
+                    for doc in snapshot?.documents ?? [] {
+                        let data = doc.data()
+                        let picks = data["picks"] as? [String: String] ?? [:]
+                        let confidence = data["confidenceUserIds"] as? [String] ?? []
+                        map[doc.documentID] = RevealedGamePicks(
+                            id: doc.documentID,
+                            picks: picks,
+                            confidenceUserIds: confidence
+                        )
+                    }
+                    self.revealedPicksByGameId = map
+                }
+            }
+
         submissionsListener = db.week(groupId: groupId, weekId: weekId)
             .collection(FirestoreCollection.submissions)
             .addSnapshotListener { [weak self] snapshot, error in
@@ -162,10 +198,12 @@ final class PickService {
         nominationsListener?.remove()
         gamesListener?.remove()
         pickListener?.remove()
+        revealedPicksListener?.remove()
         submissionsListener?.remove()
         nominationsListener = nil
         gamesListener = nil
         pickListener = nil
+        revealedPicksListener = nil
         submissionsListener = nil
         nominations = []
         slateGames = []
@@ -176,6 +214,7 @@ final class PickService {
         userPick = nil
         userPickEpoch += 1
         allPicks = []
+        revealedPicksByGameId = [:]
         submissions = []
         didSubmitNominations = false
         errorMessage = nil
@@ -305,6 +344,47 @@ final class PickService {
         }
     }
 
+    static func mergingRevealedPicks(
+        base: [UserPick],
+        revealed: [String: RevealedGamePicks],
+        members: [GroupMember] = []
+    ) -> [UserPick] {
+        var map = Dictionary(uniqueKeysWithValues: base.map { ($0.userId, $0) })
+        for (gameId, revealedGame) in revealed {
+            for (uid, teamId) in revealedGame.picks {
+                var pick = map[uid] ?? UserPick(
+                    id: uid,
+                    userId: uid,
+                    displayName: members.first(where: { $0.id == uid })?.displayName ?? uid,
+                    picks: [:],
+                    submittedAt: nil,
+                    isLocked: false
+                )
+                pick.picks[gameId] = teamId
+                if revealedGame.confidenceUserIds.contains(uid) {
+                    pick.confidenceGameId = gameId
+                }
+                map[uid] = pick
+            }
+        }
+        return Array(map.values)
+    }
+
+    func boardPicksByUserId(members: [GroupMember], ownUserId: String?) -> [String: UserPick] {
+        var merged = Self.mergingRevealedPicks(
+            base: allPicks,
+            revealed: revealedPicksByGameId,
+            members: members
+        )
+        var map = Dictionary(uniqueKeysWithValues: merged.map { ($0.userId, $0) })
+        if let own = userPick {
+            map[own.userId] = own
+        } else if let ownUserId, let existing = map[ownUserId] {
+            map[ownUserId] = existing
+        }
+        return map
+    }
+
     /// Backfill public `pickCount` on submissions written before that field existed,
     /// so Group Picks can show 3/3 without waiting for the week to lock.
     private func reconcileOwnSubmissionPickCount(
@@ -367,6 +447,23 @@ final class PickService {
             guard !gameId.isEmpty, !teamId.isEmpty else { return nil }
             return (gameId, teamId)
         })
+    }
+
+    static func preservingLockedPicks(
+        incoming: [String: String],
+        existing: [String: String],
+        games: [SlateGame],
+        week: WeekSummary
+    ) -> [String: String] {
+        var result = incoming
+        for game in games where WeekTransition.isGameLocked(game, week: week) {
+            if let old = existing[game.id] {
+                result[game.id] = old
+            } else {
+                result.removeValue(forKey: game.id)
+            }
+        }
+        return result
     }
 
     func submitNomination(
@@ -723,31 +820,36 @@ final class PickService {
         rules: GroupRules
     ) async throws {
         try await materializeNominationsIfNeeded(groupId: groupId, weekId: weekId)
-        let kickoffs = await slateKickoffs(
+        let games = await slateLockGames(
             groupId: groupId,
             weekId: weekId,
-            fallback: nominations.map(\.kickoff) + slateGames.map(\.kickoff)
+            fallback: nominations.map { ($0.espnEventId, $0.kickoff) } + slateGames.map { ($0.id, $0.kickoff) }
         )
-        guard !kickoffs.isEmpty else {
+        guard !games.isEmpty else {
             throw PickError.slateFull
         }
         try await transitionToPicking(
             groupId: groupId,
             weekId: weekId,
             rules: rules,
-            kickoffs: kickoffs,
+            games: games,
             nominationCount: nominations.count,
             lockSlate: true
         )
     }
 
-    private func slateKickoffs(groupId: String, weekId: String, fallback: [Date]) async -> [Date] {
+    private func slateLockGames(
+        groupId: String,
+        weekId: String,
+        fallback: [(id: String, kickoff: Date)]
+    ) async -> [(id: String, kickoff: Date)] {
         let gamesSnap = try? await db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
             .collection("games")
             .getDocuments()
-        let fromGames = gamesSnap?.documents.compactMap { doc -> Date? in
-            SlateGame.fromDocument(id: doc.documentID, data: doc.data())?.kickoff
+        let fromGames = gamesSnap?.documents.compactMap { doc -> (id: String, kickoff: Date)? in
+            guard let game = SlateGame.fromDocument(id: doc.documentID, data: doc.data()) else { return nil }
+            return (game.id, game.kickoff)
         } ?? []
         return fromGames.isEmpty ? fallback : fromGames
     }
@@ -756,13 +858,13 @@ final class PickService {
         groupId: String,
         weekId: String,
         rules: GroupRules,
-        kickoffs: [Date],
+        games: [(id: String, kickoff: Date)],
         nominationCount: Int?,
         lockSlate: Bool = false
     ) async throws {
         let updates = WeekTransition.toPickingUpdates(
             rules: rules,
-            kickoffs: kickoffs,
+            games: games,
             nominationCount: nominationCount,
             setDeadline: true,
             lockSlate: lockSlate
@@ -787,19 +889,40 @@ final class PickService {
             case .selection:
                 throw PickError.pickemsNotOpen
             case .picking:
-                if ScoringEngine.isPastDeadline(deadline: week.pickDeadline), !allowLatePicks {
-                    throw PickError.deadlinePassed
+                if WeekTransition.arePicksFullyLocked(week) {
+                    if week.isRollingLock || !allowLatePicks {
+                        throw PickError.deadlinePassed
+                    }
                 }
             }
         }
 
         let cleaned = Self.sanitizedPicks(picks)
         let validGameIds = Set(slateGames.map(\.id))
-        let trimmed = validGameIds.isEmpty
+        var trimmed = validGameIds.isEmpty
             ? cleaned
             : cleaned.filter { validGameIds.contains($0.key) }
+        if let week, week.isRollingLock, let existing = userPick?.picks {
+            trimmed = Self.preservingLockedPicks(
+                incoming: trimmed,
+                existing: existing,
+                games: slateGames,
+                week: week
+            )
+        }
         let trimmedConfidence: String? = {
+            if let week, week.isRollingLock,
+               let existingConfidence = userPick?.confidenceGameId,
+               let game = slateGames.first(where: { $0.id == existingConfidence }),
+               WeekTransition.isGameLocked(game, week: week) {
+                return existingConfidence
+            }
             guard let confidenceGameId, trimmed.keys.contains(confidenceGameId) else { return nil }
+            if let week, week.isRollingLock,
+               let game = slateGames.first(where: { $0.id == confidenceGameId }),
+               WeekTransition.isGameLocked(game, week: week) {
+                return userPick?.confidenceGameId
+            }
             return confidenceGameId
         }()
 
@@ -841,20 +964,55 @@ final class PickService {
         picks: [String: String],
         deadline: Date?,
         confidenceGameId: String? = nil,
-        allowLatePicks: Bool = false
+        allowLatePicks: Bool = false,
+        week: WeekSummary? = nil
     ) async throws {
-        if ScoringEngine.isPastDeadline(deadline: deadline), !allowLatePicks {
+        let rolling = week?.isRollingLock == true
+        if rolling {
+            if let week, WeekTransition.arePicksFullyLocked(week) {
+                throw PickError.deadlinePassed
+            }
+        } else if ScoringEngine.isPastDeadline(deadline: deadline), !allowLatePicks {
             throw PickError.deadlinePassed
         }
         let requiredGameIds = Set(slateGames.map(\.id))
-        let cleaned = Self.sanitizedPicks(picks).filter { requiredGameIds.contains($0.key) }
-        guard Set(cleaned.keys) == requiredGameIds else {
-            throw PickError.incompletePicks
+        var cleaned = Self.sanitizedPicks(picks).filter { requiredGameIds.contains($0.key) }
+        if let week, rolling, let existing = userPick?.picks {
+            cleaned = Self.preservingLockedPicks(
+                incoming: cleaned,
+                existing: existing,
+                games: slateGames,
+                week: week
+            )
+        }
+        if rolling, let week {
+            let openIds = Set(
+                slateGames
+                    .filter { !WeekTransition.isGameLocked($0, week: week) }
+                    .map(\.id)
+            )
+            guard openIds.isSubset(of: Set(cleaned.keys)) else {
+                throw PickError.incompletePicks
+            }
+        } else {
+            guard Set(cleaned.keys) == requiredGameIds else {
+                throw PickError.incompletePicks
+            }
         }
 
         let ref = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
             .collection("picks").document(userId)
+
+        let resolvedConfidence: String? = {
+            if rolling, let week,
+               let existingConfidence = userPick?.confidenceGameId,
+               let game = slateGames.first(where: { $0.id == existingConfidence }),
+               WeekTransition.isGameLocked(game, week: week) {
+                return existingConfidence
+            }
+            return confidenceGameId.flatMap { cleaned.keys.contains($0) ? $0 : nil }
+        }()
 
         let pick = UserPick(
             id: userId,
@@ -863,7 +1021,7 @@ final class PickService {
             picks: cleaned,
             submittedAt: Date(),
             isLocked: true,
-            confidenceGameId: confidenceGameId.flatMap { cleaned.keys.contains($0) ? $0 : nil }
+            confidenceGameId: resolvedConfidence
         )
         let generation = userPickWriteGeneration
         try await ref.setData(from: pick)
@@ -1185,6 +1343,18 @@ final class PickService {
                 throw error
             }
         }
+
+        let revealedSnap = try await weekRef.collection(FirestoreCollection.revealedPicks).getDocuments()
+        var revealed: [String: RevealedGamePicks] = [:]
+        for doc in revealedSnap.documents {
+            let data = doc.data()
+            revealed[doc.documentID] = RevealedGamePicks(
+                id: doc.documentID,
+                picks: data["picks"] as? [String: String] ?? [:],
+                confidenceUserIds: data["confidenceUserIds"] as? [String] ?? []
+            )
+        }
+        picks = Self.mergingRevealedPicks(base: picks, revealed: revealed)
 
         return (week, games, picks)
     }

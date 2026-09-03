@@ -10,6 +10,8 @@ struct GamePickRow: View {
     var showConfidenceToggle: Bool = false
     var isConfidence: Bool = false
     var onConfidenceToggle: (() -> Void)? = nil
+    /// Shown when the row is disabled because this game has locked.
+    var lockedCaption: String? = nil
     let onSelect: (String) -> Void
     @Environment(\.themePalette) private var theme
 
@@ -85,6 +87,12 @@ struct GamePickRow: View {
                 Text(game.kickoffMetaLine)
                     .font(.caption2)
                     .foregroundStyle(PickemsColors.textSecondary)
+
+                if let lockedCaption {
+                    Label(lockedCaption, systemImage: "lock.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
             }
         }
         .accessibilityElement(children: .contain)
@@ -160,7 +168,7 @@ struct GamePickRow: View {
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         .accessibilityHint(
             isDisabled
-                ? "Pickems are locked"
+                ? (lockedCaption ?? "Pickems are locked")
                 : (isSelected ? "Clear \(name) pick" : "Select \(name) against the spread")
         )
     }

@@ -416,8 +416,16 @@ final class GroupService {
             if week.status == .selection {
                 updates["status"] = WeekStatus.picking.rawValue
             }
-            if week.pickDeadline == nil, let deadline = kickoffs.min() {
-                updates["pickDeadline"] = Timestamp(date: deadline)
+            let lockGames = games.map { game -> (id: String, kickoff: Date) in
+                let slate = game.toSlateGame()
+                return (slate.id, slate.kickoff)
+            }
+            if week.pickDeadline == nil || week.pickLockMode == nil {
+                let rules = selectedGroup?.rules ?? .default
+                for (key, value) in WeekTransition.lockSnapshotFields(rules: rules, games: lockGames) {
+                    if key == "pickDeadline", week.pickDeadline != nil { continue }
+                    updates[key] = value
+                }
             }
             if week.lockedAt == nil {
                 updates["lockedAt"] = Timestamp(date: Date())
@@ -431,6 +439,12 @@ final class GroupService {
                 }
                 if currentWeek?.pickDeadline == nil {
                     currentWeek?.pickDeadline = kickoffs.min()
+                }
+                if currentWeek?.pickLockMode == nil {
+                    currentWeek?.pickLockMode = selectedGroup?.rules.pickDeadline == .rolling ? .rolling : .firstKickoff
+                    currentWeek?.weekLockAt = selectedGroup?.rules.pickDeadline == .rolling
+                        ? kickoffs.max()
+                        : kickoffs.min()
                 }
                 if currentWeek?.lockedAt == nil {
                     currentWeek?.lockedAt = Date()
@@ -468,15 +482,46 @@ final class GroupService {
         weekId: String,
         deadline: Date
     ) async throws {
-        try await db.week(groupId: groupId, weekId: weekId).updateData([
+        var updates: [String: Any] = [
             "pickDeadline": Timestamp(date: deadline),
-        ])
+        ]
+        if currentWeek?.id == weekId, currentWeek?.isRollingLock == true {
+            updates = rollingRemainingLockUpdates(deadline: deadline)
+        }
+        try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
+        applyDeadlineLocally(weekId: weekId, deadline: deadline, remainingLockAt: currentWeek?.isRollingLock == true ? deadline : nil)
+    }
+
+    /// Freeze every still-open rolling game immediately.
+    func lockRemainingGamesNow(groupId: String, weekId: String) async throws {
+        let now = Date()
+        try await db.week(groupId: groupId, weekId: weekId).updateData(
+            rollingRemainingLockUpdates(deadline: now)
+        )
+        applyDeadlineLocally(weekId: weekId, deadline: now, remainingLockAt: now)
+    }
+
+    private func rollingRemainingLockUpdates(deadline: Date) -> [String: Any] {
+        [
+            "remainingLockAt": Timestamp(date: deadline),
+        ]
+    }
+
+    private func applyDeadlineLocally(weekId: String, deadline: Date, remainingLockAt: Date?) {
         if var week = currentWeek, week.id == weekId {
-            week.pickDeadline = deadline
+            if week.isRollingLock {
+                week.remainingLockAt = remainingLockAt
+            } else {
+                week.pickDeadline = deadline
+            }
             currentWeek = week
         }
         if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
-            availableWeeks[idx].pickDeadline = deadline
+            if availableWeeks[idx].isRollingLock {
+                availableWeeks[idx].remainingLockAt = remainingLockAt
+            } else {
+                availableWeeks[idx].pickDeadline = deadline
+            }
         }
     }
 
@@ -525,21 +570,34 @@ final class GroupService {
         weekId: String,
         deadline: Date
     ) async throws {
-        try await db.week(groupId: groupId, weekId: weekId).updateData([
+        var updates: [String: Any] = [
             "status": WeekStatus.picking.rawValue,
-            "pickDeadline": Timestamp(date: deadline),
             "lockedAt": FieldValue.delete(),
-        ])
+        ]
+        if currentWeek?.id == weekId, currentWeek?.isRollingLock == true {
+            updates["remainingLockAt"] = Timestamp(date: deadline)
+        } else {
+            updates["pickDeadline"] = Timestamp(date: deadline)
+        }
+        try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
         if var week = currentWeek, week.id == weekId {
             week.status = .picking
-            week.pickDeadline = deadline
             week.lockedAt = nil
+            if week.isRollingLock {
+                week.remainingLockAt = deadline
+            } else {
+                week.pickDeadline = deadline
+            }
             currentWeek = week
         }
         if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
             availableWeeks[idx].status = .picking
-            availableWeeks[idx].pickDeadline = deadline
             availableWeeks[idx].lockedAt = nil
+            if availableWeeks[idx].isRollingLock {
+                availableWeeks[idx].remainingLockAt = deadline
+            } else {
+                availableWeeks[idx].pickDeadline = deadline
+            }
         }
     }
 
@@ -1174,8 +1232,13 @@ final class GroupService {
         }
     }
 
-    func lockSlateEarly(groupId: String, weekId: String, rules: GroupRules, kickoffs: [Date]) async throws {
-        let updates = WeekTransition.lockEarlyUpdates(rules: rules, kickoffs: kickoffs)
+    func lockSlateEarly(
+        groupId: String,
+        weekId: String,
+        rules: GroupRules,
+        games: [(id: String, kickoff: Date)]
+    ) async throws {
+        let updates = WeekTransition.lockEarlyUpdates(rules: rules, games: games)
         try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
     }
 

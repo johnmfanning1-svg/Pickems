@@ -74,4 +74,73 @@ struct PickDeadlineCalculatorTests {
         let label = PickDeadlineCalculator.countdownLabel(to: deadline)
         #expect(label.contains("m left"))
     }
-}
+
+    @Test func rollingPolicyUsesEarliestKickoffForFirstLock() {
+        let kickoffs = [
+            Date(timeIntervalSince1970: 1_000_000),
+            Date(timeIntervalSince1970: 900_000),
+            Date(timeIntervalSince1970: 1_100_000),
+        ]
+        let deadline = PickDeadlineCalculator.compute(
+            kickoffs: kickoffs,
+            policy: .rolling,
+            customHour: 20,
+            customMinute: 0
+        )
+        #expect(deadline == kickoffs.min())
+    }
+
+    @Test func nextLockDateSkipsAlreadyLockedRollingGames() {
+        let first = Date().addingTimeInterval(-60)
+        let last = Date().addingTimeInterval(3600)
+        let week = WeekSummary(
+            id: "2026-W1",
+            seasonYear: 2026,
+            weekNumber: 1,
+            status: .picking,
+            slateSize: 2,
+            selectionMode: .member,
+            selectionsPerMember: 1,
+            lockedAt: nil,
+            pickDeadline: first,
+            pickLockMode: .rolling,
+            weekLockAt: last,
+            nominationCount: 2
+        )
+        let games = [
+            SlateGame(
+                id: "thu",
+                espnEventId: "thu",
+                homeTeamId: "h1",
+                homeTeamName: "Home",
+                homeTeamAbbreviation: "H1",
+                homeTeamLogoURL: nil,
+                awayTeamId: "a1",
+                awayTeamName: "Away",
+                awayTeamAbbreviation: "A1",
+                awayTeamLogoURL: nil,
+                spread: 3,
+                spreadTeamId: "h1",
+                kickoff: first,
+                status: .inProgress
+            ),
+            SlateGame(
+                id: "sun",
+                espnEventId: "sun",
+                homeTeamId: "h2",
+                homeTeamName: "Home2",
+                homeTeamAbbreviation: "H2",
+                homeTeamLogoURL: nil,
+                awayTeamId: "a2",
+                awayTeamName: "Away2",
+                awayTeamAbbreviation: "A2",
+                awayTeamLogoURL: nil,
+                spread: 7,
+                spreadTeamId: "h2",
+                kickoff: last,
+                status: .scheduled
+            ),
+        ]
+        #expect(PickDeadlineCalculator.nextLockDate(week: week, games: games) == last)
+        #expect(PickDeadlineCalculator.openGameCount(week: week, games: games) == 1)
+    }

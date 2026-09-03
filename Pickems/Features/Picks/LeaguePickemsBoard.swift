@@ -10,6 +10,8 @@ struct LeaguePickemsBoard: View {
     var currentUserId: String?
     var allowsExpand: Bool = true
     var isExpandedLayout: Bool = false
+    /// Rolling lock: games that have not kicked off yet. Cells show a lock, not a pick.
+    var hiddenGameIds: Set<String> = []
 
     @Environment(\.themePalette) private var theme
     @State private var isExpanded = false
@@ -41,7 +43,8 @@ struct LeaguePickemsBoard: View {
                 picksByUserId: picksByUserId,
                 liveCards: liveCards,
                 teamRanks: teamRanks,
-                currentUserId: currentUserId
+                currentUserId: currentUserId,
+                hiddenGameIds: hiddenGameIds
             )
         }
     }
@@ -257,25 +260,35 @@ struct LeaguePickemsBoard: View {
         }
     }
 
+    @ViewBuilder
     private func pickCell(game: SlateGame, member: GroupMember) -> some View {
-        let pickedId = picksByUserId[member.id]?.picks[game.id]
-        let live = liveCards[game.espnEventId]
-        let status = ScoringEngine.pickBoardStatus(
-            pickedTeamId: pickedId,
-            game: game,
-            homeScore: live?.homeScore ?? game.homeScore,
-            awayScore: live?.awayScore ?? game.awayScore,
-            status: live?.status ?? game.status
-        )
-        let label = pickAbbreviation(game: game, pickedTeamId: pickedId)
-        return Text(label)
-            .font(.caption.weight(.bold))
-            .foregroundStyle(status.foreground)
-            .frame(width: pickColumnWidth, height: rowHeight)
-            .background(status.fill)
-            .accessibilityLabel(
-                "\(member.displayName) picked \(label == "—" ? "nothing" : label), \(status.label)"
+        if hiddenGameIds.contains(game.id) {
+            Image(systemName: "lock.fill")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(PickemsColors.textSecondary)
+                .frame(width: pickColumnWidth, height: rowHeight)
+                .background(PickemsColors.cardBackground)
+                .accessibilityLabel("\(member.displayName) pick hidden until kickoff")
+        } else {
+            let pickedId = picksByUserId[member.id]?.picks[game.id]
+            let live = liveCards[game.espnEventId]
+            let status = ScoringEngine.pickBoardStatus(
+                pickedTeamId: pickedId,
+                game: game,
+                homeScore: live?.homeScore ?? game.homeScore,
+                awayScore: live?.awayScore ?? game.awayScore,
+                status: live?.status ?? game.status
             )
+            let label = pickAbbreviation(game: game, pickedTeamId: pickedId)
+            Text(label)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(status.foreground)
+                .frame(width: pickColumnWidth, height: rowHeight)
+                .background(status.fill)
+                .accessibilityLabel(
+                    "\(member.displayName) picked \(label == "—" ? "nothing" : label), \(status.label)"
+                )
+        }
     }
 
     private func pickAbbreviation(game: SlateGame, pickedTeamId: String?) -> String {
@@ -301,6 +314,7 @@ struct LeaguePickemsExpandedBoard: View {
     var liveCards: [String: ESPNLiveGameCard] = [:]
     var teamRanks: TeamRankLookup = .empty
     var currentUserId: String?
+    var hiddenGameIds: Set<String> = []
 
     @Environment(\.dismiss) private var dismiss
 
@@ -315,7 +329,8 @@ struct LeaguePickemsExpandedBoard: View {
                     teamRanks: teamRanks,
                     currentUserId: currentUserId,
                     allowsExpand: false,
-                    isExpandedLayout: true
+                    isExpandedLayout: true,
+                    hiddenGameIds: hiddenGameIds
                 )
                 .padding()
             }

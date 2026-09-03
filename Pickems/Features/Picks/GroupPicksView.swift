@@ -67,11 +67,21 @@ struct GroupPicksView: View {
 
     /// Prefer `allPicks`, but always surface the signed-in member's `userPick` pre-deadline.
     private var picksByUserId: [String: UserPick] {
-        var map = Dictionary(uniqueKeysWithValues: appState.pickService.allPicks.map { ($0.userId, $0) })
-        if let own = appState.pickService.userPick {
-            map[own.userId] = own
+        appState.pickService.boardPicksByUserId(
+            members: members,
+            ownUserId: currentUserId
+        )
+    }
+
+    private var hiddenGameIds: Set<String> {
+        guard let week, week.isRollingLock, !WeekTransition.pickemsAreFullyPublic(week) else {
+            return []
         }
-        return map
+        return Set(
+            slateGames
+                .filter { !WeekTransition.isGameLocked($0, week: week) }
+                .map(\.id)
+        )
     }
 
     private var doneUserIds: Set<String> {
@@ -153,7 +163,8 @@ struct GroupPicksView: View {
                     picksByUserId: picksByUserId,
                     liveCards: appState.picksViewModel.livePickCards,
                     teamRanks: appState.picksViewModel.teamRanks,
-                    currentUserId: currentUserId
+                    currentUserId: currentUserId,
+                    hiddenGameIds: hiddenGameIds
                 )
             } else {
                 ForEach(sortedMembers) { member in
@@ -219,7 +230,9 @@ struct GroupPicksView: View {
             return "No slate games yet."
         }
         if showsPickemsBoard {
-            return "Games as rows, members as columns. Colors update as games go."
+            return hiddenGameIds.isEmpty
+                ? "Games as rows, members as columns. Colors update as games go."
+                : "Locked games show everyone's picks. Later games stay hidden until kickoff."
         }
         return "Make a Pickem against the spread for every game on the slate."
     }
@@ -323,7 +336,9 @@ struct GroupPicksView: View {
             nominationBody(for: member)
         } else if !picksVisibleToAll, !canRevealPickDetails(for: member.id) {
             if done {
-                Text("Pickems hidden until the deadline")
+                Text(week?.isRollingLock == true
+                    ? "Pickems hidden until each game kicks off"
+                    : "Pickems hidden until the deadline")
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)

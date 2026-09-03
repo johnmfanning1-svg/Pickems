@@ -95,6 +95,14 @@ struct CommissionerWeekAdminSections: View {
         }
     }
 
+    private func rollingPickDeadlineButtonTitle(_ week: WeekSummary) -> String {
+        let fullyLocked = WeekTransition.arePicksFullyLocked(week)
+        if week.isRollingLock {
+            return fullyLocked ? "Lock remaining / Reopen" : "Lock remaining games"
+        }
+        return fullyLocked ? "Extend / Unlock Deadline" : "Set Pickems Deadline"
+    }
+
     @ViewBuilder
     private var selectionsAdminSection: some View {
         if let week, WeekTransition.commissionerCanManageSelections(week),
@@ -192,9 +200,7 @@ struct CommissionerWeekAdminSections: View {
     private var pickemsAdminSection: some View {
         if let week, WeekTransition.arePickemsOpen(week) {
             Section {
-                Button(week.status == .locked ? "Reopen Pickems" : (
-                    PickDeadlineCalculator.isPast(week.pickDeadline) ? "Extend / Unlock Deadline" : "Set Pickems Deadline"
-                )) {
+                    Button(week.status == .locked ? "Reopen Pickems" : rollingPickDeadlineButtonTitle(week)) {
                     showPickDeadlineSheet = true
                 }
                 .listRowBackground(PickemsColors.cardBackground)
@@ -234,7 +240,9 @@ struct CommissionerWeekAdminSections: View {
             } header: {
                 Text("Pickems Admin")
             } footer: {
-                Text("Tap a member to force or clear their Pickems. Counts are Pickems made versus the slate. This never removes Selections.")
+                Text(week?.isRollingLock == true
+                    ? "Tap a member to force or clear their Pickems. Lock remaining freezes games that have not kicked off yet."
+                    : "Tap a member to force or clear their Pickems. Counts are Pickems made versus the slate. This never removes Selections.")
             }
         }
     }

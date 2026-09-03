@@ -31,9 +31,14 @@ struct LeaguePickemsEntryView: View {
             VStack(spacing: 16) {
                 if let week {
                     if let deadline = week.pickDeadline {
-                        PickDeadlineBanner(deadline: deadline)
+                        PickDeadlineBanner(
+                            deadline: deadline,
+                            isRolling: week.isRollingLock
+                        )
                         pendingCaption(
-                            "Everyone's Pickems show here after lock. Picks stay hidden until then."
+                            week.isRollingLock
+                                ? "Each game's picks show here at that game's kickoff. Later games stay hidden."
+                                : "Everyone's Pickems show here after lock. Picks stay hidden until then."
                         )
                     } else if let selectionDeadline = week.selectionDeadline {
                         SelectionDeadlineBanner(deadline: selectionDeadline)

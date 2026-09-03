@@ -10,6 +10,7 @@ import {
   splitPickMap,
   submissionCoversSlate,
 } from "./cfbWeekCalendar";
+import { lockSnapshotFromGames } from "./pickLock";
 
 export interface Week0SplitGroupResult {
   groupId: string;
@@ -173,10 +174,8 @@ export async function migrateGroupWeek0Split(options: {
   }
 
   const w1Data = w1Snap.data() ?? {};
-  const kickoffs = weekZeroEvents
-    .map((event) => eventKickoff(event))
-    .filter((d): d is Date => d != null);
-  const pickDeadline = earliestKickoff(kickoffs);
+  const groupRules = groupSnap.data()?.rules as { pickDeadline?: unknown } | undefined;
+  const pickLockMode = groupRules?.pickDeadline;
 
   const remainingW1Games = w1Games.docs.filter((doc) => {
     const kickoff = asDate(doc.data().kickoff);
@@ -223,9 +222,13 @@ export async function migrateGroupWeek0Split(options: {
       nominationCount: nomsToMove.length,
       slateSource: WEEK_ZERO_SLATE_SOURCE,
       lockedAt: w1Data.lockedAt ?? admin.firestore.FieldValue.serverTimestamp(),
-      pickDeadline: pickDeadline
-        ? admin.firestore.Timestamp.fromDate(pickDeadline)
-        : null,
+      ...lockSnapshotFromGames(
+        weekZeroEvents.map((event) => ({
+          id: event.id,
+          kickoff: eventKickoff(event),
+        })),
+        pickLockMode
+      ),
     };
     batch.set(w0Ref, w0Payload, { merge: true });
 
@@ -296,8 +299,17 @@ export async function migrateGroupWeek0Split(options: {
       w1Updates.status = "selection";
       w1Updates.pickDeadline = admin.firestore.FieldValue.delete();
       w1Updates.lockedAt = admin.firestore.FieldValue.delete();
-    } else if (remainingDeadline && (w1Data.status === "picking" || w1Data.status === "locked")) {
-      w1Updates.pickDeadline = admin.firestore.Timestamp.fromDate(remainingDeadline);
+    } else if (remainingW1Games.length > 0 && (w1Data.status === "picking" || w1Data.status === "locked")) {
+      Object.assign(
+        w1Updates,
+        lockSnapshotFromGames(
+          remainingW1Games.map((doc) => ({
+            id: doc.id,
+            kickoff: doc.data().kickoff,
+          })),
+          (w1Data.pickLockMode as string | undefined) ?? pickLockMode
+        )
+      );
     }
     if (w1Snap.exists) {
       batch.update(w1Ref, w1Updates);

@@ -81,6 +81,7 @@ enum PickemsHelp {
         message: "Once Pickems lock, everyone can see the chart: games as rows, members as columns. Colors update as games go.",
         tips: [
             "Before lock, this screen shows a countdown — picks stay hidden.",
+            "On a rolling-lock league, each game's row unlocks on the chart at that game's kickoff.",
             "An asterisk next to a team means that team is favored — the spread applies to them.",
             "A lock is the Pickems line. The number in parentheses is ESPN’s live line, for reference.",
             "Tap the expand arrows to view the chart fullscreen in landscape.",
@@ -103,7 +104,7 @@ enum PickemsHelp {
         title: "Who's in",
         message: "A count of how many Pickems each member has made this week, and whether they have submitted.",
         tips: [
-            "Other members' actual picks stay hidden until the first kickoff or an early lock.",
+            "Other members' actual picks stay hidden until lock — first kickoff, or each game's kickoff on a rolling league.",
             "Submitted means they locked in a full slate.",
             "In progress means they have started but have not submitted yet."
         ]
@@ -138,7 +139,7 @@ enum PickemsHelp {
         tips: [
             "You’ll get a push at the start of each week to set this.",
             "After it passes, you can fill remaining games or open the week with fewer.",
-            "Pickems still lock at the earliest slate kickoff."
+            "Pickems still lock at the earliest slate kickoff, unless the commissioner turned on rolling lock."
         ]
     )
 
@@ -151,17 +152,19 @@ enum PickemsHelp {
             "A lock marks the Pickems line. The number in parentheses is ESPN’s live line, for reference — scoring uses the locked line.",
             "Tap a selected team to clear that Pickem. The Selection (the game) stays on the slate.",
             "A push (exact spread) is neither a win nor a loss.",
-            "You must make a Pickem on every slate game before submitting."
+            "You must make a Pickem on every open slate game before submitting.",
         ]
     )
 
     static let pickDeadline = HelpTopic(
         id: "picks.deadline",
-        title: "Pickems Deadline",
-        message: "Pickems lock at the start time of the earliest game on this week’s slate — unless the commissioner sets a custom deadline.",
+        title: "Pickems Lock",
+        message: "By default, Pickems lock at the start time of the earliest game on this week’s slate. Commissioners can switch the league to rolling lock so each game locks at its own kickoff.",
         tips: [
-            "Commissioners can extend or reopen the deadline from the Pickems tab.",
-            "After the deadline, Pickems cannot be changed unless the commissioner unlocks them."
+            "Entire slate at first kickoff freezes every pick when the first game starts.",
+            "Rolling lock lets members keep picking later games after Thursday night starts. Those later picks stay hidden until that game kicks off.",
+            "Commissioners set the lock mode in Commissioner Settings. It applies when the next week opens.",
+            "Commissioners can lock remaining open games early, or reopen games that have not kicked off yet."
         ]
     )
 
@@ -209,6 +212,7 @@ enum PickemsHelp {
             "Members Select: set how many games each person submits.",
             "Commissioner Selects: set total games per week and build the slate yourself.",
             "Changes apply to future weeks. Set a Selection deadline each week in member mode.",
+            "Pickems Lock chooses entire-slate lock at first kickoff, or rolling lock at each game.",
             "On a private league, Only commissioner can invite hides Invite Friends for members."
         ]
     )

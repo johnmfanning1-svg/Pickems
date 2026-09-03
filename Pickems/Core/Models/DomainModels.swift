@@ -201,8 +201,18 @@ struct WeekSummary: Codable, Identifiable, Equatable {
     var selectionMode: SelectionMode
     var selectionsPerMember: Int
     var lockedAt: Date?
-    /// Spread-pick lock — earliest slate kickoff once picking opens.
+    /// Spread-pick lock — earliest slate kickoff once picking opens (first lock / reminders).
     var pickDeadline: Date?
+    /// Snapshot of league lock policy when this week entered picking. Nil on older weeks = first kickoff.
+    var pickLockMode: DeadlinePolicy? = nil
+    /// When the week becomes fully locked (last kickoff in rolling mode).
+    var weekLockAt: Date? = nil
+    /// Commissioner freeze of remaining open games. Already-kicked-off games stay locked.
+    var remainingLockAt: Date? = nil
+    /// Slate game ids (max 20) denormalized for security rules.
+    var gameIds: [String]? = nil
+    /// Per-game kickoff timestamps denormalized for security rules.
+    var gameKickoffs: [String: Date]? = nil
     var nominationCount: Int
     /// Commissioner-set deadline for member nominations (member mode).
     var selectionDeadline: Date? = nil
@@ -228,6 +238,26 @@ struct WeekSummary: Codable, Identifiable, Equatable {
     var isSelectionDeadlinePassed: Bool {
         guard let selectionDeadline else { return false }
         return Date() >= selectionDeadline
+    }
+
+    var resolvedPickLockMode: DeadlinePolicy {
+        pickLockMode == .rolling ? .rolling : .firstKickoff
+    }
+
+    var isRollingLock: Bool { resolvedPickLockMode == .rolling }
+
+    /// Instant the last remaining pick locks. `remainingLockAt` can pull this forward.
+    var effectiveWeekLockAt: Date? {
+        switch (weekLockAt, remainingLockAt) {
+        case let (week?, remaining?):
+            return min(week, remaining)
+        case let (week?, nil):
+            return week
+        case let (nil, remaining?):
+            return remaining
+        case (nil, nil):
+            return pickDeadline
+        }
     }
 }
 
@@ -412,6 +442,13 @@ struct UserPick: Codable, Identifiable, Equatable {
     var isLocked: Bool
     /// Optional double-weight game when confidence picks are enabled.
     var confidenceGameId: String? = nil
+}
+
+/// Public projection of one locked game's picks. Written by Cloud Functions.
+struct RevealedGamePicks: Codable, Identifiable, Equatable {
+    var id: String
+    var picks: [String: String]
+    var confidenceUserIds: [String] = []
 }
 
 /// Public submission metadata — readable by all group members before the pick deadline.

@@ -1,16 +1,20 @@
 import SwiftUI
 
 /// Prominently shows when Pickems lock. Pass the absolute `deadline` (typically
-/// `week.pickDeadline`); past/open is derived via `PickDeadlineCalculator.isPast`.
-///
-/// - Open: title “Pickems lock at Sat 12:00 PM”, subtitle countdown
-/// - Past: title “Pickems locked”, subtitle absolute lock time
+/// `week.pickDeadline` or the next rolling kickoff); past/open is derived via
+/// `PickDeadlineCalculator.isPast`.
 struct PickDeadlineBanner: View {
     let deadline: Date
+    var isRolling: Bool = false
+    var openCount: Int = 0
+    var totalCount: Int = 0
     @Environment(\.themePalette) private var theme
 
-    init(deadline: Date) {
+    init(deadline: Date, isRolling: Bool = false, openCount: Int = 0, totalCount: Int = 0) {
         self.deadline = deadline
+        self.isRolling = isRolling
+        self.openCount = openCount
+        self.totalCount = totalCount
     }
 
     /// Compatibility for call sites still passing `isPast`. Value is ignored —
@@ -28,6 +32,17 @@ struct PickDeadlineBanner: View {
         PickDeadlineCalculator.lockTimeLabel(for: deadline)
     }
 
+    private var title: String {
+        if isPast { return "Pickems locked" }
+        if isRolling { return "Next lock at \(lockTime)" }
+        return "Pickems lock at \(lockTime)"
+    }
+
+    private var subtitle: String {
+        if isPast { return lockTime }
+        return PickDeadlineCalculator.countdownLabel(to: deadline)
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: isPast ? "lock.fill" : "clock.fill")
@@ -36,14 +51,17 @@ struct PickDeadlineBanner: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(isPast ? "Pickems locked" : "Pickems lock at \(lockTime)")
+                Text(title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(PickemsColors.textPrimary)
-                Text(isPast
-                    ? lockTime
-                    : PickDeadlineCalculator.countdownLabel(to: deadline))
+                Text(subtitle)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(PickemsColors.textSecondary)
+                if isRolling, !isPast, totalCount > 0 {
+                    Text("\(openCount) of \(totalCount) games still open")
+                        .font(.caption)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
             }
 
             Spacer(minLength: 0)

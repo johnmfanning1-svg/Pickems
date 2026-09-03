@@ -14,7 +14,7 @@ export const WEEK_STATUSES: WeekStatus[] = ["selection", "picking", "locked", "s
 
 export type GameStatus = "scheduled" | "inProgress" | "final";
 export type SelectionMode = "commissioner" | "member";
-export type DeadlinePolicy = "firstKickoff" | "custom";
+export type DeadlinePolicy = "firstKickoff" | "rolling" | "custom";
 export type TieBreakerPolicy = "commissionerOverride" | "headToHead";
 export type MemberRole = "commissioner" | "member";
 
@@ -81,6 +81,11 @@ export interface WeekDoc {
   selectionsPerMember?: number;
   lockedAt?: Timestamp | null;
   pickDeadline?: Timestamp | null;
+  pickLockMode?: DeadlinePolicy | null;
+  weekLockAt?: Timestamp | null;
+  remainingLockAt?: Timestamp | null;
+  gameIds?: string[] | null;
+  gameKickoffs?: Record<string, Timestamp> | null;
   nominationCount?: number;
   selectionDeadline?: Timestamp | null;
   selectionDeadlineSetAt?: Timestamp | null;

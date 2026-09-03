@@ -105,9 +105,32 @@ struct CommissionerSettingsView: View {
                 }
 
                 Section {
-                    LabeledContent("Pickems deadline", value: "First game kickoff")
-                        .listRowBackground(PickemsColors.cardBackground)
+                    Picker("Lock mode", selection: lockModeBinding) {
+                        ForEach(DeadlinePolicy.lockModeCases) { mode in
+                            Text(mode.lockModeDisplayName).tag(mode)
+                        }
+                    }
+                    .listRowBackground(PickemsColors.cardBackground)
 
+                    if rules.pickDeadline != .rolling {
+                        Toggle("Allow late Pickems", isOn: $rules.allowLatePicks)
+                            .listRowBackground(PickemsColors.cardBackground)
+                        if rules.allowLatePicks {
+                            Stepper(
+                                "Late penalty: \(rules.latePickPenaltyWins) win(s)",
+                                value: $rules.latePickPenaltyWins,
+                                in: 1...3
+                            )
+                            .listRowBackground(PickemsColors.cardBackground)
+                        }
+                    }
+                } header: {
+                    sectionHeader("Pickems Lock", help: PickemsHelp.pickDeadline)
+                } footer: {
+                    Text(pickemsLockFooter)
+                }
+
+                Section {
                     Picker("Tie breaker", selection: $rules.tieBreaker) {
                         ForEach(TieBreakerPolicy.allCases) { policy in
                             Text(policy.displayName).tag(policy)
@@ -117,20 +140,10 @@ struct CommissionerSettingsView: View {
 
                     Toggle("Confidence pick (2x one game)", isOn: $rules.allowConfidencePick)
                         .listRowBackground(PickemsColors.cardBackground)
-                    Toggle("Allow late Pickems", isOn: $rules.allowLatePicks)
-                        .listRowBackground(PickemsColors.cardBackground)
-                    if rules.allowLatePicks {
-                        Stepper(
-                            "Late penalty: \(rules.latePickPenaltyWins) win(s)",
-                            value: $rules.latePickPenaltyWins,
-                            in: 1...3
-                        )
-                        .listRowBackground(PickemsColors.cardBackground)
-                    }
                 } header: {
-                    sectionHeader("Deadlines & Ties", help: PickemsHelp.pickDeadline)
+                    sectionHeader("Ties", help: PickemsHelp.spreadPicks)
                 } footer: {
-                    Text("Pickems lock at the earliest kickoff on the slate. Changes apply to future weeks.")
+                    Text("Tie-breakers and confidence apply every week.")
                 }
 
                 Section {
@@ -255,8 +268,14 @@ struct CommissionerSettingsView: View {
                     PickDeadlineEditorSheet(
                         weekLabel: week.displayLabel,
                         weekStatus: week.status,
-                        initialDeadline: week.pickDeadline,
-                        isPastDeadline: PickDeadlineCalculator.isPast(week.pickDeadline)
+                        initialDeadline: week.isRollingLock
+                            ? (week.remainingLockAt ?? week.effectiveWeekLockAt ?? week.pickDeadline)
+                            : week.pickDeadline,
+                        isPastDeadline: WeekTransition.arePicksFullyLocked(week),
+                        isRollingLock: week.isRollingLock,
+                        onLockRemainingNow: {
+                            appState.picksViewModel.lockRemainingGamesNow(appState: appState)
+                        }
                     ) { deadline, reopen, unlock in
                         appState.picksViewModel.setPickDeadline(
                             deadline,
@@ -489,9 +508,33 @@ struct CommissionerSettingsView: View {
         }
     }
 
+    private var pickemsLockFooter: String {
+        if rules.pickDeadline == .rolling {
+            return "Each game locks at its own kickoff. Later games stay open, and those picks stay hidden until that kickoff. Applies when the next week opens."
+        }
+        return "The whole slate locks at the earliest kickoff. Applies when the next week opens."
+    }
+
+    private var lockModeBinding: Binding<DeadlinePolicy> {
+        Binding(
+            get: { rules.pickDeadline == .rolling ? .rolling : .firstKickoff },
+            set: { mode in
+                rules.pickDeadline = mode
+                if mode == .rolling {
+                    rules.allowLatePicks = false
+                }
+            }
+        )
+    }
+
     private func save() {
         isSaving = true
-        rules.pickDeadline = .firstKickoff
+        if rules.pickDeadline == .custom {
+            rules.pickDeadline = .firstKickoff
+        }
+        if rules.pickDeadline == .rolling {
+            rules.allowLatePicks = false
+        }
         Task {
             do {
                 let trimmedName = groupName.trimmingCharacters(in: .whitespacesAndNewlines)
