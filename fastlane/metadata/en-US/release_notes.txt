@@ -1,7 +1,8 @@
-What's new in 3.3.9
+What's new in 3.3.10
 
-• Leaderboard games back is now compact: -X GB
-• Head-to-head uses +X GA when you're ahead and -X GB when you're behind
-• Your own leaderboard row lines up with everyone else's stats
+• Share Results now leads with your W–L, not a clipped headline
+• Texts send the results card as a photo — no admin-site link preview
+• Auto tone stays chill on a losing week; Fire is still there if you want it
+• One share path from Home, themed to Pickems
 
 Thanks for playing with us.

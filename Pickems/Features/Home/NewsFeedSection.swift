@@ -79,12 +79,6 @@ struct WeekRecapCard: View {
                 .font(.subheadline)
                 .foregroundStyle(PickemsColors.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
-
-            ShareLink(item: recapText) {
-                Label("Share Recap", systemImage: "square.and.arrow.up")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(theme.accent)
-            }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -5,9 +5,11 @@ extension AppState {
         guard
             let user = authService.currentUser,
             let group = groupService.selectedGroup,
-            let week = groupService.currentWeek,
-            let entry = rankedStandings(weekly: true).first(where: { $0.id == user.id })
+            let week = groupService.currentWeek
         else { return nil }
+
+        let ranked = rankedStandings(weekly: true)
+        guard let entry = ranked.first(where: { $0.id == user.id }) else { return nil }
 
         let season = groupService.cfbWeek?.seasonYear ?? Calendar.current.component(.year, from: Date())
         let totalPicks = entry.weeklyWins + entry.weeklyLosses
@@ -21,7 +23,7 @@ extension AppState {
             correctPicks: entry.weeklyWins,
             totalPicks: totalPicks,
             rank: entry.rank,
-            totalPlayers: group.memberCount,
+            totalPlayers: max(ranked.count, 1),
             isWeeklyWinner: entry.rank == 1 && !entry.isTied
         )
     }
@@ -29,9 +31,11 @@ extension AppState {
     func seasonShareSource() -> ShareSource? {
         guard
             let user = authService.currentUser,
-            let group = groupService.selectedGroup,
-            let entry = rankedStandings(weekly: false).first(where: { $0.id == user.id })
+            let group = groupService.selectedGroup
         else { return nil }
+
+        let ranked = rankedStandings(weekly: false)
+        guard let entry = ranked.first(where: { $0.id == user.id }) else { return nil }
 
         let season = groupService.cfbWeek?.seasonYear ?? Calendar.current.component(.year, from: Date())
 
@@ -43,7 +47,7 @@ extension AppState {
             totalPoints: entry.seasonWins,
             weeklyWins: 0,
             rank: entry.rank,
-            totalPlayers: group.memberCount
+            totalPlayers: max(ranked.count, 1)
         )
     }
 }

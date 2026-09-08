@@ -17,6 +17,8 @@ struct ShareableResult: Identifiable, Equatable {
     let headline: String
     let statsLine: String
     let bragLine: String
+    let heroText: String
+    let detailLine: String
     let promoURL: String
 
     init(weekly: WeeklyResult, tone: ShareTone = .auto) {
@@ -31,6 +33,8 @@ struct ShareableResult: Identifiable, Equatable {
         headline = ShareTextBuilder.weeklyHeadline(for: weekly)
         statsLine = ShareTextBuilder.weeklyStatsLine(for: weekly)
         bragLine = ShareTextBuilder.weeklyBragLine(for: weekly, tone: tone)
+        heroText = weekly.recordText
+        detailLine = "\(weekly.placementText) in \(weekly.leagueName)"
         promoURL = AppConfig.appPromoURL
     }
 
@@ -46,7 +50,16 @@ struct ShareableResult: Identifiable, Equatable {
         headline = ShareTextBuilder.seasonHeadline(for: standing)
         statsLine = ShareTextBuilder.seasonStatsLine(for: standing)
         bragLine = ShareTextBuilder.seasonBragLine(for: standing, tone: tone)
+        heroText = "#\(standing.rank)"
+        detailLine = "\(standing.placementText) · \(standing.totalPoints) wins"
         promoURL = AppConfig.appPromoURL
+    }
+
+    var rankText: String {
+        if type == .seasonEnd {
+            return "#\(rank)"
+        }
+        return ordinal(rank)
     }
 
     var tweetText: String {
@@ -60,6 +73,30 @@ struct ShareableResult: Identifiable, Equatable {
     var shareSheetText: String {
         messageText
     }
+
+    var shareImageFileName: String {
+        if let week {
+            return "pickems-week-\(week).jpg"
+        }
+        return "pickems-\(season)-season.jpg"
+    }
+
+    private func ordinal(_ value: Int) -> String {
+        let suffix: String
+        let ones = value % 10
+        let tens = (value / 10) % 10
+        if tens == 1 {
+            suffix = "th"
+        } else {
+            switch ones {
+            case 1: suffix = "st"
+            case 2: suffix = "nd"
+            case 3: suffix = "rd"
+            default: suffix = "th"
+            }
+        }
+        return "\(value)\(suffix)"
+    }
 }
 
 enum ShareTone: String, CaseIterable, Identifiable {
@@ -72,8 +109,8 @@ enum ShareTone: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .auto: return "Auto"
-        case .humbleBrag: return "Humble Brag"
-        case .fullDunk: return "Full Dunk"
+        case .humbleBrag: return "Chill"
+        case .fullDunk: return "Fire"
         }
     }
 }

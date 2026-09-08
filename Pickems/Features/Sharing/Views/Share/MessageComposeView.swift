@@ -1,10 +1,12 @@
 import MessageUI
 import SwiftUI
+import UniformTypeIdentifiers
 import UIKit
 
 struct MessageComposeView: UIViewControllerRepresentable {
     let body: String
     var image: UIImage?
+    var fileName: String = "pickems-results.jpg"
     var onFinish: (() -> Void)?
 
     final class Coordinator: NSObject, MFMessageComposeViewControllerDelegate {
@@ -32,12 +34,22 @@ struct MessageComposeView: UIViewControllerRepresentable {
         controller.messageComposeDelegate = context.coordinator
         controller.body = body
 
-        if let image, let data = image.pngData() {
-            controller.addAttachmentData(data, typeIdentifier: "public.png", filename: "pickems-results.png")
+        if MFMessageComposeViewController.canSendAttachments(),
+           let image,
+           let data = image.jpegData(compressionQuality: 0.88) {
+            controller.addAttachmentData(
+                data,
+                typeIdentifier: UTType.jpeg.identifier,
+                filename: fileName
+            )
         }
 
         return controller
     }
 
-    func updateUIViewController(_ uiViewController: MFMessageComposeViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: MFMessageComposeViewController, context: Context) {
+        if uiViewController.body?.isEmpty != false {
+            uiViewController.body = body
+        }
+    }
 }

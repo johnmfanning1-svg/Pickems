@@ -5,84 +5,71 @@ enum ShareTextBuilder {
         var lines = [result.headline, result.statsLine, result.bragLine]
         lines.append(result.promoURL)
         lines.append("\(AppConfig.cfbHashtag) \(AppConfig.appHashtag)")
-
-        return lines
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .joined(separator: "\n")
+        return joinedLines(lines)
     }
 
     static func composeMessage(for result: ShareableResult) -> String {
-        var lines = [result.headline, result.statsLine, result.bragLine]
-        lines.append(result.promoURL)
-
-        return lines
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .joined(separator: "\n")
+        joinedLines([result.headline, result.statsLine, result.bragLine])
     }
 
     static func weeklyHeadline(for result: WeeklyResult) -> String {
-        "Week \(result.week) Pickems 🏈"
+        "Week \(result.week): \(result.recordText)"
     }
 
     static func weeklyStatsLine(for result: WeeklyResult) -> String {
-        var line = "\(result.placementText) in \(result.leagueName) • \(result.recordText) correct"
+        var line = "\(result.placementText) in \(result.leagueName)"
         if let delta = result.tiebreakerDelta {
             let sign = delta >= 0 ? "+" : ""
-            line += " • TB \(sign)\(delta)"
+            line += " · TB \(sign)\(delta)"
         }
         return line
     }
 
     static func weeklyBragLine(for result: WeeklyResult, tone: ShareTone) -> String {
         let resolvedTone = tone == .auto ? autoWeeklyTone(for: result) : tone
-
         switch resolvedTone {
-        case .humbleBrag:
+        case .humbleBrag, .auto:
             return humbleWeeklyLine(for: result)
         case .fullDunk:
             return dunkWeeklyLine(for: result)
-        case .auto:
-            return humbleWeeklyLine(for: result)
         }
     }
 
     static func seasonHeadline(for standing: SeasonStanding) -> String {
-        "\(standing.season.pickemsYearString) \(standing.leagueName) — Final Standings"
+        "\(standing.season) season: #\(standing.rank)"
     }
 
     static func seasonStatsLine(for standing: SeasonStanding) -> String {
-        var line = "\(standing.rankEmoji) \(standing.placementText) • \(standing.totalPoints) pts"
+        var line = "\(standing.placementText) in \(standing.leagueName) · \(standing.totalPoints) wins"
         if standing.weeklyWins > 0 {
-            line += " • \(standing.weeklyWins) weekly \(standing.weeklyWins == 1 ? "win" : "wins")"
+            line += " · \(standing.weeklyWins) weekly \(standing.weeklyWins == 1 ? "win" : "wins")"
         }
         if let bestWeek = standing.bestWeek, let record = standing.bestWeekRecord {
-            line += " • Best: Wk \(bestWeek) (\(record))"
+            line += " · Best: Wk \(bestWeek) (\(record.replacingOccurrences(of: "/", with: "–")))"
         }
         return line
     }
 
     static func seasonBragLine(for standing: SeasonStanding, tone: ShareTone) -> String {
         let resolvedTone = tone == .auto ? autoSeasonTone(for: standing) : tone
-
         switch resolvedTone {
-        case .humbleBrag:
+        case .humbleBrag, .auto:
             return humbleSeasonLine(for: standing)
         case .fullDunk:
             return dunkSeasonLine(for: standing)
-        case .auto:
-            return humbleSeasonLine(for: standing)
         }
     }
 
+    private static func joinedLines(_ lines: [String]) -> String {
+        lines
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
+
     private static func autoWeeklyTone(for result: WeeklyResult) -> ShareTone {
-        if result.isWeeklyWinner || result.rank <= 2 {
-            return .fullDunk
-        }
-        if result.rank <= result.totalPlayers / 2 {
-            return .humbleBrag
-        }
+        if result.isWeeklyWinner { return .fullDunk }
+        if result.correctPicks > result.losses, result.rank <= 2 { return .fullDunk }
         return .humbleBrag
     }
 
@@ -92,25 +79,28 @@ enum ShareTextBuilder {
 
     private static func humbleWeeklyLine(for result: WeeklyResult) -> String {
         if result.isWeeklyWinner {
-            return "Topped the board this week. The Fannypack is mine (for now)."
+            return "Took the week. See you on next week's slate."
         }
-        if result.rank <= 3 {
-            return "Solid week on the board. The league knows who’s cooking."
+        if result.correctPicks > result.losses, result.rank <= 3 {
+            return "Winning record. The board knows."
         }
-        return "Another week in the books. On to the next slate."
+        return "Week \(result.week) is in the books. On to the next slate."
     }
 
     private static func dunkWeeklyLine(for result: WeeklyResult) -> String {
         if result.isWeeklyWinner {
-            return "Week \(result.week) belongs to me. Tell your friends. 📣"
+            return "Week \(result.week) is mine."
+        }
+        if result.correctPicks <= result.losses {
+            return "Still in the hunt. That's the assignment."
         }
         if result.rank == 2 {
-            return "So close to #1 you can smell it. Everyone else? Not even close."
+            return "One spot off the top. Not for long."
         }
         if result.rank <= 3 {
-            return "Podium finish while the rest of the league is in shambles."
+            return "Podium week. The rest of the league can catch up."
         }
-        return "Still ahead of half this league. That’s a you problem if you’re below me."
+        return "Still above the cut. That's the assignment."
     }
 
     private static func humbleSeasonLine(for standing: SeasonStanding) -> String {
@@ -118,21 +108,21 @@ enum ShareTextBuilder {
             return "Season champ. See you next year."
         }
         if standing.isPodium {
-            return "Punched a ticket to the podium. Respect the grind."
+            return "Podium finish. Respect the grind."
         }
-        return "Season wrapped. Already plotting next year’s run."
+        return "Season wrapped. Already plotting next year's run."
     }
 
     private static func dunkSeasonLine(for standing: SeasonStanding) -> String {
         if standing.isChampion {
-            return "CROWN SECURED 👑 Everyone else fought for 2nd place."
+            return "Crown secured. Everyone else played for second."
         }
         if standing.rank == 2 {
-            return "Runner-up. The only person who beat the whole league all year? Me, almost."
+            return "Runner-up. Next season's the one."
         }
         if standing.isPodium {
-            return "Top 3 finish while the bottom half is in witness protection."
+            return "Top 3. That's the company I keep."
         }
-        return "Finished above the noise. Tag your league and cope."
+        return "Finished above the noise."
     }
 }

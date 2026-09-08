@@ -12,4 +12,13 @@ enum ShareSource {
             return ShareableResult(season: standing, tone: tone)
         }
     }
+
+    var ctaTitle: String {
+        switch self {
+        case .weekly(let result):
+            return "Share \(result.recordText)"
+        case .season(let standing):
+            return "Share #\(standing.rank)"
+        }
+    }
 }

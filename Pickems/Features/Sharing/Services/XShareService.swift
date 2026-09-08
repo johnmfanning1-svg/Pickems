@@ -30,10 +30,8 @@ final class XShareService: ObservableObject {
     }
 
     func shareSheetItems(for result: ShareableResult, image: UIImage?) -> [Any] {
-        var items: [Any] = [result.shareSheetText]
-        if let image {
-            items.append(image)
-        }
+        var items: [Any] = [ResultsSharePayload(result: result, image: image)]
+        items.append(result.shareSheetText)
         return items
     }
 

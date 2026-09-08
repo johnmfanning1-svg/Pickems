@@ -14,8 +14,10 @@ struct WeeklyResult: Identifiable, Codable, Equatable {
     let tiebreakerDelta: Int?
     let isWeeklyWinner: Bool
 
+    var losses: Int { max(0, totalPicks - correctPicks) }
+
     var recordText: String {
-        "\(correctPicks)/\(totalPicks)"
+        "\(correctPicks)–\(losses)"
     }
 
     var rankText: String {
