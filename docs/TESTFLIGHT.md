@@ -37,7 +37,7 @@ Typical phrasing: “bump TestFlight”, “new build”, “upload to TestFligh
 
 ## 2. Bump shipping versions
 
-In `Pickems.xcodeproj/project.pbxproj`, replace the **current shipping** marketing version and build on Pickems, PickemsWidget, and PickemsWatch (Debug + Release). Convention: marketing `X.Y.Z` ↔ build `XYZ` (example: `3.2.3` / `323`).
+In `Pickems.xcodeproj/project.pbxproj`, replace the **current shipping** marketing version and build on Pickems, PickemsWidget, and PickemsWatch (Debug + Release). Convention: marketing `X.Y.Z` ↔ build `XYZ` with no dropped digits (example: `3.2.3` / `323`, `3.3.11` / `3311`). Never increment the build as a bare integer (`339 → 340`) when the marketing patch rolls to two digits.
 
 ```text
 CURRENT_PROJECT_VERSION = <old>;  →  CURRENT_PROJECT_VERSION = <new>;

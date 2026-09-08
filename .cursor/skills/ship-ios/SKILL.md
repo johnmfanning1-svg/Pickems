@@ -40,4 +40,4 @@ App Store Connect work uses **Google Chrome** (logged-in iris). Cursor's browser
 
 ## Version numbers
 
-Shipping targets (Pickems, PickemsWidget, PickemsWatch Debug+Release) share marketing + build. Convention: `3.2.3` ↔ `323`. Leave PickemsTests / PickemsUITests at `1.0`.
+Shipping targets (Pickems, PickemsWidget, PickemsWatch Debug+Release) share marketing + build. Convention: `3.2.3` ↔ `323`, `3.3.11` ↔ `3311`. Leave PickemsTests / PickemsUITests at `1.0`.
