@@ -51,6 +51,19 @@ struct LeaguePickemsComparisonStatsTests {
         #expect(!copy.message.contains("kickoff"))
     }
 
+    @Test func gamesAheadIsWinDifference() {
+        #expect(LeaguePickemsComparisonStats.gamesAhead(youWins: 5, themWins: 3) == 2)
+        #expect(LeaguePickemsComparisonStats.gamesAhead(youWins: 4, themWins: 4) == 0)
+        #expect(LeaguePickemsComparisonStats.gamesAhead(youWins: 3, themWins: 4) == -1)
+        #expect(LeaguePickemsComparisonStats.gamesAhead(youWins: 5, themWins: 4) == 1)
+    }
+
+    @Test func gapPhraseSwitchesAheadBackAndEven() {
+        #expect(LeaguePickemsComparisonStats.gapPhrase(gamesAhead: 1) == "1 game ahead")
+        #expect(LeaguePickemsComparisonStats.gapPhrase(gamesAhead: -2) == "2 games back")
+        #expect(LeaguePickemsComparisonStats.gapPhrase(gamesAhead: 0) == "Even")
+    }
+
     private func week(id: String, year: Int, number: Int) -> WeekSummary {
         WeekSummary(
             id: id,

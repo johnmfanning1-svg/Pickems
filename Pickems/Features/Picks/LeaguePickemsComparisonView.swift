@@ -120,6 +120,8 @@ struct LeaguePickemsComparisonView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 weekSelector
+                comparisonHeader
+                    .padding(.horizontal)
                 boardSection
             }
             .padding(.vertical)
@@ -263,8 +265,6 @@ struct LeaguePickemsComparisonView: View {
                 help: PickemsHelp.leaguePickems
             )
         } else if showsBoard, let week = selectedWeek {
-            comparisonHeader
-                .padding(.horizontal)
             LeaguePickemsBoard(
                 members: comparisonMembers,
                 games: displayGames,
@@ -278,45 +278,84 @@ struct LeaguePickemsComparisonView: View {
         }
     }
 
+    private var yourStanding: StandingEntry? {
+        appState.rankedStandings(weekly: true).first { $0.id == currentUserId }
+    }
+
+    private var theirStanding: StandingEntry {
+        appState.rankedStandings(weekly: true).first { $0.id == opponent.id } ?? opponent
+    }
+
     private var comparisonHeader: some View {
-        let same = LeaguePickemsComparisonStats.samePickCount(
-            games: displayGames,
-            youPicks: currentUserId.flatMap { picksByUserId[$0]?.picks },
-            themPicks: picksByUserId[opponent.id]?.picks,
-            hiddenGameIds: selectedWeek.map { hiddenGameIds(for: $0) } ?? []
+        let you = yourStanding
+        let them = theirStanding
+        let youWeek = "\(you?.weeklyWins ?? 0)-\(you?.weeklyLosses ?? 0)"
+        let youSeason = "\(you?.seasonWins ?? 0)-\(you?.seasonLosses ?? 0)"
+        let themWeek = "\(them.weeklyWins)-\(them.weeklyLosses)"
+        let themSeason = "\(them.seasonWins)-\(them.seasonLosses)"
+        let weekGap = LeaguePickemsComparisonStats.gamesAhead(
+            youWins: you?.weeklyWins ?? 0,
+            themWins: them.weeklyWins
         )
-        let youRecord = recordText(for: currentUserId)
-        let themRecord = recordText(for: opponent.id)
+        let seasonGap = LeaguePickemsComparisonStats.gamesAhead(
+            youWins: you?.seasonWins ?? 0,
+            themWins: them.seasonWins
+        )
+        let weekPhrase = LeaguePickemsComparisonStats.gapPhrase(gamesAhead: weekGap)
+        let seasonPhrase = LeaguePickemsComparisonStats.gapPhrase(gamesAhead: seasonGap)
         return PickemsCard {
-            HStack(alignment: .top, spacing: 12) {
-                recordBlock(title: "You", value: youRecord)
-                recordBlock(title: opponentShortName, value: themRecord)
-                recordBlock(title: "Same pick", value: "\(same.same) of \(same.visible)")
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    playerBlock(title: "You", weekly: youWeek, season: youSeason)
+                    playerBlock(title: opponentShortName, weekly: themWeek, season: themSeason)
+                }
+                Rectangle()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(height: 1)
+                    .accessibilityHidden(true)
+                HStack(alignment: .top, spacing: 12) {
+                    gapBlock(title: "This week", phrase: weekPhrase, gamesAhead: weekGap)
+                    gapBlock(title: "Season", phrase: seasonPhrase, gamesAhead: seasonGap)
+                }
             }
-            .frame(maxWidth: .infinity)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(
-                "You \(youRecord). \(opponent.displayName) \(themRecord). Same pick on \(same.same) of \(same.visible) games."
+                "You \(youWeek) this week, \(youSeason) this season. \(opponent.displayName) \(themWeek) this week, \(themSeason) this season. This week \(weekPhrase). Season \(seasonPhrase)."
             )
         }
     }
 
-    private func recordBlock(title: String, value: String) -> some View {
+    private func playerBlock(title: String, weekly: String, season: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(PickemsColors.textSecondary)
-            Text(value)
+            Text(weekly)
                 .font(.headline.monospacedDigit())
                 .foregroundStyle(PickemsColors.textPrimary)
+            Text("\(season) season")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(PickemsColors.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func recordText(for userId: String?) -> String {
-        guard let userId, let picks = picksByUserId[userId]?.picks else { return "0-0" }
-        let scored = ScoringEngine.scorePicks(picks: picks, games: displayGames)
-        return "\(scored.wins)-\(scored.losses)"
+    private func gapBlock(title: String, phrase: String, gamesAhead: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(PickemsColors.textSecondary)
+            Text(phrase)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(gapColor(gamesAhead))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func gapColor(_ gamesAhead: Int) -> Color {
+        if gamesAhead == 0 { return PickemsColors.textPrimary }
+        return gamesAhead > 0 ? PickemsColors.success : PickemsColors.lost
     }
 
     private func loadWeeks() async {
@@ -445,5 +484,19 @@ nonisolated enum LeaguePickemsComparisonStats {
             return yours == theirs
         }.count
         return (same, visible.count)
+    }
+
+    /// Win difference vs `them`. Positive means you are ahead. Losses do not create half-games:
+    /// everyone is ranked by wins first, and a missed pick is skipped rather than a game in hand.
+    static func gamesAhead(youWins: Int, themWins: Int) -> Int {
+        youWins - themWins
+    }
+
+    static func gapPhrase(gamesAhead: Int) -> String {
+        if gamesAhead == 0 { return "Even" }
+        let magnitude = abs(gamesAhead)
+        let unit = magnitude == 1 ? "game" : "games"
+        let direction = gamesAhead > 0 ? "ahead" : "back"
+        return "\(magnitude) \(unit) \(direction)"
     }
 }

@@ -1,7 +1,6 @@
-What's new in 3.3.6
+What's new in 3.3.7
 
-• Tap a name on the league leaderboard anytime to compare your Pickems with theirs
-• If this week isn’t public yet, you’ll see why — and can browse previous weeks from the top
-• Week chips run oldest on the left to newest on the right, and open on the current week
+• Head-to-head comparison now shows games ahead or games back for this week and the season
+• Each player’s weekly and season records sit above the gap so you can see the math
 
 Thanks for playing with us.
