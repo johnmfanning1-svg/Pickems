@@ -317,12 +317,12 @@ struct GroupsView: View {
 
             LazyVGrid(columns: columns, spacing: 12) {
                 NavigationLink {
-                    StatsView()
+                    WeekRecapView()
                 } label: {
-                    gridActionLabel("Stats", systemImage: "chart.line.uptrend.xyaxis")
+                    gridActionLabel("Week Recap", systemImage: "text.quote")
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("View your pick performance stats")
+                .accessibilityHint("View this week's recap, awards, and share")
 
                 NavigationLink {
                     MemberListView()

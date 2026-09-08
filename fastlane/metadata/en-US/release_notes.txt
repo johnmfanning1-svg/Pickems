@@ -1,8 +1,7 @@
-What's new in 3.3.10
+What's new in 3.3.11
 
-• Share Results now leads with your W–L, not a clipped headline
-• Texts send the results card as a photo — no admin-site link preview
-• Auto tone stays chill on a losing week; Fire is still there if you want it
-• One share path from Home, themed to Pickems
+• League tab: Week Recap replaces Stats
+• Recap, awards, and Share Results for any week on the same week wheel
+• Share uses that week's W–L, not only the live slate
 
 Thanks for playing with us.

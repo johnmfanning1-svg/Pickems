@@ -182,8 +182,19 @@ enum PickemsHelp {
             "Share your invite code so friends can join — unless the commissioner locked invites to themselves.",
             "Toggle between weekly and season standings.",
             "View League Pickems opens the chart after lock, or a countdown until then.",
+            "Week Recap has the recap, awards, and Share Results for any week.",
             "Rivalry compares your weekly record with another member.",
             "Dynasty opens champions and career records."
+        ]
+    )
+
+    static let weekRecap = HelpTopic(
+        id: "groups.weekRecap",
+        title: "Week Recap",
+        message: "The story of a week: recap copy, awards, and Share Results. Use the week chips to jump between slates.",
+        tips: [
+            "The wheel is the same one on Selections and Pickems — Current marks this week.",
+            "Awards fill in once games are final. Share Results uses that week’s W–L, not a website link."
         ]
     )
 

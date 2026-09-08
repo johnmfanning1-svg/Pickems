@@ -28,6 +28,30 @@ extension AppState {
         )
     }
 
+    func weeklyShareSource(week: WeekSummary, ranked: [StandingEntry]) -> ShareSource? {
+        guard
+            let user = authService.currentUser,
+            let group = groupService.selectedGroup,
+            let entry = ranked.first(where: { $0.id == user.id })
+        else { return nil }
+
+        let totalPicks = entry.weeklyWins + entry.weeklyLosses
+        guard totalPicks > 0 || week.status == .scored else { return nil }
+
+        return SharingIntegration.weeklySource(
+            userId: user.id,
+            displayName: user.displayName,
+            week: week.weekNumber,
+            season: week.seasonYear,
+            leagueName: group.name,
+            correctPicks: entry.weeklyWins,
+            totalPicks: totalPicks,
+            rank: entry.rank,
+            totalPlayers: max(ranked.count, 1),
+            isWeeklyWinner: entry.rank == 1 && !entry.isTied
+        )
+    }
+
     func seasonShareSource() -> ShareSource? {
         guard
             let user = authService.currentUser,

@@ -143,4 +143,43 @@ extension AppState {
             games: pickService.slateGames
         )
     }
+
+    /// Weekly W–L and rank from a specific week's picks and games (history / recap).
+    func weeklyRankedStandings(fromPicks picks: [UserPick], games: [SlateGame]) -> [StandingEntry] {
+        let group = groupService.selectedGroup
+        let members: [GroupMember]
+        if let groupId = group?.id, groupService.membersGroupId == groupId {
+            members = groupService.members
+        } else {
+            members = []
+        }
+        let baseEntries = StandingBoard.baseEntries(
+            standingsEntries: nil,
+            members: members,
+            memberIds: group?.memberIds ?? []
+        )
+        guard !baseEntries.isEmpty else { return [] }
+
+        let pickByUser = Dictionary(picks.map { ($0.userId, $0) }, uniquingKeysWith: { _, last in last })
+        let scored = baseEntries.map { entry -> StandingEntry in
+            var next = entry
+            let pick = pickByUser[entry.id]
+            let result = ScoringEngine.scorePicks(
+                picks: pick?.picks ?? [:],
+                games: games,
+                confidenceGameId: pick?.confidenceGameId
+            )
+            next.weeklyWins = result.wins
+            next.weeklyLosses = result.losses
+            return next
+        }
+
+        return ScoringEngine.rankedStandings(
+            entries: scored,
+            weekly: true,
+            tieBreaker: group?.rules.tieBreaker ?? .commissionerOverride,
+            allPicks: picks,
+            games: games
+        )
+    }
 }
