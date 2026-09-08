@@ -663,11 +663,6 @@ struct LeaderboardView: View {
         rosterCount > Self.previewLimit
     }
 
-    private var leagueBoardUnlocked: Bool {
-        guard let week = appState.groupService.currentWeek else { return false }
-        return WeekTransition.pickemsShouldShowLeagueBoard(week)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
@@ -701,7 +696,7 @@ struct LeaderboardView: View {
                         entry: entry,
                         showWeekly: showWeekly,
                         isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
-                        canCompare: leagueBoardUnlocked && entry.id != appState.currentUserId
+                        canCompare: entry.id != appState.currentUserId
                     )
                 }
             }
@@ -756,11 +751,6 @@ struct FullLeaderboardView: View {
         appState.rankedStandings(weekly: showWeekly)
     }
 
-    private var leagueBoardUnlocked: Bool {
-        guard let week = appState.groupService.currentWeek else { return false }
-        return WeekTransition.pickemsShouldShowLeagueBoard(week)
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -778,7 +768,7 @@ struct FullLeaderboardView: View {
                         entry: entry,
                         showWeekly: showWeekly,
                         isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
-                        canCompare: leagueBoardUnlocked && entry.id != appState.currentUserId
+                        canCompare: entry.id != appState.currentUserId
                     )
                 }
             }

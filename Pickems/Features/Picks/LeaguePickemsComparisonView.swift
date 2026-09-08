@@ -5,13 +5,40 @@ struct LeaguePickemsComparisonView: View {
     let opponent: StandingEntry
 
     @Environment(AppState.self) private var appState
+    @Environment(\.themePalette) private var theme
 
-    private var week: WeekSummary? {
-        appState.groupService.currentWeek
+    @State private var weeks: [WeekSummary] = []
+    @State private var selectedWeekId: String?
+    @State private var boardWeek: WeekSummary?
+    @State private var boardGames: [SlateGame] = []
+    @State private var boardPicks: [UserPick] = []
+    @State private var isLoadingWeeks = true
+    @State private var isLoadingBoard = false
+    @State private var loadError: String?
+
+    private var liveWeekId: String? {
+        appState.groupService.currentWeek?.id
     }
 
-    private var games: [SlateGame] {
-        appState.pickService.slateGames.sortedByKickoff
+    private var selectedWeek: WeekSummary? {
+        if let selectedWeekId, let match = weeks.first(where: { $0.id == selectedWeekId }) {
+            return match
+        }
+        if isViewingLiveWeek {
+            return appState.groupService.currentWeek ?? boardWeek
+        }
+        return boardWeek
+    }
+
+    private var isViewingLiveWeek: Bool {
+        selectedWeekId == liveWeekId
+    }
+
+    private var displayGames: [SlateGame] {
+        if isViewingLiveWeek, !appState.pickService.slateGames.isEmpty {
+            return appState.pickService.slateGames.sortedByKickoff
+        }
+        return boardGames
     }
 
     private var currentUserId: String? {
@@ -23,25 +50,28 @@ struct LeaguePickemsComparisonView: View {
     }
 
     private var picksByUserId: [String: UserPick] {
-        appState.pickService.boardPicksByUserId(
-            members: members,
-            ownUserId: currentUserId
-        )
+        var merged = boardPicks
+        if isViewingLiveWeek {
+            merged = PickService.mergingRevealedPicks(
+                base: appState.pickService.allPicks.isEmpty ? merged : appState.pickService.allPicks,
+                revealed: appState.pickService.revealedPicksByGameId,
+                members: members
+            )
+        }
+        var map = Dictionary(uniqueKeysWithValues: merged.map { ($0.userId, $0) })
+        if isViewingLiveWeek, let own = appState.pickService.userPick {
+            map[own.userId] = own
+        }
+        return map
     }
 
-    private var hiddenGameIds: Set<String> {
-        guard let week, week.isRollingLock, !WeekTransition.pickemsAreFullyPublic(week) else {
-            return []
-        }
+    private func hiddenGameIds(for week: WeekSummary) -> Set<String> {
+        guard week.isRollingLock, !WeekTransition.pickemsAreFullyPublic(week) else { return [] }
         return Set(
-            games
+            displayGames
                 .filter { !WeekTransition.isGameLocked($0, week: week) }
                 .map(\.id)
         )
-    }
-
-    private var yourStanding: StandingEntry? {
-        appState.rankedStandings(weekly: true).first { $0.id == currentUserId }
     }
 
     private var opponentMember: GroupMember {
@@ -54,9 +84,6 @@ struct LeaguePickemsComparisonView: View {
     private var youMember: GroupMember? {
         if let currentUserId, let member = members.first(where: { $0.id == currentUserId }) {
             return member
-        }
-        if let standing = yourStanding {
-            return Self.member(from: standing)
         }
         return nil
     }
@@ -76,39 +103,26 @@ struct LeaguePickemsComparisonView: View {
         return opponent.displayName
     }
 
-    private var samePickSummary: (same: Int, visible: Int) {
-        LeaguePickemsComparisonStats.samePickCount(
-            games: games,
-            youPicks: currentUserId.flatMap { picksByUserId[$0]?.picks },
-            themPicks: picksByUserId[opponent.id]?.picks,
-            hiddenGameIds: hiddenGameIds
-        )
+    private var showsBoard: Bool {
+        guard let week = selectedWeek else { return false }
+        return WeekTransition.pickemsShouldShowLeagueBoard(week)
+    }
+
+    private var isRollingMessage: Bool {
+        guard let week = selectedWeek else {
+            return appState.groupService.selectedGroup?.rules.pickDeadline == .rolling
+        }
+        if week.pickLockMode != nil { return week.isRollingLock }
+        return appState.groupService.selectedGroup?.rules.pickDeadline == .rolling
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                comparisonHeader
-                if games.isEmpty {
-                    EmptyStateView(
-                        icon: "american.football.fill",
-                        title: "No slate games",
-                        message: "This week locked without games on the slate.",
-                        help: PickemsHelp.leaguePickems
-                    )
-                } else {
-                    LeaguePickemsBoard(
-                        members: comparisonMembers,
-                        games: games,
-                        picksByUserId: picksByUserId,
-                        liveCards: appState.picksViewModel.livePickCards,
-                        teamRanks: appState.picksViewModel.teamRanks,
-                        currentUserId: currentUserId,
-                        hiddenGameIds: hiddenGameIds
-                    )
-                }
+                weekSelector
+                boardSection
             }
-            .padding()
+            .padding(.vertical)
         }
         .pickemsScreenBackground()
         .navigationTitle("You vs \(opponentShortName)")
@@ -116,35 +130,173 @@ struct LeaguePickemsComparisonView: View {
         .toolbar {
             HelpToolbarItem(topic: PickemsHelp.leaguePickems)
         }
-        .task(id: "\(appState.groupService.selectedGroup?.id ?? "")-\(week?.id ?? "")") {
+        .task {
+            await loadWeeks()
+        }
+        .task(id: selectedWeekId) {
+            await loadBoard()
+        }
+        .task(id: "\(appState.groupService.selectedGroup?.id ?? "")-\(liveWeekId ?? "")-\(showsBoard)") {
+            guard isViewingLiveWeek, showsBoard else { return }
             await appState.picksViewModel.ensureTeamRanks(appState: appState)
-            if let week {
+            if let week = selectedWeek {
                 appState.picksViewModel.startLiveRefresh(week: week, appState: appState)
             }
         }
     }
 
+    private var weekSelector: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Week")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(PickemsColors.textSecondary)
+                .padding(.horizontal)
+                .accessibilityAddTraits(.isHeader)
+
+            if isLoadingWeeks {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .accessibilityLabel("Loading weeks")
+            } else if weeks.isEmpty {
+                Text("No weeks yet")
+                    .font(.subheadline)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .padding(.horizontal)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(weeks) { week in
+                                weekChip(week)
+                                    .id(week.id)
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    .onAppear { scrollToSelected(proxy) }
+                    .onChange(of: selectedWeekId) { _, _ in scrollToSelected(proxy) }
+                    .onChange(of: weeks.map(\.id)) { _, _ in scrollToSelected(proxy) }
+                }
+            }
+        }
+    }
+
+    private func weekChip(_ week: WeekSummary) -> some View {
+        let isSelected = week.id == selectedWeekId
+        let isCurrent = week.id == liveWeekId
+        return Button {
+            PickemsHaptics.selection()
+            selectedWeekId = week.id
+        } label: {
+            VStack(spacing: 2) {
+                Text("Week \(week.weekNumber)")
+                    .font(.subheadline.weight(.semibold))
+                if let range = appState.groupService.dateRangeLabel(for: week.id), !range.isEmpty {
+                    Text(range)
+                        .font(.caption2.weight(.medium))
+                        .opacity(isSelected ? 0.9 : 0.7)
+                }
+                if isCurrent {
+                    Text("Current")
+                        .font(.caption2.weight(.medium))
+                        .opacity(isSelected ? 0.9 : 0.7)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(isSelected ? theme.accent : PickemsColors.cardBackground)
+            .foregroundStyle(isSelected ? theme.onAccent : PickemsColors.textPrimary)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? Color.clear : Color.white.opacity(0.08),
+                        lineWidth: 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Week \(week.weekNumber)")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityHint(isCurrent ? "Current week" : "Show this week's comparison")
+    }
+
+    private func scrollToSelected(_ proxy: ScrollViewProxy) {
+        guard let selectedWeekId else { return }
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo(selectedWeekId, anchor: UnitPoint.center)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var boardSection: some View {
+        if let error = loadError, weeks.isEmpty {
+            ContextualTipBanner(icon: "exclamationmark.triangle.fill", message: error)
+                .padding(.horizontal)
+        } else if let week = selectedWeek, !showsBoard {
+            let copy = LeaguePickemsComparisonCopy.pendingBoard(
+                isRolling: isRollingMessage,
+                isSelection: week.status == .selection
+            )
+            EmptyStateView(
+                icon: "lock.open",
+                title: copy.title,
+                message: copy.message,
+                help: PickemsHelp.leaguePickems
+            )
+        } else if isLoadingBoard {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
+                .accessibilityLabel("Loading league Pickems")
+        } else if let error = loadError {
+            ContextualTipBanner(icon: "exclamationmark.triangle.fill", message: error)
+                .padding(.horizontal)
+        } else if showsBoard, displayGames.isEmpty {
+            EmptyStateView(
+                icon: "american.football.fill",
+                title: "No slate games",
+                message: "This week locked without games on the slate.",
+                help: PickemsHelp.leaguePickems
+            )
+        } else if showsBoard, let week = selectedWeek {
+            comparisonHeader
+                .padding(.horizontal)
+            LeaguePickemsBoard(
+                members: comparisonMembers,
+                games: displayGames,
+                picksByUserId: picksByUserId,
+                liveCards: isViewingLiveWeek ? appState.picksViewModel.livePickCards : [:],
+                teamRanks: appState.picksViewModel.teamRanks,
+                currentUserId: currentUserId,
+                hiddenGameIds: hiddenGameIds(for: week)
+            )
+            .padding(.horizontal)
+        }
+    }
+
     private var comparisonHeader: some View {
-        let same = samePickSummary
+        let same = LeaguePickemsComparisonStats.samePickCount(
+            games: displayGames,
+            youPicks: currentUserId.flatMap { picksByUserId[$0]?.picks },
+            themPicks: picksByUserId[opponent.id]?.picks,
+            hiddenGameIds: selectedWeek.map { hiddenGameIds(for: $0) } ?? []
+        )
+        let youRecord = recordText(for: currentUserId)
+        let themRecord = recordText(for: opponent.id)
         return PickemsCard {
             HStack(alignment: .top, spacing: 12) {
-                recordBlock(
-                    title: "You",
-                    value: recordText(yourStanding)
-                )
-                recordBlock(
-                    title: opponentShortName,
-                    value: "\(opponent.weeklyWins)-\(opponent.weeklyLosses)"
-                )
-                recordBlock(
-                    title: "Same pick",
-                    value: "\(same.same) of \(same.visible)"
-                )
+                recordBlock(title: "You", value: youRecord)
+                recordBlock(title: opponentShortName, value: themRecord)
+                recordBlock(title: "Same pick", value: "\(same.same) of \(same.visible)")
             }
             .frame(maxWidth: .infinity)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(
-                "You \(recordText(yourStanding)) this week. \(opponent.displayName) \(opponent.weeklyWins)-\(opponent.weeklyLosses) this week. Same pick on \(same.same) of \(same.visible) games."
+                "You \(youRecord). \(opponent.displayName) \(themRecord). Same pick on \(same.same) of \(same.visible) games."
             )
         }
     }
@@ -161,9 +313,69 @@ struct LeaguePickemsComparisonView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func recordText(_ entry: StandingEntry?) -> String {
-        guard let entry else { return "0-0" }
-        return "\(entry.weeklyWins)-\(entry.weeklyLosses)"
+    private func recordText(for userId: String?) -> String {
+        guard let userId, let picks = picksByUserId[userId]?.picks else { return "0-0" }
+        let scored = ScoringEngine.scorePicks(picks: picks, games: displayGames)
+        return "\(scored.wins)-\(scored.losses)"
+    }
+
+    private func loadWeeks() async {
+        isLoadingWeeks = true
+        defer { isLoadingWeeks = false }
+        guard let group = appState.groupService.selectedGroup else {
+            weeks = []
+            return
+        }
+        do {
+            await appState.groupService.loadAvailableWeeks(groupId: group.id)
+            var fetched = try await appState.groupService.fetchPastWeeks(groupId: group.id)
+            if let current = appState.groupService.currentWeek,
+               !fetched.contains(where: { $0.id == current.id }) {
+                fetched.append(current)
+            }
+            weeks = LeaguePickemsComparisonCopy.orderedWeeks(fetched)
+            loadError = nil
+            if selectedWeekId == nil {
+                selectedWeekId = liveWeekId ?? weeks.last?.id
+            }
+        } catch {
+            if let current = appState.groupService.currentWeek {
+                weeks = [current]
+                selectedWeekId = current.id
+            } else {
+                weeks = []
+            }
+            loadError = UserFacingError.message(for: error, context: .generic)
+                ?? error.localizedDescription
+        }
+    }
+
+    private func loadBoard() async {
+        guard let group = appState.groupService.selectedGroup,
+              let weekId = selectedWeekId else { return }
+        isLoadingBoard = true
+        defer { isLoadingBoard = false }
+        do {
+            let snapshot = try await appState.pickService.fetchLeagueBoard(
+                groupId: group.id,
+                weekId: weekId
+            )
+            guard selectedWeekId == weekId else { return }
+            boardWeek = snapshot.week
+            boardGames = snapshot.games
+            boardPicks = snapshot.picks
+            if let idx = weeks.firstIndex(where: { $0.id == weekId }) {
+                weeks[idx] = snapshot.week
+            }
+            loadError = nil
+        } catch {
+            guard selectedWeekId == weekId else { return }
+            boardWeek = nil
+            boardGames = []
+            boardPicks = []
+            loadError = UserFacingError.message(for: error, context: .generic)
+                ?? error.localizedDescription
+        }
     }
 
     private static func member(from standing: StandingEntry) -> GroupMember {
@@ -176,6 +388,41 @@ struct LeaguePickemsComparisonView: View {
             seasonWins: standing.seasonWins,
             seasonLosses: standing.seasonLosses,
             avatarImageURL: standing.avatarImageURL
+        )
+    }
+}
+
+nonisolated enum LeaguePickemsComparisonCopy {
+    static func orderedWeeks(_ weeks: [WeekSummary]) -> [WeekSummary] {
+        weeks.sorted {
+            if $0.seasonYear != $1.seasonYear { return $0.seasonYear < $1.seasonYear }
+            return $0.weekNumber < $1.weekNumber
+        }
+    }
+
+    static func pendingBoard(isRolling: Bool, isSelection: Bool) -> (title: String, message: String) {
+        let title = "This week's Pickems aren't public yet"
+        if isSelection {
+            if isRolling {
+                return (
+                    title,
+                    "This comparison is empty until Selections close and Pickems start locking at each kickoff. Browse a previous week above."
+                )
+            }
+            return (
+                title,
+                "This comparison is empty until Selections close and Pickems lock. Browse a previous week above."
+            )
+        }
+        if isRolling {
+            return (
+                title,
+                "Pickems appear here as each game kicks off. Until then, browse a previous week above."
+            )
+        }
+        return (
+            title,
+            "This comparison opens after Pickems lock. Browse a previous week above."
         )
     }
 }

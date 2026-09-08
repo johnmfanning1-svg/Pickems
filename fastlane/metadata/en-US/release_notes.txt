@@ -1,8 +1,7 @@
-What's new in 3.3.5
+What's new in 3.3.6
 
-• League Pickems charts show pushes in slate gray — exact spreads are neither a win nor a loss
-• Switch Comfortable or Dense to fit more of the board on screen
-• Your column stays pinned next to Game while you scroll other members
-• After lock, tap a name on the league leaderboard to compare your Pickems with theirs
+• Tap a name on the league leaderboard anytime to compare your Pickems with theirs
+• If this week isn’t public yet, you’ll see why — and can browse previous weeks from the top
+• Week chips run oldest on the left to newest on the right, and open on the current week
 
 Thanks for playing with us.

@@ -100,13 +100,19 @@ struct SeasonPickHistoryView: View {
                 .padding(.horizontal)
                 .accessibilityAddTraits(.isHeader)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(weeks) { week in
-                        weekChip(week)
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(weeks) { week in
+                            weekChip(week)
+                                .id(week.id)
+                        }
                     }
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
+                .onAppear { scrollHistoryToSelected(proxy) }
+                .onChange(of: selectedWeekId) { _, _ in scrollHistoryToSelected(proxy) }
+                .onChange(of: weeks.map(\.id)) { _, _ in scrollHistoryToSelected(proxy) }
             }
         }
     }
@@ -143,6 +149,15 @@ struct SeasonPickHistoryView: View {
         .accessibilityLabel("Week \(week.weekNumber)")
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         .accessibilityHint("Show this week's league Pickems")
+    }
+
+    private func scrollHistoryToSelected(_ proxy: ScrollViewProxy) {
+        guard let selectedWeekId else { return }
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo(selectedWeekId, anchor: UnitPoint.center)
+            }
+        }
     }
 
     @ViewBuilder
@@ -224,10 +239,13 @@ struct SeasonPickHistoryView: View {
             let fetched = try await appState.groupService.fetchPastWeeks(groupId: group.id)
             weeks = fetched
                 .filter { $0.status == .scored || $0.status == .locked }
-                .sorted { $0.weekNumber > $1.weekNumber }
+                .sorted {
+                    if $0.seasonYear != $1.seasonYear { return $0.seasonYear < $1.seasonYear }
+                    return $0.weekNumber < $1.weekNumber
+                }
             loadError = nil
             if selectedWeekId == nil {
-                selectedWeekId = weeks.first?.id
+                selectedWeekId = weeks.last?.id
             }
         } catch {
             weeks = []

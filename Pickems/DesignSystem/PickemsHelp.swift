@@ -88,6 +88,7 @@ enum PickemsHelp {
             "Comfortable and Dense control how much of the chart fits on screen.",
             "Your column stays pinned next to Game while you scroll other members.",
             "Gray cells are pushes — the spread landed exactly. They are neither a win nor a loss.",
+            "Tap a member on the league leaderboard to compare your picks with theirs. If this week isn’t public yet, browse previous weeks from the top of that screen.",
             "After lock, open Season History to browse past weeks' charts."
         ]
     )
@@ -204,7 +205,7 @@ enum PickemsHelp {
             "W-L is wins and losses against the spread.",
             "Tied players may need a commissioner tie-break decision.",
             "Leagues with more than 10 members show Full ranking under the This Week / Season picker, then the top 10.",
-            "After Pickems lock, tap another member to compare your picks with theirs."
+            "Tap another member to compare your Pickems with theirs. If this week isn’t public yet, you can still browse previous weeks."
         ]
     )
 

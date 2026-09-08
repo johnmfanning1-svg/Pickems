@@ -27,6 +27,43 @@ struct LeaguePickemsComparisonStatsTests {
         #expect(result.visible == 2)
     }
 
+    @Test func orderedWeeksAreOldestOnTheLeft() {
+        let weeks = [
+            week(id: "2026-W2", year: 2026, number: 2),
+            week(id: "2025-W14", year: 2025, number: 14),
+            week(id: "2026-W0", year: 2026, number: 0),
+        ]
+        let ordered = LeaguePickemsComparisonCopy.orderedWeeks(weeks)
+        #expect(ordered.map(\.id) == ["2025-W14", "2026-W0", "2026-W2"])
+    }
+
+    @Test func pendingCopyMentionsSelectionsThenRollingLock() {
+        let copy = LeaguePickemsComparisonCopy.pendingBoard(isRolling: true, isSelection: true)
+        #expect(copy.title == "This week's Pickems aren't public yet")
+        #expect(copy.message.contains("Selections close"))
+        #expect(copy.message.contains("kickoff"))
+    }
+
+    @Test func pendingCopyMentionsSelectionsThenFullLock() {
+        let copy = LeaguePickemsComparisonCopy.pendingBoard(isRolling: false, isSelection: true)
+        #expect(copy.message.contains("Selections close"))
+        #expect(copy.message.contains("Pickems lock"))
+        #expect(!copy.message.contains("kickoff"))
+    }
+
+    private func week(id: String, year: Int, number: Int) -> WeekSummary {
+        WeekSummary(
+            id: id,
+            seasonYear: year,
+            weekNumber: number,
+            status: .scored,
+            slateSize: 4,
+            selectionMode: .member,
+            selectionsPerMember: 1,
+            nominationCount: 0
+        )
+    }
+
     private func game(_ id: String) -> SlateGame {
         SlateGame(
             id: id,
