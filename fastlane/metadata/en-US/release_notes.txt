@@ -1,7 +1,7 @@
-What's new in 3.3.8
+What's new in 3.3.9
 
-• Head-to-head weekly records follow the week you select; season totals stay put
-• You vs them chart columns fill the width instead of leaving a gap
-• Leaderboard and Full ranking show games back, except first place still shows batting average
+• Leaderboard games back is now compact: -X GB
+• Head-to-head uses +X GA when you're ahead and -X GB when you're behind
+• Your own leaderboard row lines up with everyone else's stats
 
 Thanks for playing with us.
