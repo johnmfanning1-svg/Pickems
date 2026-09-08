@@ -125,6 +125,7 @@ struct LeaguePickemsComparisonView: View {
                 boardSection
             }
             .padding(.vertical)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .pickemsScreenBackground()
         .navigationTitle("You vs \(opponentShortName)")
@@ -243,12 +244,8 @@ struct LeaguePickemsComparisonView: View {
                 isRolling: isRollingMessage,
                 isSelection: week.status == .selection
             )
-            EmptyStateView(
-                icon: "lock.open",
-                title: copy.title,
-                message: copy.message,
-                help: PickemsHelp.leaguePickems
-            )
+            pendingComparisonMessage(title: copy.title, message: copy.message)
+                .padding(.horizontal)
         } else if isLoadingBoard {
             ProgressView()
                 .frame(maxWidth: .infinity)
@@ -272,7 +269,9 @@ struct LeaguePickemsComparisonView: View {
                 liveCards: isViewingLiveWeek ? appState.picksViewModel.livePickCards : [:],
                 teamRanks: appState.picksViewModel.teamRanks,
                 currentUserId: currentUserId,
-                hiddenGameIds: hiddenGameIds(for: week)
+                allowsExpand: false,
+                hiddenGameIds: hiddenGameIds(for: week),
+                fillsAvailableWidth: true
             )
             .padding(.horizontal)
         }
@@ -286,41 +285,100 @@ struct LeaguePickemsComparisonView: View {
         appState.rankedStandings(weekly: true).first { $0.id == opponent.id } ?? opponent
     }
 
-    private var comparisonHeader: some View {
-        let you = yourStanding
+    private var yourSeasonRecord: (wins: Int, losses: Int) {
+        if let you = yourStanding {
+            return (you.seasonWins, you.seasonLosses)
+        }
+        if let member = youMember {
+            return (member.seasonWins, member.seasonLosses)
+        }
+        return (0, 0)
+    }
+
+    private var theirSeasonRecord: (wins: Int, losses: Int) {
         let them = theirStanding
-        let youWeek = "\(you?.weeklyWins ?? 0)-\(you?.weeklyLosses ?? 0)"
-        let youSeason = "\(you?.seasonWins ?? 0)-\(you?.seasonLosses ?? 0)"
-        let themWeek = "\(them.weeklyWins)-\(them.weeklyLosses)"
-        let themSeason = "\(them.seasonWins)-\(them.seasonLosses)"
+        return (them.seasonWins, them.seasonLosses)
+    }
+
+    private var weeklyGapTitle: String {
+        guard let week = selectedWeek, !isViewingLiveWeek else { return "This week" }
+        return "Week \(week.weekNumber)"
+    }
+
+    private func weeklyRecord(for userId: String?) -> (wins: Int, losses: Int) {
+        guard let userId else { return (0, 0) }
+        let pick = picksByUserId[userId]
+        return LeaguePickemsComparisonStats.weeklyRecord(
+            picks: pick?.picks,
+            games: displayGames,
+            hiddenGameIds: selectedWeek.map { hiddenGameIds(for: $0) } ?? [],
+            confidenceGameId: pick?.confidenceGameId
+        )
+    }
+
+    private func recordText(wins: Int, losses: Int) -> String {
+        "\(wins)-\(losses)"
+    }
+
+    private func pendingComparisonMessage(title: String, message: String) -> some View {
+        PickemsCard {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "lock.open")
+                    .font(.title2)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(PickemsColors.textPrimary)
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(title). \(message)")
+        }
+    }
+
+    private var comparisonHeader: some View {
+        let youWeek = weeklyRecord(for: currentUserId)
+        let themWeek = weeklyRecord(for: opponent.id)
+        let youSeason = yourSeasonRecord
+        let themSeason = theirSeasonRecord
+        let youWeekText = recordText(wins: youWeek.wins, losses: youWeek.losses)
+        let youSeasonText = recordText(wins: youSeason.wins, losses: youSeason.losses)
+        let themWeekText = recordText(wins: themWeek.wins, losses: themWeek.losses)
+        let themSeasonText = recordText(wins: themSeason.wins, losses: themSeason.losses)
         let weekGap = LeaguePickemsComparisonStats.gamesAhead(
-            youWins: you?.weeklyWins ?? 0,
-            themWins: them.weeklyWins
+            youWins: youWeek.wins,
+            themWins: themWeek.wins
         )
         let seasonGap = LeaguePickemsComparisonStats.gamesAhead(
-            youWins: you?.seasonWins ?? 0,
-            themWins: them.seasonWins
+            youWins: youSeason.wins,
+            themWins: themSeason.wins
         )
         let weekPhrase = LeaguePickemsComparisonStats.gapPhrase(gamesAhead: weekGap)
         let seasonPhrase = LeaguePickemsComparisonStats.gapPhrase(gamesAhead: seasonGap)
         return PickemsCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 12) {
-                    playerBlock(title: "You", weekly: youWeek, season: youSeason)
-                    playerBlock(title: opponentShortName, weekly: themWeek, season: themSeason)
+                    playerBlock(title: "You", weekly: youWeekText, season: youSeasonText)
+                    playerBlock(title: opponentShortName, weekly: themWeekText, season: themSeasonText)
                 }
                 Rectangle()
                     .fill(Color.white.opacity(0.08))
                     .frame(height: 1)
                     .accessibilityHidden(true)
                 HStack(alignment: .top, spacing: 12) {
-                    gapBlock(title: "This week", phrase: weekPhrase, gamesAhead: weekGap)
+                    gapBlock(title: weeklyGapTitle, phrase: weekPhrase, gamesAhead: weekGap)
                     gapBlock(title: "Season", phrase: seasonPhrase, gamesAhead: seasonGap)
                 }
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(
-                "You \(youWeek) this week, \(youSeason) this season. \(opponent.displayName) \(themWeek) this week, \(themSeason) this season. This week \(weekPhrase). Season \(seasonPhrase)."
+                "You \(youWeekText) \(weeklyGapTitle.lowercased()), \(youSeasonText) this season. \(opponent.displayName) \(themWeekText) \(weeklyGapTitle.lowercased()), \(themSeasonText) this season. \(weeklyGapTitle) \(weekPhrase). Season \(seasonPhrase)."
             )
         }
     }
@@ -489,14 +547,25 @@ nonisolated enum LeaguePickemsComparisonStats {
     /// Win difference vs `them`. Positive means you are ahead. Losses do not create half-games:
     /// everyone is ranked by wins first, and a missed pick is skipped rather than a game in hand.
     static func gamesAhead(youWins: Int, themWins: Int) -> Int {
-        youWins - themWins
+        StandingsGap.gamesAhead(youWins: youWins, themWins: themWins)
     }
 
     static func gapPhrase(gamesAhead: Int) -> String {
-        if gamesAhead == 0 { return "Even" }
-        let magnitude = abs(gamesAhead)
-        let unit = magnitude == 1 ? "game" : "games"
-        let direction = gamesAhead > 0 ? "ahead" : "back"
-        return "\(magnitude) \(unit) \(direction)"
+        StandingsGap.gapPhrase(gamesAhead: gamesAhead)
+    }
+
+    static func weeklyRecord(
+        picks: [String: String]?,
+        games: [SlateGame],
+        hiddenGameIds: Set<String>,
+        confidenceGameId: String? = nil
+    ) -> (wins: Int, losses: Int) {
+        let visible = games.filter { !hiddenGameIds.contains($0.id) }
+        let scored = ScoringEngine.scorePicks(
+            picks: picks ?? [:],
+            games: visible,
+            confidenceGameId: confidenceGameId
+        )
+        return (scored.wins, scored.losses)
     }
 }

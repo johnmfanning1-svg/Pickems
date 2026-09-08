@@ -7,7 +7,21 @@ struct LeaderboardRow: View {
     var isPerfectSaturday: Bool = false
     var isCommissioner: Bool = false
     var showsDisclosure: Bool = false
+    /// When set, ranks after first place show games back of this win total instead of batting average.
+    var leaderWins: Int? = nil
     @Environment(\.themePalette) private var theme
+
+    private var recordWins: Int { showWeekly ? entry.weeklyWins : entry.seasonWins }
+    private var recordLosses: Int { showWeekly ? entry.weeklyLosses : entry.seasonLosses }
+
+    private var secondaryCaption: String {
+        StandingsGap.leaderboardCaption(
+            rank: entry.rank,
+            wins: recordWins,
+            losses: recordLosses,
+            leaderWins: leaderWins
+        )
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -51,21 +65,14 @@ struct LeaderboardRow: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 2) {
-                if showWeekly {
-                    Text("\(entry.weeklyWins)-\(entry.weeklyLosses)")
-                        .font(.headline.monospacedDigit())
-                        .foregroundStyle(PickemsColors.textPrimary)
-                    Text(BattingAverage.formatted(wins: entry.weeklyWins, losses: entry.weeklyLosses))
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(PickemsColors.textSecondary)
-                } else {
-                    Text("\(entry.seasonWins)-\(entry.seasonLosses)")
-                        .font(.headline.monospacedDigit())
-                        .foregroundStyle(PickemsColors.textPrimary)
-                    Text(BattingAverage.formatted(wins: entry.seasonWins, losses: entry.seasonLosses))
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(PickemsColors.textSecondary)
-                }
+                Text("\(recordWins)-\(recordLosses)")
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(PickemsColors.textPrimary)
+                Text(secondaryCaption)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
 
             if showsDisclosure {
@@ -86,6 +93,9 @@ struct LeaderboardRow: View {
             : "\(entry.seasonWins) wins, \(entry.seasonLosses) losses this season"
         let tied = entry.isTied ? ", tied for rank" : ""
         let role = isCommissioner ? ", commissioner" : ""
-        return "Rank \(entry.rank), \(entry.displayName)\(role), \(record)\(tied)"
+        let secondary = entry.rank <= 1 || leaderWins == nil
+            ? "batting average \(secondaryCaption)"
+            : secondaryCaption
+        return "Rank \(entry.rank), \(entry.displayName)\(role), \(record), \(secondary)\(tied)"
     }
 }

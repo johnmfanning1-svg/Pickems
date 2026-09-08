@@ -64,6 +64,56 @@ struct LeaguePickemsComparisonStatsTests {
         #expect(LeaguePickemsComparisonStats.gapPhrase(gamesAhead: 0) == "Even")
     }
 
+    @Test func leaderboardCaptionKeepsBattingAverageForFirstPlace() {
+        #expect(
+            StandingsGap.leaderboardCaption(rank: 1, wins: 12, losses: 7, leaderWins: 12) == "0.632"
+        )
+        #expect(
+            StandingsGap.leaderboardCaption(rank: 1, wins: 12, losses: 7, leaderWins: 12)
+                == StandingsGap.leaderboardCaption(rank: 1, wins: 12, losses: 7, leaderWins: nil)
+        )
+    }
+
+    @Test func leaderboardCaptionShowsGamesBackAfterFirst() {
+        #expect(
+            StandingsGap.leaderboardCaption(rank: 2, wins: 7, losses: 12, leaderWins: 12)
+                == "5 games back"
+        )
+        #expect(
+            StandingsGap.leaderboardCaption(rank: 3, wins: 6, losses: 13, leaderWins: 12)
+                == "6 games back"
+        )
+    }
+
+    @Test func weeklyRecordUsesThatWeeksFinalsOnly() {
+        let games = [
+            finalGame("g1", homeCovers: true),
+            finalGame("g2", homeCovers: false),
+            game("g3"),
+        ]
+        let result = LeaguePickemsComparisonStats.weeklyRecord(
+            picks: ["g1": "home", "g2": "home", "g3": "home"],
+            games: games,
+            hiddenGameIds: []
+        )
+        #expect(result.wins == 1)
+        #expect(result.losses == 1)
+    }
+
+    @Test func weeklyRecordIgnoresHiddenGames() {
+        let games = [
+            finalGame("g1", homeCovers: true),
+            finalGame("g2", homeCovers: true),
+        ]
+        let result = LeaguePickemsComparisonStats.weeklyRecord(
+            picks: ["g1": "home", "g2": "home"],
+            games: games,
+            hiddenGameIds: ["g2"]
+        )
+        #expect(result.wins == 1)
+        #expect(result.losses == 0)
+    }
+
     private func week(id: String, year: Int, number: Int) -> WeekSummary {
         WeekSummary(
             id: id,
@@ -74,6 +124,28 @@ struct LeaguePickemsComparisonStatsTests {
             selectionMode: .member,
             selectionsPerMember: 1,
             nominationCount: 0
+        )
+    }
+
+    private func finalGame(_ id: String, homeCovers: Bool) -> SlateGame {
+        SlateGame(
+            id: id,
+            espnEventId: id,
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: 7,
+            spreadTeamId: "home",
+            kickoff: Date(),
+            status: .final,
+            homeScore: homeCovers ? 28 : 10,
+            awayScore: homeCovers ? 17 : 21,
+            winnerTeamId: homeCovers ? "home" : "away"
         )
     }
 

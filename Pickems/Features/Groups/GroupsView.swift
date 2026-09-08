@@ -663,6 +663,13 @@ struct LeaderboardView: View {
         rosterCount > Self.previewLimit
     }
 
+    private var leaderWins: Int? {
+        guard let first = allEntries.first(where: { $0.rank == 1 }) ?? allEntries.first else {
+            return nil
+        }
+        return showWeekly ? first.weeklyWins : first.seasonWins
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
@@ -696,7 +703,8 @@ struct LeaderboardView: View {
                         entry: entry,
                         showWeekly: showWeekly,
                         isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
-                        canCompare: entry.id != appState.currentUserId
+                        canCompare: entry.id != appState.currentUserId,
+                        leaderWins: leaderWins
                     )
                 }
             }
@@ -751,6 +759,13 @@ struct FullLeaderboardView: View {
         appState.rankedStandings(weekly: showWeekly)
     }
 
+    private var leaderWins: Int? {
+        guard let first = entries.first(where: { $0.rank == 1 }) ?? entries.first else {
+            return nil
+        }
+        return showWeekly ? first.weeklyWins : first.seasonWins
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -768,7 +783,8 @@ struct FullLeaderboardView: View {
                         entry: entry,
                         showWeekly: showWeekly,
                         isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
-                        canCompare: entry.id != appState.currentUserId
+                        canCompare: entry.id != appState.currentUserId,
+                        leaderWins: leaderWins
                     )
                 }
             }
@@ -788,6 +804,7 @@ private struct LeaderboardStandingRow: View {
     let showWeekly: Bool
     let isCommissioner: Bool
     let canCompare: Bool
+    var leaderWins: Int? = nil
 
     var body: some View {
         Group {
@@ -799,7 +816,8 @@ private struct LeaderboardStandingRow: View {
                         entry: entry,
                         showWeekly: showWeekly,
                         isCommissioner: isCommissioner,
-                        showsDisclosure: true
+                        showsDisclosure: true,
+                        leaderWins: leaderWins
                     )
                 }
                 .buttonStyle(.plain)
@@ -808,7 +826,8 @@ private struct LeaderboardStandingRow: View {
                 LeaderboardRow(
                     entry: entry,
                     showWeekly: showWeekly,
-                    isCommissioner: isCommissioner
+                    isCommissioner: isCommissioner,
+                    leaderWins: leaderWins
                 )
             }
         }

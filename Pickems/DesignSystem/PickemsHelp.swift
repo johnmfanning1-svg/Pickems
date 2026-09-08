@@ -203,6 +203,7 @@ enum PickemsHelp {
         message: "Rankings based on Pickem record. This Week resets each slate; Season is cumulative.",
         tips: [
             "W-L is wins and losses against the spread.",
+            "First place shows batting average. Everyone else shows games back of the leader.",
             "Tied players may need a commissioner tie-break decision.",
             "Leagues with more than 10 members show Full ranking under the This Week / Season picker, then the top 10.",
             "Tap another member to compare your Pickems with theirs. If this week isn’t public yet, you can still browse previous weeks."

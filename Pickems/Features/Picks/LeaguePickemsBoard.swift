@@ -12,6 +12,8 @@ struct LeaguePickemsBoard: View {
     var isExpandedLayout: Bool = false
     /// Rolling lock: games that have not kicked off yet. Cells show a lock, not a pick.
     var hiddenGameIds: Set<String> = []
+    /// Head-to-head: stretch the two pick columns across the remaining width.
+    var fillsAvailableWidth: Bool = false
 
     @Environment(\.themePalette) private var theme
     @AppStorage("leaguePickems.chartIsDense") private var isDense = true
@@ -62,6 +64,7 @@ struct LeaguePickemsBoard: View {
             board
             chartFootnote
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .fullScreenCover(isPresented: $isExpanded) {
             LeaguePickemsExpandedBoard(
                 members: members,
@@ -70,7 +73,8 @@ struct LeaguePickemsBoard: View {
                 liveCards: liveCards,
                 teamRanks: teamRanks,
                 currentUserId: currentUserId,
-                hiddenGameIds: hiddenGameIds
+                hiddenGameIds: hiddenGameIds,
+                fillsAvailableWidth: fillsAvailableWidth
             )
         }
     }
@@ -164,20 +168,33 @@ struct LeaguePickemsBoard: View {
     }
 
     private var board: some View {
-        HStack(alignment: .top, spacing: 0) {
-            gameColumn
-            if let you = ownMember {
-                pinnedMemberColumn(you)
-            }
-            ScrollView(.horizontal, showsIndicators: true) {
-                VStack(spacing: 0) {
-                    memberHeaderRow(otherMembers)
-                    ForEach(games) { game in
-                        pickRow(for: game, members: otherMembers)
+        Group {
+            if fillsAvailableWidth {
+                HStack(alignment: .top, spacing: 1) {
+                    gameColumn
+                    ForEach(columns) { member in
+                        memberColumn(member)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            } else {
+                HStack(alignment: .top, spacing: 0) {
+                    gameColumn
+                    if let you = ownMember {
+                        memberColumn(you, showsPinDivider: true)
+                    }
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        VStack(spacing: 0) {
+                            memberHeaderRow(otherMembers)
+                            ForEach(games) { game in
+                                pickRow(for: game, members: otherMembers)
+                            }
+                        }
                     }
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -208,7 +225,7 @@ struct LeaguePickemsBoard: View {
         }
     }
 
-    private func pinnedMemberColumn(_ member: GroupMember) -> some View {
+    private func memberColumn(_ member: GroupMember, showsPinDivider: Bool = false) -> some View {
         VStack(spacing: 0) {
             memberHeaderCell(member)
             ForEach(games) { game in
@@ -216,10 +233,12 @@ struct LeaguePickemsBoard: View {
             }
         }
         .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(Color.white.opacity(0.18))
-                .frame(width: 1)
-                .accessibilityHidden(true)
+            if showsPinDivider {
+                Rectangle()
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: 1)
+                    .accessibilityHidden(true)
+            }
         }
     }
 
@@ -238,7 +257,8 @@ struct LeaguePickemsBoard: View {
             .multilineTextAlignment(.center)
             .lineLimit(2)
             .minimumScaleFactor(0.7)
-            .frame(width: pickColumnWidth, height: headerHeight)
+            .frame(width: fillsAvailableWidth ? nil : pickColumnWidth, height: headerHeight)
+            .frame(maxWidth: fillsAvailableWidth ? .infinity : nil)
             .background(PickemsColors.cardBackground)
             .accessibilityLabel(member.displayName)
     }
@@ -377,7 +397,8 @@ struct LeaguePickemsBoard: View {
             Image(systemName: "lock.fill")
                 .font((isDense ? Font.caption2 : Font.caption).weight(.bold))
                 .foregroundStyle(PickemsColors.textSecondary)
-                .frame(width: pickColumnWidth, height: rowHeight)
+                .frame(width: fillsAvailableWidth ? nil : pickColumnWidth, height: rowHeight)
+                .frame(maxWidth: fillsAvailableWidth ? .infinity : nil)
                 .background(PickemsColors.cardBackground)
                 .accessibilityLabel("\(member.displayName) pick hidden until kickoff")
         } else {
@@ -396,7 +417,8 @@ struct LeaguePickemsBoard: View {
                 .foregroundStyle(status.foreground)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-                .frame(width: pickColumnWidth, height: rowHeight)
+                .frame(width: fillsAvailableWidth ? nil : pickColumnWidth, height: rowHeight)
+                .frame(maxWidth: fillsAvailableWidth ? .infinity : nil)
                 .background(status.fill)
                 .accessibilityLabel(
                     "\(member.displayName) picked \(label == "—" ? "nothing" : label), \(status.label)"
@@ -428,6 +450,7 @@ struct LeaguePickemsExpandedBoard: View {
     var teamRanks: TeamRankLookup = .empty
     var currentUserId: String?
     var hiddenGameIds: Set<String> = []
+    var fillsAvailableWidth: Bool = false
 
     @Environment(\.dismiss) private var dismiss
 
@@ -443,7 +466,8 @@ struct LeaguePickemsExpandedBoard: View {
                     currentUserId: currentUserId,
                     allowsExpand: false,
                     isExpandedLayout: true,
-                    hiddenGameIds: hiddenGameIds
+                    hiddenGameIds: hiddenGameIds,
+                    fillsAvailableWidth: fillsAvailableWidth
                 )
                 .padding()
             }

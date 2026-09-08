@@ -1,6 +1,7 @@
-What's new in 3.3.7
+What's new in 3.3.8
 
-• Head-to-head comparison now shows games ahead or games back for this week and the season
-• Each player’s weekly and season records sit above the gap so you can see the math
+• Head-to-head weekly records follow the week you select; season totals stay put
+• You vs them chart columns fill the width instead of leaving a gap
+• Leaderboard and Full ranking show games back, except first place still shows batting average
 
 Thanks for playing with us.
