@@ -1,7 +1,7 @@
-What's new in 3.3.11
+What's new in 3.5.0
 
-• League tab: Week Recap replaces Stats
-• Recap, awards, and Share Results for any week on the same week wheel
-• Share uses that week's W–L, not only the live slate
+• Commissioners get a league recap — winner, last place, and a week highlight
+• Moderate or Extremely edgy tone, with text you can edit before sending
+• Send to League chat, or share as a Text Message
 
 Thanks for playing with us.

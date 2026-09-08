@@ -2,7 +2,6 @@ import SwiftUI
 
 struct WeekRecapView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.themePalette) private var theme
 
     @State private var weeks: [WeekSummary] = []
     @State private var selectedWeekId: String?
@@ -172,21 +171,34 @@ struct WeekRecapView: View {
 
     private var recapContent: some View {
         VStack(alignment: .leading, spacing: 16) {
-            WeekRecapCard(recapText: recapText)
+            if appState.isCommissioner,
+               let week = selectedWeek,
+               let group = appState.groupService.selectedGroup {
+                CommissionerLeagueRecapPanel(
+                    group: group,
+                    week: week,
+                    entries: rankedEntries,
+                    picks: displayPicks,
+                    games: scoringGames,
+                    awards: awards
+                )
+            } else {
+                WeekRecapCard(recapText: recapText)
 
-            if let awards {
-                WeekAwardsBanner(awards: awards)
-                    .padding(.horizontal)
-            }
+                if let awards {
+                    WeekAwardsBanner(awards: awards)
+                        .padding(.horizontal)
+                }
 
-            if let shareSource {
-                ShareResultsButton(source: shareSource)
-                    .padding(.horizontal)
-            } else if selectedWeek?.status != .scored {
-                Text("Share Results shows up once you have a scored Pickem this week.")
-                    .font(.footnote)
-                    .foregroundStyle(PickemsColors.textSecondary)
-                    .padding(.horizontal)
+                if let shareSource {
+                    ShareResultsButton(source: shareSource)
+                        .padding(.horizontal)
+                } else if selectedWeek?.status != .scored {
+                    Text("Share Results shows up once you have a scored Pickem this week.")
+                        .font(.footnote)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .padding(.horizontal)
+                }
             }
         }
     }

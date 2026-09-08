@@ -152,9 +152,10 @@ final class ChatService {
 
     // MARK: - Sending
 
-    func send(text rawText: String, groupId: String, weekId: String?, author: UserProfile) async {
+    @discardableResult
+    func send(text rawText: String, groupId: String, weekId: String?, author: UserProfile) async -> Bool {
         let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, text.count <= ChatMessage.maxTextLength else { return }
+        guard !text.isEmpty, text.count <= ChatMessage.maxTextLength else { return false }
 
         let ref = db.group(groupId).messages.document()
         // `createdAt` has to be the server clock: the rules pin it to `request.time`,
@@ -200,10 +201,12 @@ final class ChatService {
                 "group_id": groupId,
                 "week_id": weekId ?? "league",
             ])
+            return true
         } catch {
             pendingMessages.removeAll { $0.id == echo.id }
             UserFacingError.apply(error, to: &errorMessage, context: .write)
             AppEvents.failure(.chatSendFailed, error: error, metadata: ["group_id": groupId])
+            return false
         }
     }
 

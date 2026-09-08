@@ -27,35 +27,8 @@ struct HomeView: View {
                     if let week = appState.groupService.currentWeek,
                        week.status == .scored,
                        let group = appState.groupService.selectedGroup {
-                        WeekRecapCard(recapText: WeekRecapGenerator.recap(
-                            groupName: group.name,
-                            week: week,
-                            standings: appState.groupService.standings,
-                            userId: appState.authService.currentUser?.id
-                        ))
-                        .pickemsAppear()
-
-                        if let awards = week.awards {
-                            WeekAwardsBanner(awards: awards)
-                                .padding(.horizontal)
-                        } else if week.status == .scored {
-                            let computed = WeekAwardsEngine.compute(
-                                picks: appState.pickService.allPicks,
-                                games: appState.pickService.slateGames,
-                                members: appState.groupService.members
-                            )
-                            WeekAwardsBanner(awards: WeekAwards(
-                                sharpshooterUserId: computed.sharpshooterUserId,
-                                heartbreakerUserId: computed.heartbreakerUserId,
-                                contrarianUserId: computed.contrarianUserId
-                            ))
-                            .padding(.horizontal)
-                        }
-
-                        if let shareSource = appState.weeklyShareSource() {
-                            ShareResultsButton(source: shareSource)
-                                .padding(.horizontal)
-                        }
+                        HomeScoredWeekSection(week: week, group: group)
+                            .pickemsAppear()
                     }
 
                     // Scores, CFB This Week, and news stay expanded by default.
@@ -379,5 +352,66 @@ struct HomeView: View {
             pickemsLocked: week.map { WeekTransition.arePicksFullyLocked($0) } ?? false,
             picksSubmitted: appState.pickService.userPick?.isLocked == true
         )
+    }
+}
+
+private struct HomeScoredWeekSection: View {
+    let week: WeekSummary
+    let group: PickemGroup
+    @Environment(AppState.self) private var appState
+
+    private var awards: WeekAwards? {
+        if let stored = week.awards,
+           stored.sharpshooterUserId != nil
+            || stored.heartbreakerUserId != nil
+            || stored.contrarianUserId != nil {
+            return stored
+        }
+        let computed = WeekAwardsEngine.compute(
+            picks: appState.pickService.allPicks,
+            games: appState.pickService.slateGames,
+            members: appState.groupService.members
+        )
+        let awards = WeekAwards(
+            sharpshooterUserId: computed.sharpshooterUserId,
+            heartbreakerUserId: computed.heartbreakerUserId,
+            contrarianUserId: computed.contrarianUserId
+        )
+        if awards.sharpshooterUserId != nil
+            || awards.heartbreakerUserId != nil
+            || awards.contrarianUserId != nil {
+            return awards
+        }
+        return nil
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if appState.isCommissioner {
+                CommissionerLeagueRecapPanel(
+                    group: group,
+                    week: week,
+                    entries: appState.rankedStandings(weekly: true),
+                    picks: appState.pickService.allPicks,
+                    games: appState.pickService.slateGames,
+                    awards: awards
+                )
+            } else {
+                WeekRecapCard(recapText: WeekRecapGenerator.recap(
+                    groupName: group.name,
+                    week: week,
+                    standings: appState.groupService.standings,
+                    userId: appState.authService.currentUser?.id
+                ))
+                if let awards {
+                    WeekAwardsBanner(awards: awards)
+                        .padding(.horizontal)
+                }
+                if let shareSource = appState.weeklyShareSource() {
+                    ShareResultsButton(source: shareSource)
+                        .padding(.horizontal)
+                }
+            }
+        }
     }
 }

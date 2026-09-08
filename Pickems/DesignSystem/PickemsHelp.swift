@@ -182,7 +182,7 @@ enum PickemsHelp {
             "Share your invite code so friends can join — unless the commissioner locked invites to themselves.",
             "Toggle between weekly and season standings.",
             "View League Pickems opens the chart after lock, or a countdown until then.",
-            "Week Recap has the recap, awards, and Share Results for any week.",
+            "Week Recap has the recap, awards, and share for any week. Commissioners get a league recap they can tone, edit, and send to League chat.",
             "Rivalry compares your weekly record with another member.",
             "Dynasty opens champions and career records."
         ]
@@ -191,10 +191,11 @@ enum PickemsHelp {
     static let weekRecap = HelpTopic(
         id: "groups.weekRecap",
         title: "Week Recap",
-        message: "The story of a week: recap copy, awards, and Share Results. Use the week chips to jump between slates.",
+        message: "The story of a week. Members see their own recap and Share Results. Commissioners see a league recap they can tone, edit, and send to League chat.",
         tips: [
             "The wheel is the same one on Selections and Pickems — Current marks this week.",
-            "Awards fill in once games are final. Share Results uses that week’s W–L, not a website link."
+            "Awards fill in once games are final.",
+            "Commissioners pick Moderate or Extremely edgy, then can edit the text. Send to League chat posts it for everyone; Text Message and Share to… still work outside the app."
         ]
     )
 
