@@ -14,12 +14,29 @@ struct LeaguePickemsBoard: View {
     var hiddenGameIds: Set<String> = []
 
     @Environment(\.themePalette) private var theme
+    @AppStorage("leaguePickems.chartIsDense") private var isDense = true
     @State private var isExpanded = false
 
-    private var gameColumnWidth: CGFloat { isExpandedLayout ? 168 : 152 }
-    private var pickColumnWidth: CGFloat { isExpandedLayout ? 88 : 76 }
-    private let headerHeight: CGFloat = 44
-    private let rowHeight: CGFloat = 76
+    private var gameColumnWidth: CGFloat {
+        switch (isDense, isExpandedLayout) {
+        case (true, true): return 140
+        case (true, false): return 128
+        case (false, true): return 168
+        case (false, false): return 152
+        }
+    }
+
+    private var pickColumnWidth: CGFloat {
+        switch (isDense, isExpandedLayout) {
+        case (true, true): return 60
+        case (true, false): return 52
+        case (false, true): return 88
+        case (false, false): return 76
+        }
+    }
+
+    private var headerHeight: CGFloat { isDense ? 32 : 44 }
+    private var rowHeight: CGFloat { isDense ? (isExpandedLayout ? 48 : 44) : 76 }
 
     private var columns: [GroupMember] {
         members.sorted { lhs, rhs in
@@ -28,6 +45,15 @@ struct LeaguePickemsBoard: View {
             if leftOwn != rightOwn { return leftOwn && !rightOwn }
             return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
         }
+    }
+
+    private var ownMember: GroupMember? {
+        guard let currentUserId else { return nil }
+        return columns.first { $0.id == currentUserId }
+    }
+
+    private var otherMembers: [GroupMember] {
+        columns.filter { $0.id != currentUserId }
     }
 
     var body: some View {
@@ -51,11 +77,12 @@ struct LeaguePickemsBoard: View {
 
     private var colorKey: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(spacing: 8) {
                 Text("Color key")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(PickemsColors.textSecondary)
                 Spacer(minLength: 8)
+                densityPicker
                 if allowsExpand {
                     Button {
                         isExpanded = true
@@ -71,14 +98,47 @@ struct LeaguePickemsBoard: View {
                     .accessibilityHint("Opens a landscape fullscreen view of the league Pickems chart")
                 }
             }
-            HStack(spacing: 8) {
-                keyChip("Trailing", fill: PickemsColors.warning, ink: .black)
-                keyChip("Covering", fill: PickemsColors.covering, ink: .white)
-                keyChip("Won", fill: PickemsColors.success, ink: .black)
-                keyChip("Lost", fill: PickemsColors.lost, ink: .white)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    keyChips
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        keyChip("Trailing", fill: PickemsColors.warning, ink: .black)
+                        keyChip("Covering", fill: PickemsColors.covering, ink: .white)
+                        keyChip("Won", fill: PickemsColors.success, ink: .black)
+                    }
+                    HStack(spacing: 6) {
+                        keyChip("Lost", fill: PickemsColors.lost, ink: .white)
+                        keyChip("Push", fill: PickemsColors.push, ink: .white)
+                    }
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .contain)
         }
+    }
+
+    private var densityPicker: some View {
+        Picker("Chart density", selection: $isDense) {
+            Text("Comfortable").tag(false)
+            Text("Dense").tag(true)
+        }
+        .pickerStyle(.segmented)
+        .frame(maxWidth: 210)
+        .labelsHidden()
+        .accessibilityLabel("Chart density")
+        .accessibilityValue(isDense ? "Dense" : "Comfortable")
+        .accessibilityHint("Dense shows more members and games on screen")
+    }
+
+    @ViewBuilder
+    private var keyChips: some View {
+        keyChip("Trailing", fill: PickemsColors.warning, ink: .black)
+        keyChip("Covering", fill: PickemsColors.covering, ink: .white)
+        keyChip("Won", fill: PickemsColors.success, ink: .black)
+        keyChip("Lost", fill: PickemsColors.lost, ink: .white)
+        keyChip("Push", fill: PickemsColors.push, ink: .white)
     }
 
     private func keyChip(_ title: String, fill: Color, ink: Color) -> some View {
@@ -106,11 +166,14 @@ struct LeaguePickemsBoard: View {
     private var board: some View {
         HStack(alignment: .top, spacing: 0) {
             gameColumn
+            if let you = ownMember {
+                pinnedMemberColumn(you)
+            }
             ScrollView(.horizontal, showsIndicators: true) {
                 VStack(spacing: 0) {
-                    memberHeaderRow
+                    memberHeaderRow(otherMembers)
                     ForEach(games) { game in
-                        pickRow(for: game)
+                        pickRow(for: game, members: otherMembers)
                     }
                 }
             }
@@ -121,7 +184,11 @@ struct LeaguePickemsBoard: View {
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("League Pickems board. Games as rows, members as columns.")
+        .accessibilityLabel(
+            ownMember == nil
+                ? "League Pickems board. Games as rows, members as columns."
+                : "League Pickems board. Games as rows, members as columns. Your picks stay visible while scrolling other members."
+        )
     }
 
     private var gameColumn: some View {
@@ -129,37 +196,56 @@ struct LeaguePickemsBoard: View {
             Text("Game")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PickemsColors.textSecondary)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, isDense ? 8 : 10)
                 .frame(width: gameColumnWidth, height: headerHeight, alignment: .leading)
                 .background(PickemsColors.cardBackground)
             ForEach(games) { game in
                 gameLabel(game)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, isDense ? 8 : 10)
                     .frame(width: gameColumnWidth, height: rowHeight, alignment: .leading)
                     .background(PickemsColors.cardBackground)
             }
         }
     }
 
-    private var memberHeaderRow: some View {
+    private func pinnedMemberColumn(_ member: GroupMember) -> some View {
+        VStack(spacing: 0) {
+            memberHeaderCell(member)
+            ForEach(games) { game in
+                pickCell(game: game, member: member)
+            }
+        }
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(Color.white.opacity(0.18))
+                .frame(width: 1)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func memberHeaderRow(_ members: [GroupMember]) -> some View {
         HStack(spacing: 1) {
-            ForEach(columns) { member in
-                Text(columnTitle(for: member))
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(PickemsColors.textPrimary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.7)
-                    .frame(width: pickColumnWidth, height: headerHeight)
-                    .background(PickemsColors.cardBackground)
-                    .accessibilityLabel(member.displayName)
+            ForEach(members) { member in
+                memberHeaderCell(member)
             }
         }
     }
 
-    private func pickRow(for game: SlateGame) -> some View {
+    private func memberHeaderCell(_ member: GroupMember) -> some View {
+        Text(columnTitle(for: member))
+            .font((isDense ? Font.caption2 : Font.caption).weight(.bold))
+            .foregroundStyle(PickemsColors.textPrimary)
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .minimumScaleFactor(0.7)
+            .frame(width: pickColumnWidth, height: headerHeight)
+            .background(PickemsColors.cardBackground)
+            .accessibilityLabel(member.displayName)
+    }
+
+    private func pickRow(for game: SlateGame, members: [GroupMember]) -> some View {
         HStack(spacing: 1) {
-            ForEach(columns) { member in
+            ForEach(members) { member in
                 pickCell(game: game, member: member)
             }
         }
@@ -178,23 +264,47 @@ struct LeaguePickemsBoard: View {
             separator: game.matchupSeparator,
             favoredSide: game.favoredSide
         )
-        return VStack(alignment: .leading, spacing: 2) {
+        let statusLine = gameStatusLine(
+            game: game,
+            live: live,
+            status: status,
+            compactFinal: isDense
+        )
+        let spreadCaption = SpreadLineCopy.caption(
+            locked: game.favoriteSpreadDisplay,
+            live: live?.liveSpreadLabel
+        )
+        return VStack(alignment: .leading, spacing: isDense ? 1 : 2) {
             Text(matchup)
-                .font(.caption.weight(.semibold))
+                .font((isDense ? Font.caption2 : Font.caption).weight(.semibold))
                 .foregroundStyle(PickemsColors.textPrimary)
+                .lineLimit(isDense ? 1 : 2)
+                .minimumScaleFactor(0.7)
+            if isDense {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Image(systemName: "lock.fill")
+                        .font(.caption2)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .accessibilityHidden(true)
+                    Text("\(spreadCaption) · \(statusLine)")
+                        .font(.caption2)
+                        .foregroundStyle(status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+            } else {
+                LockedSpreadLabel(
+                    lockedText: game.favoriteSpreadDisplay,
+                    liveText: live?.liveSpreadLabel,
+                    isLocked: true
+                )
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
-            LockedSpreadLabel(
-                lockedText: game.favoriteSpreadDisplay,
-                liveText: live?.liveSpreadLabel,
-                isLocked: true
-            )
-            .lineLimit(2)
-            .minimumScaleFactor(0.8)
-            Text(gameStatusLine(game: game, live: live, status: status))
-                .font(.caption2)
-                .foregroundStyle(status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
-                .lineLimit(1)
+                Text(statusLine)
+                    .font(.caption2)
+                    .foregroundStyle(status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
+                    .lineLimit(1)
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(gameAccessibilityLabel(
@@ -233,7 +343,8 @@ struct LeaguePickemsBoard: View {
         game: SlateGame,
         live: ESPNLiveGameCard?,
         status: SlateGame.GameStatus,
-        compactKickoff: Bool = true
+        compactKickoff: Bool = true,
+        compactFinal: Bool = false
     ) -> String {
         switch status {
         case .inProgress:
@@ -248,9 +359,9 @@ struct LeaguePickemsBoard: View {
         case .final:
             if let away = live?.awayScore ?? game.awayScore,
                let home = live?.homeScore ?? game.homeScore {
-                return "Final \(away)–\(home)"
+                return compactFinal ? "F \(away)–\(home)" : "Final \(away)–\(home)"
             }
-            return "Final"
+            return compactFinal ? "F" : "Final"
         case .scheduled:
             return GameKickoffLine.make(
                 kickoff: game.kickoff,
@@ -264,7 +375,7 @@ struct LeaguePickemsBoard: View {
     private func pickCell(game: SlateGame, member: GroupMember) -> some View {
         if hiddenGameIds.contains(game.id) {
             Image(systemName: "lock.fill")
-                .font(.caption.weight(.bold))
+                .font((isDense ? Font.caption2 : Font.caption).weight(.bold))
                 .foregroundStyle(PickemsColors.textSecondary)
                 .frame(width: pickColumnWidth, height: rowHeight)
                 .background(PickemsColors.cardBackground)
@@ -281,8 +392,10 @@ struct LeaguePickemsBoard: View {
             )
             let label = pickAbbreviation(game: game, pickedTeamId: pickedId)
             Text(label)
-                .font(.caption.weight(.bold))
+                .font((isDense ? Font.caption2 : Font.caption).weight(.bold))
                 .foregroundStyle(status.foreground)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .frame(width: pickColumnWidth, height: rowHeight)
                 .background(status.fill)
                 .accessibilityLabel(
@@ -356,15 +469,16 @@ private extension PickBoardStatus {
         case .trailing: return PickemsColors.warning
         case .won: return PickemsColors.success
         case .lost: return PickemsColors.lost
-        case .none, .pending, .push: return PickemsColors.cardBackground
+        case .push: return PickemsColors.push
+        case .none, .pending: return PickemsColors.cardBackground
         }
     }
 
     var foreground: Color {
         switch self {
-        case .covering, .lost: return .white
+        case .covering, .lost, .push: return .white
         case .trailing, .won: return .black
-        case .none, .pending, .push: return PickemsColors.textPrimary
+        case .none, .pending: return PickemsColors.textPrimary
         }
     }
 }

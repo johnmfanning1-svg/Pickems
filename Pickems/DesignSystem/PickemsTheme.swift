@@ -15,6 +15,8 @@ enum PickemsColors {
     static let covering = Color(red: 0.22, green: 0.48, blue: 0.92)
     /// Final loss / brand red already used as `accent`.
     static let lost = defaultAccent
+    /// Final push — landed exactly on the spread. Distinct from pending (unfilled card).
+    static let push = Color(red: 0.36, green: 0.37, blue: 0.40)
 
     static let avatarPalette: [Color] = [
         Color(red: 0.86, green: 0.15, blue: 0.15),

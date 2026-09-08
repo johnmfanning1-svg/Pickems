@@ -6,6 +6,7 @@ struct LeaderboardRow: View {
     var streak: Int = 0
     var isPerfectSaturday: Bool = false
     var isCommissioner: Bool = false
+    var showsDisclosure: Bool = false
     @Environment(\.themePalette) private var theme
 
     var body: some View {
@@ -65,6 +66,13 @@ struct LeaderboardRow: View {
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(PickemsColors.textSecondary)
                 }
+            }
+
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .accessibilityHidden(true)
             }
         }
         .padding(.vertical, 6)

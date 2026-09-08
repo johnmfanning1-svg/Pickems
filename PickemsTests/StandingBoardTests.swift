@@ -53,7 +53,7 @@ struct StandingBoardTests {
         #expect(merged.map(\.id) == ["a"])
     }
 
-    @Test func widgetRankingDropsOtherLeagueMember() {
+    @Test @MainActor func widgetRankingDropsOtherLeagueMember() {
         let standings = GroupStandings(
             groupId: "ppp",
             weekNumber: 0,

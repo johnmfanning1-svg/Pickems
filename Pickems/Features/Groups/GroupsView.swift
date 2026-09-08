@@ -663,6 +663,11 @@ struct LeaderboardView: View {
         rosterCount > Self.previewLimit
     }
 
+    private var leagueBoardUnlocked: Bool {
+        guard let week = appState.groupService.currentWeek else { return false }
+        return WeekTransition.pickemsShouldShowLeagueBoard(week)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
@@ -692,12 +697,12 @@ struct LeaderboardView: View {
                 )
             } else {
                 ForEach(previewEntries) { entry in
-                    LeaderboardRow(
+                    LeaderboardStandingRow(
                         entry: entry,
                         showWeekly: showWeekly,
-                        isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId
+                        isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
+                        canCompare: leagueBoardUnlocked && entry.id != appState.currentUserId
                     )
-                    .padding(.horizontal)
                 }
             }
         }
@@ -751,6 +756,11 @@ struct FullLeaderboardView: View {
         appState.rankedStandings(weekly: showWeekly)
     }
 
+    private var leagueBoardUnlocked: Bool {
+        guard let week = appState.groupService.currentWeek else { return false }
+        return WeekTransition.pickemsShouldShowLeagueBoard(week)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -764,12 +774,12 @@ struct FullLeaderboardView: View {
                 .accessibilityLabel("Standings period")
 
                 ForEach(entries) { entry in
-                    LeaderboardRow(
+                    LeaderboardStandingRow(
                         entry: entry,
                         showWeekly: showWeekly,
-                        isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId
+                        isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
+                        canCompare: leagueBoardUnlocked && entry.id != appState.currentUserId
                     )
-                    .padding(.horizontal)
                 }
             }
             .padding(.vertical, 8)
@@ -780,5 +790,38 @@ struct FullLeaderboardView: View {
         .toolbar {
             HelpToolbarItem(topic: PickemsHelp.leaderboard)
         }
+    }
+}
+
+private struct LeaderboardStandingRow: View {
+    let entry: StandingEntry
+    let showWeekly: Bool
+    let isCommissioner: Bool
+    let canCompare: Bool
+
+    var body: some View {
+        Group {
+            if canCompare {
+                NavigationLink {
+                    LeaguePickemsComparisonView(opponent: entry)
+                } label: {
+                    LeaderboardRow(
+                        entry: entry,
+                        showWeekly: showWeekly,
+                        isCommissioner: isCommissioner,
+                        showsDisclosure: true
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Compare your Pickems with \(entry.displayName)")
+            } else {
+                LeaderboardRow(
+                    entry: entry,
+                    showWeekly: showWeekly,
+                    isCommissioner: isCommissioner
+                )
+            }
+        }
+        .padding(.horizontal)
     }
 }

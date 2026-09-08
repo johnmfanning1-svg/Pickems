@@ -144,3 +144,4 @@ struct PickDeadlineCalculatorTests {
         #expect(PickDeadlineCalculator.nextLockDate(week: week, games: games) == last)
         #expect(PickDeadlineCalculator.openGameCount(week: week, games: games) == 1)
     }
+}

@@ -1,7 +1,8 @@
-What's new in 3.3.4
+What's new in 3.3.5
 
-• Rolling Pickems lock: freeze each game at kickoff instead of the whole slate at first kick
-• Later games stay editable (and hidden) until they start
-• Lock remaining / reopen only affect games that have not kicked off
+• League Pickems charts show pushes in slate gray — exact spreads are neither a win nor a loss
+• Switch Comfortable or Dense to fit more of the board on screen
+• Your column stays pinned next to Game while you scroll other members
+• After lock, tap a name on the league leaderboard to compare your Pickems with theirs
 
 Thanks for playing with us.

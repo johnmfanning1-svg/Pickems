@@ -85,6 +85,9 @@ enum PickemsHelp {
             "An asterisk next to a team means that team is favored — the spread applies to them.",
             "A lock is the Pickems line. The number in parentheses is ESPN’s live line, for reference.",
             "Tap the expand arrows to view the chart fullscreen in landscape.",
+            "Comfortable and Dense control how much of the chart fits on screen.",
+            "Your column stays pinned next to Game while you scroll other members.",
+            "Gray cells are pushes — the spread landed exactly. They are neither a win nor a loss.",
             "After lock, open Season History to browse past weeks' charts."
         ]
     )
@@ -200,7 +203,8 @@ enum PickemsHelp {
         tips: [
             "W-L is wins and losses against the spread.",
             "Tied players may need a commissioner tie-break decision.",
-            "Leagues with more than 10 members show Full ranking under the This Week / Season picker, then the top 10."
+            "Leagues with more than 10 members show Full ranking under the This Week / Season picker, then the top 10.",
+            "After Pickems lock, tap another member to compare your picks with theirs."
         ]
     )
 
