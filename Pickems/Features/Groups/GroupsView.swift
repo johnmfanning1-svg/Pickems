@@ -827,6 +827,7 @@ private struct LeaderboardStandingRow: View {
                     entry: entry,
                     showWeekly: showWeekly,
                     isCommissioner: isCommissioner,
+                    reservesDisclosureSpace: true,
                     leaderWins: leaderWins
                 )
             }

@@ -6,15 +6,14 @@ enum StandingsGap {
         youWins - themWins
     }
 
+    /// Head-to-head only: `+N GA` ahead, `-N GB` back.
     static func gapPhrase(gamesAhead: Int) -> String {
         if gamesAhead == 0 { return "Even" }
-        let magnitude = abs(gamesAhead)
-        let unit = magnitude == 1 ? "game" : "games"
-        let direction = gamesAhead > 0 ? "ahead" : "back"
-        return "\(magnitude) \(unit) \(direction)"
+        if gamesAhead > 0 { return "+\(gamesAhead) GA" }
+        return "-\(abs(gamesAhead)) GB"
     }
 
-    /// First place (including ties) keeps batting average. Everyone else is games back of the leader.
+    /// First place (including ties) keeps batting average. Everyone else is `-N GB`.
     static func leaderboardCaption(
         rank: Int,
         wins: Int,
@@ -24,6 +23,8 @@ enum StandingsGap {
         guard let leaderWins, rank > 1 else {
             return BattingAverage.formatted(wins: wins, losses: losses)
         }
-        return gapPhrase(gamesAhead: gamesAhead(youWins: wins, themWins: leaderWins))
+        let ahead = gamesAhead(youWins: wins, themWins: leaderWins)
+        if ahead >= 0 { return "Even" }
+        return "-\(abs(ahead)) GB"
     }
 }

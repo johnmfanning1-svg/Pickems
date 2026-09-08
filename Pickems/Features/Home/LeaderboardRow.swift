@@ -7,6 +7,8 @@ struct LeaderboardRow: View {
     var isPerfectSaturday: Bool = false
     var isCommissioner: Bool = false
     var showsDisclosure: Bool = false
+    /// Keep the chevron's width even when the chevron is hidden so records line up with tappable rows.
+    var reservesDisclosureSpace: Bool = false
     /// When set, ranks after first place show games back of this win total instead of batting average.
     var leaderWins: Int? = nil
     @Environment(\.themePalette) private var theme
@@ -75,10 +77,11 @@ struct LeaderboardRow: View {
                     .minimumScaleFactor(0.8)
             }
 
-            if showsDisclosure {
+            if showsDisclosure || reservesDisclosureSpace {
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(PickemsColors.textSecondary)
+                    .opacity(showsDisclosure ? 1 : 0)
                     .accessibilityHidden(true)
             }
         }
@@ -93,9 +96,13 @@ struct LeaderboardRow: View {
             : "\(entry.seasonWins) wins, \(entry.seasonLosses) losses this season"
         let tied = entry.isTied ? ", tied for rank" : ""
         let role = isCommissioner ? ", commissioner" : ""
-        let secondary = entry.rank <= 1 || leaderWins == nil
-            ? "batting average \(secondaryCaption)"
-            : secondaryCaption
+        let secondary: String
+        if entry.rank <= 1 || leaderWins == nil {
+            secondary = "batting average \(secondaryCaption)"
+        } else {
+            let back = (leaderWins ?? recordWins) - recordWins
+            secondary = back == 0 ? "Even" : "\(back) games back"
+        }
         return "Rank \(entry.rank), \(entry.displayName)\(role), \(record), \(secondary)\(tied)"
     }
 }

@@ -59,8 +59,8 @@ struct LeaguePickemsComparisonStatsTests {
     }
 
     @Test func gapPhraseSwitchesAheadBackAndEven() {
-        #expect(LeaguePickemsComparisonStats.gapPhrase(gamesAhead: 1) == "1 game ahead")
-        #expect(LeaguePickemsComparisonStats.gapPhrase(gamesAhead: -2) == "2 games back")
+        #expect(LeaguePickemsComparisonStats.gapPhrase(gamesAhead: 1) == "+1 GA")
+        #expect(LeaguePickemsComparisonStats.gapPhrase(gamesAhead: -2) == "-2 GB")
         #expect(LeaguePickemsComparisonStats.gapPhrase(gamesAhead: 0) == "Even")
     }
 
@@ -77,11 +77,15 @@ struct LeaguePickemsComparisonStatsTests {
     @Test func leaderboardCaptionShowsGamesBackAfterFirst() {
         #expect(
             StandingsGap.leaderboardCaption(rank: 2, wins: 7, losses: 12, leaderWins: 12)
-                == "5 games back"
+                == "-5 GB"
         )
         #expect(
             StandingsGap.leaderboardCaption(rank: 3, wins: 6, losses: 13, leaderWins: 12)
-                == "6 games back"
+                == "-6 GB"
+        )
+        #expect(
+            !StandingsGap.leaderboardCaption(rank: 2, wins: 13, losses: 6, leaderWins: 12)
+                .contains("GA")
         )
     }
 
