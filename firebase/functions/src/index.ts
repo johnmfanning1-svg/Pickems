@@ -21,6 +21,7 @@ import {
   computeWeekAwards,
   applyLatePickPenalty,
   membersOnRoster,
+  toMillis,
 } from "./scoring";
 import { materializeNominations } from "./materialize";
 import {
@@ -678,10 +679,14 @@ export const autoCloseSeasons = onSchedule("0 12 15 1 *", async () => {
     const members = membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc));
     if (members.length === 0) continue;
 
+    // Champion / archive rank is most season wins, then earlier join, then name — not batting average.
     const sorted = [...members].sort((a, b) => {
       if ((b.seasonWins ?? 0) !== (a.seasonWins ?? 0)) {
         return (b.seasonWins ?? 0) - (a.seasonWins ?? 0);
       }
+      const aJoin = toMillis(a.joinedAt) ?? Number.POSITIVE_INFINITY;
+      const bJoin = toMillis(b.joinedAt) ?? Number.POSITIVE_INFINITY;
+      if (aJoin !== bJoin) return aJoin - bJoin;
       return (a.displayName ?? "").localeCompare(b.displayName ?? "");
     });
     const champion = sorted[0];

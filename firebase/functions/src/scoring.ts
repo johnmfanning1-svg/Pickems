@@ -21,6 +21,7 @@ export interface MemberDoc {
   avatarColorHex: string;
   seasonWins: number;
   seasonLosses: number;
+  joinedAt?: unknown;
 }
 
 export interface PickDoc {
@@ -85,18 +86,60 @@ export function coveredTeamId(
   return adjusted > 0 ? game.homeTeamId : game.awayTeamId;
 }
 
+/** True when the user actually chose a team for this slate game. */
+export function pickedTeamId(picks: Record<string, string>, gameId: string): string | null {
+  const picked = picks[gameId];
+  if (typeof picked !== "string") return null;
+  const trimmed = picked.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/** Week 0 docs are `{seasonYear}-W0` with `weekNumber: 0`. */
+export function isWeekZero(weekId: string, weekNumber?: unknown): boolean {
+  if (weekNumber === 0) return true;
+  return /(^|-)W0$/i.test(weekId);
+}
+
+/**
+ * Admin rescore re-sums every scored week. Keep Week 0 on skip-miss math unless
+ * Week 0 itself is the week being rescored (which we do not do in production).
+ */
+export function missedPickIsLossForSeasonWeek(options: {
+  targetWeekId: string;
+  targetWeekNumber?: unknown;
+  seasonWeekId: string;
+  seasonWeekNumber?: unknown;
+}): boolean {
+  if (isWeekZero(options.targetWeekId, options.targetWeekNumber)) return true;
+  if (isWeekZero(options.seasonWeekId, options.seasonWeekNumber)) return false;
+  return true;
+}
+
+/**
+ * Score a member against the slate. Keep in sync with iOS `ScoringEngine.scorePicks`.
+ * A final slate game with no Pickem is an automatic loss (weight 1, even on a push
+ * or if it was marked as the confidence game).
+ *
+ * Pass `missedPickIsLoss: false` only when re-summing historical Week 0 so a later
+ * week's admin rescore does not rewrite Week 0's original skip-miss math.
+ */
 export function scorePicks(
   picks: Record<string, string>,
   games: SlateGameDoc[],
-  confidenceGameId?: string | null
+  confidenceGameId?: string | null,
+  options?: { missedPickIsLoss?: boolean }
 ): { wins: number; losses: number; pushes: number } {
+  const missedPickIsLoss = options?.missedPickIsLoss !== false;
   let wins = 0;
   let losses = 0;
   let pushes = 0;
   for (const game of games) {
     if (game.status !== "final" || game.homeScore == null || game.awayScore == null) continue;
-    const picked = picks[game.id];
-    if (!picked) continue;
+    const picked = pickedTeamId(picks, game.id);
+    if (!picked) {
+      if (missedPickIsLoss) losses += 1;
+      continue;
+    }
     const covered = coveredTeamId(game, game.homeScore, game.awayScore);
     const weight = confidenceGameId && confidenceGameId === game.id ? 2 : 1;
     if (covered == null) {
@@ -110,6 +153,7 @@ export function scorePicks(
   return { wins, losses, pushes };
 }
 
+/** Rank by most weekly wins, then name. Keep in sync with iOS `ScoringEngine.rankedStandings`. */
 export function rankEntries(
   entries: Array<{
     id: string;
@@ -131,21 +175,19 @@ export function rankEntries(
   rank: number;
   isTied: boolean;
 }> {
+  // Rank by most wins outright — not batting average. Keep in sync with iOS
+  // `ScoringEngine.rankedStandings`. Same win totals share a rank.
   const sorted = [...entries].sort((a, b) => {
     if (b.weeklyWins !== a.weeklyWins) return b.weeklyWins - a.weeklyWins;
-    const aAvg = a.weeklyWins + a.weeklyLosses === 0 ? 0 : a.weeklyWins / (a.weeklyWins + a.weeklyLosses);
-    const bAvg = b.weeklyWins + b.weeklyLosses === 0 ? 0 : b.weeklyWins / (b.weeklyWins + b.weeklyLosses);
-    if (bAvg !== aAvg) return bAvg - aAvg;
     return a.displayName.localeCompare(b.displayName);
   });
 
   return sorted.map((entry, index) => {
     const prev = sorted[index - 1];
-    const tied =
-      !!prev &&
-      prev.weeklyWins === entry.weeklyWins &&
-      prev.weeklyLosses === entry.weeklyLosses;
-    const rank = tied ? (sorted.findIndex((e) => e.weeklyWins === entry.weeklyWins && e.weeklyLosses === entry.weeklyLosses) + 1) : index + 1;
+    const tied = !!prev && prev.weeklyWins === entry.weeklyWins;
+    const rank = tied
+      ? sorted.findIndex((e) => e.weeklyWins === entry.weeklyWins) + 1
+      : index + 1;
     return { ...entry, rank, isTied: tied };
   });
 }

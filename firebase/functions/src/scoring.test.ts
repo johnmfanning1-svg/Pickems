@@ -7,6 +7,8 @@ import {
   applyLatePickPenalty,
   toMillis,
   membersOnRoster,
+  isWeekZero,
+  missedPickIsLossForSeasonWeek,
   type SlateGameDoc,
   type PickDoc,
 } from "./scoring";
@@ -58,6 +60,33 @@ describe("scorePicks", () => {
   it("counts a spread push", () => {
     const g = game({ id: "g1", homeScore: 24, awayScore: 17 });
     expect(scorePicks({ g1: "home" }, [g])).toEqual({ wins: 0, losses: 0, pushes: 1 });
+  });
+
+  it("counts a missing Pickem on a final slate game as a loss", () => {
+    const g1 = game({ id: "g1" });
+    const g2 = game({ id: "g2", homeScore: 10, awayScore: 21, winnerTeamId: "away" });
+    expect(scorePicks({ g1: "home" }, [g1, g2])).toEqual({ wins: 1, losses: 1, pushes: 0 });
+    expect(scorePicks({}, [g1, g2])).toEqual({ wins: 0, losses: 2, pushes: 0 });
+    expect(scorePicks({ g2: "   " }, [g1, g2])).toEqual({ wins: 0, losses: 2, pushes: 0 });
+  });
+
+  it("counts a missed Pickem as a loss even when the spread pushes", () => {
+    const g = game({ id: "g1", homeScore: 24, awayScore: 17 });
+    expect(scorePicks({}, [g])).toEqual({ wins: 0, losses: 1, pushes: 0 });
+  });
+
+  it("does not double a missed confidence game", () => {
+    const g = game({ id: "g1" });
+    expect(scorePicks({}, [g], "g1")).toEqual({ wins: 0, losses: 1, pushes: 0 });
+  });
+
+  it("can skip missed Pickems when re-summing historical Week 0", () => {
+    const g = game({ id: "g1" });
+    expect(scorePicks({}, [g], null, { missedPickIsLoss: false })).toEqual({
+      wins: 0,
+      losses: 0,
+      pushes: 0,
+    });
   });
 });
 
@@ -111,30 +140,55 @@ describe("toMillis", () => {
   });
 });
 
+function standing(overrides: {
+  id: string;
+  displayName: string;
+  weeklyWins: number;
+  weeklyLosses: number;
+  seasonWins?: number;
+  seasonLosses?: number;
+}) {
+  return {
+    avatarColorHex: "#111",
+    seasonWins: overrides.seasonWins ?? overrides.weeklyWins,
+    seasonLosses: overrides.seasonLosses ?? overrides.weeklyLosses,
+    ...overrides,
+  };
+}
+
 describe("rankEntries", () => {
-  it("orders by weekly wins then batting average then name", () => {
+  it("orders by weekly wins then name, not batting average", () => {
     const ranked = rankEntries([
-      {
-        id: "a",
-        displayName: "Amy",
-        avatarColorHex: "#111",
-        weeklyWins: 4,
-        weeklyLosses: 4,
-        seasonWins: 4,
-        seasonLosses: 4,
-      },
-      {
-        id: "b",
-        displayName: "Bob",
-        avatarColorHex: "#222",
-        weeklyWins: 4,
-        weeklyLosses: 2,
-        seasonWins: 4,
-        seasonLosses: 2,
-      },
+      standing({ id: "a", displayName: "Amy", weeklyWins: 4, weeklyLosses: 4 }),
+      standing({ id: "b", displayName: "Bob", weeklyWins: 4, weeklyLosses: 2 }),
     ]);
-    expect(ranked.map((e) => e.id)).toEqual(["b", "a"]);
+    expect(ranked.map((e) => e.id)).toEqual(["a", "b"]);
+    expect(ranked.map((e) => e.rank)).toEqual([1, 1]);
+    expect(ranked[1].isTied).toBe(true);
+  });
+
+  it("ranks more wins ahead of a hotter batting average", () => {
+    const ranked = rankEntries([
+      standing({
+        id: "late",
+        displayName: "Late",
+        weeklyWins: 8,
+        weeklyLosses: 0,
+        seasonWins: 8,
+        seasonLosses: 0,
+      }),
+      standing({
+        id: "vet",
+        displayName: "Veteran",
+        weeklyWins: 10,
+        weeklyLosses: 10,
+        seasonWins: 10,
+        seasonLosses: 10,
+      }),
+    ]);
+    expect(ranked.map((e) => e.id)).toEqual(["vet", "late"]);
     expect(ranked[0].rank).toBe(1);
+    expect(ranked[1].rank).toBe(2);
   });
 });
 
@@ -146,6 +200,33 @@ describe("computeWeekAwards", () => {
       { userId: "b", displayName: "Blake", picks: { "1": "away" } },
     ];
     expect(computeWeekAwards(picks, games).sharpshooterUserId).toBe("a");
+  });
+});
+
+describe("weekZeroRescoreGuard", () => {
+  it("detects Week 0 ids and numbers", () => {
+    expect(isWeekZero("2026-W0", 0)).toBe(true);
+    expect(isWeekZero("2026-W1", 1)).toBe(false);
+    expect(isWeekZero("2026-W2", 2)).toBe(false);
+  });
+
+  it("keeps skip-miss math when a later week re-sums Week 0", () => {
+    expect(
+      missedPickIsLossForSeasonWeek({
+        targetWeekId: "2026-W2",
+        targetWeekNumber: 2,
+        seasonWeekId: "2026-W0",
+        seasonWeekNumber: 0,
+      })
+    ).toBe(false);
+    expect(
+      missedPickIsLossForSeasonWeek({
+        targetWeekId: "2026-W2",
+        targetWeekNumber: 2,
+        seasonWeekId: "2026-W1",
+        seasonWeekNumber: 1,
+      })
+    ).toBe(true);
   });
 });
 
