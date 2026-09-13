@@ -64,10 +64,12 @@ struct CareerRecord: Codable, Identifiable, Equatable {
 }
 
 enum SeasonCloseEngine {
+    /// Season champion / archive rank is most wins, then earlier join, then name.
+    /// Keep in sync with Cloud Functions `autoCloseSeasons`.
     static func finalStandings(from members: [GroupMember]) -> [SeasonStandingEntry] {
         let ranked = members.sorted {
             if $0.seasonWins != $1.seasonWins { return $0.seasonWins > $1.seasonWins }
-            if $0.battingAverage != $1.battingAverage { return $0.battingAverage > $1.battingAverage }
+            if $0.joinedAt != $1.joinedAt { return $0.joinedAt < $1.joinedAt }
             return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
         }
 

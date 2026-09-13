@@ -214,7 +214,8 @@ enum PickemsHelp {
         title: "Leaderboard",
         message: "Rankings based on Pickem record. This Week resets each slate; Season is cumulative.",
         tips: [
-            "W-L is wins and losses against the spread.",
+            "W-L is wins and losses against the spread. No Pickem on a final slate game is a loss.",
+            "Rank is by most wins, not batting average — a late joiner with a hot percentage does not jump people who have more wins.",
             "First place shows batting average. Everyone else shows games back of the leader.",
             "Tied players may need a commissioner tie-break decision.",
             "Leagues with more than 10 members show Full ranking under the This Week / Season picker, then the top 10.",

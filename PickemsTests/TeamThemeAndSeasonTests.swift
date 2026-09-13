@@ -132,7 +132,7 @@ struct SeasonCloseEngineTests {
         )
     }
 
-    @Test func ranksByWinsThenBattingAverage() {
+    @Test func ranksByMostWinsNotBattingAverage() {
         let members = [
             member(id: "a", name: "Alex", wins: 10, losses: 5),
             member(id: "b", name: "Blake", wins: 12, losses: 3),
@@ -140,9 +140,32 @@ struct SeasonCloseEngineTests {
         ]
 
         let standings = SeasonCloseEngine.finalStandings(from: members)
-        #expect(standings.map(\.id) == ["b", "c", "a"])
+        #expect(standings.map(\.id) == ["b", "a", "c"])
         #expect(standings.map(\.rank) == [1, 2, 3])
         #expect(standings.first?.seasonWins == 12)
+    }
+
+    @Test func lateJoinerWithFewerWinsRanksBehind() {
+        let veteran = GroupMember(
+            id: "vet",
+            displayName: "Veteran",
+            avatarColorHex: "#111111",
+            role: .member,
+            joinedAt: Date(timeIntervalSince1970: 1),
+            seasonWins: 10,
+            seasonLosses: 10
+        )
+        let late = GroupMember(
+            id: "late",
+            displayName: "Late",
+            avatarColorHex: "#222222",
+            role: .member,
+            joinedAt: Date(timeIntervalSince1970: 9_000),
+            seasonWins: 8,
+            seasonLosses: 0
+        )
+        let standings = SeasonCloseEngine.finalStandings(from: [late, veteran])
+        #expect(standings.map(\.id) == ["vet", "late"])
     }
 
     @Test func makeArchiveSetsChampionAndWeekCount() {

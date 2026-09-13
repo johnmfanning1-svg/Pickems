@@ -969,21 +969,17 @@ final class GroupService {
             let games = gamesSnap.documents.compactMap { doc in
                 SlateGame.fromDocument(id: doc.documentID, data: doc.data())
             }
-            guard let pick = try? pickSnap.data(as: UserPick.self) else { continue }
-
-            var wins = 0
-            var losses = 0
-            for game in games where game.status == .final {
-                guard let pickedId = pick.picks[game.id] else { continue }
-                if let correct = ScoringEngine.isPickCorrect(pickedTeamId: pickedId, game: game) {
-                    if correct { wins += 1 } else { losses += 1 }
-                }
-            }
-            let record = WeeklyRecord(week: week.weekNumber, wins: wins, losses: losses)
+            let pick = try? pickSnap.data(as: UserPick.self)
+            let scored = ScoringEngine.scorePicks(
+                picks: pick?.picks ?? [:],
+                games: games,
+                confidenceGameId: pick?.confidenceGameId
+            )
+            let record = WeeklyRecord(week: week.weekNumber, wins: scored.wins, losses: scored.losses)
             weeklyRecords.append(record)
-            seasonWins += wins
-            seasonLosses += losses
-            if bestWeek == nil || wins > (bestWeek?.wins ?? 0) {
+            seasonWins += scored.wins
+            seasonLosses += scored.losses
+            if bestWeek == nil || scored.wins > (bestWeek?.wins ?? 0) {
                 bestWeek = record
             }
         }

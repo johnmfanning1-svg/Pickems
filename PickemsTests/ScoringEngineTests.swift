@@ -211,14 +211,66 @@ struct ScoringEngineTests {
         #expect(ranked[1].rank == 2)
     }
 
-    @Test func rankedStandingsBreaksTiesByBattingAverage() {
+    @Test func rankedStandingsTiesEqualWinsRegardlessOfBattingAverage() {
         let entries = [
             StandingEntry(id: "a", displayName: "A", avatarColorHex: "#DC2626", weeklyWins: 4, weeklyLosses: 4, seasonWins: 10, seasonLosses: 5, rank: 0, isTied: false),
             StandingEntry(id: "b", displayName: "B", avatarColorHex: "#3366CC", weeklyWins: 4, weeklyLosses: 2, seasonWins: 8, seasonLosses: 7, rank: 0, isTied: false),
         ]
         let ranked = ScoringEngine.rankedStandings(entries: entries, weekly: true, tieBreaker: .commissionerOverride)
-        #expect(ranked[0].id == "b")
-        #expect(ranked[1].id == "a")
+        #expect(ranked.map(\.id) == ["a", "b"])
+        #expect(ranked.map(\.rank) == [1, 1])
+        #expect(ranked[1].isTied)
+    }
+
+    @Test func rankedStandingsOrdersByMostWinsNotBattingAverage() {
+        let entries = [
+            StandingEntry(id: "late", displayName: "Late", avatarColorHex: "#111111", weeklyWins: 8, weeklyLosses: 0, seasonWins: 8, seasonLosses: 0, rank: 0, isTied: false),
+            StandingEntry(id: "vet", displayName: "Veteran", avatarColorHex: "#222222", weeklyWins: 10, weeklyLosses: 10, seasonWins: 10, seasonLosses: 10, rank: 0, isTied: false),
+        ]
+        let weekly = ScoringEngine.rankedStandings(entries: entries, weekly: true, tieBreaker: .commissionerOverride)
+        #expect(weekly.map(\.id) == ["vet", "late"])
+        let season = ScoringEngine.rankedStandings(entries: entries, weekly: false, tieBreaker: .commissionerOverride)
+        #expect(season.map(\.id) == ["vet", "late"])
+    }
+
+    @Test func missedPickOnFinalSlateGameIsALoss() {
+        let cover = boardGame(status: .final, homeScore: 28, awayScore: 17)
+        let miss = SlateGame(
+            id: "2",
+            espnEventId: "2",
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: 7,
+            spreadTeamId: "home",
+            kickoff: Date(),
+            status: .final,
+            homeScore: 10,
+            awayScore: 21,
+            winnerTeamId: "away"
+        )
+        let partial = ScoringEngine.scorePicks(picks: ["1": "home"], games: [cover, miss])
+        #expect(partial.wins == 1)
+        #expect(partial.losses == 1)
+        let satOut = ScoringEngine.scorePicks(picks: [:], games: [cover, miss])
+        #expect(satOut.wins == 0)
+        #expect(satOut.losses == 2)
+        let push = boardGame(status: .final, homeScore: 24, awayScore: 17)
+        let missedPush = ScoringEngine.scorePicks(picks: [:], games: [push])
+        #expect(missedPush.losses == 1)
+        #expect(missedPush.pushes == 0)
+        let scheduled = boardGame(status: .scheduled, homeScore: nil, awayScore: nil)
+        let beforeKickoff = ScoringEngine.scorePicks(picks: [:], games: [scheduled])
+        #expect(beforeKickoff.wins == 0)
+        #expect(beforeKickoff.losses == 0)
+        #expect(beforeKickoff.pushes == 0)
+        let missedConfidence = ScoringEngine.scorePicks(picks: [:], games: [cover], confidenceGameId: "1")
+        #expect(missedConfidence.losses == 1)
     }
 
     @Test func rankedStandingsInterimOrdersByJoinedAtWhenNoWins() {

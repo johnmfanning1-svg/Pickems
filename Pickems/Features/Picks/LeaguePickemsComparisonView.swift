@@ -545,7 +545,7 @@ nonisolated enum LeaguePickemsComparisonStats {
     }
 
     /// Win difference vs `them`. Positive means you are ahead. Losses do not create half-games:
-    /// everyone is ranked by wins first, and a missed pick is skipped rather than a game in hand.
+    /// everyone is ranked by most wins, not batting average.
     static func gamesAhead(youWins: Int, themWins: Int) -> Int {
         StandingsGap.gamesAhead(youWins: youWins, themWins: themWins)
     }

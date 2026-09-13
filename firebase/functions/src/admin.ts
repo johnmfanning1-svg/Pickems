@@ -11,6 +11,7 @@ import {
   rankEntries,
   computeWeekAwards,
   applyLatePickPenalty,
+  membersOnRoster,
 } from "./scoring";
 import { isRollingLock } from "./pickLock";
 
@@ -508,7 +509,10 @@ export const adminRescoreWeek = onCall(async (request) => {
     groupRef.collection("weeks").get(),
     groupRef.get(),
   ]);
-  const members = membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc));
+  const members = membersOnRoster(
+    membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc)),
+    groupSnap.data()?.memberIds as string[] | undefined
+  );
   const rules = (groupSnap.data()?.rules ?? {}) as {
     allowLatePicks?: boolean;
     latePickPenaltyWins?: number;
@@ -540,15 +544,20 @@ export const adminRescoreWeek = onCall(async (request) => {
       targetGames = games;
       targetPicks = picks;
     }
-    for (const pick of picks) {
-      const scored = applyLatePickPenalty(scorePicks(pick.picks ?? {}, games, pick.confidenceGameId), {
-        allowLatePicks: !isRollingLock(weekDoc.data().pickLockMode) && lateOptions.allowLatePicks,
-        latePickPenaltyWins: lateOptions.latePickPenaltyWins,
-        submittedAt: pick.submittedAt,
-        deadline: weekDoc.data().pickDeadline,
-      });
-      const running = seasonTotals.get(pick.userId) ?? { wins: 0, losses: 0 };
-      seasonTotals.set(pick.userId, {
+    // Score every roster member, not just pick docs — sitting out a slate is all losses.
+    for (const member of members) {
+      const pick = picks.find((p) => p.userId === member.id);
+      const scored = applyLatePickPenalty(
+        scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId),
+        {
+          allowLatePicks: !isRollingLock(weekDoc.data().pickLockMode) && lateOptions.allowLatePicks,
+          latePickPenaltyWins: lateOptions.latePickPenaltyWins,
+          submittedAt: pick?.submittedAt,
+          deadline: weekDoc.data().pickDeadline,
+        }
+      );
+      const running = seasonTotals.get(member.id) ?? { wins: 0, losses: 0 };
+      seasonTotals.set(member.id, {
         wins: running.wins + scored.wins,
         losses: running.losses + scored.losses,
       });

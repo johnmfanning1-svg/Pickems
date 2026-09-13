@@ -104,6 +104,27 @@ struct LeaguePickemsComparisonStatsTests {
         #expect(result.losses == 1)
     }
 
+    @Test func weeklyRecordCountsMissedPickAsLoss() {
+        let games = [
+            finalGame("g1", homeCovers: true),
+            finalGame("g2", homeCovers: true),
+        ]
+        let result = LeaguePickemsComparisonStats.weeklyRecord(
+            picks: ["g1": "home"],
+            games: games,
+            hiddenGameIds: []
+        )
+        #expect(result.wins == 1)
+        #expect(result.losses == 1)
+        let satOut = LeaguePickemsComparisonStats.weeklyRecord(
+            picks: nil,
+            games: games,
+            hiddenGameIds: []
+        )
+        #expect(satOut.wins == 0)
+        #expect(satOut.losses == 2)
+    }
+
     @Test func weeklyRecordIgnoresHiddenGames() {
         let games = [
             finalGame("g1", homeCovers: true),

@@ -13,7 +13,7 @@ struct MemberListView: View {
             let rightIsComm = $1.id == commissionerId
             if leftIsComm != rightIsComm { return leftIsComm && !rightIsComm }
             if $0.seasonWins != $1.seasonWins { return $0.seasonWins > $1.seasonWins }
-            return $0.battingAverage > $1.battingAverage
+            return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
         }
     }
 

@@ -63,6 +63,9 @@ enum ScoringEngine {
         }
     }
 
+    /// Score a member against the slate. Keep in sync with `firebase/functions/src/scoring.ts` `scorePicks`.
+    /// A final slate game with no Pickem is an automatic loss (weight 1, even on a push
+    /// or if it was marked as the confidence game).
     static func scorePicks(
         picks: [String: String],
         games: [SlateGame],
@@ -74,16 +77,18 @@ enum ScoringEngine {
         var wins = 0
         var losses = 0
         var pushes = 0
-        let gamesById = Dictionary(uniqueKeysWithValues: games.map { ($0.id, $0) })
 
-        for (gameId, pickedTeamId) in picks {
-            guard let game = gamesById[gameId] else { continue }
-            let weight = (confidenceGameId == gameId) ? 2 : 1
-            switch isPickCorrect(pickedTeamId: pickedTeamId, game: game) {
+        for game in games {
+            guard game.status == .final, game.homeScore != nil, game.awayScore != nil else { continue }
+            guard let picked = pickedTeamId(picks: picks, gameId: game.id) else {
+                losses += 1
+                continue
+            }
+            let weight = (confidenceGameId == game.id) ? 2 : 1
+            switch isPickCorrect(pickedTeamId: picked, game: game) {
             case .some(true): wins += weight
             case .some(false): losses += weight
-            case .none:
-                if game.status == .final { pushes += 1 }
+            case .none: pushes += 1
             }
         }
         if latePenaltyWins > 0,
@@ -93,6 +98,13 @@ enum ScoringEngine {
             wins = max(0, wins - latePenaltyWins)
         }
         return (wins, losses, pushes)
+    }
+
+    /// True when the user actually chose a team for this slate game.
+    private static func pickedTeamId(picks: [String: String], gameId: String) -> String? {
+        guard let picked = picks[gameId] else { return nil }
+        let trimmed = picked.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     static func headToHeadPoints(
@@ -143,6 +155,9 @@ enum ScoringEngine {
         return wins
     }
 
+    /// Rank by most wins outright, then the league's tie-breaker, then join date / name.
+    /// Keep in sync with `firebase/functions/src/scoring.ts` `rankEntries`.
+    /// Batting average is a display stat only — it must not change order.
     static func rankedStandings(
         entries: [StandingEntry],
         weekly: Bool,
@@ -215,10 +230,6 @@ enum ScoringEngine {
         let lhsWins = weekly ? lhs.weeklyWins : lhs.seasonWins
         let rhsWins = weekly ? rhs.weeklyWins : rhs.seasonWins
         if lhsWins != rhsWins { return lhsWins > rhsWins }
-
-        let lhsAvg = weekly ? lhs.weeklyBattingAverage : lhs.seasonBattingAverage
-        let rhsAvg = weekly ? rhs.weeklyBattingAverage : rhs.seasonBattingAverage
-        if lhsAvg != rhsAvg { return lhsAvg > rhsAvg }
 
         if tieBreaker == .headToHead, !picksByUser.isEmpty, !games.isEmpty {
             let h2h = headToHeadPoints(
@@ -295,13 +306,12 @@ enum ScoringEngine {
         return result
     }
 
+    /// Rank is by most wins outright. Same win total is a tie, regardless of batting average.
     private static func samePrimaryRecord(_ lhs: StandingEntry, _ rhs: StandingEntry, weekly: Bool) -> Bool {
         if weekly {
             return lhs.weeklyWins == rhs.weeklyWins
-                && lhs.weeklyBattingAverage == rhs.weeklyBattingAverage
         }
         return lhs.seasonWins == rhs.seasonWins
-            && lhs.seasonBattingAverage == rhs.seasonBattingAverage
     }
 
     private static func entriesAreTied(
