@@ -12,6 +12,7 @@ import {
   computeWeekAwards,
   applyLatePickPenalty,
   membersOnRoster,
+  missedPickIsLossForSeasonWeek,
 } from "./scoring";
 import { isRollingLock } from "./pickLock";
 
@@ -544,11 +545,17 @@ export const adminRescoreWeek = onCall(async (request) => {
       targetGames = games;
       targetPicks = picks;
     }
+    const missedPickIsLoss = missedPickIsLossForSeasonWeek({
+      targetWeekId: weekId,
+      targetWeekNumber: week.weekNumber,
+      seasonWeekId: weekDoc.id,
+      seasonWeekNumber: weekDoc.data().weekNumber,
+    });
     // Score every roster member, not just pick docs — sitting out a slate is all losses.
     for (const member of members) {
       const pick = picks.find((p) => p.userId === member.id);
       const scored = applyLatePickPenalty(
-        scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId),
+        scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId, { missedPickIsLoss }),
         {
           allowLatePicks: !isRollingLock(weekDoc.data().pickLockMode) && lateOptions.allowLatePicks,
           latePickPenaltyWins: lateOptions.latePickPenaltyWins,

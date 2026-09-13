@@ -7,6 +7,8 @@ import {
   applyLatePickPenalty,
   toMillis,
   membersOnRoster,
+  isWeekZero,
+  missedPickIsLossForSeasonWeek,
   type SlateGameDoc,
   type PickDoc,
 } from "./scoring";
@@ -76,6 +78,15 @@ describe("scorePicks", () => {
   it("does not double a missed confidence game", () => {
     const g = game({ id: "g1" });
     expect(scorePicks({}, [g], "g1")).toEqual({ wins: 0, losses: 1, pushes: 0 });
+  });
+
+  it("can skip missed Pickems when re-summing historical Week 0", () => {
+    const g = game({ id: "g1" });
+    expect(scorePicks({}, [g], null, { missedPickIsLoss: false })).toEqual({
+      wins: 0,
+      losses: 0,
+      pushes: 0,
+    });
   });
 });
 
@@ -189,6 +200,33 @@ describe("computeWeekAwards", () => {
       { userId: "b", displayName: "Blake", picks: { "1": "away" } },
     ];
     expect(computeWeekAwards(picks, games).sharpshooterUserId).toBe("a");
+  });
+});
+
+describe("weekZeroRescoreGuard", () => {
+  it("detects Week 0 ids and numbers", () => {
+    expect(isWeekZero("2026-W0", 0)).toBe(true);
+    expect(isWeekZero("2026-W1", 1)).toBe(false);
+    expect(isWeekZero("2026-W2", 2)).toBe(false);
+  });
+
+  it("keeps skip-miss math when a later week re-sums Week 0", () => {
+    expect(
+      missedPickIsLossForSeasonWeek({
+        targetWeekId: "2026-W2",
+        targetWeekNumber: 2,
+        seasonWeekId: "2026-W0",
+        seasonWeekNumber: 0,
+      })
+    ).toBe(false);
+    expect(
+      missedPickIsLossForSeasonWeek({
+        targetWeekId: "2026-W2",
+        targetWeekNumber: 2,
+        seasonWeekId: "2026-W1",
+        seasonWeekNumber: 1,
+      })
+    ).toBe(true);
   });
 });
 

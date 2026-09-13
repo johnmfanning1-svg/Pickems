@@ -94,16 +94,42 @@ export function pickedTeamId(picks: Record<string, string>, gameId: string): str
   return trimmed.length > 0 ? trimmed : null;
 }
 
+/** Week 0 docs are `{seasonYear}-W0` with `weekNumber: 0`. */
+export function isWeekZero(weekId: string, weekNumber?: unknown): boolean {
+  if (weekNumber === 0) return true;
+  return /(^|-)W0$/i.test(weekId);
+}
+
+/**
+ * Admin rescore re-sums every scored week. Keep Week 0 on skip-miss math unless
+ * Week 0 itself is the week being rescored (which we do not do in production).
+ */
+export function missedPickIsLossForSeasonWeek(options: {
+  targetWeekId: string;
+  targetWeekNumber?: unknown;
+  seasonWeekId: string;
+  seasonWeekNumber?: unknown;
+}): boolean {
+  if (isWeekZero(options.targetWeekId, options.targetWeekNumber)) return true;
+  if (isWeekZero(options.seasonWeekId, options.seasonWeekNumber)) return false;
+  return true;
+}
+
 /**
  * Score a member against the slate. Keep in sync with iOS `ScoringEngine.scorePicks`.
  * A final slate game with no Pickem is an automatic loss (weight 1, even on a push
  * or if it was marked as the confidence game).
+ *
+ * Pass `missedPickIsLoss: false` only when re-summing historical Week 0 so a later
+ * week's admin rescore does not rewrite Week 0's original skip-miss math.
  */
 export function scorePicks(
   picks: Record<string, string>,
   games: SlateGameDoc[],
-  confidenceGameId?: string | null
+  confidenceGameId?: string | null,
+  options?: { missedPickIsLoss?: boolean }
 ): { wins: number; losses: number; pushes: number } {
+  const missedPickIsLoss = options?.missedPickIsLoss !== false;
   let wins = 0;
   let losses = 0;
   let pushes = 0;
@@ -111,7 +137,7 @@ export function scorePicks(
     if (game.status !== "final" || game.homeScore == null || game.awayScore == null) continue;
     const picked = pickedTeamId(picks, game.id);
     if (!picked) {
-      losses += 1;
+      if (missedPickIsLoss) losses += 1;
       continue;
     }
     const covered = coveredTeamId(game, game.homeScore, game.awayScore);
