@@ -69,7 +69,7 @@ struct RivalryView: View {
             guard let historyA, let historyB,
                   let pickA = historyA.userPick,
                   let pickB = historyB.userPick else { continue }
-            let pickMode = appState.selectedPickMode
+            let pickMode = appState.pickMode(for: week)
             let scoreA = ScoringEngine.scorePicks(picks: pickA.picks, games: historyA.slateGames, pickMode: pickMode)
             let scoreB = ScoringEngine.scorePicks(picks: pickB.picks, games: historyB.slateGames, pickMode: pickMode)
             rows.append((week.id, scoreA.wins, scoreA.losses, scoreB.wins, scoreB.losses))

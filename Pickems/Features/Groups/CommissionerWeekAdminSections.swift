@@ -9,6 +9,8 @@ struct CommissionerWeekAdminSections: View {
     @Binding var showPickDeadlineSheet: Bool
     @Binding var showAdminGameBrowse: Bool
     @State private var showReopenSelectionsConfirm = false
+    @State private var showPickModeConfirm = false
+    @State private var pendingStraightUp = false
     @State private var rankDraft: TieRankDraft?
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
@@ -123,6 +125,8 @@ struct CommissionerWeekAdminSections: View {
                     }
                     .listRowBackground(PickemsColors.cardBackground)
                 }
+
+                weekPickModeRow(week)
             } else if displayedWeeks.isEmpty {
                 Text("No active week.")
                     .foregroundStyle(PickemsColors.textSecondary)
@@ -131,7 +135,7 @@ struct CommissionerWeekAdminSections: View {
         } header: {
             Text("This Week")
         } footer: {
-            Text("Deadlines, slate, Pickems, and ties for the week you pick. Switching here also switches Selections and Pickems.")
+            Text("Deadlines, slate, Pickems, and ties for the week you pick. Switching here also switches Selections and Pickems. ATS leagues can score a future week — or this week before lock — Straight Up.")
         }
         .alert("Reopen Selections?", isPresented: $showReopenSelectionsConfirm) {
             Button("Reopen Selections") {
@@ -141,12 +145,85 @@ struct CommissionerWeekAdminSections: View {
         } message: {
             Text("Members can add and remove Selections again. Pickems close until you open the week.")
         }
+        .alert(pickModeConfirmTitle, isPresented: $showPickModeConfirm) {
+            Button(pendingStraightUp ? "Score Straight Up" : "Use Spreads", role: .destructive) {
+                applyPendingWeekPickMode()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(pickModeConfirmMessage)
+        }
     }
 
     private func selectAdminWeek(_ selected: WeekSummary) {
         guard selected.id != week?.id else { return }
         PickemsHaptics.selection()
         appState.selectObservedWeek(selected)
+    }
+
+    @ViewBuilder
+    private func weekPickModeRow(_ week: WeekSummary) -> some View {
+        let leagueMode = appState.groupService.selectedGroup?.rules.pickMode ?? .ats
+        let resolved = week.resolvedPickMode(leagueMode: leagueMode)
+        if leagueMode == .ats {
+            if WeekTransition.canChangeWeekPickMode(week, leagueMode: leagueMode) {
+                Toggle("Straight Up this week", isOn: weekStraightUpBinding(week, resolved: resolved))
+                    .listRowBackground(PickemsColors.cardBackground)
+                    .accessibilityHint("Hide spreads and grade outright winners for this week only.")
+            } else if resolved == .straightUp {
+                LabeledContent("This week", value: PickMode.straightUp.displayName)
+                    .listRowBackground(PickemsColors.cardBackground)
+            }
+        }
+    }
+
+    private func weekStraightUpBinding(_ week: WeekSummary, resolved: PickMode) -> Binding<Bool> {
+        Binding(
+            get: { resolved == .straightUp },
+            set: { newValue in
+                guard newValue != (resolved == .straightUp) else { return }
+                if WeekTransition.weekPickModeChangeResetsWork(
+                    week,
+                    nominationCount: week.nominationCount,
+                    hasSlateOrPicks: hasWeekWork
+                ) {
+                    pendingStraightUp = newValue
+                    showPickModeConfirm = true
+                } else {
+                    picksVM.setWeekPickMode(newValue ? .straightUp : nil, resetWork: false, appState: appState)
+                }
+            }
+        )
+    }
+
+    private var hasWeekWork: Bool {
+        !appState.pickService.nominations.isEmpty
+            || !appState.pickService.slateGames.isEmpty
+            || appState.pickService.userPick != nil
+            || !appState.pickService.submissions.isEmpty
+            || !appState.pickService.allPicks.isEmpty
+    }
+
+    private var pickModeConfirmTitle: String {
+        if week?.skipsSelection == true {
+            return pendingStraightUp ? "Clear this week's Pickems?" : "Clear Pickems and restore spreads?"
+        }
+        return pendingStraightUp ? "Reset this week's Selections?" : "Reset Selections and restore spreads?"
+    }
+
+    private var pickModeConfirmMessage: String {
+        if week?.skipsSelection == true {
+            return "The Week 0 slate stays. Everyone's Pickems for this week are cleared so they can pick again."
+        }
+        return "This week already has Selections or Pickems. Changing scoring resets them. Members will need to select games and make Pickems again."
+    }
+
+    private func applyPendingWeekPickMode() {
+        picksVM.setWeekPickMode(
+            pendingStraightUp ? .straightUp : nil,
+            resetWork: true,
+            appState: appState
+        )
     }
 
     private func tieGroupTitle(_ group: [StandingEntry]) -> String {
@@ -250,7 +327,7 @@ struct CommissionerWeekAdminSections: View {
             } footer: {
                 Text(appState.selectedPickMode.showsSpreads
                     ? "Edit lines or remove a Selection. Members remake their own Selections on the Selections tab before the deadline."
-                    : "Remove a Selection if needed. Spreads stay hidden in Straight Up leagues.")
+                    : "Remove a Selection if needed. Spreads stay hidden when this week is Straight Up.")
             }
         }
     }

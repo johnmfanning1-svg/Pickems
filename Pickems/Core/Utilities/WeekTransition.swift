@@ -264,4 +264,39 @@ enum WeekTransition {
             return false
         }
     }
+
+    /// ATS commissioners may override a week to Straight Up before any game locks.
+    static func canChangeWeekPickMode(
+        _ week: WeekSummary,
+        leagueMode: PickMode,
+        now: Date = Date()
+    ) -> Bool {
+        guard leagueMode == .ats else { return false }
+        switch week.status {
+        case .scored, .locked:
+            return false
+        case .selection:
+            return true
+        case .picking:
+            // First kickoff (or remaining freeze) has already closed some Pickems.
+            return !pickemsShouldShowLeagueBoard(week, now: now)
+        }
+    }
+
+    /// Changing scoring on a week that already has Selections or an open slate
+    /// wipes that work so members re-pick without (or with) spreads.
+    static func weekPickModeChangeResetsWork(
+        _ week: WeekSummary,
+        nominationCount: Int,
+        hasSlateOrPicks: Bool
+    ) -> Bool {
+        switch week.status {
+        case .scored:
+            return false
+        case .picking, .locked:
+            return true
+        case .selection:
+            return nominationCount > 0 || hasSlateOrPicks
+        }
+    }
 }

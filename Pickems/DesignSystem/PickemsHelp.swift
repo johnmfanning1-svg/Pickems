@@ -295,7 +295,7 @@ enum PickemsHelp {
         title: "Commissioner Settings",
         message: "Choose either Selections-per-member or games-per-week — not both.",
         tips: [
-            "League type (ATS or Straight Up) is chosen when you create the league and cannot be changed mid-season.",
+            "League type (ATS or Straight Up) is chosen when you create the league and cannot be changed mid-season. In an ATS league, This Week can score a future or still-unlocked week Straight Up.",
             "Commissioner Selects: set total games per week and build the slate yourself.",
             "Changes apply to future weeks. Set a Selection deadline each week in member mode.",
             "Pickems Lock chooses entire-slate lock at first kickoff, or rolling lock at each game.",
@@ -360,7 +360,7 @@ enum PickemsHelp {
         id: "onboarding.create",
         title: "Create a League",
         message: "Start a private league. You'll be the commissioner and can invite friends with your code.",
-        tips: ["Choose Against the Spread or Straight Up when you create the league — that type cannot change mid-season.", "You can configure slate size and other rules after creating the league."]
+        tips: ["Choose Against the Spread or Straight Up when you create the league — that type cannot change mid-season. ATS commissioners can still score individual weeks Straight Up from This Week.", "You can configure slate size and other rules after creating the league."]
     )
 
     static let joinGroup = HelpTopic(

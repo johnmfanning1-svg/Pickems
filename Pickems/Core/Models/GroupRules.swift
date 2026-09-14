@@ -67,6 +67,7 @@ enum TieBreakerPolicy: String, Codable, CaseIterable, Identifiable {
 
 /// How Pickems are graded. Stored on `groups/{id}.rules.pickMode`.
 /// Missing on existing leagues → `.ats` so ATS scoring stays unchanged.
+/// ATS leagues may also set `weeks/{id}.pickMode` to `.straightUp` for one week.
 enum PickMode: String, Codable, CaseIterable, Identifiable {
     case ats
     case straightUp

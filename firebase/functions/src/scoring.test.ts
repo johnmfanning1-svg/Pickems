@@ -10,6 +10,7 @@ import {
   isWeekZero,
   missedPickIsLossForSeasonWeek,
   resolvePickMode,
+  resolveWeekPickMode,
   type SlateGameDoc,
   type PickDoc,
 } from "./scoring";
@@ -35,6 +36,21 @@ describe("resolvePickMode", () => {
     expect(resolvePickMode("ats")).toBe("ats");
     expect(resolvePickMode("straightUp")).toBe("straightUp");
     expect(resolvePickMode("other")).toBe("ats");
+  });
+});
+
+describe("resolveWeekPickMode", () => {
+  it("inherits the league type when the week has no override", () => {
+    expect(resolveWeekPickMode(undefined, "ats")).toBe("ats");
+    expect(resolveWeekPickMode(undefined, "straightUp")).toBe("straightUp");
+  });
+
+  it("lets an ATS league score one week straight up", () => {
+    expect(resolveWeekPickMode("straightUp", "ats")).toBe("straightUp");
+  });
+
+  it("does not let a Straight Up league fall back to ATS for one week", () => {
+    expect(resolveWeekPickMode("ats", "straightUp")).toBe("straightUp");
   });
 });
 

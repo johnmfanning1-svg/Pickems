@@ -72,7 +72,8 @@ struct WeekRecapView: View {
         appState.weeklyRankedStandings(
             fromPicks: displayPicks,
             games: scoringGames,
-            tieBreakOrder: selectedWeek?.tieBreakOrder ?? []
+            tieBreakOrder: selectedWeek?.tieBreakOrder ?? [],
+            pickMode: appState.pickMode(for: selectedWeek)
         )
     }
 
@@ -85,7 +86,7 @@ struct WeekRecapView: View {
             week: week,
             entries: rankedEntries,
             userId: appState.authService.currentUser?.id,
-            pickMode: group.rules.pickMode
+            pickMode: appState.pickMode(for: week)
         )
     }
 
@@ -98,7 +99,7 @@ struct WeekRecapView: View {
             picks: displayPicks,
             games: scoringGames,
             members: appState.groupService.members,
-            pickMode: appState.selectedPickMode
+            pickMode: appState.pickMode(for: selectedWeek)
         )
         let awards = WeekAwards(
             sharpshooterUserId: computed.sharpshooterUserId,

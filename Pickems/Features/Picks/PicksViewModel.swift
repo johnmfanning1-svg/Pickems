@@ -473,6 +473,40 @@ final class PicksViewModel {
         }
     }
 
+    func setWeekPickMode(_ pickMode: PickMode?, resetWork: Bool, appState: AppState) {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek else { return }
+        Task {
+            do {
+                if resetWork {
+                    if !week.skipsSelection, WeekTransition.canReopenSelections(week) {
+                        try await appState.groupService.reopenWeekForSelections(
+                            groupId: group.id,
+                            weekId: week.id
+                        )
+                    }
+                    try await appState.pickService.resetWeekWorkForPickModeChange(
+                        groupId: group.id,
+                        weekId: week.id,
+                        keepFixedSlate: week.skipsSelection
+                    )
+                    draftPicks = [:]
+                    confidenceGameId = nil
+                    resetPendingWrite()
+                }
+                try await appState.groupService.setWeekPickMode(
+                    groupId: group.id,
+                    weekId: week.id,
+                    pickMode: pickMode,
+                    week: appState.groupService.currentWeek ?? week
+                )
+                PickemsHaptics.success()
+            } catch {
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
+            }
+        }
+    }
+
     func setSelectionDeadline(_ deadline: Date, appState: AppState) {
         guard let group = appState.groupService.selectedGroup,
               let week = appState.groupService.currentWeek,

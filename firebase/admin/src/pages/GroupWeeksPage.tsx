@@ -20,7 +20,7 @@ import {
   fromDateTimeLocalValue,
   toDateTimeLocalValue,
 } from "@/lib/format";
-import { WEEK_STATUSES, resolvePickMode, type WeekDoc, type WeekStatus } from "@/lib/types";
+import { WEEK_STATUSES, resolveWeekPickMode, type WeekDoc, type WeekStatus } from "@/lib/types";
 
 export function GroupWeeksPage() {
   const { id: groupId } = useParams<{ id: string }>();
@@ -35,7 +35,6 @@ export function GroupWeeksPage() {
 
   if (!groupId) return <Banner tone="error" title="Missing group id" />;
   const groupName = group?.name ?? groupId;
-  const showsSpreads = resolvePickMode(group?.rules) !== "straightUp";
 
   function draftStatus(week: WithId<WeekDoc>): WeekStatus {
     return statusDraft[week.id] ?? week.status ?? "selection";
@@ -198,6 +197,8 @@ export function GroupWeeksPage() {
               : null;
           const misaligned = expectedId != null && expectedId !== week.id;
           const isExpanded = expanded === week.id;
+          const weekPickMode = resolveWeekPickMode(week.pickMode, group?.rules);
+          const showsSpreads = weekPickMode !== "straightUp";
 
           return (
             <Card
@@ -211,6 +212,7 @@ export function GroupWeeksPage() {
               actions={
                 <div className="flex items-center gap-2">
                   <WeekStatusBadge status={week.status} />
+                  {week.pickMode === "straightUp" ? <Badge tone="info">straightUp week</Badge> : null}
                   {misaligned ? <Badge tone="danger">expected {expectedId}</Badge> : null}
                   <Link
                     to={`/groups/${groupId}/weeks/${week.id}/picks`}
@@ -263,6 +265,10 @@ export function GroupWeeksPage() {
               </div>
 
               <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
+                <div>
+                  <dt className="inline">pickMode </dt>
+                  <dd className="inline font-mono text-slate-300">{week.pickMode ?? "inherit"}</dd>
+                </div>
                 <div>
                   <dt className="inline">nominationCount </dt>
                   <dd className="inline font-mono text-slate-300">{week.nominationCount ?? 0}</dd>

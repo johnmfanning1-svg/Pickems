@@ -676,4 +676,40 @@ struct GroupRulesTests {
         #expect(decoded.showsSpreads == false)
         #expect(PickMode.straightUp.pickemsSectionTitle == "Straight Up Pickems")
     }
+
+    @Test func missingWeekPickModeInheritsLeagueType() throws {
+        let json = Data(#"""
+        {
+          "id": "2026-W3",
+          "seasonYear": 2026,
+          "weekNumber": 3,
+          "status": "selection",
+          "slateSize": 12,
+          "selectionMode": "member",
+          "selectionsPerMember": 3,
+          "nominationCount": 0
+        }
+        """#.utf8)
+        let week = try JSONDecoder().decode(WeekSummary.self, from: json)
+        #expect(week.pickMode == nil)
+        #expect(week.resolvedPickMode(leagueMode: .ats) == .ats)
+        #expect(week.resolvedPickMode(leagueMode: .straightUp) == .straightUp)
+    }
+
+    @Test func weekStraightUpOverrideDoesNotDowngradeStraightUpLeagues() {
+        var week = WeekSummary(
+            id: "2026-W4",
+            seasonYear: 2026,
+            weekNumber: 4,
+            status: .selection,
+            slateSize: 12,
+            selectionMode: .member,
+            selectionsPerMember: 3,
+            nominationCount: 0,
+            pickMode: .straightUp
+        )
+        #expect(week.resolvedPickMode(leagueMode: .ats) == .straightUp)
+        week.pickMode = .ats
+        #expect(week.resolvedPickMode(leagueMode: .straightUp) == .straightUp)
+    }
 }

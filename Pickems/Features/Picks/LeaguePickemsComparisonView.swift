@@ -131,7 +131,7 @@ struct LeaguePickemsComparisonView: View {
         .navigationTitle("You vs \(opponentShortName)")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            HelpToolbarItem(topic: PickemsHelp.leaguePickems(for: appState.selectedPickMode))
+            HelpToolbarItem(topic: PickemsHelp.leaguePickems(for: appState.pickMode(for: selectedWeek)))
         }
         .task {
             await loadWeeks()
@@ -259,7 +259,7 @@ struct LeaguePickemsComparisonView: View {
                 icon: "american.football.fill",
                 title: "No slate games",
                 message: "This week locked without games on the slate.",
-                help: PickemsHelp.leaguePickems(for: appState.selectedPickMode)
+                help: PickemsHelp.leaguePickems(for: appState.pickMode(for: selectedWeek))
             )
         } else if showsBoard, let week = selectedWeek {
             LeaguePickemsBoard(
@@ -272,7 +272,7 @@ struct LeaguePickemsComparisonView: View {
                 allowsExpand: false,
                 hiddenGameIds: hiddenGameIds(for: week),
                 fillsAvailableWidth: true,
-                pickMode: appState.selectedPickMode
+                pickMode: appState.pickMode(for: week)
             )
             .padding(.horizontal)
         }
@@ -314,7 +314,7 @@ struct LeaguePickemsComparisonView: View {
             games: displayGames,
             hiddenGameIds: selectedWeek.map { hiddenGameIds(for: $0) } ?? [],
             confidenceGameId: pick?.confidenceGameId,
-            pickMode: appState.selectedPickMode
+            pickMode: appState.pickMode(for: selectedWeek)
         )
     }
 

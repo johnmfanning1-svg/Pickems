@@ -341,6 +341,7 @@ describe("existing invariants (regression)", () => {
     const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
     const week = doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID);
 
+    await assertSucceeds(updateDoc(week, { pickMode: "straightUp" }));
     await assertSucceeds(updateDoc(week, { status: "locked", lockedAt: new Date() }));
     // slateSize alone is not on the allow-list once the week left selection.
     await assertFails(updateDoc(week, { slateSize: 12 }));
@@ -357,6 +358,26 @@ describe("existing invariants (regression)", () => {
       WEEK_ID
     );
     await assertFails(updateDoc(memberWeek, { tieBreakOrder: [MEMBER] }));
+    await assertFails(updateDoc(memberWeek, { pickMode: "straightUp" }));
+  });
+
+  it("blocks a commissioner from changing pickMode after the week is locked", async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID),
+        { status: "locked" },
+        { merge: true }
+      );
+    });
+    const week = doc(
+      testEnv.authenticatedContext(COMMISH).firestore(),
+      "groups",
+      GROUP_ID,
+      "weeks",
+      WEEK_ID
+    );
+    await assertFails(updateDoc(week, { pickMode: "straightUp" }));
   });
 
   it("lets the commissioner set a selection deadline and sync slate knobs while selecting", async () => {

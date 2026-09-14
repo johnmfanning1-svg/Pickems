@@ -91,7 +91,10 @@ service cloud.firestore {
         || (changed.hasOnly(['slateSize', 'selectionMode', 'selectionsPerMember'])
             && resource.data.status == 'selection')
         // This week's commissioner Override ranking among equal records.
-        || changed.hasOnly(['tieBreakOrder']);
+        || changed.hasOnly(['tieBreakOrder'])
+        // ATS commissioner per-week Straight Up override. Locked/scored weeks stay frozen.
+        || (changed.hasOnly(['pickMode'])
+            && resource.data.status in ['selection', 'picking']);
     }
 
     function weekData(groupId, weekId) {
@@ -279,6 +282,7 @@ service cloud.firestore {
       allow update: if isCommissioner(groupId) || isJoiningGroup() || isLeavingGroup();
       // Commissioners write nested `rules` including `pickMode` (`ats` | `straightUp`).
       // Missing pickMode is treated as ats by iOS and Cloud Functions.
+      // Per-week Straight Up overrides live on `weeks/{id}.pickMode`.
       allow delete: if isCommissioner(groupId);
 
       match /members/{memberId} {

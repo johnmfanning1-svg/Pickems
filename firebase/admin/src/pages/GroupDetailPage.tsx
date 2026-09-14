@@ -113,7 +113,8 @@ export function GroupDetailPage() {
         <>
           Rules drive slate size, pick mode, and deadlines for <strong>{league.name}</strong>. Changing{" "}
           <code className="font-mono">pickMode</code> mid-season does not rewrite already-scored weeks until you
-          rescore. Changing <code className="font-mono">slateSize</code> mid-week does not re-materialize an
+          rescore. A week can also store its own <code className="font-mono">pickMode</code> override; rescore uses
+          that when present. Changing <code className="font-mono">slateSize</code> mid-week does not re-materialize an
           existing slate — use the Weeks tab for that.
         </>
       ),
