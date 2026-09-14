@@ -12,6 +12,7 @@ struct GamePickRow: View {
     var onConfidenceToggle: (() -> Void)? = nil
     /// Shown when the row is disabled because this game has locked.
     var lockedCaption: String? = nil
+    var showsSpread: Bool = true
     let onSelect: (String) -> Void
     @Environment(\.themePalette) private var theme
 
@@ -53,14 +54,16 @@ struct GamePickRow: View {
                 }
 
                 ZStack {
-                    LockedSpreadLabel(
-                        lockedText: game.favoriteSpreadDisplay,
-                        liveText: liveCard?.liveSpreadLabel,
-                        isLocked: true,
-                        font: .caption.weight(.semibold)
-                    )
-                    .frame(maxWidth: .infinity)
-                    .multilineTextAlignment(.center)
+                    if showsSpread {
+                        LockedSpreadLabel(
+                            lockedText: game.favoriteSpreadDisplay,
+                            liveText: liveCard?.liveSpreadLabel,
+                            isLocked: true,
+                            font: .caption.weight(.semibold)
+                        )
+                        .frame(maxWidth: .infinity)
+                        .multilineTextAlignment(.center)
+                    }
 
                     if let result = liveCard?.pickResult {
                         HStack {
@@ -169,7 +172,7 @@ struct GamePickRow: View {
         .accessibilityHint(
             isDisabled
                 ? (lockedCaption ?? "Pickems are locked")
-                : (isSelected ? "Clear \(name) pick" : "Select \(name) against the spread")
+                : (isSelected ? "Clear \(name) pick" : "Select \(name) \(showsSpread ? "against the spread" : "to win")")
         )
     }
 }

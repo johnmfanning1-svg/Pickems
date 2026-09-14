@@ -7,6 +7,7 @@ struct PickResultRow: View {
     var liveSpreadLabel: String? = nil
     var homeRank: Int? = nil
     var awayRank: Int? = nil
+    var pickMode: PickMode = .ats
     @Environment(\.themePalette) private var theme
 
     var body: some View {
@@ -38,7 +39,11 @@ struct PickResultRow: View {
                 Text(pickedTeamId == game.homeTeamId ? game.homeTeamAbbreviation : game.awayTeamAbbreviation)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(theme.accent)
-                if let result = ScoringEngine.isPickCorrect(pickedTeamId: pickedTeamId, game: game) {
+                if let result = ScoringEngine.isPickCorrect(
+                    pickedTeamId: pickedTeamId,
+                    game: game,
+                    pickMode: pickMode
+                ) {
                     Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
                         .foregroundStyle(result ? PickemsColors.success : theme.accent)
                         .accessibilityLabel(result ? "Win" : "Loss")

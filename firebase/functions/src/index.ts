@@ -22,6 +22,8 @@ import {
   applyLatePickPenalty,
   membersOnRoster,
   toMillis,
+  resolvePickMode,
+  type PickMode,
 } from "./scoring";
 import { materializeNominations } from "./materialize";
 import {
@@ -366,6 +368,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
 
   for (const { groupDoc, memberIds, weeks: activeWeeks } of activeWeeksByGroup) {
     const groupId = groupDoc.id;
+    const pickMode = resolvePickMode(groupDoc.data()?.rules?.pickMode);
 
     for (const weekDoc of activeWeeks.docs) {
       const week = weekDoc.data();
@@ -439,13 +442,13 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
           parsed.homeScore != null &&
           parsed.awayScore != null
         ) {
-          patch.winnerTeamId = coveredTeamId(game, parsed.homeScore, parsed.awayScore);
+          patch.winnerTeamId = coveredTeamId(game, parsed.homeScore, parsed.awayScore, pickMode);
         }
         if (slateGameNeedsWrite(game, nextStatus, parsed)) {
           await gameDoc.ref.update(patch);
           if (prevStatus !== "final" && nextStatus === "final") {
             anyFinalizedThisPass = true;
-            await notifyGameFinal(groupId, weekId, { ...game, ...patch } as SlateGameDoc);
+            await notifyGameFinal(groupId, weekId, { ...game, ...patch } as SlateGameDoc, pickMode);
           }
         }
         updatedGames.push({ ...game, ...patch } as SlateGameDoc);
@@ -454,9 +457,9 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
       const allFinal =
         updatedGames.length > 0 && updatedGames.every((g) => g.status === "final");
       if ((week.status === "locked" || week.status === "picking") && allFinal) {
-        await scoreWeek(groupId, weekId, week.weekNumber as number, updatedGames, memberIds);
+        await scoreWeek(groupId, weekId, week.weekNumber as number, updatedGames, memberIds, pickMode);
       } else if (anyFinalizedThisPass && week.status === "locked") {
-        await refreshLiveStandings(groupId, weekId, week.weekNumber as number, updatedGames);
+        await refreshLiveStandings(groupId, weekId, week.weekNumber as number, updatedGames, pickMode);
       }
     }
   }
@@ -465,7 +468,8 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
 async function notifyGameFinal(
   groupId: string,
   weekId: string,
-  game: SlateGameDoc
+  game: SlateGameDoc,
+  pickMode: PickMode
 ): Promise<void> {
   const picksSnap = await db
     .collection("groups")
@@ -487,7 +491,13 @@ async function notifyGameFinal(
     else if (covered) result = "missed";
     await sendToUser(
       pick.userId,
-      result === "covered" ? "You covered" : result === "missed" ? "Tough beat" : "Push",
+      result === "covered"
+        ? pickMode === "straightUp"
+          ? "You won"
+          : "You covered"
+        : result === "missed"
+          ? "Tough beat"
+          : "Push",
       `${label} is final.`,
       "game_final",
       { groupId, weekId, gameId: game.id, result }
@@ -499,7 +509,8 @@ async function refreshLiveStandings(
   groupId: string,
   weekId: string,
   weekNumber: number,
-  games: SlateGameDoc[]
+  games: SlateGameDoc[],
+  pickMode: PickMode = "ats"
 ): Promise<void> {
   const [membersSnap, picksSnap, standingsSnap, groupSnap, weekSnap] = await Promise.all([
     db.collection("groups").doc(groupId).collection("members").get(),
@@ -521,13 +532,15 @@ async function refreshLiveStandings(
   const rules = (groupSnap.data()?.rules ?? {}) as {
     allowLatePicks?: boolean;
     latePickPenaltyWins?: number;
+    pickMode?: unknown;
   };
   const deadline = weekSnap.data()?.pickDeadline;
+  const mode = resolvePickMode(pickMode ?? rules.pickMode);
 
   const entries = members.map((member) => {
     const pick = picks.find((p) => p.userId === member.id);
     const scored = applyLatePickPenalty(
-      scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId),
+      scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId, { pickMode: mode }),
       {
         allowLatePicks: !isRollingLock(weekSnap.data()?.pickLockMode) && rules.allowLatePicks === true,
         latePickPenaltyWins: rules.latePickPenaltyWins,
@@ -578,7 +591,8 @@ async function scoreWeek(
   weekId: string,
   weekNumber: number,
   games: SlateGameDoc[],
-  memberIds: string[]
+  memberIds: string[],
+  pickMode: PickMode = "ats"
 ): Promise<void> {
   const groupRef = db.collection("groups").doc(groupId);
   const weekRef = groupRef.collection("weeks").doc(weekId);
@@ -610,21 +624,23 @@ async function scoreWeek(
     const rules = (groupSnap.data()?.rules ?? {}) as {
       allowLatePicks?: boolean;
       latePickPenaltyWins?: number;
+      pickMode?: unknown;
     };
     const deadline = week?.pickDeadline;
+    const mode = resolvePickMode(pickMode ?? rules.pickMode);
 
     const members = membersOnRoster(
       membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc)),
       (groupSnap.data()?.memberIds as string[] | undefined) ?? memberIds
     );
     const picks = picksSnap.docs.map((d) => ({ ...(d.data() as PickDoc), userId: d.id }));
-    awards = computeWeekAwards(picks, games);
+    awards = computeWeekAwards(picks, games, mode);
 
     const weeklyEntries = [];
     for (const member of members) {
       const pick = picks.find((p) => p.userId === member.id);
       const scored = applyLatePickPenalty(
-        scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId),
+        scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId, { pickMode: mode }),
         {
           allowLatePicks: !isRollingLock(week?.pickLockMode) && rules.allowLatePicks === true,
           latePickPenaltyWins: rules.latePickPenaltyWins,
@@ -752,10 +768,21 @@ export const autoCloseSeasons = onSchedule("0 12 15 1 *", async () => {
 
 /** Keep public league index in sync when isPublic flips. */
 export const syncPublicLeagueIndex = onDocumentUpdated("groups/{groupId}", async (event) => {
-  const before = event.data?.before.data();
-  const after = event.data?.after.data();
+  const change = event.data;
+  if (!change) return;
+  const before = change.before.data();
+  const after = change.after.data();
   if (!before || !after) return;
   const groupId = event.params.groupId;
+  const beforePickMode = (before.rules as { pickMode?: unknown } | undefined)?.pickMode;
+  const afterPickMode = (after.rules as { pickMode?: unknown } | undefined)?.pickMode;
+  // Old iOS clients replace the whole `rules` map and would drop pickMode.
+  if (
+    (beforePickMode === "straightUp" || beforePickMode === "ats") &&
+    afterPickMode == null
+  ) {
+    await change.after.ref.update({ "rules.pickMode": beforePickMode });
+  }
   const indexRef = db.collection("publicLeagues").doc(groupId);
   if (after.isPublic === true) {
     await indexRef.set({

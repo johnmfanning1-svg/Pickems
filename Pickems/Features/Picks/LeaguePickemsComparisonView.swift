@@ -131,7 +131,7 @@ struct LeaguePickemsComparisonView: View {
         .navigationTitle("You vs \(opponentShortName)")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            HelpToolbarItem(topic: PickemsHelp.leaguePickems)
+            HelpToolbarItem(topic: PickemsHelp.leaguePickems(for: appState.selectedPickMode))
         }
         .task {
             await loadWeeks()
@@ -259,7 +259,7 @@ struct LeaguePickemsComparisonView: View {
                 icon: "american.football.fill",
                 title: "No slate games",
                 message: "This week locked without games on the slate.",
-                help: PickemsHelp.leaguePickems
+                help: PickemsHelp.leaguePickems(for: appState.selectedPickMode)
             )
         } else if showsBoard, let week = selectedWeek {
             LeaguePickemsBoard(
@@ -271,7 +271,8 @@ struct LeaguePickemsComparisonView: View {
                 currentUserId: currentUserId,
                 allowsExpand: false,
                 hiddenGameIds: hiddenGameIds(for: week),
-                fillsAvailableWidth: true
+                fillsAvailableWidth: true,
+                pickMode: appState.selectedPickMode
             )
             .padding(.horizontal)
         }
@@ -312,7 +313,8 @@ struct LeaguePickemsComparisonView: View {
             picks: pick?.picks,
             games: displayGames,
             hiddenGameIds: selectedWeek.map { hiddenGameIds(for: $0) } ?? [],
-            confidenceGameId: pick?.confidenceGameId
+            confidenceGameId: pick?.confidenceGameId,
+            pickMode: appState.selectedPickMode
         )
     }
 
@@ -558,13 +560,15 @@ nonisolated enum LeaguePickemsComparisonStats {
         picks: [String: String]?,
         games: [SlateGame],
         hiddenGameIds: Set<String>,
-        confidenceGameId: String? = nil
+        confidenceGameId: String? = nil,
+        pickMode: PickMode = .ats
     ) -> (wins: Int, losses: Int) {
         let visible = games.filter { !hiddenGameIds.contains($0.id) }
         let scored = ScoringEngine.scorePicks(
             picks: picks ?? [:],
             games: visible,
-            confidenceGameId: confidenceGameId
+            confidenceGameId: confidenceGameId,
+            pickMode: pickMode
         )
         return (scored.wins, scored.losses)
     }

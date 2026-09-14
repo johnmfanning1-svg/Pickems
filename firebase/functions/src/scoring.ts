@@ -33,6 +33,12 @@ export interface PickDoc {
   submittedAt?: unknown;
 }
 
+export type PickMode = "ats" | "straightUp";
+
+export function resolvePickMode(value: unknown): PickMode {
+  return value === "straightUp" ? "straightUp" : "ats";
+}
+
 /** Keep scoring on `groups.memberIds` so leftover member docs cannot stay on the board. */
 export function membersOnRoster<T extends { id: string }>(
   members: T[],
@@ -76,14 +82,34 @@ export function applyLatePickPenalty(
 export function coveredTeamId(
   game: SlateGameDoc,
   homeScore: number,
-  awayScore: number
+  awayScore: number,
+  pickMode: PickMode = "ats"
 ): string | null {
+  if (pickMode === "straightUp") {
+    if (homeScore === awayScore) return null;
+    return homeScore > awayScore ? game.homeTeamId : game.awayTeamId;
+  }
   const spreadMagnitude = Math.abs(game.spread);
   const margin = homeScore - awayScore;
   const adjusted =
     margin + (game.spreadTeamId === game.homeTeamId ? -spreadMagnitude : spreadMagnitude);
   if (adjusted === 0) return null;
   return adjusted > 0 ? game.homeTeamId : game.awayTeamId;
+}
+
+/** Heartbreaker near-miss. ATS uses cover margin vs the line; Straight Up uses raw score. */
+export function nearMissMargin(
+  game: SlateGameDoc,
+  homeScore: number,
+  awayScore: number,
+  pickMode: PickMode = "ats"
+): number {
+  if (pickMode === "straightUp") return Math.abs(homeScore - awayScore);
+  return Math.abs(
+    homeScore -
+      awayScore +
+      (game.spreadTeamId === game.homeTeamId ? -Math.abs(game.spread) : Math.abs(game.spread))
+  );
 }
 
 /** True when the user actually chose a team for this slate game. */
@@ -127,9 +153,10 @@ export function scorePicks(
   picks: Record<string, string>,
   games: SlateGameDoc[],
   confidenceGameId?: string | null,
-  options?: { missedPickIsLoss?: boolean }
+  options?: { missedPickIsLoss?: boolean; pickMode?: PickMode }
 ): { wins: number; losses: number; pushes: number } {
   const missedPickIsLoss = options?.missedPickIsLoss !== false;
+  const pickMode = resolvePickMode(options?.pickMode);
   let wins = 0;
   let losses = 0;
   let pushes = 0;
@@ -140,7 +167,7 @@ export function scorePicks(
       if (missedPickIsLoss) losses += 1;
       continue;
     }
-    const covered = coveredTeamId(game, game.homeScore, game.awayScore);
+    const covered = coveredTeamId(game, game.homeScore, game.awayScore, pickMode);
     const weight = confidenceGameId && confidenceGameId === game.id ? 2 : 1;
     if (covered == null) {
       pushes += 1;
@@ -194,13 +221,15 @@ export function rankEntries(
 
 export function computeWeekAwards(
   picks: PickDoc[],
-  games: SlateGameDoc[]
+  games: SlateGameDoc[],
+  pickMode: PickMode = "ats"
 ): {
   sharpshooterUserId?: string;
   heartbreakerUserId?: string;
   contrarianUserId?: string;
 } {
   if (picks.length === 0 || games.length === 0) return {};
+  const mode = resolvePickMode(pickMode);
 
   let sharpshooterUserId: string | undefined;
   let bestWins = -1;
@@ -220,7 +249,7 @@ export function computeWeekAwards(
   }
 
   for (const pick of picks) {
-    const scored = scorePicks(pick.picks, games, pick.confidenceGameId);
+    const scored = scorePicks(pick.picks, games, pick.confidenceGameId, { pickMode: mode });
     if (scored.wins > bestWins) {
       bestWins = scored.wins;
       sharpshooterUserId = pick.userId;
@@ -232,15 +261,10 @@ export function computeWeekAwards(
       if (game.status !== "final" || game.homeScore == null || game.awayScore == null) continue;
       const picked = pick.picks[game.id];
       if (!picked) continue;
-      const covered = coveredTeamId(game, game.homeScore, game.awayScore);
+      const covered = coveredTeamId(game, game.homeScore, game.awayScore, mode);
       if (covered == null) continue;
       if (covered !== picked) {
-        const margin = Math.abs(
-          game.homeScore -
-            game.awayScore +
-            (game.spreadTeamId === game.homeTeamId ? -Math.abs(game.spread) : Math.abs(game.spread))
-        );
-        if (margin <= 3) nearMisses += 1;
+        if (nearMissMargin(game, game.homeScore, game.awayScore, mode) <= 3) nearMisses += 1;
       } else if ((pickCounts[game.id]?.[picked] ?? 0) === 1) {
         uniqueCorrect += 1;
       }

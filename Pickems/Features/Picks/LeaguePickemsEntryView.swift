@@ -22,7 +22,7 @@ struct LeaguePickemsEntryView: View {
             }
         }
         .toolbar {
-            HelpToolbarItem(topic: PickemsHelp.leaguePickems)
+            HelpToolbarItem(topic: PickemsHelp.leaguePickems(for: appState.selectedPickMode))
         }
     }
 
@@ -46,7 +46,7 @@ struct LeaguePickemsEntryView: View {
                             icon: "lock.open",
                             title: "Pickems lock after the slate is set",
                             message: "Once Selections are in, you'll see a countdown to lock here.",
-                            help: PickemsHelp.leaguePickems
+                            help: PickemsHelp.leaguePickems(for: appState.selectedPickMode)
                         )
                     } else {
                         EmptyStateView(
@@ -55,7 +55,7 @@ struct LeaguePickemsEntryView: View {
                             message: week.status == .selection
                                 ? "Finish Selections first. The league chart opens after Pickems lock."
                                 : "You'll see a countdown here once this week's lock time is set.",
-                            help: PickemsHelp.leaguePickems
+                            help: PickemsHelp.leaguePickems(for: appState.selectedPickMode)
                         )
                     }
                 } else {
@@ -63,7 +63,7 @@ struct LeaguePickemsEntryView: View {
                         icon: "person.3",
                         title: "No Active Week",
                         message: "Join a league to see League Pickems.",
-                        help: PickemsHelp.leaguePickems
+                        help: PickemsHelp.leaguePickems(for: appState.selectedPickMode)
                     )
                 }
             }

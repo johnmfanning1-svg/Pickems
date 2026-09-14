@@ -635,7 +635,8 @@ final class PicksViewModel {
                 slateEventIds: slateIds,
                 userPicks: draftPicks,
                 slateGames: appState.pickService.slateGames,
-                forceRefresh: forceRefresh
+                forceRefresh: forceRefresh,
+                pickMode: appState.selectedPickMode
             )
             guard generation == liveResultsGeneration else { return }
             if !forceRefresh, liveForceRefreshCount > 0 { return }

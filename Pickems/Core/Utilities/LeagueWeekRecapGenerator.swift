@@ -43,7 +43,8 @@ enum LeagueWeekRecapGenerator {
         picks: [UserPick] = [],
         games: [SlateGame] = [],
         awards: WeekAwards? = nil,
-        tone: LeagueRecapTone = .moderate
+        tone: LeagueRecapTone = .moderate,
+        pickMode: PickMode = .ats
     ) -> LeagueWeekRecap {
         let isFinal = week.status == .scored
         let headline = isFinal
@@ -81,7 +82,8 @@ enum LeagueWeekRecapGenerator {
             picks: picks,
             games: games,
             awards: awards,
-            tone: tone
+            tone: tone,
+            pickMode: pickMode
         )
 
         return LeagueWeekRecap(
@@ -172,7 +174,8 @@ enum LeagueWeekRecapGenerator {
         picks: [UserPick],
         games: [SlateGame],
         awards: WeekAwards?,
-        tone: LeagueRecapTone
+        tone: LeagueRecapTone,
+        pickMode: PickMode
     ) -> String? {
         let winnerIds = Set(winners.map(\.id))
         let cellarIds = Set(cellar.map(\.id))
@@ -189,7 +192,7 @@ enum LeagueWeekRecapGenerator {
             }
         }
 
-        if let chalk = chalkBustLine(picks: picks, games: games, tone: tone) {
+        if let chalk = chalkBustLine(picks: picks, games: games, tone: tone, pickMode: pickMode) {
             return chalk
         }
 
@@ -241,12 +244,17 @@ enum LeagueWeekRecapGenerator {
         return nil
     }
 
-    private static func chalkBustLine(picks: [UserPick], games: [SlateGame], tone: LeagueRecapTone) -> String? {
+    private static func chalkBustLine(
+        picks: [UserPick],
+        games: [SlateGame],
+        tone: LeagueRecapTone,
+        pickMode: PickMode
+    ) -> String? {
         var best: (abbrev: String, coveringCount: Int, total: Int, margin: Int)?
 
         for game in games where game.status == .final {
             guard let home = game.homeScore, let away = game.awayScore,
-                  let covered = game.coveredTeamId(homeScore: home, awayScore: away) else {
+                  let covered = game.coveredTeamId(homeScore: home, awayScore: away, pickMode: pickMode) else {
                 continue
             }
             var counts: [String: Int] = [:]

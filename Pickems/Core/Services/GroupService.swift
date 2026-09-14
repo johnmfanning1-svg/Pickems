@@ -606,7 +606,8 @@ final class GroupService {
         commissionerId: String,
         displayName: String,
         avatarColorHex: String? = nil,
-        avatarImageURL: String? = nil
+        avatarImageURL: String? = nil,
+        rules: GroupRules = .default
     ) async throws -> PickemGroup {
         AppEvents.track(.onboardingCreateStarted, metadata: [
             "uid": AppEvents.shortUID(commissionerId),
@@ -620,7 +621,7 @@ final class GroupService {
                 inviteCode: inviteCode,
                 commissionerId: commissionerId,
                 memberIds: [commissionerId],
-                rules: .default,
+                rules: rules,
                 createdAt: Date()
             )
             try await groupRef.setData(from: group)
@@ -970,10 +971,12 @@ final class GroupService {
                 SlateGame.fromDocument(id: doc.documentID, data: doc.data())
             }
             let pick = try? pickSnap.data(as: UserPick.self)
+            let pickMode = (selectedGroup?.id == groupId ? selectedGroup : groups.first { $0.id == groupId })?.rules.pickMode ?? .ats
             let scored = ScoringEngine.scorePicks(
                 picks: pick?.picks ?? [:],
                 games: games,
-                confidenceGameId: pick?.confidenceGameId
+                confidenceGameId: pick?.confidenceGameId,
+                pickMode: pickMode
             )
             let record = WeeklyRecord(week: week.weekNumber, wins: scored.wins, losses: scored.losses)
             weeklyRecords.append(record)

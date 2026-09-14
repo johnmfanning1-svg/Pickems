@@ -364,7 +364,7 @@ struct GroupsView: View {
                 LeaguePickemsEntryView()
             } label: {
                 leaguePickemsCard(
-                    subtitle: "Everyone's picks against the spread",
+                    subtitle: appState.selectedPickMode.leagueChartSubtitle,
                     showsChevron: true
                 )
             }
@@ -675,7 +675,7 @@ struct LeaderboardView: View {
             PickemsSectionHeader(
                 title: "Leaderboard",
                 subtitle: showWeekly ? "This week's Pickem record" : "Season standings",
-                help: PickemsHelp.leaderboard
+                help: PickemsHelp.leaderboard(for: appState.selectedPickMode)
             )
 
             Picker("Standings", selection: $showWeekly) {
@@ -695,7 +695,7 @@ struct LeaderboardView: View {
                     icon: "chart.bar.fill",
                     title: "No Standings Yet",
                     message: "Invite members to see an interim ranking by join order.",
-                    help: PickemsHelp.leaderboard
+                    help: PickemsHelp.leaderboard(for: appState.selectedPickMode)
                 )
             } else {
                 ForEach(previewEntries) { entry in
@@ -794,7 +794,7 @@ struct FullLeaderboardView: View {
         .navigationTitle("Full Ranking")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            HelpToolbarItem(topic: PickemsHelp.leaderboard)
+            HelpToolbarItem(topic: PickemsHelp.leaderboard(for: appState.selectedPickMode))
         }
     }
 }

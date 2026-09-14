@@ -20,7 +20,7 @@ import {
   fromDateTimeLocalValue,
   toDateTimeLocalValue,
 } from "@/lib/format";
-import { WEEK_STATUSES, type WeekDoc, type WeekStatus } from "@/lib/types";
+import { WEEK_STATUSES, resolvePickMode, type WeekDoc, type WeekStatus } from "@/lib/types";
 
 export function GroupWeeksPage() {
   const { id: groupId } = useParams<{ id: string }>();
@@ -35,6 +35,7 @@ export function GroupWeeksPage() {
 
   if (!groupId) return <Banner tone="error" title="Missing group id" />;
   const groupName = group?.name ?? groupId;
+  const showsSpreads = resolvePickMode(group?.rules) !== "straightUp";
 
   function draftStatus(week: WithId<WeekDoc>): WeekStatus {
     return statusDraft[week.id] ?? week.status ?? "selection";
@@ -295,7 +296,7 @@ export function GroupWeeksPage() {
                   Re-materialize slate
                 </Button>
                 <Button onClick={() => setExpanded(isExpanded ? null : week.id)}>
-                  {isExpanded ? "Hide slate & spreads" : "Slate & spreads"}
+                  {isExpanded ? "Hide slate" : showsSpreads ? "Slate & spreads" : "Slate"}
                 </Button>
                 <Button
                   variant="danger"
@@ -309,7 +310,7 @@ export function GroupWeeksPage() {
 
               {isExpanded ? (
                 <div className="mt-4 border-t border-ink-600 pt-4">
-                  <WeekSlateEditor groupId={groupId} weekId={week.id} />
+                  <WeekSlateEditor groupId={groupId} weekId={week.id} showsSpreads={showsSpreads} />
                 </div>
               ) : null}
             </Card>

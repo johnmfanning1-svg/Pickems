@@ -33,6 +33,20 @@ struct WeekRecapGeneratorTests {
         #expect(!text.contains("Recap"))
     }
 
+    @Test func straightUpRecapOmitsSpreadLanguage() {
+        let text = WeekRecapGenerator.recap(
+            groupName: "Core 4 OG",
+            week: week(status: .scored),
+            entries: [
+                entry(id: "u1", name: "JMF", wins: 4, losses: 7, rank: 2)
+            ],
+            userId: "u1",
+            pickMode: .straightUp
+        )
+        #expect(text.contains("Your week: 4–7 straight up"))
+        #expect(!text.contains("against the spread"))
+    }
+
     @Test func inProgressWithoutResultsStaysShort() {
         let text = WeekRecapGenerator.recap(
             groupName: "Core 4 OG",

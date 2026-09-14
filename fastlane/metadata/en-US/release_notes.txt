@@ -1,7 +1,8 @@
-What's new in 3.5.1
+What's new in 3.5.2
 
-• Commissioner Settings This Week chips pick which week you admin
-• Resolve Ties waits until the week is scored, then ranks equal records for that week
-• Head-to-Head leagues still skip Resolve Ties
+• New league type: Straight Up — pick outright winners, no spread
+• ATS leagues are unchanged
+• Save every remaining Selection in one pass
+• Rank weekly ties by dragging
 
 Thanks for playing with us.

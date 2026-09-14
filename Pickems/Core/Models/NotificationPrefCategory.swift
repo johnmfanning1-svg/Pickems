@@ -48,7 +48,7 @@ enum NotificationPrefCategory: String, CaseIterable, Identifiable, Sendable {
         case .pickemsDeadlines:
             return "Pickems are open, lock-in reminders, and when the board locks."
         case .gameFinals:
-            return "You covered, tough beat, or push when a slate game goes final."
+            return "Covered or won, tough beat, or push when a slate game goes final."
         case .tookTheLead:
             return "You’re #1 on the live board."
         case .weekScored:

@@ -277,6 +277,8 @@ service cloud.firestore {
         && request.resource.data.memberIds.size() == 1
         && request.auth.uid in request.resource.data.memberIds;
       allow update: if isCommissioner(groupId) || isJoiningGroup() || isLeavingGroup();
+      // Commissioners write nested `rules` including `pickMode` (`ats` | `straightUp`).
+      // Missing pickMode is treated as ats by iOS and Cloud Functions.
       allow delete: if isCommissioner(groupId);
 
       match /members/{memberId} {

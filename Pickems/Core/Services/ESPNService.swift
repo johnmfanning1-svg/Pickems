@@ -152,7 +152,8 @@ actor ESPNService {
         slateEventIds: Set<String> = [],
         userPicks: [String: String] = [:],
         slateGames: [SlateGame] = [],
-        forceRefresh: Bool = false
+        forceRefresh: Bool = false,
+        pickMode: PickMode = .ats
     ) async throws -> [ESPNLiveGameCard] {
         let espnGames = try await fetchScoreboard(
             week: week,
@@ -182,7 +183,13 @@ actor ESPNService {
                 }
                 return nil
             }()
-            let result = pickOutcome(game: game, slateGame: slateGame, pickedTeamId: pickedTeamId)
+            let result = pickOutcome(
+                game: game,
+                slateGame: slateGame,
+                pickedTeamId: pickedTeamId,
+                pickMode: pickMode
+            )
+            let hideSpread = isSlate && !pickMode.showsSpreads
 
             return ESPNLiveGameCard(
                 id: game.espnEventId,
@@ -197,7 +204,7 @@ actor ESPNService {
                 homeTeamLogoURL: game.homeTeamLogoURL,
                 awayScore: game.awayScore,
                 homeScore: game.homeScore,
-                spreadLabel: Self.resolvedSpreadLabel(espnGame: game, slateGame: slateGame),
+                spreadLabel: hideSpread ? nil : Self.resolvedSpreadLabel(espnGame: game, slateGame: slateGame),
                 status: game.status,
                 statusDetail: statusDetail(for: game),
                 kickoff: game.kickoff,
@@ -210,7 +217,7 @@ actor ESPNService {
                 isNeutralSite: game.isNeutralSite,
                 userPickTeamAbbreviation: pickAbbr,
                 pickResult: result,
-                liveSpreadLabel: Self.liveSpreadLabel(espnGame: game, isSlateGame: isSlate)
+                liveSpreadLabel: hideSpread ? nil : Self.liveSpreadLabel(espnGame: game, isSlateGame: isSlate)
             )
         }
 
@@ -219,7 +226,7 @@ actor ESPNService {
         // Slate games missing from this ESPN week still belong on Group / My Picks.
         let presentIds = Set(cards.map(\.espnEventId))
         for slate in slateGames where !presentIds.contains(slate.espnEventId) {
-            cards.append(Self.card(from: slate, userPicks: userPicks, ranks: ranks))
+            cards.append(Self.card(from: slate, userPicks: userPicks, ranks: ranks, pickMode: pickMode))
         }
 
         return cards.sorted { $0.kickoff < $1.kickoff }
@@ -230,7 +237,8 @@ actor ESPNService {
         slateEventIds: Set<String> = [],
         userPicks: [String: String] = [:],
         slateGames: [SlateGame] = [],
-        forceRefresh: Bool = false
+        forceRefresh: Bool = false,
+        pickMode: PickMode = .ats
     ) async throws -> [ESPNLiveGameCard] {
         let cards = try await liveGameCards(
             week: week.espnScoreboardWeek,
@@ -238,7 +246,8 @@ actor ESPNService {
             slateEventIds: slateEventIds,
             userPicks: userPicks,
             slateGames: slateGames,
-            forceRefresh: forceRefresh
+            forceRefresh: forceRefresh,
+            pickMode: pickMode
         )
         return cards.matching(seasonYear: week.seasonYear, appWeekNumber: week.weekNumber)
     }
@@ -260,7 +269,8 @@ actor ESPNService {
     nonisolated static func card(
         from slate: SlateGame,
         userPicks: [String: String],
-        ranks: TeamRankLookup = .empty
+        ranks: TeamRankLookup = .empty,
+        pickMode: PickMode = .ats
     ) -> ESPNLiveGameCard {
         let pickedTeamId = resolvedPickedTeamId(
             espnEventId: slate.espnEventId,
@@ -292,7 +302,7 @@ actor ESPNService {
         }()
         let pickResult: ESPNLiveGameCard.PickResult? = {
             guard pickedTeamId != nil else { return nil }
-            switch ScoringEngine.isPickCorrect(pickedTeamId: pickedTeamId!, game: slate) {
+            switch ScoringEngine.isPickCorrect(pickedTeamId: pickedTeamId!, game: slate, pickMode: pickMode) {
             case .some(true): return .win
             case .some(false): return .loss
             case .none: return slate.status == .final ? .push : .pending
@@ -311,7 +321,7 @@ actor ESPNService {
             homeTeamLogoURL: slate.homeTeamLogoURL,
             awayScore: slate.awayScore,
             homeScore: slate.homeScore,
-            spreadLabel: slate.favoriteSpreadDisplay,
+            spreadLabel: pickMode.showsSpreads ? slate.favoriteSpreadDisplay : nil,
             status: slate.status,
             statusDetail: statusDetail,
             kickoff: slate.kickoff,
@@ -327,10 +337,15 @@ actor ESPNService {
         )
     }
 
-    private func pickOutcome(game: ESPNGame, slateGame: SlateGame?, pickedTeamId: String?) -> ESPNLiveGameCard.PickResult? {
+    private func pickOutcome(
+        game: ESPNGame,
+        slateGame: SlateGame?,
+        pickedTeamId: String?,
+        pickMode: PickMode
+    ) -> ESPNLiveGameCard.PickResult? {
         guard pickedTeamId != nil else { return nil }
         let scoringGame = slateGame ?? game.toSlateGame()
-        switch ScoringEngine.isPickCorrect(pickedTeamId: pickedTeamId!, game: scoringGame) {
+        switch ScoringEngine.isPickCorrect(pickedTeamId: pickedTeamId!, game: scoringGame, pickMode: pickMode) {
         case .some(true): return .win
         case .some(false): return .loss
         case .none:

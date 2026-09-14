@@ -65,6 +65,69 @@ enum TieBreakerPolicy: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// How Pickems are graded. Stored on `groups/{id}.rules.pickMode`.
+/// Missing on existing leagues → `.ats` so ATS scoring stays unchanged.
+enum PickMode: String, Codable, CaseIterable, Identifiable {
+    case ats
+    case straightUp
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .ats: return "Against the Spread"
+        case .straightUp: return "Straight Up"
+        }
+    }
+
+    /// Spreads stay off every Straight Up surface — including live ESPN lines on slate games.
+    var showsSpreads: Bool { self == .ats }
+
+    var pickemsSectionTitle: String {
+        switch self {
+        case .ats: return "Spread Pickems"
+        case .straightUp: return "Straight Up Pickems"
+        }
+    }
+
+    var recordPhrase: String {
+        switch self {
+        case .ats: return "against the spread"
+        case .straightUp: return "straight up"
+        }
+    }
+
+    var leagueChartSubtitle: String {
+        switch self {
+        case .ats: return "Everyone's picks against the spread"
+        case .straightUp: return "Everyone's outright winner picks"
+        }
+    }
+
+    var createFooter: String {
+        switch self {
+        case .ats:
+            return "Pick which team covers the point spread. League type is set at create and cannot be changed mid-season."
+        case .straightUp:
+            return "Pick the outright winner. Spreads are hidden, and a game tie is a push. League type is set at create and cannot be changed mid-season."
+        }
+    }
+
+    var coverMomentWinTitle: String {
+        switch self {
+        case .ats: return "Covered"
+        case .straightUp: return "Won"
+        }
+    }
+
+    var gameFinalWinTitle: String {
+        switch self {
+        case .ats: return "You covered"
+        case .straightUp: return "You won"
+        }
+    }
+}
+
 struct GroupRules: Codable, Equatable {
     /// Who builds the weekly slate. Either/or with the numeric knobs below:
     /// - `.member`: only `selectionsPerMember` is active; expected slate size is derived at week mint.
@@ -75,7 +138,7 @@ struct GroupRules: Codable, Equatable {
     /// Commissioner mode only — target games per week. In member mode this value on
     /// `GroupRules` is ignored; the week snapshot stores the derived allowance.
     var slateSize: Int
-    /// Spread-pick lock policy. Product default is earliest slate kickoff (`firstKickoff`).
+    /// Pickems lock policy. Product default is earliest slate kickoff (`firstKickoff`).
     /// `rolling` locks each game at its own kickoff. `custom` is legacy unused.
     var pickDeadline: DeadlinePolicy
     var tieBreaker: TieBreakerPolicy
@@ -86,6 +149,8 @@ struct GroupRules: Codable, Equatable {
     /// Allow submissions after deadline with a win penalty.
     var allowLatePicks: Bool
     var latePickPenaltyWins: Int
+    /// ATS (default) vs Straight Up. Existing docs without this field decode as `.ats`.
+    var pickMode: PickMode
 
     /// Expected unique games for a week under the active mode.
     /// Member mode is always `members × Selections per person`, never the unused
@@ -99,10 +164,13 @@ struct GroupRules: Codable, Equatable {
         }
     }
 
+    var showsSpreads: Bool { pickMode.showsSpreads }
+
     enum CodingKeys: String, CodingKey {
         case selectionMode, selectionsPerMember, slateSize, pickDeadline, tieBreaker
         case customDeadlineHour, customDeadlineMinute
         case allowConfidencePick, allowLatePicks, latePickPenaltyWins
+        case pickMode
     }
 
     init(
@@ -115,7 +183,8 @@ struct GroupRules: Codable, Equatable {
         customDeadlineMinute: Int = 0,
         allowConfidencePick: Bool = false,
         allowLatePicks: Bool = false,
-        latePickPenaltyWins: Int = 1
+        latePickPenaltyWins: Int = 1,
+        pickMode: PickMode = .ats
     ) {
         self.selectionMode = selectionMode
         self.selectionsPerMember = selectionsPerMember
@@ -127,6 +196,7 @@ struct GroupRules: Codable, Equatable {
         self.allowConfidencePick = allowConfidencePick
         self.allowLatePicks = allowLatePicks
         self.latePickPenaltyWins = latePickPenaltyWins
+        self.pickMode = pickMode
     }
 
     init(from decoder: Decoder) throws {
@@ -141,6 +211,7 @@ struct GroupRules: Codable, Equatable {
         allowConfidencePick = try container.decodeIfPresent(Bool.self, forKey: .allowConfidencePick) ?? false
         allowLatePicks = try container.decodeIfPresent(Bool.self, forKey: .allowLatePicks) ?? false
         latePickPenaltyWins = try container.decodeIfPresent(Int.self, forKey: .latePickPenaltyWins) ?? 1
+        pickMode = try container.decodeIfPresent(PickMode.self, forKey: .pickMode) ?? .ats
     }
 
     static let `default` = GroupRules(
@@ -153,6 +224,7 @@ struct GroupRules: Codable, Equatable {
         customDeadlineMinute: 0,
         allowConfidencePick: false,
         allowLatePicks: false,
-        latePickPenaltyWins: 1
+        latePickPenaltyWins: 1,
+        pickMode: .ats
     )
 }

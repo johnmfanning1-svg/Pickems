@@ -27,7 +27,8 @@ struct CommissionerLeagueRecapPanel: View {
             picks: picks,
             games: games,
             awards: awards,
-            tone: tone
+            tone: tone,
+            pickMode: group.rules.pickMode
         )
     }
 

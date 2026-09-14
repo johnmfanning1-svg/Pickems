@@ -164,7 +164,8 @@ struct GroupPicksView: View {
                     liveCards: appState.picksViewModel.livePickCards,
                     teamRanks: appState.picksViewModel.teamRanks,
                     currentUserId: currentUserId,
-                    hiddenGameIds: hiddenGameIds
+                    hiddenGameIds: hiddenGameIds,
+                    pickMode: appState.selectedPickMode
                 )
             } else {
                 ForEach(sortedMembers) { member in
@@ -234,7 +235,7 @@ struct GroupPicksView: View {
                 ? "Games as rows, members as columns. Colors update as games go."
                 : "Locked games show everyone's picks. Later games stay hidden until kickoff."
         }
-        return "Make a Pickem against the spread for every game on the slate."
+        return "Make a Pickem \(appState.selectedPickMode.showsSpreads ? "against the spread" : "for the outright winner") for every game on the slate."
     }
 
     private var showsPickemsBoard: Bool {
@@ -372,10 +373,11 @@ struct GroupPicksView: View {
                     PickResultRow(
                         game: game,
                         pickedTeamId: pick?.picks[game.id],
-                        showSpread: true,
+                        showSpread: appState.selectedPickMode.showsSpreads,
                         liveSpreadLabel: appState.picksViewModel.livePickCards[game.espnEventId]?.liveSpreadLabel,
                         homeRank: appState.picksViewModel.teamRanks.rank(for: game.homeTeamId),
-                        awayRank: appState.picksViewModel.teamRanks.rank(for: game.awayTeamId)
+                        awayRank: appState.picksViewModel.teamRanks.rank(for: game.awayTeamId),
+                        pickMode: appState.selectedPickMode
                     )
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
@@ -398,7 +400,7 @@ struct GroupPicksView: View {
 
         VStack(alignment: .leading, spacing: 8) {
             if isOwn, canRemake {
-                Text("This list is Selections (the games). Remove Selection frees a slot. Pickems (who covers) start after the slate opens.")
+                Text("This list is Selections (the games). Remove Selection frees a slot. Pickems start after the slate opens.")
                     .font(.caption)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .padding(.horizontal, 6)
@@ -423,13 +425,15 @@ struct GroupPicksView: View {
                                 Text(nominationMatchupLabel(nom))
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(PickemsColors.textPrimary)
-                                LockedSpreadLabel(
-                                    lockedText: nominationSpreadLabel(nom),
-                                    liveText: liveSpreadText(forEventId: nom.espnEventId),
-                                    isLocked: true,
-                                    font: .caption.weight(.bold),
-                                    lockedColor: theme.accent
-                                )
+                                if appState.selectedPickMode.showsSpreads {
+                                    LockedSpreadLabel(
+                                        lockedText: nominationSpreadLabel(nom),
+                                        liveText: liveSpreadText(forEventId: nom.espnEventId),
+                                        isLocked: true,
+                                        font: .caption.weight(.bold),
+                                        lockedColor: theme.accent
+                                    )
+                                }
                             }
                             Spacer(minLength: 8)
                             if canRemove, let rules = appState.groupService.selectedGroup?.rules {

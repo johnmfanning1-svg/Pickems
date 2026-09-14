@@ -11,6 +11,10 @@ extension AppState {
         return group.commissionerId == userId
     }
 
+    var selectedPickMode: PickMode {
+        groupService.selectedGroup?.rules.pickMode ?? .ats
+    }
+
     var needsOnboarding: Bool {
         _ = authService.onboardingRevision
         _ = groupService.groups
@@ -161,7 +165,8 @@ extension AppState {
             tieBreaker: tieBreaker,
             allPicks: pickService.allPicks,
             games: pickService.slateGames,
-            tieBreakOrder: tieBreakOrder
+            tieBreakOrder: tieBreakOrder,
+            pickMode: group?.rules.pickMode ?? .ats
         )
     }
 
@@ -185,6 +190,7 @@ extension AppState {
         )
         guard !baseEntries.isEmpty else { return [] }
 
+        let pickMode = group?.rules.pickMode ?? .ats
         let pickByUser = Dictionary(picks.map { ($0.userId, $0) }, uniquingKeysWith: { _, last in last })
         let scored = baseEntries.map { entry -> StandingEntry in
             var next = entry
@@ -192,7 +198,8 @@ extension AppState {
             let result = ScoringEngine.scorePicks(
                 picks: pick?.picks ?? [:],
                 games: games,
-                confidenceGameId: pick?.confidenceGameId
+                confidenceGameId: pick?.confidenceGameId,
+                pickMode: pickMode
             )
             next.weeklyWins = result.wins
             next.weeklyLosses = result.losses
@@ -205,7 +212,8 @@ extension AppState {
             tieBreaker: group?.rules.tieBreaker ?? .commissionerOverride,
             allPicks: picks,
             games: games,
-            tieBreakOrder: tieBreakOrder
+            tieBreakOrder: tieBreakOrder,
+            pickMode: pickMode
         )
     }
 }

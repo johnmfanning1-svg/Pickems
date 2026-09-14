@@ -39,7 +39,8 @@ struct CommissionerManagePicksSheet: View {
                                 selectedTeamId: draftPicks[game.id],
                                 homeRank: appState.picksViewModel.teamRanks.rank(for: game.homeTeamId),
                                 awayRank: appState.picksViewModel.teamRanks.rank(for: game.awayTeamId),
-                                showConfidenceToggle: false
+                                showConfidenceToggle: false,
+                                showsSpread: appState.selectedPickMode.showsSpreads
                             ) { teamId in
                                 if teamId.isEmpty {
                                     draftPicks.removeValue(forKey: game.id)

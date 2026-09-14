@@ -63,7 +63,7 @@ struct PicksView: View {
             .navigationTitle(kind == .selections ? "Selections" : "Pickems")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                HelpToolbarItem(topic: kind == .selections ? PickemsHelp.nominations : PickemsHelp.picksOverview)
+                HelpToolbarItem(topic: kind == .selections ? PickemsHelp.nominations : PickemsHelp.picksOverview(for: appState.selectedPickMode))
             }
             .pickemsRefreshable(isRefreshing: $isRefreshing) {
                 await reloadPicks()
@@ -121,7 +121,7 @@ struct PicksView: View {
             message: kind == .selections
                 ? "Join a league to start making Selections."
                 : "Join a league to start making Pickems.",
-            help: kind == .selections ? PickemsHelp.nominations : PickemsHelp.picksOverview
+            help: kind == .selections ? PickemsHelp.nominations : PickemsHelp.picksOverview(for: appState.selectedPickMode)
         )
     }
 
@@ -471,7 +471,11 @@ struct PicksView: View {
         let openGames = games.filter { !WeekTransition.isGameLocked($0, week: week) }
 
         return VStack(spacing: 16) {
-            PickemsSectionHeader(title: "Spread Pickems", subtitle: "Tap a team to pick. Tap again to clear that Pickem — the Selection stays on the slate.", help: PickemsHelp.spreadPicks)
+            PickemsSectionHeader(
+                title: appState.selectedPickMode.pickemsSectionTitle,
+                subtitle: "Tap a team to pick. Tap again to clear that Pickem — the Selection stays on the slate.",
+                help: PickemsHelp.pickems(for: appState.selectedPickMode)
+            )
 
             if appState.pickService.userPick?.isLocked == true {
                 VStack(alignment: .leading, spacing: 8) {
@@ -512,7 +516,8 @@ struct PicksView: View {
                         viewModel.confidenceGameId = viewModel.confidenceGameId == game.id ? nil : game.id
                         viewModel.saveDraft(appState: appState)
                     },
-                    lockedCaption: gameLocked ? "Locked at kickoff" : nil
+                    lockedCaption: gameLocked ? "Locked at kickoff" : nil,
+                    showsSpread: appState.selectedPickMode.showsSpreads
                 ) { teamId in
                     if teamId.isEmpty {
                         viewModel.draftPicks.removeValue(forKey: game.id)
@@ -664,6 +669,7 @@ struct PicksView: View {
                             liveCard: viewModel.livePickCards[game.espnEventId],
                             homeRank: viewModel.teamRanks.rank(for: game.homeTeamId),
                             awayRank: viewModel.teamRanks.rank(for: game.awayTeamId),
+                            showsSpread: appState.selectedPickMode.showsSpreads,
                             onSelect: { _ in }
                         )
                     }

@@ -36,7 +36,8 @@ enum PickemsHelp {
         tips: [
             "Your Slate highlights games on your slate this week.",
             "Green checkmarks mean your Pickem won.",
-            "A lock next to a spread is the Pickems line used for scoring. The number in parentheses is ESPN’s live line, for reference."
+            "A lock next to a spread is the Pickems line used for scoring. The number in parentheses is ESPN’s live line, for reference.",
+            "Straight Up leagues hide the line on slate games — scoring is the outright winner."
         ]
     )
 
@@ -46,7 +47,7 @@ enum PickemsHelp {
         message: "Each week moves through phases from building the slate to scoring Pickems.",
         tips: [
             "Selection — members or commissioner choose games.",
-            "Pickems — everyone submits Pickems against the spread.",
+            "Pickems — everyone submits Pickems.",
             "Locked — games are in progress; Pickems are final.",
             "Scored — all games finished; standings updated."
         ]
@@ -66,7 +67,7 @@ enum PickemsHelp {
         title: "Pickems",
         message: "Make your weekly Pickems against the slate your league selected.",
         tips: [
-            "Tap a team to select them against the spread.",
+            "Tap a team to select them.",
             "Submit before the deadline shown at the top.",
             "Draft Pickems save automatically as you tap.",
             "Pickems stay locked until Selections are done or the Selection deadline passes.",
@@ -74,6 +75,22 @@ enum PickemsHelp {
             "After Pickems lock, this tab shows the league chart. Expand Your Pickems to review your own picks."
         ]
     )
+
+    static func picksOverview(for pickMode: PickMode) -> HelpTopic {
+        guard pickMode == .straightUp else { return picksOverview }
+        return HelpTopic(
+            id: "picks.overview.straightUp",
+            title: "Pickems",
+            message: "Make your weekly Straight Up Pickems against the slate your league selected.",
+            tips: [
+                "Tap the team you think will win the game.",
+                "Spreads are hidden in this league — a tied game is a push.",
+                "Submit before the deadline shown at the top.",
+                "Draft Pickems save automatically as you tap.",
+                "After Pickems lock, this tab shows the league chart. Expand Your Pickems to review your own picks."
+            ]
+        )
+    }
 
     static let leaguePickems = HelpTopic(
         id: "picks.leagueBoard",
@@ -92,6 +109,24 @@ enum PickemsHelp {
             "After lock, open Season History to browse past weeks' charts."
         ]
     )
+
+    static func leaguePickems(for pickMode: PickMode) -> HelpTopic {
+        guard pickMode == .straightUp else { return leaguePickems }
+        return HelpTopic(
+            id: "picks.leagueBoard.straightUp",
+            title: "League Pickems",
+            message: "Once Pickems lock, everyone can see the chart: games as rows, members as columns. Colors update as games go.",
+            tips: [
+                "Before lock, this screen shows a countdown — picks stay hidden.",
+                "On a rolling-lock league, each game's row unlocks on the chart at that game's kickoff.",
+                "This league is Straight Up — spreads are hidden and a tied game is a push.",
+                "Tap the expand arrows to view the chart fullscreen in landscape.",
+                "Your column stays pinned next to Game while you scroll other members.",
+                "Tap a member on the league leaderboard to compare your picks with theirs.",
+                "After lock, open Season History to browse past weeks' charts."
+            ]
+        )
+    }
 
     static let seasonHistory = HelpTopic(
         id: "picks.seasonHistory",
@@ -161,6 +196,21 @@ enum PickemsHelp {
         ]
     )
 
+    static func pickems(for pickMode: PickMode) -> HelpTopic {
+        guard pickMode == .straightUp else { return spreadPicks }
+        return HelpTopic(
+            id: "picks.straightUp",
+            title: "Straight Up Pickems",
+            message: "Pick the team you think will win the game. Spreads are hidden in this league.",
+            tips: [
+                "Home or away — whoever scores more points wins the Pickem.",
+                "A tied game is a push. Missed Pickems still count as a loss.",
+                "Tap a selected team to clear that Pickem. The Selection (the game) stays on the slate.",
+                "You must make a Pickem on every open slate game before submitting.",
+            ]
+        )
+    }
+
     static let pickDeadline = HelpTopic(
         id: "picks.deadline",
         title: "Pickems Lock",
@@ -215,7 +265,7 @@ enum PickemsHelp {
         title: "Leaderboard",
         message: "Rankings based on Pickem record. This Week resets each slate; Season is cumulative.",
         tips: [
-            "W-L is wins and losses against the spread. No Pickem on a final slate game is a loss.",
+            "W-L is wins and losses. No Pickem on a final slate game is a loss.",
             "Rank is by most wins, not batting average — a late joiner with a hot percentage does not jump people who have more wins.",
             "First place shows batting average. Everyone else shows games back of the leader.",
             "Tied This Week records wait for Rank in Commissioner Settings → Resolve Ties (Commissioner Override leagues).",
@@ -224,12 +274,28 @@ enum PickemsHelp {
         ]
     )
 
+    static func leaderboard(for pickMode: PickMode) -> HelpTopic {
+        guard pickMode == .straightUp else { return leaderboard }
+        return HelpTopic(
+            id: "groups.leaderboard.straightUp",
+            title: "Leaderboard",
+            message: "Rankings based on Straight Up Pickem record. This Week resets each slate; Season is cumulative.",
+            tips: [
+                "W-L is outright wins and losses. A tied game is a push. No Pickem on a final slate game is a loss.",
+                "Rank is by most wins, not batting average — a late joiner with a hot percentage does not jump people who have more wins.",
+                "First place shows batting average. Everyone else shows games back of the leader.",
+                "Tied This Week records wait for a commissioner tap in Commissioner Settings → Resolve Ties (Commissioner Override leagues).",
+                "Tap another member to compare your Pickems with theirs."
+            ]
+        )
+    }
+
     static let commissionerSettings = HelpTopic(
         id: "groups.commissioner",
         title: "Commissioner Settings",
         message: "Choose either Selections-per-member or games-per-week — not both.",
         tips: [
-            "Members Select: set how many games each person submits.",
+            "League type (ATS or Straight Up) is chosen when you create the league and cannot be changed mid-season.",
             "Commissioner Selects: set total games per week and build the slate yourself.",
             "Changes apply to future weeks. Set a Selection deadline each week in member mode.",
             "Pickems Lock chooses entire-slate lock at first kickoff, or rolling lock at each game.",
@@ -294,7 +360,7 @@ enum PickemsHelp {
         id: "onboarding.create",
         title: "Create a League",
         message: "Start a private league. You'll be the commissioner and can invite friends with your code.",
-        tips: ["You can configure slate size and rules after creating the league."]
+        tips: ["Choose Against the Spread or Straight Up when you create the league — that type cannot change mid-season.", "You can configure slate size and other rules after creating the league."]
     )
 
     static let joinGroup = HelpTopic(
