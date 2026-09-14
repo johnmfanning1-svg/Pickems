@@ -335,7 +335,7 @@ struct PicksView: View {
                 help: PickemsHelp.commissionerSlate
             )
 
-            PrimaryButton(title: "Add Game") {
+            PrimaryButton(title: "Add Games") {
                 viewModel.selectionBrowseIntent = .own
                 appState.present(.gameBrowse)
             }
@@ -384,7 +384,8 @@ struct PicksView: View {
             } else if atLimit {
                 nominationSubmitSection(userNoms: userNoms, perMember: perMember, week: week)
             } else if WeekTransition.canRemakeSelections(week) {
-                PrimaryButton(title: "Select Game") {
+                let remaining = perMember - userNoms
+                PrimaryButton(title: remaining == 1 ? "Select Game" : "Select Games") {
                     viewModel.selectionBrowseIntent = .own
                     appState.present(.gameBrowse)
                 }

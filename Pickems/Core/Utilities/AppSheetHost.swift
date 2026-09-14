@@ -29,8 +29,8 @@ struct AppSheetHostModifier: ViewModifier {
     private func appSheetContent(_ sheet: AppSheet) -> some View {
         switch sheet {
         case .gameBrowse:
-            GameBrowseView { game in
-                appState.picksViewModel.handleGameSelection(game, appState: appState)
+            GameBrowseView(seedGames: appState.picksViewModel.espnGames) { games in
+                try await appState.picksViewModel.saveBrowseSelections(games, appState: appState)
             }
         case .joinGroup:
             JoinGroupSheet(initialCode: appState.pendingInviteCode ?? "")

@@ -194,103 +194,136 @@ final class PicksViewModel {
         appState.present(.gameBrowse)
     }
 
-    func handleGameSelection(_ game: ESPNGame, appState: AppState) {
-        guard let group = appState.groupService.selectedGroup,
-              let week = appState.groupService.currentWeek,
-              let user = appState.authService.currentUser else { return }
+    func gameBrowseSelectionLimit(appState: AppState) -> Int {
+        guard let week = appState.groupService.currentWeek,
+              let group = appState.groupService.selectedGroup else { return 1 }
+        let rules = group.rules
+        let perMember = max(
+            week.selectionsPerMember > 0 ? week.selectionsPerMember : rules.selectionsPerMember,
+            1
+        )
+        let noms = appState.pickService.nominations
+        let slate = appState.pickService.slateGames
 
-        let intent = selectionBrowseIntent
-        Task {
-            do {
-                let rules = group.rules
-                try await applyGameSelection(
-                    game,
-                    intent: intent,
-                    group: group,
-                    week: week,
-                    user: user,
-                    rules: rules,
-                    appState: appState
-                )
-                PickemsHaptics.success()
-                selectionBrowseIntent = .own
-                if appState.presentedSheet == .gameBrowse {
-                    appState.dismissSheet()
+        switch selectionBrowseIntent {
+        case .replace:
+            return 1
+        case .addFor(let memberId, _):
+            let used = noms.filter { $0.submittedBy == memberId }.count
+            return max(perMember - used, 0)
+        case .own:
+            if usesCommissionerGameWrite(week: week, appState: appState) {
+                let slateSize = week.slateSize > 0 ? week.slateSize : rules.slateSize
+                let current: Int
+                if week.status == .picking {
+                    current = slate.count
+                } else {
+                    current = max(
+                        slate.count,
+                        Set(noms.map(\.espnEventId) + slate.map(\.espnEventId)).count
+                    )
                 }
-            } catch {
-                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
+                return max(slateSize - current, 0)
             }
+            let userId = appState.currentUserId ?? ""
+            let used = noms.filter { $0.submittedBy == userId }.count
+            let unique = Set(noms.map(\.espnEventId) + slate.map(\.espnEventId)).count
+            let slateSize = week.slateSize
+            return max(0, min(perMember - used, slateSize - unique))
         }
     }
 
-    private func applyGameSelection(
-        _ game: ESPNGame,
-        intent: SelectionBrowseIntent,
-        group: PickemGroup,
-        week: WeekSummary,
-        user: UserProfile,
-        rules: GroupRules,
+    func saveBrowseSelections(
+        _ games: [ESPNGame],
         appState: AppState
-    ) async throws {
-        switch intent {
+    ) async throws -> SelectionBrowseSaveResult {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek,
+              let user = appState.authService.currentUser else {
+            throw PickService.PickError.unauthorized
+        }
+        let empty = SelectionBrowseSaveResult(
+            savedEventIds: [],
+            collidedEventIds: [],
+            collidedLabels: []
+        )
+        guard !games.isEmpty else { return empty }
+
+        let rules = group.rules
+        switch selectionBrowseIntent {
         case .replace(let nomination):
             try await appState.pickService.replaceNomination(
                 groupId: group.id,
                 weekId: week.id,
                 nomination: nomination,
-                game: game,
+                game: games[0],
                 rules: rules,
                 week: week,
                 isCommissioner: appState.isCommissioner,
                 userId: user.id
             )
+            return SelectionBrowseSaveResult(
+                savedEventIds: [games[0].espnEventId],
+                collidedEventIds: [],
+                collidedLabels: []
+            )
         case .addFor(let memberId, let displayName):
-            try await appState.pickService.submitNomination(
-                groupId: group.id,
-                weekId: week.id,
-                nomination: Nomination.fromESPNGame(
-                    game,
+            let nominations = games.map {
+                Nomination.fromESPNGame(
+                    $0,
+                    id: $0.espnEventId,
                     submittedBy: memberId,
                     submitterName: displayName
-                ),
+                )
+            }
+            return try await appState.pickService.submitNominations(
+                groupId: group.id,
+                weekId: week.id,
+                nominations: nominations,
                 rules: rules,
                 week: week,
                 memberIds: group.memberIds,
                 isCommissioner: true
             )
         case .own:
-            let selectionMode = week.selectionMode
-            let commissionerFill =
-                appState.isCommissioner
-                && (
-                    (selectionMode == .member && week.isSelectionDeadlinePassed)
-                    || week.status == .picking
-                )
-
-            if selectionMode == .commissioner || commissionerFill {
-                try await appState.pickService.submitCommissionerGame(
+            if usesCommissionerGameWrite(week: week, appState: appState) {
+                return try await appState.pickService.submitCommissionerGames(
                     groupId: group.id,
                     weekId: week.id,
-                    game: game.toSlateGame(),
+                    games: games.map { $0.toSlateGame() },
                     rules: rules,
                     week: week
                 )
-            } else {
-                try await appState.pickService.submitNomination(
-                    groupId: group.id,
-                    weekId: week.id,
-                    nomination: Nomination.fromESPNGame(
-                        game,
-                        submittedBy: user.id,
-                        submitterName: user.displayName
-                    ),
-                    rules: rules,
-                    week: week,
-                    memberIds: group.memberIds,
-                    isCommissioner: appState.isCommissioner
+            }
+            let nominations = games.map {
+                Nomination.fromESPNGame(
+                    $0,
+                    id: $0.espnEventId,
+                    submittedBy: user.id,
+                    submitterName: user.displayName
                 )
             }
+            return try await appState.pickService.submitNominations(
+                groupId: group.id,
+                weekId: week.id,
+                nominations: nominations,
+                rules: rules,
+                week: week,
+                memberIds: group.memberIds,
+                isCommissioner: appState.isCommissioner
+            )
         }
+    }
+
+    private func usesCommissionerGameWrite(week: WeekSummary, appState: AppState) -> Bool {
+        let selectionMode = week.selectionMode
+        let commissionerFill =
+            appState.isCommissioner
+            && (
+                (selectionMode == .member && week.isSelectionDeadlinePassed)
+                || week.status == .picking
+            )
+        return selectionMode == .commissioner || commissionerFill
     }
 
     func saveDraft(appState: AppState) {

@@ -472,9 +472,35 @@ final class PickService {
         nomination: Nomination,
         rules: GroupRules,
         week: WeekSummary,
-        memberIds _: [String],
+        memberIds: [String],
         isCommissioner: Bool = false
     ) async throws {
+        let result = try await submitNominations(
+            groupId: groupId,
+            weekId: weekId,
+            nominations: [nomination],
+            rules: rules,
+            week: week,
+            memberIds: memberIds,
+            isCommissioner: isCommissioner
+        )
+        if result.savedCount > 0 { return }
+        if !result.collidedEventIds.isEmpty { throw PickError.duplicateGame }
+        throw PickError.nominationLimitReached
+    }
+
+    /// Writes every still-free Selection in one pass after a server re-read.
+    /// Games another member claimed since browse opened are returned as collisions
+    /// instead of failing the whole save.
+    func submitNominations(
+        groupId: String,
+        weekId: String,
+        nominations requested: [Nomination],
+        rules: GroupRules,
+        week: WeekSummary,
+        memberIds _: [String],
+        isCommissioner: Bool = false
+    ) async throws -> SelectionBrowseSaveResult {
         switch week.status {
         case .locked, .scored, .picking:
             // After lock-early or the Selection deadline, members cannot remake
@@ -485,45 +511,122 @@ final class PickService {
                 guard isCommissioner else { throw PickError.selectionClosed }
             }
         }
-        let existingNoms = nominations.contains { $0.espnEventId == nomination.espnEventId }
-        let existingGames = slateGames.contains { $0.espnEventId == nomination.espnEventId }
-        guard !existingNoms, !existingGames else {
-            throw PickError.duplicateGame
+        guard !requested.isEmpty else {
+            return SelectionBrowseSaveResult(savedEventIds: [], collidedEventIds: [], collidedLabels: [])
         }
 
-        let slateSize = week.slateSize
+        let weekRef = db.week(groupId: groupId, weekId: weekId)
+        let nomsSnap = try await weekRef.nominations.getDocuments(source: .server)
+        let serverNoms = nomsSnap.documents.compactMap { try? $0.data(as: Nomination.self) }
+        let gamesSnap = try await weekRef.games.getDocuments(source: .server)
+        let serverGameEventIds = Set(gamesSnap.documents.compactMap { doc -> String? in
+            SlateGame.fromDocument(id: doc.documentID, data: doc.data())?.espnEventId
+        })
+
+        let submittedBy = requested[0].submittedBy
+        let taken = Set(serverNoms.map(\.espnEventId)).union(serverGameEventIds)
         let perMember = week.selectionsPerMember > 0 ? week.selectionsPerMember : rules.selectionsPerMember
-        let uniqueCount: Int
-        if week.status == .picking {
-            uniqueCount = Set(slateGames.map(\.espnEventId)).count
-        } else {
-            uniqueCount = Set(nominations.map(\.espnEventId) + slateGames.map(\.espnEventId)).count
+        let uniqueCount = taken.count
+        let userCount = serverNoms.filter { $0.submittedBy == submittedBy }.count
+        let remainingUser = max(perMember - userCount, 0)
+        let remainingSlate = max(week.slateSize - uniqueCount, 0)
+        var remainingSlots = min(remainingUser, remainingSlate)
+        if !isCommissioner, ScoringEngine.isPastDeadline(deadline: week.selectionDeadline) {
+            remainingSlots = 0
         }
-        let userCount = nominations.filter { $0.submittedBy == nomination.submittedBy }.count
-        guard ScoringEngine.canSubmitNomination(
-            userNominationCount: userCount,
-            selectionsPerMember: perMember,
-            uniqueNominationCount: uniqueCount,
-            slateSize: slateSize,
-            selectionDeadline: isCommissioner ? nil : week.selectionDeadline
-        ) else {
+        if remainingSlots <= 0 {
             throw PickError.nominationLimitReached
         }
 
-        let ref = db.collection("groups").document(groupId)
-            .collection("weeks").document(weekId)
-            .collection("nominations").document()
+        let plan = SelectionBatchPlanner.plan(
+            requestedIds: requested.map(\.espnEventId),
+            takenIds: taken,
+            remainingSlots: remainingSlots
+        )
+        let byEventId = Dictionary(
+            requested.map { ($0.espnEventId, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var saved: [Nomination] = []
+        var collidedIds = plan.collidedIds
+        var collidedLabels = plan.collidedIds.map { matchupLabel(for: byEventId[$0]) }
 
-        var nom = nomination
-        nom.id = ref.documentID
-        try await ref.setData(from: nom)
-        nominations.append(nom)
+        for eventId in plan.acceptedIds {
+            guard var nom = byEventId[eventId] else { continue }
+            nom.id = eventId
+            let ref = weekRef.nominations.document(eventId)
+            do {
+                try await createNominationIfFree(ref, nomination: nom)
+                saved.append(nom)
+            } catch PickError.duplicateGame {
+                collidedIds.append(eventId)
+                collidedLabels.append(matchupLabel(for: nom))
+            }
+        }
 
-        let weekRef = db.collection("groups").document(groupId)
-            .collection("weeks").document(weekId)
-        // Completing Selections does not open Pickems. Stay in `.selection` so
-        // members can clear and remake until the deadline or commissioner lock-early.
-        try await weekRef.updateData(["nominationCount": nominations.count])
+        if !saved.isEmpty {
+            let savedIds = Set(saved.map(\.id))
+            nominations.removeAll { savedIds.contains($0.id) || savedIds.contains($0.espnEventId) }
+            nominations.append(contentsOf: saved)
+            // Completing Selections does not open Pickems. Stay in `.selection` so
+            // members can clear and remake until the deadline or commissioner lock-early.
+            let countSnap = try await weekRef.nominations.getDocuments(source: .server)
+            try await weekRef.updateData([
+                FirestoreField.nominationCount: countSnap.count
+            ])
+        }
+
+        return SelectionBrowseSaveResult(
+            savedEventIds: saved.map(\.espnEventId),
+            collidedEventIds: collidedIds,
+            collidedLabels: collidedLabels
+        )
+    }
+
+    private func matchupLabel(for nomination: Nomination?) -> String {
+        guard let nomination else { return "That game" }
+        let away = nomination.awayTeamAbbreviation ?? nomination.awayTeamName
+        let home = nomination.homeTeamAbbreviation ?? nomination.homeTeamName
+        return "\(away) @ \(home)"
+    }
+
+    /// Creates `nominations/{espnEventId}` only if nobody else claimed it.
+    /// Same member retry is treated as already saved.
+    private func createNominationIfFree(
+        _ ref: DocumentReference,
+        nomination: Nomination
+    ) async throws {
+        do {
+            _ = try await db.runTransaction { transaction, errorPointer in
+                do {
+                    let snap = try transaction.getDocument(ref)
+                    if snap.exists {
+                        let owner = snap.data()?["submittedBy"] as? String
+                        if owner == nomination.submittedBy {
+                            return nil
+                        }
+                        let taken = NSError(
+                            domain: "Pickems.NominationClaim",
+                            code: 409,
+                            userInfo: [NSLocalizedDescriptionKey: "taken"]
+                        )
+                        errorPointer?.pointee = taken
+                        return nil
+                    }
+                    try transaction.setData(from: nomination, forDocument: ref)
+                    return nil
+                } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+            }
+        } catch {
+            let ns = error as NSError
+            if ns.domain == "Pickems.NominationClaim", ns.code == 409 {
+                throw PickError.duplicateGame
+            }
+            throw error
+        }
     }
 
     /// Copies nominations into `games` for any event that is not already on the slate.
@@ -624,18 +727,20 @@ final class PickService {
         }
 
         let newEventId = game.espnEventId
-        let takenByOtherNom = nominations.contains {
-            $0.id != nomination.id && $0.espnEventId == newEventId
+        let weekRef = db.week(groupId: groupId, weekId: weekId)
+        let nomsSnap = try await weekRef.nominations.getDocuments(source: .server)
+        let takenByOtherNom = nomsSnap.documents.contains { doc in
+            doc.documentID != nomination.id
+                && SlateGameDecoding.stringValue(doc.data()["espnEventId"]) == newEventId
         }
-        let takenBySlate = slateGames.contains {
-            $0.espnEventId == newEventId && $0.espnEventId != nomination.espnEventId
+        let gamesSnap = try await weekRef.games.getDocuments(source: .server)
+        let takenBySlate = gamesSnap.documents.contains { doc in
+            let eventId = SlateGame.fromDocument(id: doc.documentID, data: doc.data())?.espnEventId
+            return eventId == newEventId && eventId != nomination.espnEventId
         }
         guard !takenByOtherNom, !takenBySlate else {
             throw PickError.duplicateGame
         }
-
-        let weekRef = db.collection("groups").document(groupId)
-            .collection("weeks").document(weekId)
         var updated = Nomination.fromESPNGame(
             game,
             id: nomination.id,
@@ -683,6 +788,25 @@ final class PickService {
         rules: GroupRules,
         week: WeekSummary
     ) async throws {
+        let result = try await submitCommissionerGames(
+            groupId: groupId,
+            weekId: weekId,
+            games: [game],
+            rules: rules,
+            week: week
+        )
+        if result.savedCount > 0 { return }
+        if !result.collidedEventIds.isEmpty { throw PickError.duplicateGame }
+        throw PickError.slateFull
+    }
+
+    func submitCommissionerGames(
+        groupId: String,
+        weekId: String,
+        games requested: [SlateGame],
+        rules: GroupRules,
+        week: WeekSummary
+    ) async throws -> SelectionBrowseSaveResult {
         switch week.status {
         case .locked, .scored:
             throw PickError.cannotModifyLockedSlate
@@ -693,25 +817,8 @@ final class PickService {
         case .selection:
             break
         }
-
-        let slateSize = week.slateSize > 0 ? week.slateSize : rules.slateSize
-        // During picking the live slate is `games`; leftover nominations must not block a replacement.
-        let currentCount: Int
-        if week.status == .picking {
-            currentCount = slateGames.count
-        } else {
-            currentCount = max(slateGames.count, Set(nominations.map(\.espnEventId)).count)
-        }
-        guard currentCount < slateSize else {
-            throw PickError.slateFull
-        }
-        guard !slateGames.contains(where: { $0.espnEventId == game.espnEventId }) else {
-            throw PickError.duplicateGame
-        }
-        if week.status != .picking {
-            guard !nominations.contains(where: { $0.espnEventId == game.espnEventId }) else {
-                throw PickError.duplicateGame
-            }
+        guard !requested.isEmpty else {
+            return SelectionBrowseSaveResult(savedEventIds: [], collidedEventIds: [], collidedLabels: [])
         }
 
         // Ensure member nominations are on the slate before commissioner fill.
@@ -719,18 +826,108 @@ final class PickService {
             try await materializeNominationsIfNeeded(groupId: groupId, weekId: weekId)
         }
 
-        let ref = db.collection("groups").document(groupId)
-            .collection("weeks").document(weekId)
-            .collection("games").document(game.id)
-        try await ref.setData(from: game)
-        if !slateGames.contains(where: { $0.id == game.id }) {
-            slateGames.append(game)
+        let weekRef = db.week(groupId: groupId, weekId: weekId)
+        let gamesSnap = try await weekRef.games.getDocuments(source: .server)
+        let serverGames = gamesSnap.documents.compactMap { doc in
+            SlateGame.fromDocument(id: doc.documentID, data: doc.data())
+        }
+        var occupiedEvents = Set(serverGames.map(\.espnEventId))
+        if week.status != .picking {
+            let nomsSnap = try await weekRef.nominations.getDocuments(source: .server)
+            occupiedEvents.formUnion(nomsSnap.documents.compactMap { doc -> String? in
+                SlateGameDecoding.stringValue(doc.data()["espnEventId"])
+            })
+        }
+        var taken = occupiedEvents
+        taken.formUnion(gamesSnap.documents.map(\.documentID))
+
+        let slateSize = week.slateSize > 0 ? week.slateSize : rules.slateSize
+        let currentCount = week.status == .picking ? serverGames.count : occupiedEvents.count
+        let remainingSlots = max(slateSize - currentCount, 0)
+        if remainingSlots <= 0 {
+            throw PickError.slateFull
         }
 
-        if week.status == .selection {
-            try await db.week(groupId: groupId, weekId: weekId).updateData([
-                "nominationCount": week.selectionMode == .member ? nominations.count : slateGames.count
-            ])
+        let plan = SelectionBatchPlanner.plan(
+            requestedIds: requested.map(\.espnEventId),
+            takenIds: taken,
+            remainingSlots: remainingSlots
+        )
+        let byEventId = Dictionary(
+            requested.map { ($0.espnEventId, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var saved: [SlateGame] = []
+        var collidedIds = plan.collidedIds
+        var collidedLabels = plan.collidedIds.map { matchupLabel(for: byEventId[$0]) }
+
+        for eventId in plan.acceptedIds {
+            guard let game = byEventId[eventId] else { continue }
+            let ref = weekRef.games.document(game.id)
+            do {
+                try await createSlateGameIfFree(ref, game: game)
+                saved.append(game)
+            } catch PickError.duplicateGame {
+                collidedIds.append(eventId)
+                collidedLabels.append(matchupLabel(for: game))
+            }
+        }
+
+        if !saved.isEmpty {
+            let savedIds = Set(saved.map(\.espnEventId) + saved.map(\.id))
+            slateGames.removeAll { savedIds.contains($0.espnEventId) || savedIds.contains($0.id) }
+            slateGames.append(contentsOf: saved)
+            if week.status == .selection {
+                try await weekRef.updateData([
+                    FirestoreField.nominationCount: week.selectionMode == .member
+                        ? nominations.count
+                        : slateGames.count
+                ])
+            }
+        }
+
+        return SelectionBrowseSaveResult(
+            savedEventIds: saved.map(\.espnEventId),
+            collidedEventIds: collidedIds,
+            collidedLabels: collidedLabels
+        )
+    }
+
+    private func matchupLabel(for game: SlateGame?) -> String {
+        guard let game else { return "That game" }
+        return "\(game.awayTeamAbbreviation) \(game.matchupSeparator) \(game.homeTeamAbbreviation)"
+    }
+
+    private func createSlateGameIfFree(
+        _ ref: DocumentReference,
+        game: SlateGame
+    ) async throws {
+        do {
+            _ = try await db.runTransaction { transaction, errorPointer in
+                do {
+                    let snap = try transaction.getDocument(ref)
+                    if snap.exists {
+                        let taken = NSError(
+                            domain: "Pickems.NominationClaim",
+                            code: 409,
+                            userInfo: [NSLocalizedDescriptionKey: "taken"]
+                        )
+                        errorPointer?.pointee = taken
+                        return nil
+                    }
+                    try transaction.setData(from: game, forDocument: ref)
+                    return nil
+                } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+            }
+        } catch {
+            let ns = error as NSError
+            if ns.domain == "Pickems.NominationClaim", ns.code == 409 {
+                throw PickError.duplicateGame
+            }
+            throw error
         }
     }
 

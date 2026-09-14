@@ -34,7 +34,7 @@ struct CommissionerManageSelectionsSheet: View {
                     .font(.headline)
                     .foregroundStyle(PickemsColors.textPrimary)
 
-                Text("Remove or replace their games, or add one if they still have a slot. This updates the slate for everyone.")
+                Text("Remove or replace their games, or add the rest of their slots in one save. This updates the slate for everyone.")
                     .font(.subheadline)
                     .foregroundStyle(PickemsColors.textSecondary)
 
@@ -114,9 +114,10 @@ struct CommissionerManageSelectionsSheet: View {
         .sheet(isPresented: $showBrowse) {
             GameBrowseView(
                 seedGames: appState.picksViewModel.espnGames,
-                replacingEventId: replacing?.espnEventId
-            ) { game in
-                applyBrowse(game)
+                replacingEventId: replacing?.espnEventId,
+                selectionLimitOverride: replacing != nil ? 1 : max(perMember - nominations.count, 1)
+            ) { games in
+                try await applyBrowse(games)
             }
             .pickemsEnvironment(appState)
         }
@@ -131,47 +132,49 @@ struct CommissionerManageSelectionsSheet: View {
         PickemsHaptics.success()
     }
 
-    private func applyBrowse(_ game: ESPNGame) {
-        isWorking = true
-        errorMessage = nil
-        Task {
-            defer { isWorking = false }
-            do {
-                let rules = appState.groupService.selectedGroup?.rules ?? .default
-                if let replacing {
-                    try await appState.pickService.replaceNomination(
-                        groupId: groupId,
-                        weekId: week.id,
-                        nomination: replacing,
-                        game: game,
-                        rules: rules,
-                        week: week,
-                        isCommissioner: true,
-                        userId: appState.currentUserId ?? ""
-                    )
-                } else {
-                    try await appState.pickService.submitNomination(
-                        groupId: groupId,
-                        weekId: week.id,
-                        nomination: Nomination.fromESPNGame(
-                            game,
-                            submittedBy: member.id,
-                            submitterName: member.displayName
-                        ),
-                        rules: rules,
-                        week: week,
-                        memberIds: appState.groupService.selectedGroup?.memberIds ?? [],
-                        isCommissioner: true
-                    )
-                }
-                self.replacing = nil
-                showBrowse = false
-                PickemsHaptics.success()
-            } catch {
-                errorMessage = UserFacingError.message(for: error, context: .write)
-                    ?? error.localizedDescription
-                PickemsHaptics.warning()
+    private func applyBrowse(_ games: [ESPNGame]) async throws -> SelectionBrowseSaveResult {
+        let rules = appState.groupService.selectedGroup?.rules ?? .default
+        if let replacing {
+            guard let game = games.first else {
+                return SelectionBrowseSaveResult(
+                    savedEventIds: [],
+                    collidedEventIds: [],
+                    collidedLabels: []
+                )
             }
+            try await appState.pickService.replaceNomination(
+                groupId: groupId,
+                weekId: week.id,
+                nomination: replacing,
+                game: game,
+                rules: rules,
+                week: week,
+                isCommissioner: true,
+                userId: appState.currentUserId ?? ""
+            )
+            self.replacing = nil
+            return SelectionBrowseSaveResult(
+                savedEventIds: [game.espnEventId],
+                collidedEventIds: [],
+                collidedLabels: []
+            )
         }
+        let result = try await appState.pickService.submitNominations(
+            groupId: groupId,
+            weekId: week.id,
+            nominations: games.map {
+                Nomination.fromESPNGame(
+                    $0,
+                    id: $0.espnEventId,
+                    submittedBy: member.id,
+                    submitterName: member.displayName
+                )
+            },
+            rules: rules,
+            week: week,
+            memberIds: appState.groupService.selectedGroup?.memberIds ?? [],
+            isCommissioner: true
+        )
+        return result
     }
 }

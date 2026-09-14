@@ -313,9 +313,8 @@ struct CommissionerSettingsView: View {
             .sheet(isPresented: $showAdminGameBrowse) {
                 GameBrowseView(
                     seedGames: appState.picksViewModel.espnGames
-                ) { game in
-                    appState.picksViewModel.handleGameSelection(game, appState: appState)
-                    showAdminGameBrowse = false
+                ) { games in
+                    try await appState.picksViewModel.saveBrowseSelections(games, appState: appState)
                 }
                 .pickemsEnvironment(appState)
             }

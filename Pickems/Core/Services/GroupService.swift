@@ -1241,11 +1241,10 @@ final class GroupService {
         try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
     }
 
-    func resolveTie(
+    func resolveTieGroup(
         groupId: String,
         weekId: String,
-        winnerUserId: String,
-        amongUserIds: [String]
+        orderedUserIds: [String]
     ) async throws {
         let group = selectedGroup?.id == groupId
             ? selectedGroup
@@ -1253,7 +1252,7 @@ final class GroupService {
         guard let group, group.commissionerId == Auth.auth().currentUser?.uid else {
             throw GroupError.notCommissioner
         }
-        guard amongUserIds.contains(winnerUserId), Set(amongUserIds).count >= 2 else { return }
+        guard Set(orderedUserIds).count >= 2 else { return }
 
         let currentOrder: [String]
         if currentWeek?.id == weekId {
@@ -1263,11 +1262,7 @@ final class GroupService {
         } else {
             currentOrder = []
         }
-        let updated = ScoringEngine.promoteTieBreakWinner(
-            winnerUserId,
-            among: amongUserIds,
-            in: currentOrder
-        )
+        let updated = ScoringEngine.rankTieBreakGroup(orderedUserIds, in: currentOrder)
 
         try await db.week(groupId: groupId, weekId: weekId)
             .updateData([FirestoreField.tieBreakOrder: updated])

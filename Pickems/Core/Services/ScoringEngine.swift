@@ -269,30 +269,31 @@ enum ScoringEngine {
         }
     }
 
-    /// Remaining weekly groups that still share a rank (equal record, unresolved).
+    /// Remaining weekly groups that still share a rank (equal win total, unresolved).
     static func unresolvedWeeklyTieGroups(from ranked: [StandingEntry]) -> [[StandingEntry]] {
         let eligible = ranked.filter { $0.weeklyWins + $0.weeklyLosses > 0 }
         let grouped = Dictionary(grouping: eligible, by: \.rank)
         return grouped.keys.sorted().compactMap { rank -> [StandingEntry]? in
             let group = grouped[rank] ?? []
             guard group.count >= 2 else { return nil }
-            return group.sorted {
-                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-            }
+            return group
         }
     }
 
-    /// Move `winnerId` above everyone else in `userIds` for this week's override list.
-    /// Losers stay unlisted so they remain tied with each other until another tap.
-    static func promoteTieBreakWinner(
-        _ winnerId: String,
-        among userIds: [String],
-        in order: [String]
+    /// Place `orderedUserIds` as a complete ranking among themselves, after any
+    /// other groups already in `existing`. Earlier in the result ranks higher.
+    static func rankTieBreakGroup(
+        _ orderedUserIds: [String],
+        in existing: [String]
     ) -> [String] {
-        let group = Set(userIds)
-        guard group.contains(winnerId), group.count >= 2 else { return order }
-        var next = order.filter { !group.contains($0) }
-        next.append(winnerId)
+        var ordered: [String] = []
+        for id in orderedUserIds where !ordered.contains(id) {
+            ordered.append(id)
+        }
+        guard ordered.count >= 2 else { return existing }
+        let group = Set(ordered)
+        var next = existing.filter { !group.contains($0) }
+        next.append(contentsOf: ordered)
         return next
     }
 

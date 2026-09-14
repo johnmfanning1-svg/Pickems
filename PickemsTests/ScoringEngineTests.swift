@@ -368,11 +368,47 @@ struct ScoringEngineTests {
         #expect(Set(groups[0].map(\.id)) == ["b", "c"])
     }
 
-    @Test func promoteTieBreakWinnerLeavesLosersUnlisted() {
-        let once = ScoringEngine.promoteTieBreakWinner("a", among: ["a", "b", "c"], in: [])
-        #expect(once == ["a"])
-        let twice = ScoringEngine.promoteTieBreakWinner("b", among: ["b", "c"], in: once)
-        #expect(twice == ["a", "b"])
+    @Test func rankTieBreakGroupWritesFullOrderAfterExistingGroups() {
+        let leftover = ScoringEngine.rankTieBreakGroup(["c", "a", "b"], in: ["x", "a"])
+        #expect(leftover == ["x", "c", "a", "b"])
+        #expect(ScoringEngine.rankTieBreakGroup(["a"], in: ["z"]) == ["z"])
+        #expect(ScoringEngine.rankTieBreakGroup(["c", "a", "c", "b"], in: []) == ["c", "a", "b"])
+    }
+
+    @Test func commissionerOverrideFullGroupOrderClearsTie() {
+        let entries = [
+            StandingEntry(id: "a", displayName: "Amy", avatarColorHex: "#DC2626", weeklyWins: 8, weeklyLosses: 3, seasonWins: 8, seasonLosses: 3, rank: 0, isTied: false),
+            StandingEntry(id: "b", displayName: "Bo", avatarColorHex: "#3366CC", weeklyWins: 8, weeklyLosses: 3, seasonWins: 8, seasonLosses: 3, rank: 0, isTied: false),
+            StandingEntry(id: "c", displayName: "Cam", avatarColorHex: "#22AA44", weeklyWins: 8, weeklyLosses: 3, seasonWins: 8, seasonLosses: 3, rank: 0, isTied: false),
+            StandingEntry(id: "d", displayName: "Dee", avatarColorHex: "#AA22AA", weeklyWins: 5, weeklyLosses: 2, seasonWins: 5, seasonLosses: 2, rank: 0, isTied: false),
+            StandingEntry(id: "e", displayName: "Eli", avatarColorHex: "#22AAAA", weeklyWins: 5, weeklyLosses: 2, seasonWins: 5, seasonLosses: 2, rank: 0, isTied: false),
+        ]
+        let ranked = ScoringEngine.rankedStandings(
+            entries: entries,
+            weekly: true,
+            tieBreaker: .commissionerOverride,
+            tieBreakOrder: ["c", "a", "b"]
+        )
+        #expect(ranked.prefix(3).map(\.id) == ["c", "a", "b"])
+        #expect(ranked.prefix(3).map(\.rank) == [1, 2, 3])
+        #expect(ranked.prefix(3).allSatisfy { !$0.isTied })
+        #expect(Set(ranked.suffix(2).map(\.id)) == ["d", "e"])
+        #expect(Set(ranked.suffix(2).map(\.rank)) == [4])
+        #expect(ranked[4].isTied)
+        let groups = ScoringEngine.unresolvedWeeklyTieGroups(from: ranked)
+        #expect(groups.count == 1)
+        #expect(Set(groups[0].map(\.id)) == ["d", "e"])
+    }
+
+    @Test func unresolvedWeeklyTieGroupsPreservesRankedOrder() {
+        let ranked = [
+            StandingEntry(id: "c", displayName: "Cam", avatarColorHex: "#22AA44", weeklyWins: 8, weeklyLosses: 5, seasonWins: 8, seasonLosses: 5, rank: 1, isTied: false),
+            StandingEntry(id: "a", displayName: "Amy", avatarColorHex: "#DC2626", weeklyWins: 8, weeklyLosses: 3, seasonWins: 8, seasonLosses: 3, rank: 1, isTied: true),
+            StandingEntry(id: "b", displayName: "Bo", avatarColorHex: "#3366CC", weeklyWins: 8, weeklyLosses: 3, seasonWins: 8, seasonLosses: 3, rank: 1, isTied: true),
+        ]
+        let groups = ScoringEngine.unresolvedWeeklyTieGroups(from: ranked)
+        #expect(groups.count == 1)
+        #expect(groups[0].map(\.id) == ["c", "a", "b"])
     }
 
     @Test func unresolvedWeeklyTieGroupsSkipsZeroRecords() {
