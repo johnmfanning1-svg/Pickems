@@ -392,6 +392,16 @@ describe("existing invariants (regression)", () => {
         selectionsPerMember: 3,
       })
     );
+    await assertSucceeds(updateDoc(week, { pickMode: "ats" }));
+    await assertSucceeds(updateDoc(week, { pickMode: "straightUp" }));
+  });
+
+  it("lets the commissioner stamp missing pickMode on a locked week but not rewrite it", async () => {
+    await seed();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const week = doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID);
+    await assertSucceeds(updateDoc(week, { pickMode: "straightUp" }));
+    await assertFails(updateDoc(week, { pickMode: "ats" }));
   });
 
   it("lets the commissioner extend pickDeadline alone and reopen a locked week", async () => {

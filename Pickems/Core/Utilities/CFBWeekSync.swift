@@ -79,7 +79,8 @@ enum CFBWeekSync {
             selectionDeadline: nil,
             selectionDeadlineSetAt: nil,
             selectionDeadlineSetBy: nil,
-            slateSource: isFixed ? CFBWeekCalendar.weekZeroSlateSource : nil
+            slateSource: isFixed ? CFBWeekCalendar.weekZeroSlateSource : nil,
+            pickMode: rules.pickMode
         )
     }
 

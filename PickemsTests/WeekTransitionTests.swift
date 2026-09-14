@@ -127,6 +127,48 @@ struct WeekTransitionTests {
         #expect(WeekTransition.arePickemsOpen(fixed))
     }
 
+    @Test func pickModeRewritesOpenSelectionButNotLockedOrWeekZero() {
+        #expect(WeekTransition.canRewritePickMode(week(status: .selection)))
+        #expect(!WeekTransition.canRewritePickMode(week(status: .picking)))
+        #expect(!WeekTransition.canRewritePickMode(week(status: .locked)))
+        #expect(!WeekTransition.canRewritePickMode(week(status: .scored)))
+        var fixed = week(status: .selection)
+        fixed.weekNumber = 0
+        fixed.slateSource = CFBWeekCalendar.weekZeroSlateSource
+        #expect(!WeekTransition.canRewritePickMode(fixed))
+    }
+
+    @Test func pickModeSwitchAppliesToOpenSelectionAndFreezesClosedWeeks() {
+        let open = week(status: .selection)
+        #expect(
+            WeekTransition.pickModeToPersist(
+                on: open,
+                newMode: .ats,
+                previousMode: .straightUp,
+                pickModeChanged: true
+            ) == .ats
+        )
+        let locked = week(status: .locked)
+        #expect(
+            WeekTransition.pickModeToPersist(
+                on: locked,
+                newMode: .ats,
+                previousMode: .straightUp,
+                pickModeChanged: true
+            ) == .straightUp
+        )
+        var frozen = week(status: .locked)
+        frozen.pickMode = .straightUp
+        #expect(
+            WeekTransition.pickModeToPersist(
+                on: frozen,
+                newMode: .ats,
+                previousMode: .straightUp,
+                pickModeChanged: true
+            ) == nil
+        )
+    }
+
     @Test func toSelectionUpdatesClearsLockAndSetsSelection() {
         let updates = WeekTransition.toSelectionUpdates()
         #expect(updates["status"] as? String == WeekStatus.selection.rawValue)

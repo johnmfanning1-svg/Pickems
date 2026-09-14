@@ -114,5 +114,19 @@ struct CFBWeekSyncTests {
         #expect(week.weekNumber == 1)
         #expect(week.status == .selection)
         #expect(week.skipsSelection == false)
+        #expect(week.pickMode == .ats)
+    }
+
+    @Test func makeWeekSummaryCopiesStraightUpPickMode() {
+        var rules = GroupRules.default
+        rules.pickMode = .straightUp
+        let week = CFBWeekSync.makeWeekSummary(
+            id: "2026-W2",
+            info: CFBWeekInfo(seasonYear: 2026, weekNumber: 2, seasonType: 2, label: ""),
+            rules: rules,
+            memberCount: 4
+        )
+        #expect(week.pickMode == .straightUp)
+        #expect(PickMode.resolving(week: week, groupRules: .default) == .straightUp)
     }
 }

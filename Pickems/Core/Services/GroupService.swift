@@ -977,7 +977,8 @@ final class GroupService {
                 SlateGame.fromDocument(id: doc.documentID, data: doc.data())
             }
             let pick = try? pickSnap.data(as: UserPick.self)
-            let pickMode = (selectedGroup?.id == groupId ? selectedGroup : groups.first { $0.id == groupId })?.rules.pickMode ?? .ats
+            let groupMode = (selectedGroup?.id == groupId ? selectedGroup : groups.first { $0.id == groupId })?.rules.pickMode ?? .ats
+            let pickMode = week.pickMode ?? groupMode
             let scored = ScoringEngine.scorePicks(
                 picks: pick?.picks ?? [:],
                 games: games,
@@ -1144,6 +1145,9 @@ final class GroupService {
     }
 
     func updateRules(groupId: String, rules: GroupRules) async throws {
+        let previousPickMode = (selectedGroup?.id == groupId ? selectedGroup : groups.first { $0.id == groupId })?
+            .rules.pickMode ?? .ats
+        let pickModeChanged = previousPickMode != rules.pickMode
         try await db.collection("groups").document(groupId).updateData([
             "rules": try Firestore.Encoder().encode(rules)
         ])
@@ -1154,6 +1158,11 @@ final class GroupService {
 
         // Keep an open selection-week snapshot aligned with the active either/or knob.
         await reconcileSelectionWeekSnapshot(groupId: groupId, rules: rules)
+        await freezePickModeOnClosedWeeks(
+            groupId: groupId,
+            previousMode: previousPickMode,
+            pickModeChanged: pickModeChanged
+        )
     }
 
     /// Member-mode weeks store a derived slate size (`members × Selections`). Rewrite it
@@ -1165,22 +1174,63 @@ final class GroupService {
         let expected = rules.expectedSlateSize(memberCount: memberCount)
         guard week.slateSize != expected
             || week.selectionMode != rules.selectionMode
-            || week.selectionsPerMember != rules.selectionsPerMember else { return }
+            || week.selectionsPerMember != rules.selectionsPerMember
+            || week.pickMode != rules.pickMode else { return }
         do {
             try await db.week(groupId: groupId, weekId: week.id).updateData([
                 "slateSize": expected,
                 "selectionMode": rules.selectionMode.rawValue,
                 "selectionsPerMember": rules.selectionsPerMember,
+                "pickMode": rules.pickMode.rawValue,
             ])
             week.slateSize = expected
             week.selectionMode = rules.selectionMode
             week.selectionsPerMember = rules.selectionsPerMember
+            week.pickMode = rules.pickMode
             currentWeek = week
+            if let idx = availableWeeks.firstIndex(where: { $0.id == week.id }) {
+                availableWeeks[idx] = week
+            }
         } catch {
             AppLog.error(AppLog.firestore, "selection slate size reconcile failed", error: error, metadata: [
                 "group_id": groupId,
                 "week_id": week.id,
             ])
+        }
+    }
+
+    /// Closed weeks without `pickMode` would inherit a later group switch. Stamp the previous mode.
+    private func freezePickModeOnClosedWeeks(
+        groupId: String,
+        previousMode: PickMode,
+        pickModeChanged: Bool
+    ) async {
+        guard pickModeChanged else { return }
+        var weeks: [WeekSummary] = (try? await fetchPastWeeks(groupId: groupId, limit: 20)) ?? []
+        if let current = currentWeek, !weeks.contains(where: { $0.id == current.id }) {
+            weeks.append(current)
+        }
+        for week in weeks {
+            guard !WeekTransition.canRewritePickMode(week), week.pickMode == nil else { continue }
+            do {
+                try await db.week(groupId: groupId, weekId: week.id).updateData([
+                    "pickMode": previousMode.rawValue
+                ])
+                if currentWeek?.id == week.id {
+                    currentWeek?.pickMode = previousMode
+                }
+                if let idx = availableWeeks.firstIndex(where: { $0.id == week.id }) {
+                    availableWeeks[idx].pickMode = previousMode
+                }
+            } catch {
+                if currentWeek?.id == week.id {
+                    currentWeek?.pickMode = previousMode
+                }
+                AppLog.error(AppLog.firestore, "pickMode freeze failed", error: error, metadata: [
+                    "group_id": groupId,
+                    "week_id": week.id,
+                ])
+            }
         }
     }
 

@@ -39,6 +39,73 @@ export function resolvePickMode(value: unknown): PickMode {
   return value === "straightUp" ? "straightUp" : "ats";
 }
 
+/** Prefer a week snapshot so a mid-season group switch cannot regrade a locked week. */
+export function weekPickMode(weekPickMode: unknown, groupPickMode: unknown): PickMode {
+  return weekPickMode === "straightUp" || weekPickMode === "ats"
+    ? weekPickMode
+    : resolvePickMode(groupPickMode);
+}
+
+function weekSkipsSelection(week: {
+  status?: unknown;
+  slateSource?: unknown;
+  weekNumber?: unknown;
+}): boolean {
+  return week.weekNumber === 0 || week.slateSource === "fixedBoard";
+}
+
+/** Open Selection weeks follow a commissioner type switch. Fixed slates wait until next week. */
+export function shouldRewriteWeekPickMode(week: {
+  status?: unknown;
+  slateSource?: unknown;
+  weekNumber?: unknown;
+}): boolean {
+  if (weekSkipsSelection(week)) return false;
+  return week.status === "selection";
+}
+
+/** `null` means leave the week document alone. */
+export function pickModeToPersistOnWeek(
+  week: {
+    status?: unknown;
+    slateSource?: unknown;
+    weekNumber?: unknown;
+    pickMode?: unknown;
+  },
+  newMode: PickMode,
+  previousMode: PickMode,
+  pickModeChanged: boolean
+): PickMode | null {
+  if (shouldRewriteWeekPickMode(week)) {
+    const current =
+      week.pickMode === "straightUp" || week.pickMode === "ats" ? week.pickMode : null;
+    return current === newMode ? null : newMode;
+  }
+  if (pickModeChanged && week.pickMode !== "ats" && week.pickMode !== "straightUp") {
+    return previousMode;
+  }
+  return null;
+}
+
+export function pickModeSnapshotsForWeeks(
+  weeks: Array<{
+    id: string;
+    status?: unknown;
+    slateSource?: unknown;
+    weekNumber?: unknown;
+    pickMode?: unknown;
+  }>,
+  newMode: PickMode,
+  previousMode: PickMode
+): Array<{ id: string; pickMode: PickMode }> {
+  const out: Array<{ id: string; pickMode: PickMode }> = [];
+  for (const week of weeks) {
+    const next = pickModeToPersistOnWeek(week, newMode, previousMode, true);
+    if (next) out.push({ id: week.id, pickMode: next });
+  }
+  return out;
+}
+
 /** Keep scoring on `groups.memberIds` so leftover member docs cannot stay on the board. */
 export function membersOnRoster<T extends { id: string }>(
   members: T[],

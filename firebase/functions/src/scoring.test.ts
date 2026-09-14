@@ -10,6 +10,9 @@ import {
   isWeekZero,
   missedPickIsLossForSeasonWeek,
   resolvePickMode,
+  weekPickMode,
+  pickModeSnapshotsForWeeks,
+  shouldRewriteWeekPickMode,
   type SlateGameDoc,
   type PickDoc,
 } from "./scoring";
@@ -35,6 +38,36 @@ describe("resolvePickMode", () => {
     expect(resolvePickMode("ats")).toBe("ats");
     expect(resolvePickMode("straightUp")).toBe("straightUp");
     expect(resolvePickMode("other")).toBe("ats");
+  });
+});
+
+describe("week pickMode snapshots", () => {
+  it("prefers the week snapshot over group rules", () => {
+    expect(weekPickMode("ats", "straightUp")).toBe("ats");
+    expect(weekPickMode("straightUp", "ats")).toBe("straightUp");
+    expect(weekPickMode(undefined, "straightUp")).toBe("straightUp");
+    expect(weekPickMode(undefined, undefined)).toBe("ats");
+  });
+
+  it("rewrites open selection weeks and freezes closed weeks without a snapshot", () => {
+    expect(shouldRewriteWeekPickMode({ status: "selection", weekNumber: 2 })).toBe(true);
+    expect(shouldRewriteWeekPickMode({ status: "picking", weekNumber: 2 })).toBe(false);
+    expect(shouldRewriteWeekPickMode({ status: "selection", weekNumber: 0 })).toBe(false);
+
+    expect(
+      pickModeSnapshotsForWeeks(
+        [
+          { id: "2026-W2", status: "selection", weekNumber: 2, pickMode: "straightUp" },
+          { id: "2026-W1", status: "locked", weekNumber: 1 },
+          { id: "2026-W0", status: "picking", weekNumber: 0, pickMode: "straightUp" },
+        ],
+        "ats",
+        "straightUp"
+      )
+    ).toEqual([
+      { id: "2026-W2", pickMode: "ats" },
+      { id: "2026-W1", pickMode: "straightUp" },
+    ]);
   });
 });
 

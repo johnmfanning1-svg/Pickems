@@ -12,7 +12,7 @@ extension AppState {
     }
 
     var selectedPickMode: PickMode {
-        groupService.selectedGroup?.rules.pickMode ?? .ats
+        PickMode.resolving(week: groupService.currentWeek, groupRules: groupService.selectedGroup?.rules)
     }
 
     var needsOnboarding: Bool {
@@ -169,7 +169,7 @@ extension AppState {
             allPicks: pickService.allPicks,
             games: pickService.slateGames,
             tieBreakOrder: tieBreakOrder,
-            pickMode: group?.rules.pickMode ?? .ats
+            pickMode: selectedPickMode
         )
     }
 
@@ -177,7 +177,8 @@ extension AppState {
     func weeklyRankedStandings(
         fromPicks picks: [UserPick],
         games: [SlateGame],
-        tieBreakOrder: [String] = []
+        tieBreakOrder: [String] = [],
+        pickMode resolvedPickMode: PickMode? = nil
     ) -> [StandingEntry] {
         let group = groupService.selectedGroup
         let members: [GroupMember]
@@ -193,7 +194,7 @@ extension AppState {
         )
         guard !baseEntries.isEmpty else { return [] }
 
-        let pickMode = group?.rules.pickMode ?? .ats
+        let pickMode = resolvedPickMode ?? selectedPickMode
         let pickByUser = Dictionary(picks.map { ($0.userId, $0) }, uniquingKeysWith: { _, last in last })
         let scored = baseEntries.map { entry -> StandingEntry in
             var next = entry

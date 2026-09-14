@@ -15,6 +15,7 @@ import {
   missedPickIsLossForSeasonWeek,
   coveredTeamId,
   resolvePickMode,
+  weekPickMode,
 } from "./scoring";
 import { isRollingLock } from "./pickLock";
 
@@ -521,7 +522,8 @@ export const adminRescoreWeek = onCall(async (request) => {
     latePickPenaltyWins?: number;
     pickMode?: unknown;
   };
-  const pickMode = resolvePickMode(rules.pickMode);
+  const pickMode = weekPickMode(week.pickMode, rules.pickMode);
+  const groupPickMode = resolvePickMode(rules.pickMode);
   const lateOptions = {
     allowLatePicks: rules.allowLatePicks === true,
     latePickPenaltyWins: rules.latePickPenaltyWins,
@@ -561,7 +563,7 @@ export const adminRescoreWeek = onCall(async (request) => {
       const scored = applyLatePickPenalty(
         scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId, {
           missedPickIsLoss,
-          pickMode,
+          pickMode: weekPickMode(weekDoc.data().pickMode, groupPickMode),
         }),
         {
           allowLatePicks: !isRollingLock(weekDoc.data().pickLockMode) && lateOptions.allowLatePicks,

@@ -65,7 +65,7 @@ enum TieBreakerPolicy: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// How Pickems are graded. Stored on `groups/{id}.rules.pickMode`.
+/// How Pickems are graded. Stored on `groups/{id}.rules.pickMode` and snapshotted onto each week.
 /// Missing on existing leagues → `.ats` so ATS scoring stays unchanged.
 enum PickMode: String, Codable, CaseIterable, Identifiable {
     case ats
@@ -107,10 +107,24 @@ enum PickMode: String, Codable, CaseIterable, Identifiable {
     var createFooter: String {
         switch self {
         case .ats:
-            return "Pick which team covers the point spread. League type is set at create and cannot be changed mid-season."
+            return "Pick which team covers the point spread. You can switch to Straight Up in Commissioner Settings while Selections are open, or for a future week."
         case .straightUp:
-            return "Pick the outright winner. Spreads are hidden, and a game tie is a push. League type is set at create and cannot be changed mid-season."
+            return "Pick the outright winner. Spreads are hidden, and a game tie is a push. You can switch to Against the Spread in Commissioner Settings while Selections are open, or for a future week."
         }
+    }
+
+    /// Commissioner settings footer. Same gate as lock mode: this open Selection week, else the next week.
+    var settingsFooter: String {
+        switch self {
+        case .ats:
+            return "ATS grades the cover. Applies to this week while Selections are open, or to the next week after Selections lock."
+        case .straightUp:
+            return "Straight Up grades the outright winner (a tie is a push). Applies to this week while Selections are open, or to the next week after Selections lock."
+        }
+    }
+
+    static func resolving(week: WeekSummary?, groupRules: GroupRules?) -> PickMode {
+        week?.pickMode ?? groupRules?.pickMode ?? .ats
     }
 
     var coverMomentWinTitle: String {
@@ -150,6 +164,7 @@ struct GroupRules: Codable, Equatable {
     var allowLatePicks: Bool
     var latePickPenaltyWins: Int
     /// ATS (default) vs Straight Up. Existing docs without this field decode as `.ats`.
+    /// Commissioners may switch while Selections are open, or for a future week.
     var pickMode: PickMode
 
     /// Expected unique games for a week under the active mode.

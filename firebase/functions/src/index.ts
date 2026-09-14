@@ -23,6 +23,8 @@ import {
   membersOnRoster,
   toMillis,
   resolvePickMode,
+  weekPickMode,
+  pickModeSnapshotsForWeeks,
   type PickMode,
 } from "./scoring";
 import { materializeNominations } from "./materialize";
@@ -368,11 +370,12 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
 
   for (const { groupDoc, memberIds, weeks: activeWeeks } of activeWeeksByGroup) {
     const groupId = groupDoc.id;
-    const pickMode = resolvePickMode(groupDoc.data()?.rules?.pickMode);
+    const groupPickMode = resolvePickMode(groupDoc.data()?.rules?.pickMode);
 
     for (const weekDoc of activeWeeks.docs) {
       const week = weekDoc.data();
       const weekId = weekDoc.id;
+      const pickMode = weekPickMode(week.pickMode, groupPickMode);
       const rolling = isRollingLock(week.pickLockMode);
 
       const gamesSnap = await weekDoc.ref.collection("games").get();
@@ -535,7 +538,7 @@ async function refreshLiveStandings(
     pickMode?: unknown;
   };
   const deadline = weekSnap.data()?.pickDeadline;
-  const mode = resolvePickMode(pickMode ?? rules.pickMode);
+  const mode = weekPickMode(weekSnap.data()?.pickMode, pickMode ?? rules.pickMode);
 
   const entries = members.map((member) => {
     const pick = picks.find((p) => p.userId === member.id);
@@ -627,7 +630,7 @@ async function scoreWeek(
       pickMode?: unknown;
     };
     const deadline = week?.pickDeadline;
-    const mode = resolvePickMode(pickMode ?? rules.pickMode);
+    const mode = weekPickMode(week?.pickMode, pickMode ?? rules.pickMode);
 
     const members = membersOnRoster(
       membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc)),
@@ -766,6 +769,28 @@ export const autoCloseSeasons = onSchedule("0 12 15 1 *", async () => {
   }
 });
 
+/** Snapshot league type onto weeks when group `rules.pickMode` changes. */
+async function snapshotPickModeOnWeeks(
+  groupId: string,
+  newMode: PickMode,
+  previousMode: PickMode
+) {
+  const weeks = await db.collection("groups").doc(groupId).collection("weeks").get();
+  const writes = pickModeSnapshotsForWeeks(
+    weeks.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    newMode,
+    previousMode
+  );
+  if (writes.length === 0) return;
+  const batch = db.batch();
+  for (const write of writes) {
+    batch.update(db.collection("groups").doc(groupId).collection("weeks").doc(write.id), {
+      pickMode: write.pickMode,
+    });
+  }
+  await batch.commit();
+}
+
 /** Keep public league index in sync when isPublic flips. */
 export const syncPublicLeagueIndex = onDocumentUpdated("groups/{groupId}", async (event) => {
   const change = event.data;
@@ -776,12 +801,15 @@ export const syncPublicLeagueIndex = onDocumentUpdated("groups/{groupId}", async
   const groupId = event.params.groupId;
   const beforePickMode = (before.rules as { pickMode?: unknown } | undefined)?.pickMode;
   const afterPickMode = (after.rules as { pickMode?: unknown } | undefined)?.pickMode;
+  const beforeMode =
+    beforePickMode === "straightUp" || beforePickMode === "ats" ? beforePickMode : null;
+  const afterMode =
+    afterPickMode === "straightUp" || afterPickMode === "ats" ? afterPickMode : null;
   // Old iOS clients replace the whole `rules` map and would drop pickMode.
-  if (
-    (beforePickMode === "straightUp" || beforePickMode === "ats") &&
-    afterPickMode == null
-  ) {
-    await change.after.ref.update({ "rules.pickMode": beforePickMode });
+  if (beforeMode && afterMode == null) {
+    await change.after.ref.update({ "rules.pickMode": beforeMode });
+  } else if (afterMode && beforeMode !== afterMode) {
+    await snapshotPickModeOnWeeks(groupId, afterMode, beforeMode ?? "ats");
   }
   const indexRef = db.collection("publicLeagues").doc(groupId);
   if (after.isPublic === true) {

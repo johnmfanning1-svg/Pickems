@@ -222,6 +222,8 @@ export async function migrateGroupWeek0Split(options: {
       nominationCount: nomsToMove.length,
       slateSource: WEEK_ZERO_SLATE_SOURCE,
       lockedAt: w1Data.lockedAt ?? admin.firestore.FieldValue.serverTimestamp(),
+      pickMode:
+        w1Data.pickMode === "straightUp" || w1Data.pickMode === "ats" ? w1Data.pickMode : "ats",
       ...lockSnapshotFromGames(
         weekZeroEvents.map((event) => ({
           id: event.id,

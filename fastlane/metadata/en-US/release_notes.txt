@@ -1,5 +1,6 @@
-What's new in 3.5.4
+What's new in 3.5.5
 
+• Switch Straight Up and Against the Spread while Selections are open, or for a future week
 • New leagues start at 0–0 instead of showing another league's record
 • Straight Up: pick outright winners, no spread
 • Save every remaining Selection in one pass

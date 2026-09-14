@@ -120,6 +120,30 @@ enum WeekTransition {
         return week.status == .selection
     }
 
+    /// League type can follow commissioner settings while Selections are still open.
+    /// Fixed slates skip Selection, so a change starts on the next week.
+    static func canRewritePickMode(_ week: WeekSummary) -> Bool {
+        guard !week.skipsSelection else { return false }
+        return week.status == .selection
+    }
+
+    /// Value to persist on a week when league type is saved. `nil` means leave the week alone.
+    /// Open Selection weeks take the new mode. Closed weeks without a snapshot freeze the previous mode.
+    static func pickModeToPersist(
+        on week: WeekSummary,
+        newMode: PickMode,
+        previousMode: PickMode,
+        pickModeChanged: Bool
+    ) -> PickMode? {
+        if canRewritePickMode(week) {
+            return week.pickMode == newMode ? nil : newMode
+        }
+        if pickModeChanged, week.pickMode == nil {
+            return previousMode
+        }
+        return nil
+    }
+
     /// Members can add/remove Selections while the week is still in `.selection`
     /// and the Selection deadline has not passed. After lock-early or deadline,
     /// status is `.picking` and Selections are frozen.

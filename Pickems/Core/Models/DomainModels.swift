@@ -224,6 +224,8 @@ struct WeekSummary: Codable, Identifiable, Equatable {
     /// Commissioner Override: user ids ranked above others who share this week's win total.
     /// Earlier in the list ranks higher. Only consulted when win totals match.
     var tieBreakOrder: [String]? = nil
+    /// League type snapshotted for this week. Nil on older weeks → fall back to group rules.
+    var pickMode: PickMode? = nil
 
     var displayLabel: String {
         "Season \(seasonYear.pickemsYearString) | Week \(weekNumber)"

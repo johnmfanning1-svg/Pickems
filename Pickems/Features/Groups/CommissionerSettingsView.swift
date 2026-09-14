@@ -78,12 +78,16 @@ struct CommissionerSettingsView: View {
                 membersSection
 
                 Section {
-                    LabeledContent("League type", value: rules.pickMode.displayName)
-                        .listRowBackground(PickemsColors.cardBackground)
+                    Picker("League type", selection: $rules.pickMode) {
+                        ForEach(PickMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .listRowBackground(PickemsColors.cardBackground)
                 } header: {
                     Text("Scoring")
                 } footer: {
-                    Text("ATS grades the cover. Straight Up grades the outright winner (a tie is a push). League type is set at create and cannot be changed mid-season.")
+                    Text(rules.pickMode.settingsFooter)
                 }
 
                 Section {

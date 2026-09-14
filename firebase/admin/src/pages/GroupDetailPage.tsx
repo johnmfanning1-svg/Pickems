@@ -366,7 +366,7 @@ export function GroupDetailPage() {
             </Field>
             <Field
               label="Pick mode"
-              hint="ats grades the cover. straightUp grades the outright winner (tie = push). iOS commissioners cannot change this after create. Rescore after changing it."
+              hint="ats grades the cover. straightUp grades the outright winner (tie = push). iOS commissioners can switch while Selections are open, or for a future week. Rescore after changing a week that already locked."
             >
               <Select
                 value={resolvePickMode(rules)}

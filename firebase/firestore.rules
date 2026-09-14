@@ -90,6 +90,13 @@ service cloud.firestore {
         || changed.hasOnly(['selectionDeadline', 'selectionDeadlineSetAt', 'selectionDeadlineSetBy', 'selectionDeadlinePassedNotified'])
         || (changed.hasOnly(['slateSize', 'selectionMode', 'selectionsPerMember'])
             && resource.data.status == 'selection')
+        || (changed.hasOnly(['slateSize', 'selectionMode', 'selectionsPerMember', 'pickMode'])
+            && resource.data.status == 'selection')
+        // Open Selection: switch league type. Closed week: stamp a missing snapshot once
+        // so a later group switch cannot rewrite already-locked grades.
+        || (changed.hasOnly(['pickMode'])
+            && (resource.data.status == 'selection'
+                || !resource.data.keys().hasAll(['pickMode'])))
         // This week's commissioner Override ranking among equal records.
         || changed.hasOnly(['tieBreakOrder']);
     }
@@ -279,6 +286,7 @@ service cloud.firestore {
       allow update: if isCommissioner(groupId) || isJoiningGroup() || isLeavingGroup();
       // Commissioners write nested `rules` including `pickMode` (`ats` | `straightUp`).
       // Missing pickMode is treated as ats by iOS and Cloud Functions.
+      // Mid-season switches apply to open Selection weeks and future mints.
       allow delete: if isCommissioner(groupId);
 
       match /members/{memberId} {

@@ -675,5 +675,7 @@ struct GroupRulesTests {
         #expect(decoded.pickMode == .straightUp)
         #expect(decoded.showsSpreads == false)
         #expect(PickMode.straightUp.pickemsSectionTitle == "Straight Up Pickems")
+        #expect(PickMode.straightUp.createFooter.contains("Against the Spread"))
+        #expect(PickMode.ats.settingsFooter.contains("Selections are open"))
     }
 }
