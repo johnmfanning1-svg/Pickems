@@ -14,7 +14,7 @@ import {
   membersOnRoster,
   missedPickIsLossForSeasonWeek,
   coveredTeamId,
-  resolvePickMode,
+  resolveWeekPickMode,
 } from "./scoring";
 import { isRollingLock } from "./pickLock";
 
@@ -521,7 +521,6 @@ export const adminRescoreWeek = onCall(async (request) => {
     latePickPenaltyWins?: number;
     pickMode?: unknown;
   };
-  const pickMode = resolvePickMode(rules.pickMode);
   const lateOptions = {
     allowLatePicks: rules.allowLatePicks === true,
     latePickPenaltyWins: rules.latePickPenaltyWins,
@@ -537,6 +536,7 @@ export const adminRescoreWeek = onCall(async (request) => {
   const seasonTotals = new Map<string, { wins: number; losses: number }>();
   let targetGames: SlateGameDoc[] = [];
   let targetPicks: PickDoc[] = [];
+  let targetPickMode = resolveWeekPickMode(week.pickMode, rules.pickMode);
 
   for (const weekDoc of seasonWeeks) {
     const [gamesSnap, picksSnap] = await Promise.all([
@@ -545,15 +545,18 @@ export const adminRescoreWeek = onCall(async (request) => {
     ]);
     const games = gamesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as unknown as SlateGameDoc));
     const picks = picksSnap.docs.map((d) => ({ ...(d.data() as PickDoc), userId: d.id }));
+    const weekData = weekDoc.data();
+    const weekPickMode = resolveWeekPickMode(weekData.pickMode, rules.pickMode);
     if (weekDoc.id === weekId) {
       targetGames = games;
       targetPicks = picks;
+      targetPickMode = weekPickMode;
     }
     const missedPickIsLoss = missedPickIsLossForSeasonWeek({
       targetWeekId: weekId,
       targetWeekNumber: week.weekNumber,
       seasonWeekId: weekDoc.id,
-      seasonWeekNumber: weekDoc.data().weekNumber,
+      seasonWeekNumber: weekData.weekNumber,
     });
     // Score every roster member, not just pick docs — sitting out a slate is all losses.
     for (const member of members) {
@@ -561,13 +564,13 @@ export const adminRescoreWeek = onCall(async (request) => {
       const scored = applyLatePickPenalty(
         scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId, {
           missedPickIsLoss,
-          pickMode,
+          pickMode: weekPickMode,
         }),
         {
-          allowLatePicks: !isRollingLock(weekDoc.data().pickLockMode) && lateOptions.allowLatePicks,
+          allowLatePicks: !isRollingLock(weekData.pickLockMode) && lateOptions.allowLatePicks,
           latePickPenaltyWins: lateOptions.latePickPenaltyWins,
           submittedAt: pick?.submittedAt,
-          deadline: weekDoc.data().pickDeadline,
+          deadline: weekData.pickDeadline,
         }
       );
       const running = seasonTotals.get(member.id) ?? { wins: 0, losses: 0 };
@@ -578,19 +581,19 @@ export const adminRescoreWeek = onCall(async (request) => {
     }
   }
 
-  const awards = computeWeekAwards(targetPicks, targetGames, pickMode);
+  const awards = computeWeekAwards(targetPicks, targetGames, targetPickMode);
   const batch = db().batch();
   for (const game of targetGames) {
     if (game.status === "final" && game.homeScore != null && game.awayScore != null) {
       batch.update(groupRef.collection("weeks").doc(weekId).collection("games").doc(game.id), {
-        winnerTeamId: coveredTeamId(game, game.homeScore, game.awayScore, pickMode),
+        winnerTeamId: coveredTeamId(game, game.homeScore, game.awayScore, targetPickMode),
       });
     }
   }
   const entries = members.map((member) => {
     const pick = targetPicks.find((p) => p.userId === member.id);
     const scored = applyLatePickPenalty(
-      scorePicks(pick?.picks ?? {}, targetGames, pick?.confidenceGameId, { pickMode }),
+      scorePicks(pick?.picks ?? {}, targetGames, pick?.confidenceGameId, { pickMode: targetPickMode }),
       {
         allowLatePicks: !isRollingLock(week.pickLockMode) && lateOptions.allowLatePicks,
         latePickPenaltyWins: lateOptions.latePickPenaltyWins,

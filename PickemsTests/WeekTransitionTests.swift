@@ -248,4 +248,42 @@ struct WeekTransitionTests {
         #expect(updates["pickDeadline"] != nil)
         #expect(updates["status"] as? String == WeekStatus.picking.rawValue)
     }
+
+    @Test func atsCommissionerCanOverrideFutureAndUnlockedWeeks() {
+        #expect(WeekTransition.canChangeWeekPickMode(week(status: .selection), leagueMode: .ats))
+        let deadline = Date().addingTimeInterval(7 * 24 * 3600)
+        #expect(WeekTransition.canChangeWeekPickMode(
+            week(status: .picking, deadline: deadline),
+            leagueMode: .ats
+        ))
+        #expect(!WeekTransition.canChangeWeekPickMode(week(status: .locked), leagueMode: .ats))
+        #expect(!WeekTransition.canChangeWeekPickMode(week(status: .scored), leagueMode: .ats))
+        #expect(!WeekTransition.canChangeWeekPickMode(week(status: .selection), leagueMode: .straightUp))
+    }
+
+    @Test func firstKickoffBlocksPickModeChange() {
+        let past = Date().addingTimeInterval(-60)
+        #expect(!WeekTransition.canChangeWeekPickMode(
+            week(status: .picking, deadline: past),
+            leagueMode: .ats
+        ))
+    }
+
+    @Test func pickModeChangeResetsWorkOnceSelectionsExist() {
+        #expect(!WeekTransition.weekPickModeChangeResetsWork(
+            week(status: .selection),
+            nominationCount: 0,
+            hasSlateOrPicks: false
+        ))
+        #expect(WeekTransition.weekPickModeChangeResetsWork(
+            week(status: .selection),
+            nominationCount: 3,
+            hasSlateOrPicks: false
+        ))
+        #expect(WeekTransition.weekPickModeChangeResetsWork(
+            week(status: .picking, deadline: Date().addingTimeInterval(3600)),
+            nominationCount: 0,
+            hasSlateOrPicks: false
+        ))
+    }
 }

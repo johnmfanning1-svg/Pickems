@@ -39,6 +39,7 @@ enum FirestoreField {
     static let chatEnabled = "chatEnabled"
     static let minimumBuild = "minimumBuild"
     static let tieBreakOrder = "tieBreakOrder"
+    static let pickMode = "pickMode"
 }
 
 extension Firestore {

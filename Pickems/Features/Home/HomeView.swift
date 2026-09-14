@@ -371,7 +371,7 @@ private struct HomeScoredWeekSection: View {
             picks: appState.pickService.allPicks,
             games: appState.pickService.slateGames,
             members: appState.groupService.members,
-            pickMode: group.rules.pickMode
+            pickMode: appState.pickMode(for: week)
         )
         let awards = WeekAwards(
             sharpshooterUserId: computed.sharpshooterUserId,
@@ -403,7 +403,7 @@ private struct HomeScoredWeekSection: View {
                     week: week,
                     standings: appState.groupService.standings,
                     userId: appState.authService.currentUser?.id,
-                    pickMode: group.rules.pickMode
+                    pickMode: appState.pickMode(for: week)
                 ))
                 if let awards {
                     WeekAwardsBanner(awards: awards)

@@ -224,6 +224,9 @@ struct WeekSummary: Codable, Identifiable, Equatable {
     /// Commissioner Override: user ids ranked above others who share this week's win total.
     /// Earlier in the list ranks higher. Only consulted when win totals match.
     var tieBreakOrder: [String]? = nil
+    /// Optional per-week scoring override. Nil inherits `groups/{id}.rules.pickMode`.
+    /// ATS leagues can set `.straightUp` on a future week or the current week before lock.
+    var pickMode: PickMode? = nil
 
     var displayLabel: String {
         "Season \(seasonYear.pickemsYearString) | Week \(weekNumber)"
@@ -245,6 +248,12 @@ struct WeekSummary: Codable, Identifiable, Equatable {
 
     var resolvedPickLockMode: DeadlinePolicy {
         pickLockMode == .rolling ? .rolling : .firstKickoff
+    }
+
+    /// Straight Up leagues stay Straight Up. ATS weeks inherit the league unless overridden.
+    func resolvedPickMode(leagueMode: PickMode) -> PickMode {
+        if leagueMode == .straightUp { return .straightUp }
+        return pickMode ?? leagueMode
     }
 
     var isRollingLock: Bool { resolvedPickLockMode == .rolling }

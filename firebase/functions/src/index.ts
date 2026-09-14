@@ -23,6 +23,7 @@ import {
   membersOnRoster,
   toMillis,
   resolvePickMode,
+  resolveWeekPickMode,
   type PickMode,
 } from "./scoring";
 import { materializeNominations } from "./materialize";
@@ -368,11 +369,12 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
 
   for (const { groupDoc, memberIds, weeks: activeWeeks } of activeWeeksByGroup) {
     const groupId = groupDoc.id;
-    const pickMode = resolvePickMode(groupDoc.data()?.rules?.pickMode);
+    const leaguePickMode = resolvePickMode(groupDoc.data()?.rules?.pickMode);
 
     for (const weekDoc of activeWeeks.docs) {
       const week = weekDoc.data();
       const weekId = weekDoc.id;
+      const pickMode = resolveWeekPickMode(week.pickMode, leaguePickMode);
       const rolling = isRollingLock(week.pickLockMode);
 
       const gamesSnap = await weekDoc.ref.collection("games").get();
@@ -534,8 +536,8 @@ async function refreshLiveStandings(
     latePickPenaltyWins?: number;
     pickMode?: unknown;
   };
-  const deadline = weekSnap.data()?.pickDeadline;
-  const mode = resolvePickMode(pickMode ?? rules.pickMode);
+    const deadline = weekSnap.data()?.pickDeadline;
+  const mode = resolveWeekPickMode(weekSnap.data()?.pickMode ?? pickMode, rules.pickMode);
 
   const entries = members.map((member) => {
     const pick = picks.find((p) => p.userId === member.id);
@@ -627,7 +629,7 @@ async function scoreWeek(
       pickMode?: unknown;
     };
     const deadline = week?.pickDeadline;
-    const mode = resolvePickMode(pickMode ?? rules.pickMode);
+    const mode = resolveWeekPickMode(week?.pickMode ?? pickMode, rules.pickMode);
 
     const members = membersOnRoster(
       membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc)),

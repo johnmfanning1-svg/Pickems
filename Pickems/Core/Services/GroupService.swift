@@ -564,6 +564,48 @@ final class GroupService {
         }
     }
 
+    /// ATS commissioner sets (or clears) a per-week Straight Up override.
+    func setWeekPickMode(
+        groupId: String,
+        weekId: String,
+        pickMode: PickMode?,
+        week: WeekSummary
+    ) async throws {
+        guard let group = groups.first(where: { $0.id == groupId }) ?? selectedGroup,
+              group.id == groupId else {
+            throw GroupError.groupNotFound
+        }
+        guard group.commissionerId == Auth.auth().currentUser?.uid else {
+            throw GroupError.notCommissioner
+        }
+        guard WeekTransition.canChangeWeekPickMode(week, leagueMode: group.rules.pickMode) else {
+            throw GroupError.weekPickModeLocked
+        }
+
+        let weekRef = db.week(groupId: groupId, weekId: weekId)
+        let snapshot = try await weekRef.getDocument()
+        if !snapshot.exists {
+            var minted = week
+            minted.pickMode = pickMode
+            try await weekRef.setData(from: minted)
+        } else if let pickMode {
+            try await weekRef.updateData([FirestoreField.pickMode: pickMode.rawValue])
+        } else {
+            try await weekRef.updateData([FirestoreField.pickMode: FieldValue.delete()])
+        }
+        applyPickModeLocally(weekId: weekId, pickMode: pickMode)
+    }
+
+    private func applyPickModeLocally(weekId: String, pickMode: PickMode?) {
+        if var week = currentWeek, week.id == weekId {
+            week.pickMode = pickMode
+            currentWeek = week
+        }
+        if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
+            availableWeeks[idx].pickMode = pickMode
+        }
+    }
+
     /// Commissioner reopens a locked week for picking with a new deadline.
     func reopenWeekForPicking(
         groupId: String,
@@ -971,7 +1013,9 @@ final class GroupService {
                 SlateGame.fromDocument(id: doc.documentID, data: doc.data())
             }
             let pick = try? pickSnap.data(as: UserPick.self)
-            let pickMode = (selectedGroup?.id == groupId ? selectedGroup : groups.first { $0.id == groupId })?.rules.pickMode ?? .ats
+            let pickMode = week.resolvedPickMode(
+                leagueMode: (selectedGroup?.id == groupId ? selectedGroup : groups.first { $0.id == groupId })?.rules.pickMode ?? .ats
+            )
             let scored = ScoringEngine.scorePicks(
                 picks: pick?.picks ?? [:],
                 games: games,
@@ -1741,6 +1785,7 @@ final class GroupService {
         case seasonAlreadyClosed
         case noMembersToArchive
         case signInRequired
+        case weekPickModeLocked
 
         var errorDescription: String? {
             switch self {
@@ -1755,6 +1800,7 @@ final class GroupService {
             case .seasonAlreadyClosed: return "That season is already archived."
             case .noMembersToArchive: return "No members to archive for this season."
             case .signInRequired: return "Sign in to continue."
+            case .weekPickModeLocked: return "This week's scoring is locked. Switch a future week, or this week before any Pickem locks."
             }
         }
     }

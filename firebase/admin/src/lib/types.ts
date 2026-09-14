@@ -52,6 +52,13 @@ export function resolvePickMode(rules?: Partial<GroupRules> | null): PickMode {
   return rules?.pickMode === "straightUp" ? "straightUp" : "ats";
 }
 
+/** Week override on ATS leagues. Straight Up leagues stay Straight Up. */
+export function resolveWeekPickMode(weekPickMode?: PickMode | null, leagueRules?: Partial<GroupRules> | null): PickMode {
+  const league = resolvePickMode(leagueRules);
+  if (league === "straightUp") return "straightUp";
+  return weekPickMode === "straightUp" ? "straightUp" : league;
+}
+
 export interface GroupDoc {
   id: string;
   name: string;
@@ -106,6 +113,8 @@ export interface WeekDoc {
   deadlineReminder1hSent?: boolean;
   scoredAt?: Timestamp | null;
   slateSource?: string | null;
+  /** Optional per-week scoring override. Missing inherits league `rules.pickMode`. */
+  pickMode?: PickMode | null;
 }
 
 export interface SlateGameDoc {

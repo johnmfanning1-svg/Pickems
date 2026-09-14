@@ -1010,6 +1010,48 @@ final class PickService {
         userPickEpoch += 1
     }
 
+    /// Wipes Selections and Pickems after an ATS commissioner changes this week's scoring.
+    /// Fixed-slate weeks (Week 0) keep games and only clear Pickems.
+    func resetWeekWorkForPickModeChange(
+        groupId: String,
+        weekId: String,
+        keepFixedSlate: Bool
+    ) async throws {
+        let weekRef = db.collection("groups").document(groupId)
+            .collection("weeks").document(weekId)
+
+        try await deleteAllDocuments(in: weekRef.collection("picks"))
+        try await deleteAllDocuments(in: weekRef.collection("submissions"))
+
+        if !keepFixedSlate {
+            try await deleteAllDocuments(in: weekRef.collection("games"))
+            try await deleteAllDocuments(in: weekRef.collection("nominations"))
+            try await weekRef.updateData([
+                FirestoreField.nominationCount: 0,
+            ])
+            nominations = []
+            slateGames = []
+        }
+
+        userPick = nil
+        allPicks = []
+        submissions = []
+        revealedPicksByGameId = [:]
+        userPickWriteGeneration += 1
+        userPickEpoch += 1
+        didSubmitNominations = false
+    }
+
+    private func deleteAllDocuments(in collection: CollectionReference) async throws {
+        let snap = try await collection.getDocuments()
+        guard !snap.documents.isEmpty else { return }
+        let batch = db.batch()
+        for doc in snap.documents {
+            batch.deleteDocument(doc.reference)
+        }
+        try await batch.commit()
+    }
+
     /// Opens picking with whatever unique games/nominations exist (may be under slateSize).
     func openWeekWithCurrentSlate(
         groupId: String,

@@ -11,7 +11,7 @@ import { useAction } from "@/hooks/useAction";
 import type { WithId } from "@/hooks/useFirestore";
 import { adminRescoreWeek, adminUpsertPick } from "@/lib/callables";
 import { favoriteSpreadLabel, formatTimestamp } from "@/lib/format";
-import { resolvePickMode, type MemberDoc, type SlateGameDoc } from "@/lib/types";
+import { resolveWeekPickMode, type MemberDoc, type SlateGameDoc } from "@/lib/types";
 
 type PickDraft = Record<string, Record<string, string>>;
 
@@ -30,7 +30,7 @@ export function WeekPicksPage() {
 
   if (!groupId || !weekId) return <Banner tone="error" title="Missing group or week id" />;
   const groupName = group?.name ?? groupId;
-  const showsSpreads = resolvePickMode(group?.rules) !== "straightUp";
+  const showsSpreads = resolveWeekPickMode(week.data?.pickMode, group?.rules) !== "straightUp";
 
   function currentPicks(userId: string): Record<string, string> {
     const stored = pickForUser(picks.data, userId)?.picks ?? {};

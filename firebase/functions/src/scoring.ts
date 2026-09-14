@@ -39,6 +39,13 @@ export function resolvePickMode(value: unknown): PickMode {
   return value === "straightUp" ? "straightUp" : "ats";
 }
 
+/** Week override on ATS leagues. Straight Up leagues stay Straight Up. */
+export function resolveWeekPickMode(weekPickMode: unknown, leaguePickMode: unknown): PickMode {
+  const league = resolvePickMode(leaguePickMode);
+  if (league === "straightUp") return "straightUp";
+  return resolvePickMode(weekPickMode ?? league);
+}
+
 /** Keep scoring on `groups.memberIds` so leftover member docs cannot stay on the board. */
 export function membersOnRoster<T extends { id: string }>(
   members: T[],

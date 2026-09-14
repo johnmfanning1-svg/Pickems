@@ -83,7 +83,7 @@ struct CommissionerSettingsView: View {
                 } header: {
                     Text("Scoring")
                 } footer: {
-                    Text("ATS grades the cover. Straight Up grades the outright winner (a tie is a push). League type is set at create and cannot be changed mid-season.")
+                    Text("ATS grades the cover. Straight Up grades the outright winner (a tie is a push). League type is set at create. In an ATS league, use This Week to score a future week — or the current week before lock — Straight Up.")
                 }
 
                 Section {
