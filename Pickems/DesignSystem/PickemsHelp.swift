@@ -217,7 +217,7 @@ enum PickemsHelp {
             "W-L is wins and losses against the spread. No Pickem on a final slate game is a loss.",
             "Rank is by most wins, not batting average — a late joiner with a hot percentage does not jump people who have more wins.",
             "First place shows batting average. Everyone else shows games back of the leader.",
-            "Tied players may need a commissioner tie-break decision.",
+            "Tied This Week records wait for a commissioner tap in Commissioner Settings → Resolve Ties (Commissioner Override leagues).",
             "Leagues with more than 10 members show Full ranking under the This Week / Season picker, then the top 10.",
             "Tap another member to compare your Pickems with theirs. If this week isn’t public yet, you can still browse previous weeks."
         ]
@@ -232,7 +232,22 @@ enum PickemsHelp {
             "Commissioner Selects: set total games per week and build the slate yourself.",
             "Changes apply to future weeks. Set a Selection deadline each week in member mode.",
             "Pickems Lock chooses entire-slate lock at first kickoff, or rolling lock at each game.",
-            "On a private league, Only commissioner can invite hides Invite Friends for members."
+            "On a private league, Only commissioner can invite hides Invite Friends for members.",
+            "This Week’s chip bar picks which week you admin. It also switches Selections and Pickems.",
+            "Resolve Ties appears after this week is scored when two or more people have the same number of wins. Head-to-Head leagues skip that — the slate breaks ties."
+        ]
+    )
+
+    static let tieBreaker = HelpTopic(
+        id: "groups.tieBreaker",
+        title: "Ties",
+        message: "Choose how equal records rank. Commissioner Override waits for your tap after the week is scored. Head-to-Head uses this week’s slate automatically.",
+        tips: [
+            "Resolve Ties shows the tied group and their record — tap who ranks higher.",
+            "Use This Week’s chips to open a scored week if you need to break a past tie.",
+            "That ranking is for this week only. Next week starts clean.",
+            "Head-to-Head leagues never see Resolve Ties.",
+            "Confidence pick (2x one game) is a separate scoring rule, not a tie-break."
         ]
     )
 

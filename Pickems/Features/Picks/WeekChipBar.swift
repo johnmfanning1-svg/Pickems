@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Horizontal week chips used on Selections, Pickems, and Week Recap.
+/// Horizontal week chips used on Selections, Pickems, Week Recap, and Commissioner Settings.
 struct WeekChipBar: View {
     @Environment(\.themePalette) private var theme
     let weeks: [WeekSummary]
@@ -8,15 +8,19 @@ struct WeekChipBar: View {
     let activeWeekId: String?
     let dateRangeLabel: (WeekSummary) -> String?
     var accessibilityHint: String = "View this week"
+    var showsCaption: Bool = true
+    var horizontalPadding: CGFloat = 16
     let onSelect: (WeekSummary) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Week")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(PickemsColors.textSecondary)
-                .padding(.horizontal)
-                .accessibilityAddTraits(.isHeader)
+            if showsCaption {
+                Text("Week")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .padding(.horizontal, horizontalPadding)
+                    .accessibilityAddTraits(.isHeader)
+            }
 
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -26,7 +30,7 @@ struct WeekChipBar: View {
                                 .id(week.id)
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, horizontalPadding)
                 }
                 .onAppear { scrollToSelected(proxy) }
                 .onChange(of: selectedWeekId) { _, _ in scrollToSelected(proxy) }

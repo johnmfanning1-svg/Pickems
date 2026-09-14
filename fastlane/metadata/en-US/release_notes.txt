@@ -1,7 +1,7 @@
-What's new in 3.5.0
+What's new in 3.5.1
 
-• Commissioners get a league recap — winner, last place, and a week highlight
-• Moderate or Extremely edgy tone, with text you can edit before sending
-• Send to League chat, or share as a Text Message
+• Commissioner Settings This Week chips pick which week you admin
+• Resolve Ties waits until the week is scored, then ranks equal records for that week
+• Head-to-Head leagues still skip Resolve Ties
 
 Thanks for playing with us.

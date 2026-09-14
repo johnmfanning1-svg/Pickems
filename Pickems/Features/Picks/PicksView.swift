@@ -211,14 +211,7 @@ struct PicksView: View {
             return
         }
         PickemsHaptics.selection()
-        viewModel.stopLiveRefresh()
-        viewModel.resetPendingWrite()
-        viewModel.draftPicks = [:]
-        viewModel.confidenceGameId = nil
-        Task {
-            await appState.groupService.selectWeek(weekId: week.id)
-            reobservePicks(weekId: week.id)
-        }
+        appState.selectObservedWeek(week)
     }
 
     private func reobservePicks(weekId: String?) {

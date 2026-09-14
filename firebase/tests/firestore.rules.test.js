@@ -322,6 +322,19 @@ describe("existing invariants (regression)", () => {
     await assertSucceeds(updateDoc(week, { status: "locked", lockedAt: new Date() }));
     // slateSize alone is not on the allow-list once the week left selection.
     await assertFails(updateDoc(week, { slateSize: 12 }));
+    await assertSucceeds(updateDoc(week, { tieBreakOrder: [COMMISH, MEMBER] }));
+  });
+
+  it("blocks a member from writing this week's commissioner tie-break order", async () => {
+    await seed();
+    const memberWeek = doc(
+      testEnv.authenticatedContext(MEMBER).firestore(),
+      "groups",
+      GROUP_ID,
+      "weeks",
+      WEEK_ID
+    );
+    await assertFails(updateDoc(memberWeek, { tieBreakOrder: [MEMBER] }));
   });
 
   it("lets the commissioner set a selection deadline and sync slate knobs while selecting", async () => {

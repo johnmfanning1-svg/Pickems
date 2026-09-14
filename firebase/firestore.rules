@@ -89,7 +89,9 @@ service cloud.firestore {
         || changed.hasOnly(['selectionDeadline', 'selectionDeadlineSetAt', 'selectionDeadlineSetBy'])
         || changed.hasOnly(['selectionDeadline', 'selectionDeadlineSetAt', 'selectionDeadlineSetBy', 'selectionDeadlinePassedNotified'])
         || (changed.hasOnly(['slateSize', 'selectionMode', 'selectionsPerMember'])
-            && resource.data.status == 'selection');
+            && resource.data.status == 'selection')
+        // This week's commissioner Override ranking among equal records.
+        || changed.hasOnly(['tieBreakOrder']);
     }
 
     function weekData(groupId, weekId) {

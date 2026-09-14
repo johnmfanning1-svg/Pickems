@@ -1238,27 +1238,47 @@ final class GroupService {
         try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
     }
 
-    func resolveTie(groupId: String, standingUserId: String) async throws {
-        guard var standings else { return }
-        guard let index = standings.entries.firstIndex(where: { $0.id == standingUserId }) else { return }
-
-        let tiedRank = standings.entries[index].rank
-        standings.entries[index].isTied = false
-
-        for i in standings.entries.indices where i != index {
-            if standings.entries[i].rank == tiedRank && standings.entries[i].isTied {
-                standings.entries[i].rank = tiedRank + 1
-            }
+    func resolveTie(
+        groupId: String,
+        weekId: String,
+        winnerUserId: String,
+        amongUserIds: [String]
+    ) async throws {
+        let group = selectedGroup?.id == groupId
+            ? selectedGroup
+            : groups.first(where: { $0.id == groupId })
+        guard let group, group.commissionerId == Auth.auth().currentUser?.uid else {
+            throw GroupError.notCommissioner
         }
+        guard amongUserIds.contains(winnerUserId), Set(amongUserIds).count >= 2 else { return }
 
-        standings.entries = ScoringEngine.rankedStandings(
-            entries: standings.entries,
-            weekly: true,
-            tieBreaker: selectedGroup?.rules.tieBreaker ?? .commissionerOverride
+        let currentOrder: [String]
+        if currentWeek?.id == weekId {
+            currentOrder = currentWeek?.tieBreakOrder ?? []
+        } else if let stored = availableWeeks.first(where: { $0.id == weekId })?.tieBreakOrder {
+            currentOrder = stored
+        } else {
+            currentOrder = []
+        }
+        let updated = ScoringEngine.promoteTieBreakWinner(
+            winnerUserId,
+            among: amongUserIds,
+            in: currentOrder
         )
-        try await db.collection("groups").document(groupId)
-            .collection("standings").document("current")
-            .setData(from: standings)
+
+        try await db.week(groupId: groupId, weekId: weekId)
+            .updateData([FirestoreField.tieBreakOrder: updated])
+        applyTieBreakOrderLocally(weekId: weekId, order: updated)
+    }
+
+    private func applyTieBreakOrderLocally(weekId: String, order: [String]) {
+        if var week = currentWeek, week.id == weekId {
+            week.tieBreakOrder = order
+            currentWeek = week
+        }
+        if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
+            availableWeeks[idx].tieBreakOrder = order
+        }
     }
 
     /// Archives the given season year, updates career totals, and resets current-season W–L.

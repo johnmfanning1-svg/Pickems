@@ -72,7 +72,8 @@ enum LiveActivityController {
                 standings: fetched.standings,
                 members: fetched.members,
                 memberIds: group.memberIds,
-                tieBreaker: group.rules.tieBreaker
+                tieBreaker: group.rules.tieBreaker,
+                tieBreakOrder: fetched.week?.tieBreakOrder ?? []
             )
             nextLabel = "This week's slate"
             shouldRun = liveActivityShouldRun(week: week, pickingHasLiveGame: false)

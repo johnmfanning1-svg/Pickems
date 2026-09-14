@@ -141,9 +141,9 @@ struct CommissionerSettingsView: View {
                     Toggle("Confidence pick (2x one game)", isOn: $rules.allowConfidencePick)
                         .listRowBackground(PickemsColors.cardBackground)
                 } header: {
-                    sectionHeader("Ties", help: PickemsHelp.spreadPicks)
+                    sectionHeader("Ties", help: PickemsHelp.tieBreaker)
                 } footer: {
-                    Text("Tie-breakers and confidence apply every week.")
+                    Text("Commissioner Override lets you rank equal records after this week is scored. Head-to-Head uses this week’s slate automatically.")
                 }
 
                 Section {

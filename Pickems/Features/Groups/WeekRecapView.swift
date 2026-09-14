@@ -69,7 +69,11 @@ struct WeekRecapView: View {
     }
 
     private var rankedEntries: [StandingEntry] {
-        appState.weeklyRankedStandings(fromPicks: displayPicks, games: scoringGames)
+        appState.weeklyRankedStandings(
+            fromPicks: displayPicks,
+            games: scoringGames,
+            tieBreakOrder: selectedWeek?.tieBreakOrder ?? []
+        )
     }
 
     private var recapText: String {

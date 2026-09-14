@@ -144,7 +144,8 @@ enum WidgetSnapshotService {
             standings: fetched.standings,
             members: fetched.members,
             memberIds: group.memberIds,
-            tieBreaker: group.rules.tieBreaker
+            tieBreaker: group.rules.tieBreaker,
+            tieBreakOrder: fetched.week?.tieBreakOrder ?? []
         )
         saveStandingsSnapshot(
             group: group,
@@ -170,7 +171,8 @@ enum WidgetSnapshotService {
             standings: appState.groupService.standings,
             members: [],
             memberIds: group.memberIds,
-            tieBreaker: group.rules.tieBreaker
+            tieBreaker: group.rules.tieBreaker,
+            tieBreakOrder: appState.groupService.currentWeek?.tieBreakOrder ?? []
         )
     }
 
@@ -178,7 +180,8 @@ enum WidgetSnapshotService {
         standings: GroupStandings?,
         members: [GroupMember],
         memberIds: [String] = [],
-        tieBreaker: TieBreakerPolicy
+        tieBreaker: TieBreakerPolicy,
+        tieBreakOrder: [String] = []
     ) -> [StandingEntry] {
         let base = StandingBoard.baseEntries(
             standingsEntries: standings?.entries,
@@ -186,7 +189,12 @@ enum WidgetSnapshotService {
             memberIds: memberIds
         )
         guard !base.isEmpty else { return [] }
-        return ScoringEngine.rankedStandings(entries: base, weekly: true, tieBreaker: tieBreaker)
+        return ScoringEngine.rankedStandings(
+            entries: base,
+            weekly: true,
+            tieBreaker: tieBreaker,
+            tieBreakOrder: tieBreakOrder
+        )
     }
 
     private static func saveStandingsSnapshot(

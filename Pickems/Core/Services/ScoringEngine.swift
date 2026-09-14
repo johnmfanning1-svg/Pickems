@@ -163,15 +163,25 @@ enum ScoringEngine {
         weekly: Bool,
         tieBreaker: TieBreakerPolicy,
         allPicks: [UserPick] = [],
-        games: [SlateGame] = []
+        games: [SlateGame] = [],
+        tieBreakOrder: [String] = []
     ) -> [StandingEntry] {
         let picksByUser = Dictionary(uniqueKeysWithValues: allPicks.map { ($0.userId, $0.picks) })
         let hasAnyWins = entries.contains { (weekly ? $0.weeklyWins : $0.seasonWins) > 0 }
+        let order = weekly && tieBreaker == .commissionerOverride ? tieBreakOrder : []
 
         var sorted: [StandingEntry]
         if hasAnyWins {
             sorted = entries.sorted { lhs, rhs in
-                compareEntries(lhs, rhs, weekly: weekly, tieBreaker: tieBreaker, picksByUser: picksByUser, games: games)
+                compareEntries(
+                    lhs,
+                    rhs,
+                    weekly: weekly,
+                    tieBreaker: tieBreaker,
+                    picksByUser: picksByUser,
+                    games: games,
+                    tieBreakOrder: order
+                )
             }
 
             if tieBreaker == .headToHead, !allPicks.isEmpty, !games.isEmpty {
@@ -199,7 +209,8 @@ enum ScoringEngine {
                         weekly: weekly,
                         tieBreaker: tieBreaker,
                         picksByUser: picksByUser,
-                        games: games
+                        games: games,
+                        tieBreakOrder: order
                     )
                     if entry.isTied && tieBreaker == .commissionerOverride {
                         entry.rank = prev.rank
@@ -219,17 +230,68 @@ enum ScoringEngine {
         return ranked
     }
 
+    /// True when Commissioner Override can rank this week's remaining ties.
+    static func canShowCommissionerTieBreak(
+        week: WeekSummary?,
+        games: [SlateGame],
+        tieBreaker: TieBreakerPolicy
+    ) -> Bool {
+        guard tieBreaker == .commissionerOverride, let week else { return false }
+        switch week.status {
+        case .scored:
+            return true
+        case .selection:
+            return false
+        case .picking, .locked:
+            guard !games.isEmpty else { return false }
+            return games.allSatisfy { $0.status == .final }
+        }
+    }
+
+    /// Remaining weekly groups that still share a rank (equal record, unresolved).
+    static func unresolvedWeeklyTieGroups(from ranked: [StandingEntry]) -> [[StandingEntry]] {
+        let eligible = ranked.filter { $0.weeklyWins + $0.weeklyLosses > 0 }
+        let grouped = Dictionary(grouping: eligible, by: \.rank)
+        return grouped.keys.sorted().compactMap { rank -> [StandingEntry]? in
+            let group = grouped[rank] ?? []
+            guard group.count >= 2 else { return nil }
+            return group.sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+        }
+    }
+
+    /// Move `winnerId` above everyone else in `userIds` for this week's override list.
+    /// Losers stay unlisted so they remain tied with each other until another tap.
+    static func promoteTieBreakWinner(
+        _ winnerId: String,
+        among userIds: [String],
+        in order: [String]
+    ) -> [String] {
+        let group = Set(userIds)
+        guard group.contains(winnerId), group.count >= 2 else { return order }
+        var next = order.filter { !group.contains($0) }
+        next.append(winnerId)
+        return next
+    }
+
     private static func compareEntries(
         _ lhs: StandingEntry,
         _ rhs: StandingEntry,
         weekly: Bool,
         tieBreaker: TieBreakerPolicy,
         picksByUser: [String: [String: String]],
-        games: [SlateGame]
+        games: [SlateGame],
+        tieBreakOrder: [String]
     ) -> Bool {
         let lhsWins = weekly ? lhs.weeklyWins : lhs.seasonWins
         let rhsWins = weekly ? rhs.weeklyWins : rhs.seasonWins
         if lhsWins != rhsWins { return lhsWins > rhsWins }
+
+        if tieBreaker == .commissionerOverride,
+           let ordered = compareTieBreakOrder(lhs.id, rhs.id, order: tieBreakOrder) {
+            return ordered
+        }
 
         if tieBreaker == .headToHead, !picksByUser.isEmpty, !games.isEmpty {
             let h2h = headToHeadPoints(
@@ -242,6 +304,22 @@ enum ScoringEngine {
         }
 
         return compareJoinDateThenName(lhs, rhs)
+    }
+
+    /// `true` if lhs ranks above rhs via override; `nil` if the list does not distinguish them.
+    private static func compareTieBreakOrder(_ lhsId: String, _ rhsId: String, order: [String]) -> Bool? {
+        let lhsIndex = order.firstIndex(of: lhsId)
+        let rhsIndex = order.firstIndex(of: rhsId)
+        switch (lhsIndex, rhsIndex) {
+        case let (left?, right?) where left != right:
+            return left < right
+        case (_?, nil):
+            return true
+        case (nil, _?):
+            return false
+        default:
+            return nil
+        }
     }
 
     /// Earlier join ranks higher; display name is the final stabilizer.
@@ -320,9 +398,14 @@ enum ScoringEngine {
         weekly: Bool,
         tieBreaker: TieBreakerPolicy,
         picksByUser: [String: [String: String]],
-        games: [SlateGame]
+        games: [SlateGame],
+        tieBreakOrder: [String]
     ) -> Bool {
         guard samePrimaryRecord(lhs, rhs, weekly: weekly) else { return false }
+
+        if tieBreaker == .commissionerOverride {
+            return compareTieBreakOrder(lhs.id, rhs.id, order: tieBreakOrder) == nil
+        }
 
         if tieBreaker == .headToHead, !picksByUser.isEmpty, !games.isEmpty {
             let opponentIds = [lhs.id, rhs.id]

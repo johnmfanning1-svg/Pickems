@@ -34,6 +34,25 @@ extension AppState {
         pickService.observeWeek(groupId: group.id, weekId: week.id, userId: userId)
     }
 
+    /// Pin Selections, Pickems, and commissioner week-admin to the same week.
+    func selectObservedWeek(_ week: WeekSummary) {
+        picksViewModel.stopLiveRefresh()
+        picksViewModel.resetPendingWrite()
+        picksViewModel.draftPicks = [:]
+        picksViewModel.confidenceGameId = nil
+        Task {
+            await groupService.selectWeek(weekId: week.id)
+            guard let group = groupService.selectedGroup,
+                  let userId = currentUserId else { return }
+            pickService.observeWeek(groupId: group.id, weekId: week.id, userId: userId)
+            picksViewModel.syncDraftFromServer(
+                pickService.userPick?.picks,
+                confidenceGameId: pickService.userPick?.confidenceGameId
+            )
+            picksViewModel.refreshNominationSubmissionState(appState: self)
+        }
+    }
+
     /// Pull-to-refresh: hit the server for the selected league, week, and Pickems.
     func refreshLeagueData() async {
         await ESPNService.shared.invalidateScoreboardCache()
@@ -135,17 +154,23 @@ extension AppState {
         guard !baseEntries.isEmpty else { return [] }
 
         let tieBreaker = group?.rules.tieBreaker ?? .commissionerOverride
+        let tieBreakOrder = weekly ? (groupService.currentWeek?.tieBreakOrder ?? []) : []
         return ScoringEngine.rankedStandings(
             entries: baseEntries,
             weekly: weekly,
             tieBreaker: tieBreaker,
             allPicks: pickService.allPicks,
-            games: pickService.slateGames
+            games: pickService.slateGames,
+            tieBreakOrder: tieBreakOrder
         )
     }
 
     /// Weekly W–L and rank from a specific week's picks and games (history / recap).
-    func weeklyRankedStandings(fromPicks picks: [UserPick], games: [SlateGame]) -> [StandingEntry] {
+    func weeklyRankedStandings(
+        fromPicks picks: [UserPick],
+        games: [SlateGame],
+        tieBreakOrder: [String] = []
+    ) -> [StandingEntry] {
         let group = groupService.selectedGroup
         let members: [GroupMember]
         if let groupId = group?.id, groupService.membersGroupId == groupId {
@@ -179,7 +204,8 @@ extension AppState {
             weekly: true,
             tieBreaker: group?.rules.tieBreaker ?? .commissionerOverride,
             allPicks: picks,
-            games: games
+            games: games,
+            tieBreakOrder: tieBreakOrder
         )
     }
 }

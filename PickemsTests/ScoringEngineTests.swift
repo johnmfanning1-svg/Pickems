@@ -330,6 +330,155 @@ struct ScoringEngineTests {
         #expect(ranked[1].rank == 1)
     }
 
+    @Test func commissionerOverrideOrderBreaksEqualRecords() {
+        let entries = [
+            StandingEntry(id: "a", displayName: "A", avatarColorHex: "#DC2626", weeklyWins: 8, weeklyLosses: 3, seasonWins: 8, seasonLosses: 3, rank: 0, isTied: false),
+            StandingEntry(id: "b", displayName: "B", avatarColorHex: "#3366CC", weeklyWins: 8, weeklyLosses: 3, seasonWins: 8, seasonLosses: 3, rank: 0, isTied: false),
+        ]
+        let ranked = ScoringEngine.rankedStandings(
+            entries: entries,
+            weekly: true,
+            tieBreaker: .commissionerOverride,
+            tieBreakOrder: ["b"]
+        )
+        #expect(ranked.map(\.id) == ["b", "a"])
+        #expect(ranked.map(\.rank) == [1, 2])
+        #expect(ranked.allSatisfy { !$0.isTied })
+    }
+
+    @Test func commissionerOverrideThreeWayLeavesRemainingTied() {
+        let entries = [
+            StandingEntry(id: "a", displayName: "Amy", avatarColorHex: "#DC2626", weeklyWins: 8, weeklyLosses: 3, seasonWins: 8, seasonLosses: 3, rank: 0, isTied: false),
+            StandingEntry(id: "b", displayName: "Bo", avatarColorHex: "#3366CC", weeklyWins: 8, weeklyLosses: 3, seasonWins: 8, seasonLosses: 3, rank: 0, isTied: false),
+            StandingEntry(id: "c", displayName: "Cam", avatarColorHex: "#22AA44", weeklyWins: 8, weeklyLosses: 3, seasonWins: 8, seasonLosses: 3, rank: 0, isTied: false),
+        ]
+        let ranked = ScoringEngine.rankedStandings(
+            entries: entries,
+            weekly: true,
+            tieBreaker: .commissionerOverride,
+            tieBreakOrder: ["a"]
+        )
+        #expect(ranked[0].id == "a")
+        #expect(ranked[0].rank == 1)
+        #expect(!ranked[0].isTied)
+        #expect(Set(ranked.dropFirst().map(\.rank)) == [2])
+        #expect(ranked[2].isTied)
+        let groups = ScoringEngine.unresolvedWeeklyTieGroups(from: ranked)
+        #expect(groups.count == 1)
+        #expect(Set(groups[0].map(\.id)) == ["b", "c"])
+    }
+
+    @Test func promoteTieBreakWinnerLeavesLosersUnlisted() {
+        let once = ScoringEngine.promoteTieBreakWinner("a", among: ["a", "b", "c"], in: [])
+        #expect(once == ["a"])
+        let twice = ScoringEngine.promoteTieBreakWinner("b", among: ["b", "c"], in: once)
+        #expect(twice == ["a", "b"])
+    }
+
+    @Test func unresolvedWeeklyTieGroupsSkipsZeroRecords() {
+        let ranked = [
+            StandingEntry(id: "a", displayName: "A", avatarColorHex: "#DC2626", weeklyWins: 0, weeklyLosses: 0, seasonWins: 0, seasonLosses: 0, rank: 1, isTied: false),
+            StandingEntry(id: "b", displayName: "B", avatarColorHex: "#3366CC", weeklyWins: 0, weeklyLosses: 0, seasonWins: 0, seasonLosses: 0, rank: 1, isTied: true),
+        ]
+        #expect(ScoringEngine.unresolvedWeeklyTieGroups(from: ranked).isEmpty)
+    }
+
+    @Test func commissionerTieBreakHiddenUntilWeekIsFinal() {
+        let week = WeekSummary(
+            id: "2026-W3",
+            seasonYear: 2026,
+            weekNumber: 3,
+            status: .selection,
+            slateSize: 2,
+            selectionMode: .member,
+            selectionsPerMember: 1,
+            nominationCount: 0
+        )
+        let live = SlateGame(
+            id: "1",
+            espnEventId: "1",
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: 7,
+            spreadTeamId: "home",
+            kickoff: Date(),
+            status: .inProgress,
+            homeScore: 14,
+            awayScore: 7,
+            winnerTeamId: nil
+        )
+        let final = SlateGame(
+            id: "1",
+            espnEventId: "1",
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: 7,
+            spreadTeamId: "home",
+            kickoff: Date(),
+            status: .final,
+            homeScore: 28,
+            awayScore: 17,
+            winnerTeamId: "home"
+        )
+        #expect(!ScoringEngine.canShowCommissionerTieBreak(
+            week: week,
+            games: [final],
+            tieBreaker: .commissionerOverride
+        ))
+        var scored = week
+        scored.status = .scored
+        #expect(ScoringEngine.canShowCommissionerTieBreak(
+            week: scored,
+            games: [],
+            tieBreaker: .commissionerOverride
+        ))
+        var locked = week
+        locked.status = .locked
+        #expect(!ScoringEngine.canShowCommissionerTieBreak(
+            week: locked,
+            games: [live],
+            tieBreaker: .commissionerOverride
+        ))
+        #expect(ScoringEngine.canShowCommissionerTieBreak(
+            week: locked,
+            games: [final],
+            tieBreaker: .commissionerOverride
+        ))
+        #expect(!ScoringEngine.canShowCommissionerTieBreak(
+            week: scored,
+            games: [final],
+            tieBreaker: .headToHead
+        ))
+    }
+
+    @Test func seasonRankingIgnoresWeeklyTieBreakOrder() {
+        let entries = [
+            StandingEntry(id: "a", displayName: "A", avatarColorHex: "#DC2626", weeklyWins: 1, weeklyLosses: 0, seasonWins: 4, seasonLosses: 2, rank: 0, isTied: false),
+            StandingEntry(id: "b", displayName: "B", avatarColorHex: "#3366CC", weeklyWins: 0, weeklyLosses: 1, seasonWins: 4, seasonLosses: 2, rank: 0, isTied: false),
+        ]
+        let ranked = ScoringEngine.rankedStandings(
+            entries: entries,
+            weekly: false,
+            tieBreaker: .commissionerOverride,
+            tieBreakOrder: ["b"]
+        )
+        #expect(ranked[0].rank == 1)
+        #expect(ranked[1].rank == 1)
+        #expect(ranked[1].isTied)
+    }
+
     @Test func underdogCoverIsCorrect() {
         let game = SlateGame(
             id: "1",
@@ -432,7 +581,8 @@ struct ScoringEngineTests {
             weekly: true,
             tieBreaker: .headToHead,
             allPicks: picks,
-            games: [game]
+            games: [game],
+            tieBreakOrder: ["c"]
         )
 
         #expect(ranked[0].id == "a")

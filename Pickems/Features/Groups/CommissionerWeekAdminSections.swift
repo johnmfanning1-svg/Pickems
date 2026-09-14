@@ -8,6 +8,8 @@ struct CommissionerWeekAdminSections: View {
     @Binding var showPickDeadlineSheet: Bool
     @Binding var showAdminGameBrowse: Bool
     @State private var showReopenSelectionsConfirm = false
+    @State private var tieError: String?
+    @State private var resolvingUserId: String?
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var week: WeekSummary? { appState.groupService.currentWeek }
@@ -21,6 +23,9 @@ struct CommissionerWeekAdminSections: View {
     var body: some View {
         weekStatusSection
             .task {
+                if let groupId = appState.groupService.selectedGroup?.id {
+                    await appState.groupService.loadAvailableWeeks(groupId: groupId)
+                }
                 await picksVM.ensureTeamRanks(appState: appState)
             }
         selectionsAdminSection
@@ -29,12 +34,37 @@ struct CommissionerWeekAdminSections: View {
         tiesSection
     }
 
+    private var displayedWeeks: [WeekSummary] {
+        appState.groupService.availableWeeks
+    }
+
+    private var activeESPNWeekId: String? {
+        appState.groupService.cfbWeek.map { CFBWeekSync.weekId(for: $0) }
+            ?? appState.groupService.currentWeek?.id
+    }
+
     @ViewBuilder
     private var weekStatusSection: some View {
         Section {
+            if !displayedWeeks.isEmpty {
+                WeekChipBar(
+                    weeks: displayedWeeks,
+                    selectedWeekId: week?.id,
+                    activeWeekId: activeESPNWeekId,
+                    dateRangeLabel: { appState.groupService.dateRangeLabel(for: $0.id) },
+                    accessibilityHint: "Admin this week. Also switches Selections and Pickems.",
+                    showsCaption: false,
+                    horizontalPadding: 0
+                ) { selected in
+                    selectAdminWeek(selected)
+                }
+                .buttonStyle(.borderless)
+                .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+
             if let week {
-                LabeledContent("Week", value: week.displayLabel)
-                    .listRowBackground(PickemsColors.cardBackground)
                 LabeledContent("Status", value: week.status.rawValue.capitalized)
                     .listRowBackground(PickemsColors.cardBackground)
 
@@ -75,7 +105,7 @@ struct CommissionerWeekAdminSections: View {
                     }
                     .listRowBackground(PickemsColors.cardBackground)
                 }
-            } else {
+            } else if displayedWeeks.isEmpty {
                 Text("No active week.")
                     .foregroundStyle(PickemsColors.textSecondary)
                     .listRowBackground(PickemsColors.cardBackground)
@@ -83,7 +113,7 @@ struct CommissionerWeekAdminSections: View {
         } header: {
             Text("This Week")
         } footer: {
-            Text("Deadlines, lock-early, opening the slate, and reopening Selections live here — not on the Selections tab.")
+            Text("Deadlines, slate, Pickems, and ties for the week you pick. Switching here also switches Selections and Pickems.")
         }
         .alert("Reopen Selections?", isPresented: $showReopenSelectionsConfirm) {
             Button("Reopen Selections") {
@@ -93,6 +123,22 @@ struct CommissionerWeekAdminSections: View {
         } message: {
             Text("Members can add and remove Selections again. Pickems close until you open the week.")
         }
+    }
+
+    private func selectAdminWeek(_ selected: WeekSummary) {
+        guard selected.id != week?.id else { return }
+        PickemsHaptics.selection()
+        appState.selectObservedWeek(selected)
+    }
+
+    private func tieGroupPrompt(_ group: [StandingEntry]) -> String {
+        let records = Set(group.map { "\($0.weeklyWins)–\($0.weeklyLosses)" })
+        if records.count == 1, let record = records.first {
+            let names = LeagueWeekRecapGenerator.joinNames(group.map(\.displayName))
+            return "\(names) \(record) — tap who ranks higher."
+        }
+        let namedRecords = group.map { "\($0.displayName) \($0.weeklyWins)–\($0.weeklyLosses)" }
+        return "\(LeagueWeekRecapGenerator.joinNames(namedRecords)) — tap who ranks higher."
     }
 
     private func rollingPickDeadlineButtonTitle(_ week: WeekSummary) -> String {
@@ -249,25 +295,67 @@ struct CommissionerWeekAdminSections: View {
 
     @ViewBuilder
     private var tiesSection: some View {
-        if appState.groupService.selectedGroup?.rules.tieBreaker == .commissionerOverride {
-            let tied = appState.rankedStandings(weekly: true).filter { $0.isTied && $0.weeklyWins > 0 }
-            if !tied.isEmpty {
+        if ScoringEngine.canShowCommissionerTieBreak(
+            week: week,
+            games: appState.pickService.slateGames,
+            tieBreaker: appState.groupService.selectedGroup?.rules.tieBreaker ?? .headToHead
+        ) {
+            let groups = ScoringEngine.unresolvedWeeklyTieGroups(
+                from: appState.rankedStandings(weekly: true)
+            )
+            if !groups.isEmpty {
                 Section {
-                    ForEach(tied) { entry in
-                        Button("Resolve tie — \(entry.displayName)") {
-                            Task {
-                                guard let groupId = appState.groupService.selectedGroup?.id else { return }
-                                try? await appState.groupService.resolveTie(
-                                    groupId: groupId,
-                                    standingUserId: entry.id
-                                )
+                    if let tieError {
+                        Text(tieError)
+                            .foregroundStyle(PickemsColors.warning)
+                            .listRowBackground(PickemsColors.cardBackground)
+                    }
+                    ForEach(groups, id: \.tieGroupId) { group in
+                        Text(tieGroupPrompt(group))
+                            .font(.subheadline)
+                            .foregroundStyle(PickemsColors.textSecondary)
+                            .listRowBackground(PickemsColors.cardBackground)
+
+                        ForEach(group) { entry in
+                            Button("\(entry.displayName) ranks higher") {
+                                resolveTie(winner: entry, in: group)
                             }
+                            .disabled(resolvingUserId != nil)
+                            .listRowBackground(PickemsColors.cardBackground)
                         }
-                        .listRowBackground(PickemsColors.cardBackground)
                     }
                 } header: {
-                    Text("Resolve Ties")
+                    HStack {
+                        Text("Resolve Ties")
+                        Spacer()
+                        HelpInfoButton(topic: PickemsHelp.tieBreaker, size: .caption)
+                    }
+                } footer: {
+                    Text("Ranks this week only. Head-to-head leagues break ties automatically.")
                 }
+            }
+        }
+    }
+
+    private func resolveTie(winner: StandingEntry, in group: [StandingEntry]) {
+        guard let groupId = appState.groupService.selectedGroup?.id,
+              let weekId = week?.id else { return }
+        tieError = nil
+        resolvingUserId = winner.id
+        Task {
+            defer { resolvingUserId = nil }
+            do {
+                try await appState.groupService.resolveTie(
+                    groupId: groupId,
+                    weekId: weekId,
+                    winnerUserId: winner.id,
+                    amongUserIds: group.map(\.id)
+                )
+                PickemsHaptics.success()
+            } catch {
+                tieError = UserFacingError.message(for: error, context: .write)
+                    ?? error.localizedDescription
+                PickemsHaptics.warning()
             }
         }
     }
@@ -292,5 +380,11 @@ struct CommissionerWeekAdminSections: View {
             CountStatusMeter(made: made, total: total, status: status, unitName: unitName)
         }
         .accessibilityElement(children: .ignore)
+    }
+}
+
+private extension [StandingEntry] {
+    var tieGroupId: String {
+        map(\.id).sorted().joined(separator: "|")
     }
 }

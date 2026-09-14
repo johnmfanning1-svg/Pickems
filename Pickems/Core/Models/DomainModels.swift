@@ -221,6 +221,9 @@ struct WeekSummary: Codable, Identifiable, Equatable {
     var awards: WeekAwards? = nil
     /// `"fixedBoard"` for auto-slated weeks (Week 0). Nil on nomination-built weeks.
     var slateSource: String? = nil
+    /// Commissioner Override: user ids ranked above others who share this week's record.
+    /// Earlier in the list ranks higher. Only consulted when W–L (and average) match.
+    var tieBreakOrder: [String]? = nil
 
     var displayLabel: String {
         "Season \(seasonYear.pickemsYearString) | Week \(weekNumber)"
