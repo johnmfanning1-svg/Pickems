@@ -53,6 +53,28 @@ struct StandingBoardTests {
         #expect(merged.map(\.id) == ["a"])
     }
 
+    @Test func ignoresStandingsFromAnotherLeague() {
+        let standings = GroupStandings(
+            groupId: "ppp",
+            weekNumber: 3,
+            entries: [
+                entry("you", "Fannypack", weeklyWins: 10, weeklyLosses: 10, seasonWins: 23, seasonLosses: 26)
+            ],
+            updatedAt: Date()
+        )
+        #expect(standings.belongs(to: "ppp"))
+        #expect(!standings.belongs(to: "straight-up-test"))
+        #expect(!standings.belongs(to: nil))
+        let members = [member("you", "Fannypack")]
+        let leaked = StandingBoard.baseEntries(
+            standingsEntries: standings.belongs(to: "straight-up-test") ? standings.entries : nil,
+            members: members,
+            memberIds: ["you"]
+        )
+        #expect(leaked.first?.weeklyWins == 0)
+        #expect(leaked.first?.seasonWins == 0)
+    }
+
     @Test @MainActor func widgetRankingDropsOtherLeagueMember() {
         let standings = GroupStandings(
             groupId: "ppp",

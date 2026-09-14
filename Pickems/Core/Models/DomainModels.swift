@@ -575,6 +575,14 @@ struct GroupStandings: Codable, Equatable {
     var weekNumber: Int
     var entries: [StandingEntry]
     var updatedAt: Date
+
+    /// Stale in-memory standings from another league must not paint a new roster.
+    /// Empty `groupId` is treated as matching so older docs still apply.
+    func belongs(to groupId: String?) -> Bool {
+        guard let groupId, !groupId.isEmpty else { return false }
+        if self.groupId.isEmpty { return true }
+        return self.groupId == groupId
+    }
 }
 
 struct WeekHistoryEntry: Identifiable, Equatable {

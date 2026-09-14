@@ -150,8 +150,11 @@ extension AppState {
         } else {
             members = []
         }
+        let standingsEntries = groupService.standings?.belongs(to: group?.id) == true
+            ? groupService.standings?.entries
+            : nil
         let baseEntries = StandingBoard.baseEntries(
-            standingsEntries: groupService.standings?.entries,
+            standingsEntries: standingsEntries,
             members: members,
             memberIds: group?.memberIds ?? []
         )

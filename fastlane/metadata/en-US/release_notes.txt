@@ -1,7 +1,7 @@
-What's new in 3.5.2
+What's new in 3.5.3
 
-• New league type: Straight Up — pick outright winners, no spread
-• ATS leagues are unchanged
+• New leagues start at 0–0 instead of showing another league's record
+• Straight Up: pick outright winners, no spread
 • Save every remaining Selection in one pass
 • Rank weekly ties by dragging
 

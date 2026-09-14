@@ -166,7 +166,7 @@ enum WidgetSnapshotService {
         if appState.groupService.membersGroupId == group.id {
             return appState.rankedStandings(weekly: true)
         }
-        guard appState.groupService.standings != nil else { return nil }
+        guard appState.groupService.standings?.belongs(to: group.id) == true else { return nil }
         return rankedDisplayEntries(
             standings: appState.groupService.standings,
             members: [],
