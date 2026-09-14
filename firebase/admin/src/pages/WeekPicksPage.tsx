@@ -11,7 +11,7 @@ import { useAction } from "@/hooks/useAction";
 import type { WithId } from "@/hooks/useFirestore";
 import { adminRescoreWeek, adminUpsertPick } from "@/lib/callables";
 import { favoriteSpreadLabel, formatTimestamp } from "@/lib/format";
-import type { MemberDoc, SlateGameDoc } from "@/lib/types";
+import { resolvePickMode, type MemberDoc, type SlateGameDoc } from "@/lib/types";
 
 type PickDraft = Record<string, Record<string, string>>;
 
@@ -30,6 +30,7 @@ export function WeekPicksPage() {
 
   if (!groupId || !weekId) return <Banner tone="error" title="Missing group or week id" />;
   const groupName = group?.name ?? groupId;
+  const showsSpreads = resolvePickMode(group?.rules) !== "straightUp";
 
   function currentPicks(userId: string): Record<string, string> {
     const stored = pickForUser(picks.data, userId)?.picks ?? {};
@@ -257,12 +258,14 @@ export function WeekPicksPage() {
                       <span className="block whitespace-nowrap text-slate-300">
                         {game.awayTeamAbbreviation} @ {game.homeTeamAbbreviation}
                       </span>
-                      <span className="block whitespace-nowrap font-mono text-[10px] text-slate-500">
-                        {game.spreadTeamId === game.homeTeamId
-                          ? game.homeTeamAbbreviation
-                          : game.awayTeamAbbreviation}{" "}
-                        {favoriteSpreadLabel(game.spread ?? 0)}
-                      </span>
+                      {showsSpreads ? (
+                        <span className="block whitespace-nowrap font-mono text-[10px] text-slate-500">
+                          {game.spreadTeamId === game.homeTeamId
+                            ? game.homeTeamAbbreviation
+                            : game.awayTeamAbbreviation}{" "}
+                          {favoriteSpreadLabel(game.spread ?? 0)}
+                        </span>
+                      ) : null}
                     </th>
                   ))}
                   <th

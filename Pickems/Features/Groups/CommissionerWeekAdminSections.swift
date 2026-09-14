@@ -206,12 +206,16 @@ struct CommissionerWeekAdminSections: View {
                             )
                         )
                             .foregroundStyle(PickemsColors.textPrimary)
-                        LockedSpreadLabel(
-                            lockedText: game.favoriteSpreadDisplay,
-                            liveText: picksVM.livePickCards[game.espnEventId]?.liveSpreadLabel
-                        )
+                        if appState.selectedPickMode.showsSpreads {
+                            LockedSpreadLabel(
+                                lockedText: game.favoriteSpreadDisplay,
+                                liveText: picksVM.livePickCards[game.espnEventId]?.liveSpreadLabel
+                            )
+                        }
                         HStack {
-                            Button("Edit Spread") { picksVM.spreadEditGame = game }
+                            if appState.selectedPickMode.showsSpreads {
+                                Button("Edit Spread") { picksVM.spreadEditGame = game }
+                            }
                             if !week.skipsSelection {
                                 Spacer()
                                 Button("Remove Selection", role: .destructive) {
@@ -226,7 +230,9 @@ struct CommissionerWeekAdminSections: View {
             } header: {
                 Text("This Week's Slate")
             } footer: {
-                Text("Edit lines or remove a Selection. Members remake their own Selections on the Selections tab before the deadline.")
+                Text(appState.selectedPickMode.showsSpreads
+                    ? "Edit lines or remove a Selection. Members remake their own Selections on the Selections tab before the deadline."
+                    : "Remove a Selection if needed. Spreads stay hidden in Straight Up leagues.")
             }
         }
     }

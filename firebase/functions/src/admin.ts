@@ -13,6 +13,8 @@ import {
   applyLatePickPenalty,
   membersOnRoster,
   missedPickIsLossForSeasonWeek,
+  coveredTeamId,
+  resolvePickMode,
 } from "./scoring";
 import { isRollingLock } from "./pickLock";
 
@@ -517,7 +519,9 @@ export const adminRescoreWeek = onCall(async (request) => {
   const rules = (groupSnap.data()?.rules ?? {}) as {
     allowLatePicks?: boolean;
     latePickPenaltyWins?: number;
+    pickMode?: unknown;
   };
+  const pickMode = resolvePickMode(rules.pickMode);
   const lateOptions = {
     allowLatePicks: rules.allowLatePicks === true,
     latePickPenaltyWins: rules.latePickPenaltyWins,
@@ -555,7 +559,10 @@ export const adminRescoreWeek = onCall(async (request) => {
     for (const member of members) {
       const pick = picks.find((p) => p.userId === member.id);
       const scored = applyLatePickPenalty(
-        scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId, { missedPickIsLoss }),
+        scorePicks(pick?.picks ?? {}, games, pick?.confidenceGameId, {
+          missedPickIsLoss,
+          pickMode,
+        }),
         {
           allowLatePicks: !isRollingLock(weekDoc.data().pickLockMode) && lateOptions.allowLatePicks,
           latePickPenaltyWins: lateOptions.latePickPenaltyWins,
@@ -571,12 +578,19 @@ export const adminRescoreWeek = onCall(async (request) => {
     }
   }
 
-  const awards = computeWeekAwards(targetPicks, targetGames);
+  const awards = computeWeekAwards(targetPicks, targetGames, pickMode);
   const batch = db().batch();
+  for (const game of targetGames) {
+    if (game.status === "final" && game.homeScore != null && game.awayScore != null) {
+      batch.update(groupRef.collection("weeks").doc(weekId).collection("games").doc(game.id), {
+        winnerTeamId: coveredTeamId(game, game.homeScore, game.awayScore, pickMode),
+      });
+    }
+  }
   const entries = members.map((member) => {
     const pick = targetPicks.find((p) => p.userId === member.id);
     const scored = applyLatePickPenalty(
-      scorePicks(pick?.picks ?? {}, targetGames, pick?.confidenceGameId),
+      scorePicks(pick?.picks ?? {}, targetGames, pick?.confidenceGameId, { pickMode }),
       {
         allowLatePicks: !isRollingLock(week.pickLockMode) && lateOptions.allowLatePicks,
         latePickPenaltyWins: lateOptions.latePickPenaltyWins,

@@ -9,6 +9,7 @@ import {
   membersOnRoster,
   isWeekZero,
   missedPickIsLossForSeasonWeek,
+  resolvePickMode,
   type SlateGameDoc,
   type PickDoc,
 } from "./scoring";
@@ -28,6 +29,15 @@ function game(overrides: Partial<SlateGameDoc> & Pick<SlateGameDoc, "id">): Slat
   };
 }
 
+describe("resolvePickMode", () => {
+  it("defaults missing values to ats", () => {
+    expect(resolvePickMode(undefined)).toBe("ats");
+    expect(resolvePickMode("ats")).toBe("ats");
+    expect(resolvePickMode("straightUp")).toBe("straightUp");
+    expect(resolvePickMode("other")).toBe("ats");
+  });
+});
+
 describe("coveredTeamId", () => {
   it("favorite covers when margin beats the spread", () => {
     const g = game({ id: "1" });
@@ -42,6 +52,14 @@ describe("coveredTeamId", () => {
   it("underdog covers when favorite fails to cover", () => {
     const g = game({ id: "1", spread: 3.5 });
     expect(coveredTeamId(g, 21, 24)).toBe("away");
+  });
+
+  it("straight up ignores the spread and pushes on a tie", () => {
+    const g = game({ id: "1" });
+    expect(coveredTeamId(g, 24, 17, "straightUp")).toBe("home");
+    expect(coveredTeamId(g, 21, 24, "straightUp")).toBe("away");
+    expect(coveredTeamId(g, 17, 17, "straightUp")).toBeNull();
+    expect(coveredTeamId(g, 24, 17, "ats")).toBeNull();
   });
 });
 
@@ -73,6 +91,31 @@ describe("scorePicks", () => {
   it("counts a missed Pickem as a loss even when the spread pushes", () => {
     const g = game({ id: "g1", homeScore: 24, awayScore: 17 });
     expect(scorePicks({}, [g])).toEqual({ wins: 0, losses: 1, pushes: 0 });
+  });
+
+  it("straight up scores the outright winner and treats a tie as a push", () => {
+    const coverPush = game({ id: "g1", homeScore: 24, awayScore: 17 });
+    expect(scorePicks({ g1: "home" }, [coverPush], null, { pickMode: "straightUp" })).toEqual({
+      wins: 1,
+      losses: 0,
+      pushes: 0,
+    });
+    expect(scorePicks({ g1: "away" }, [coverPush], null, { pickMode: "straightUp" })).toEqual({
+      wins: 0,
+      losses: 1,
+      pushes: 0,
+    });
+    const tie = game({ id: "g1", homeScore: 21, awayScore: 21 });
+    expect(scorePicks({ g1: "home" }, [tie], null, { pickMode: "straightUp" })).toEqual({
+      wins: 0,
+      losses: 0,
+      pushes: 1,
+    });
+    expect(scorePicks({}, [tie], null, { pickMode: "straightUp" })).toEqual({
+      wins: 0,
+      losses: 1,
+      pushes: 0,
+    });
   });
 
   it("does not double a missed confidence game", () => {
@@ -200,6 +243,16 @@ describe("computeWeekAwards", () => {
       { userId: "b", displayName: "Blake", picks: { "1": "away" } },
     ];
     expect(computeWeekAwards(picks, games).sharpshooterUserId).toBe("a");
+  });
+
+  it("straight up heartbreaker uses raw score margin", () => {
+    const games = [game({ id: "1", homeScore: 24, awayScore: 21, spread: 14 })];
+    const picks: PickDoc[] = [
+      { userId: "a", displayName: "Alex", picks: { "1": "home" } },
+      { userId: "b", displayName: "Blake", picks: { "1": "away" } },
+    ];
+    expect(computeWeekAwards(picks, games, "straightUp").sharpshooterUserId).toBe("a");
+    expect(computeWeekAwards(picks, games, "straightUp").heartbreakerUserId).toBe("b");
   });
 });
 

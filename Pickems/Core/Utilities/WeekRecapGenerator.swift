@@ -5,23 +5,31 @@ enum WeekRecapGenerator {
         groupName: String,
         week: WeekSummary,
         standings: GroupStandings?,
-        userId: String?
+        userId: String?,
+        pickMode: PickMode = .ats
     ) -> String {
-        recap(groupName: groupName, week: week, entries: standings?.entries ?? [], userId: userId)
+        recap(
+            groupName: groupName,
+            week: week,
+            entries: standings?.entries ?? [],
+            userId: userId,
+            pickMode: pickMode
+        )
     }
 
     static func recap(
         groupName: String,
         week: WeekSummary,
         entries: [StandingEntry],
-        userId: String?
+        userId: String?,
+        pickMode: PickMode = .ats
     ) -> String {
         let you = userId.flatMap { id in entries.first(where: { $0.id == id }) }
 
         guard week.status == .scored else {
             var lines = ["Week \(week.weekNumber) is still in progress."]
             if let you, you.weeklyWins + you.weeklyLosses > 0 {
-                lines.append("Your week so far: \(you.weeklyWins)–\(you.weeklyLosses) against the spread")
+                lines.append("Your week so far: \(you.weeklyWins)–\(you.weeklyLosses) \(pickMode.recordPhrase)")
             }
             return lines.joined(separator: "\n")
         }
@@ -33,7 +41,7 @@ enum WeekRecapGenerator {
         }
 
         if let you {
-            lines.append("Your week: \(you.weeklyWins)–\(you.weeklyLosses) against the spread")
+            lines.append("Your week: \(you.weeklyWins)–\(you.weeklyLosses) \(pickMode.recordPhrase)")
             if you.weeklyWins + you.weeklyLosses > 0 {
                 lines.append("Batting average: \(String(format: "%.3f", you.weeklyBattingAverage))")
             }

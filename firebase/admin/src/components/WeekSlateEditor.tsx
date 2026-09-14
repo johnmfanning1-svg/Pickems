@@ -22,7 +22,15 @@ import type { SlateGameDoc } from "@/lib/types";
  * iOS. Editing one without the other flips the favourite, so both are saved
  * together and previewed before saving.
  */
-export function WeekSlateEditor({ groupId, weekId }: { groupId: string; weekId: string }) {
+export function WeekSlateEditor({
+  groupId,
+  weekId,
+  showsSpreads = true,
+}: {
+  groupId: string;
+  weekId: string;
+  showsSpreads?: boolean;
+}) {
   const games = useSlateGames(groupId, weekId);
   const nominations = useNominations(groupId, weekId);
   const action = useAction();
@@ -198,6 +206,7 @@ export function WeekSlateEditor({ groupId, weekId }: { groupId: string; weekId: 
       },
     },
   ];
+  const visibleColumns = showsSpreads ? columns : columns.filter((column) => column.key !== "line");
 
   const countsDisagree =
     games.data.length > 0 && nominations.data.length > 0 && games.data.length !== nominations.data.length;
@@ -217,8 +226,13 @@ export function WeekSlateEditor({ groupId, weekId }: { groupId: string; weekId: 
           rebuild the slate from nominations.
         </Banner>
       ) : null}
+      {!showsSpreads ? (
+        <Banner tone="info" title="Straight Up league">
+          Spreads are hidden. Scoring uses the outright winner; a tied game is a push.
+        </Banner>
+      ) : null}
       <DataTable
-        columns={columns}
+        columns={visibleColumns}
         rows={games.data}
         rowKey={(game) => game.id}
         loading={games.loading}

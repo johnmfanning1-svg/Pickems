@@ -76,11 +76,15 @@ final class CoverMomentPresenter {
             guard !seenFinalGameIds.contains(game.id) else { continue }
             seenFinalGameIds.insert(game.id)
             guard let picked = pick?.picks[game.id],
-                  let correct = ScoringEngine.isPickCorrect(pickedTeamId: picked, game: game) else {
+                  let correct = ScoringEngine.isPickCorrect(
+                    pickedTeamId: picked,
+                    game: game,
+                    pickMode: appState.selectedPickMode
+                  ) else {
                 continue
             }
             let label = "\(game.awayTeamAbbreviation) @ \(game.homeTeamAbbreviation)"
-            let resultTitle = correct ? "Covered" : "Missed"
+            let resultTitle = correct ? appState.selectedPickMode.coverMomentWinTitle : "Missed"
             let recordText: String
             let rankText: String
             if let entry = appState.rankedStandings(weekly: true).first(where: { $0.id == userId }) {

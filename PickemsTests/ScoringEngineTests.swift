@@ -504,6 +504,22 @@ struct ScoringEngineTests {
         #expect(ScoringEngine.isPickCorrect(pickedTeamId: "home", game: game) == false)
     }
 
+    @Test func straightUpIgnoresSpreadAndPushesOnTie() {
+        let atsPush = boardGame(status: .final, homeScore: 24, awayScore: 17)
+        #expect(ScoringEngine.isPickCorrect(pickedTeamId: "home", game: atsPush) == nil)
+        #expect(ScoringEngine.isPickCorrect(pickedTeamId: "home", game: atsPush, pickMode: .straightUp) == true)
+        #expect(ScoringEngine.isPickCorrect(pickedTeamId: "away", game: atsPush, pickMode: .straightUp) == false)
+
+        let tie = boardGame(status: .final, homeScore: 21, awayScore: 21)
+        #expect(ScoringEngine.isPickCorrect(pickedTeamId: "home", game: tie, pickMode: .straightUp) == nil)
+        #expect(ScoringEngine.pickBoardStatus(pickedTeamId: "home", game: tie, pickMode: .straightUp) == .push)
+        #expect(ScoringEngine.scorePicks(picks: ["1": "home"], games: [atsPush], pickMode: .straightUp).wins == 1)
+        #expect(ScoringEngine.scorePicks(picks: [:], games: [atsPush], pickMode: .straightUp).losses == 1)
+        #expect(PickBoardStatus.covering.label(for: .straightUp) == "Winning")
+        #expect(PickBoardStatus.trailing.label(for: .straightUp) == "Losing")
+        #expect(PickBoardStatus.covering.label(for: .ats) == "Covering")
+    }
+
     @Test func latePickPenaltySubtractsWinsAfterDeadline() {
         let game = SlateGame(
             id: "1",
@@ -597,5 +613,31 @@ struct GroupRulesTests {
         #expect(rules.selectionMode == .member)
         #expect(rules.selectionsPerMember == 3)
         #expect(rules.slateSize == 12)
+        #expect(rules.pickMode == .ats)
+    }
+
+    @Test func missingPickModeDecodesAsATS() throws {
+        let json = Data(#"""
+        {
+          "selectionMode": "member",
+          "selectionsPerMember": 3,
+          "slateSize": 12,
+          "pickDeadline": "firstKickoff",
+          "tieBreaker": "commissionerOverride"
+        }
+        """#.utf8)
+        let rules = try JSONDecoder().decode(GroupRules.self, from: json)
+        #expect(rules.pickMode == .ats)
+        #expect(rules.showsSpreads == true)
+    }
+
+    @Test func straightUpEncodesAndHidesSpreads() throws {
+        var rules = GroupRules.default
+        rules.pickMode = .straightUp
+        let encoded = try JSONEncoder().encode(rules)
+        let decoded = try JSONDecoder().decode(GroupRules.self, from: encoded)
+        #expect(decoded.pickMode == .straightUp)
+        #expect(decoded.showsSpreads == false)
+        #expect(PickMode.straightUp.pickemsSectionTitle == "Straight Up Pickems")
     }
 }

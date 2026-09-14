@@ -10,11 +10,15 @@ nonisolated enum PickBoardStatus: Equatable, Sendable {
     case push
 
     var label: String {
+        label(for: .ats)
+    }
+
+    func label(for pickMode: PickMode) -> String {
         switch self {
         case .none: return "No pick"
         case .pending: return "Pending"
-        case .covering: return "Covering"
-        case .trailing: return "Trailing"
+        case .covering: return pickMode == .straightUp ? "Winning" : "Covering"
+        case .trailing: return pickMode == .straightUp ? "Losing" : "Trailing"
         case .won: return "Won"
         case .lost: return "Lost"
         case .push: return "Push"
@@ -23,13 +27,21 @@ nonisolated enum PickBoardStatus: Equatable, Sendable {
 }
 
 enum ScoringEngine {
-    static func isPickCorrect(pickedTeamId: String, game: SlateGame) -> Bool? {
+    static func isPickCorrect(
+        pickedTeamId: String,
+        game: SlateGame,
+        pickMode: PickMode = .ats
+    ) -> Bool? {
         guard game.status == .final,
               let homeScore = game.homeScore,
               let awayScore = game.awayScore else {
             return nil
         }
-        guard let coveredTeamId = game.coveredTeamId(homeScore: homeScore, awayScore: awayScore) else {
+        guard let coveredTeamId = game.coveredTeamId(
+            homeScore: homeScore,
+            awayScore: awayScore,
+            pickMode: pickMode
+        ) else {
             return nil
         }
         return pickedTeamId == coveredTeamId
@@ -41,14 +53,15 @@ enum ScoringEngine {
         game: SlateGame,
         homeScore: Int? = nil,
         awayScore: Int? = nil,
-        status: SlateGame.GameStatus? = nil
+        status: SlateGame.GameStatus? = nil,
+        pickMode: PickMode = .ats
     ) -> PickBoardStatus {
         guard let pickedTeamId, !pickedTeamId.isEmpty else { return .none }
         let resolvedStatus = status ?? game.status
         let home = homeScore ?? game.homeScore
         let away = awayScore ?? game.awayScore
         guard let home, let away, resolvedStatus != .scheduled else { return .pending }
-        let covered = game.coveredTeamId(homeScore: home, awayScore: away)
+        let covered = game.coveredTeamId(homeScore: home, awayScore: away, pickMode: pickMode)
         if covered == nil {
             return resolvedStatus == .final ? .push : .pending
         }
@@ -72,7 +85,8 @@ enum ScoringEngine {
         confidenceGameId: String? = nil,
         submittedAt: Date? = nil,
         deadline: Date? = nil,
-        latePenaltyWins: Int = 0
+        latePenaltyWins: Int = 0,
+        pickMode: PickMode = .ats
     ) -> (wins: Int, losses: Int, pushes: Int) {
         var wins = 0
         var losses = 0
@@ -85,7 +99,7 @@ enum ScoringEngine {
                 continue
             }
             let weight = (confidenceGameId == game.id) ? 2 : 1
-            switch isPickCorrect(pickedTeamId: picked, game: game) {
+            switch isPickCorrect(pickedTeamId: picked, game: game, pickMode: pickMode) {
             case .some(true): wins += weight
             case .some(false): losses += weight
             case .none: pushes += 1
@@ -111,7 +125,8 @@ enum ScoringEngine {
         userA: String,
         userB: String,
         picksByUser: [String: [String: String]],
-        games: [SlateGame]
+        games: [SlateGame],
+        pickMode: PickMode = .ats
     ) -> (a: Int, b: Int) {
         var aPoints = 0
         var bPoints = 0
@@ -121,12 +136,12 @@ enum ScoringEngine {
                   let pickB = picksByUser[userB]?[game.id],
                   pickA != pickB else { continue }
 
-            switch isPickCorrect(pickedTeamId: pickA, game: game) {
+            switch isPickCorrect(pickedTeamId: pickA, game: game, pickMode: pickMode) {
             case .some(true): aPoints += 1
             case .some(false): break
             case .none: break
             }
-            switch isPickCorrect(pickedTeamId: pickB, game: game) {
+            switch isPickCorrect(pickedTeamId: pickB, game: game, pickMode: pickMode) {
             case .some(true): bPoints += 1
             case .some(false): break
             case .none: break
@@ -140,7 +155,8 @@ enum ScoringEngine {
         userId: String,
         opponents: [String],
         picksByUser: [String: [String: String]],
-        games: [SlateGame]
+        games: [SlateGame],
+        pickMode: PickMode = .ats
     ) -> Int {
         var wins = 0
         for opponent in opponents where opponent != userId {
@@ -148,7 +164,8 @@ enum ScoringEngine {
                 userA: userId,
                 userB: opponent,
                 picksByUser: picksByUser,
-                games: games
+                games: games,
+                pickMode: pickMode
             )
             if h2h.a > h2h.b { wins += 1 }
         }
@@ -164,7 +181,8 @@ enum ScoringEngine {
         tieBreaker: TieBreakerPolicy,
         allPicks: [UserPick] = [],
         games: [SlateGame] = [],
-        tieBreakOrder: [String] = []
+        tieBreakOrder: [String] = [],
+        pickMode: PickMode = .ats
     ) -> [StandingEntry] {
         let picksByUser = Dictionary(uniqueKeysWithValues: allPicks.map { ($0.userId, $0.picks) })
         let hasAnyWins = entries.contains { (weekly ? $0.weeklyWins : $0.seasonWins) > 0 }
@@ -180,7 +198,8 @@ enum ScoringEngine {
                     tieBreaker: tieBreaker,
                     picksByUser: picksByUser,
                     games: games,
-                    tieBreakOrder: order
+                    tieBreakOrder: order,
+                    pickMode: pickMode
                 )
             }
 
@@ -189,7 +208,8 @@ enum ScoringEngine {
                     sorted,
                     weekly: weekly,
                     picksByUser: picksByUser,
-                    games: games
+                    games: games,
+                    pickMode: pickMode
                 )
             }
         } else {
@@ -210,7 +230,8 @@ enum ScoringEngine {
                         tieBreaker: tieBreaker,
                         picksByUser: picksByUser,
                         games: games,
-                        tieBreakOrder: order
+                        tieBreakOrder: order,
+                        pickMode: pickMode
                     )
                     if entry.isTied && tieBreaker == .commissionerOverride {
                         entry.rank = prev.rank
@@ -282,7 +303,8 @@ enum ScoringEngine {
         tieBreaker: TieBreakerPolicy,
         picksByUser: [String: [String: String]],
         games: [SlateGame],
-        tieBreakOrder: [String]
+        tieBreakOrder: [String],
+        pickMode: PickMode
     ) -> Bool {
         let lhsWins = weekly ? lhs.weeklyWins : lhs.seasonWins
         let rhsWins = weekly ? rhs.weeklyWins : rhs.seasonWins
@@ -298,7 +320,8 @@ enum ScoringEngine {
                 userA: lhs.id,
                 userB: rhs.id,
                 picksByUser: picksByUser,
-                games: games
+                games: games,
+                pickMode: pickMode
             )
             if h2h.a != h2h.b { return h2h.a > h2h.b }
         }
@@ -342,7 +365,8 @@ enum ScoringEngine {
         _ entries: [StandingEntry],
         weekly: Bool,
         picksByUser: [String: [String: String]],
-        games: [SlateGame]
+        games: [SlateGame],
+        pickMode: PickMode
     ) -> [StandingEntry] {
         var result: [StandingEntry] = []
         var index = 0
@@ -362,13 +386,15 @@ enum ScoringEngine {
                         userId: lhs.id,
                         opponents: opponentIds,
                         picksByUser: picksByUser,
-                        games: games
+                        games: games,
+                        pickMode: pickMode
                     )
                     let rhsRecord = headToHeadRecord(
                         userId: rhs.id,
                         opponents: opponentIds,
                         picksByUser: picksByUser,
-                        games: games
+                        games: games,
+                        pickMode: pickMode
                     )
                     if lhsRecord != rhsRecord { return lhsRecord > rhsRecord }
                     return compareJoinDateThenName(lhs, rhs)
@@ -399,7 +425,8 @@ enum ScoringEngine {
         tieBreaker: TieBreakerPolicy,
         picksByUser: [String: [String: String]],
         games: [SlateGame],
-        tieBreakOrder: [String]
+        tieBreakOrder: [String],
+        pickMode: PickMode
     ) -> Bool {
         guard samePrimaryRecord(lhs, rhs, weekly: weekly) else { return false }
 
@@ -413,13 +440,15 @@ enum ScoringEngine {
                 userId: lhs.id,
                 opponents: opponentIds,
                 picksByUser: picksByUser,
-                games: games
+                games: games,
+                pickMode: pickMode
             )
             let rhsRecord = headToHeadRecord(
                 userId: rhs.id,
                 opponents: opponentIds,
                 picksByUser: picksByUser,
-                games: games
+                games: games,
+                pickMode: pickMode
             )
             return lhsRecord == rhsRecord
         }

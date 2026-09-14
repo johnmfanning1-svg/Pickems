@@ -11,7 +11,7 @@ enum WeekAwardsEngine {
         var contrarianName: String?
     }
 
-    static func compute(picks: [UserPick], games: [SlateGame], members: [GroupMember]) -> Result {
+    static func compute(picks: [UserPick], games: [SlateGame], members: [GroupMember], pickMode: PickMode = .ats) -> Result {
         guard !picks.isEmpty, !games.isEmpty else { return Result() }
         let nameById = Dictionary(uniqueKeysWithValues: members.map { ($0.id, $0.displayName) })
 
@@ -37,7 +37,8 @@ enum WeekAwardsEngine {
             let scored = ScoringEngine.scorePicks(
                 picks: pick.picks,
                 games: games,
-                confidenceGameId: pick.confidenceGameId
+                confidenceGameId: pick.confidenceGameId,
+                pickMode: pickMode
             )
             let wins = scored.wins
             if wins > bestWins {
@@ -51,12 +52,11 @@ enum WeekAwardsEngine {
                 guard let picked = pick.picks[game.id],
                       let home = game.homeScore,
                       let away = game.awayScore else { continue }
-                guard let covered = game.coveredTeamId(homeScore: home, awayScore: away) else { continue }
+                guard let covered = game.coveredTeamId(homeScore: home, awayScore: away, pickMode: pickMode) else { continue }
                 if covered != picked {
-                    let margin = abs(
-                        Double(home - away) + (game.spreadTeamId == game.homeTeamId ? -abs(game.spread) : abs(game.spread))
-                    )
-                    if margin <= 3 { nearMisses += 1 }
+                    if game.nearMissMargin(homeScore: home, awayScore: away, pickMode: pickMode) <= 3 {
+                        nearMisses += 1
+                    }
                 } else if pickCounts[game.id]?[picked] == 1 {
                     uniqueCorrect += 1
                 }

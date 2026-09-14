@@ -11,9 +11,11 @@ struct PickHistoryView: View {
                         PickResultRow(
                             game: game,
                             pickedTeamId: pick.picks[game.id],
+                            showSpread: appState.selectedPickMode.showsSpreads,
                             liveSpreadLabel: appState.picksViewModel.livePickCards[game.espnEventId]?.liveSpreadLabel,
                             homeRank: appState.picksViewModel.teamRanks.rank(for: game.homeTeamId),
-                            awayRank: appState.picksViewModel.teamRanks.rank(for: game.awayTeamId)
+                            awayRank: appState.picksViewModel.teamRanks.rank(for: game.awayTeamId),
+                            pickMode: appState.selectedPickMode
                         )
                     }
                 } header: {
@@ -41,7 +43,7 @@ struct PickHistoryView: View {
         .pickemsScreenBackground()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                HelpInfoButton(topic: PickemsHelp.spreadPicks, size: .body)
+                HelpInfoButton(topic: PickemsHelp.pickems(for: appState.selectedPickMode), size: .body)
             }
         }
         .task {

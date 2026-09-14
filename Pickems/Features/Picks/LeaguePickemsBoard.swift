@@ -14,6 +14,7 @@ struct LeaguePickemsBoard: View {
     var hiddenGameIds: Set<String> = []
     /// Head-to-head: stretch the two pick columns across the remaining width.
     var fillsAvailableWidth: Bool = false
+    var pickMode: PickMode = .ats
 
     @Environment(\.themePalette) private var theme
     @AppStorage("leaguePickems.chartIsDense") private var isDense = true
@@ -74,7 +75,8 @@ struct LeaguePickemsBoard: View {
                 teamRanks: teamRanks,
                 currentUserId: currentUserId,
                 hiddenGameIds: hiddenGameIds,
-                fillsAvailableWidth: fillsAvailableWidth
+                fillsAvailableWidth: fillsAvailableWidth,
+                pickMode: pickMode
             )
         }
     }
@@ -107,15 +109,15 @@ struct LeaguePickemsBoard: View {
                     keyChips
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        keyChip("Trailing", fill: PickemsColors.warning, ink: .black)
-                        keyChip("Covering", fill: PickemsColors.covering, ink: .white)
-                        keyChip("Won", fill: PickemsColors.success, ink: .black)
-                    }
-                    HStack(spacing: 6) {
-                        keyChip("Lost", fill: PickemsColors.lost, ink: .white)
-                        keyChip("Push", fill: PickemsColors.push, ink: .white)
-                    }
+                HStack(spacing: 6) {
+                    keyChip(PickBoardStatus.trailing.label(for: pickMode), fill: PickemsColors.warning, ink: .black)
+                    keyChip(PickBoardStatus.covering.label(for: pickMode), fill: PickemsColors.covering, ink: .white)
+                    keyChip("Won", fill: PickemsColors.success, ink: .black)
+                }
+                HStack(spacing: 6) {
+                    keyChip("Lost", fill: PickemsColors.lost, ink: .white)
+                    keyChip("Push", fill: PickemsColors.push, ink: .white)
+                }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -138,8 +140,8 @@ struct LeaguePickemsBoard: View {
 
     @ViewBuilder
     private var keyChips: some View {
-        keyChip("Trailing", fill: PickemsColors.warning, ink: .black)
-        keyChip("Covering", fill: PickemsColors.covering, ink: .white)
+        keyChip(PickBoardStatus.trailing.label(for: pickMode), fill: PickemsColors.warning, ink: .black)
+        keyChip(PickBoardStatus.covering.label(for: pickMode), fill: PickemsColors.covering, ink: .white)
         keyChip("Won", fill: PickemsColors.success, ink: .black)
         keyChip("Lost", fill: PickemsColors.lost, ink: .white)
         keyChip("Push", fill: PickemsColors.push, ink: .white)
@@ -158,8 +160,12 @@ struct LeaguePickemsBoard: View {
 
     private var chartFootnote: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("* Favored team — the spread applies to this team.")
-            Text("The lock is the Pickems line used for scoring. The number in parentheses is ESPN’s live line, for reference.")
+            if pickMode.showsSpreads {
+                Text("* Favored team — the spread applies to this team.")
+                Text("The lock is the Pickems line used for scoring. The number in parentheses is ESPN’s live line, for reference.")
+            } else {
+                Text("Pick the outright winner. A tied game is a push.")
+            }
         }
         .font(.caption2)
         .foregroundStyle(PickemsColors.textSecondary)
@@ -282,7 +288,7 @@ struct LeaguePickemsBoard: View {
             homeAbbreviation: game.homeTeamAbbreviation,
             homeRank: homeRank,
             separator: game.matchupSeparator,
-            favoredSide: game.favoredSide
+            favoredSide: pickMode.showsSpreads ? game.favoredSide : nil
         )
         let statusLine = gameStatusLine(
             game: game,
@@ -300,26 +306,33 @@ struct LeaguePickemsBoard: View {
                 .foregroundStyle(PickemsColors.textPrimary)
                 .lineLimit(isDense ? 1 : 2)
                 .minimumScaleFactor(0.7)
-            if isDense {
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Image(systemName: "lock.fill")
-                        .font(.caption2)
-                        .foregroundStyle(PickemsColors.textSecondary)
-                        .accessibilityHidden(true)
-                    Text("\(spreadCaption) · \(statusLine)")
+            if pickMode.showsSpreads {
+                if isDense {
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        Image(systemName: "lock.fill")
+                            .font(.caption2)
+                            .foregroundStyle(PickemsColors.textSecondary)
+                            .accessibilityHidden(true)
+                        Text("\(spreadCaption) · \(statusLine)")
+                            .font(.caption2)
+                            .foregroundStyle(status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                } else {
+                    LockedSpreadLabel(
+                        lockedText: game.favoriteSpreadDisplay,
+                        liveText: live?.liveSpreadLabel,
+                        isLocked: true
+                    )
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    Text(statusLine)
                         .font(.caption2)
                         .foregroundStyle(status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
                 }
             } else {
-                LockedSpreadLabel(
-                    lockedText: game.favoriteSpreadDisplay,
-                    liveText: live?.liveSpreadLabel,
-                    isLocked: true
-                )
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
                 Text(statusLine)
                     .font(.caption2)
                     .foregroundStyle(status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
@@ -342,17 +355,19 @@ struct LeaguePickemsBoard: View {
         status: SlateGame.GameStatus
     ) -> String {
         var parts = [matchup]
-        if let side = game.favoredSide {
+        if pickMode.showsSpreads, let side = game.favoredSide {
             let name = side == .home ? game.homeTeamAbbreviation : game.awayTeamAbbreviation
             parts.append("\(name) is favored — the spread applies to this team")
         }
-        parts.append(
-            SpreadLineCopy.accessibilityLabel(
-                locked: game.favoriteSpreadDisplay,
-                live: live?.liveSpreadLabel,
-                isLocked: true
+        if pickMode.showsSpreads {
+            parts.append(
+                SpreadLineCopy.accessibilityLabel(
+                    locked: game.favoriteSpreadDisplay,
+                    live: live?.liveSpreadLabel,
+                    isLocked: true
+                )
             )
-        )
+        }
         parts.append(
             gameStatusLine(game: game, live: live, status: status, compactKickoff: false)
         )
@@ -409,7 +424,8 @@ struct LeaguePickemsBoard: View {
                 game: game,
                 homeScore: live?.homeScore ?? game.homeScore,
                 awayScore: live?.awayScore ?? game.awayScore,
-                status: live?.status ?? game.status
+                status: live?.status ?? game.status,
+                pickMode: pickMode
             )
             let label = pickAbbreviation(game: game, pickedTeamId: pickedId)
             Text(label)
@@ -421,7 +437,7 @@ struct LeaguePickemsBoard: View {
                 .frame(maxWidth: fillsAvailableWidth ? .infinity : nil)
                 .background(status.fill)
                 .accessibilityLabel(
-                    "\(member.displayName) picked \(label == "—" ? "nothing" : label), \(status.label)"
+                    "\(member.displayName) picked \(label == "—" ? "nothing" : label), \(status.label(for: pickMode))"
                 )
         }
     }
@@ -451,6 +467,7 @@ struct LeaguePickemsExpandedBoard: View {
     var currentUserId: String?
     var hiddenGameIds: Set<String> = []
     var fillsAvailableWidth: Bool = false
+    var pickMode: PickMode = .ats
 
     @Environment(\.dismiss) private var dismiss
 
@@ -467,7 +484,8 @@ struct LeaguePickemsExpandedBoard: View {
                     allowsExpand: false,
                     isExpandedLayout: true,
                     hiddenGameIds: hiddenGameIds,
-                    fillsAvailableWidth: fillsAvailableWidth
+                    fillsAvailableWidth: fillsAvailableWidth,
+                    pickMode: pickMode
                 )
                 .padding()
             }

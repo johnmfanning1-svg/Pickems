@@ -113,6 +113,7 @@ final class HomeViewModel {
             let userPicks = appState.pickService.userPick?.picks ?? [:]
             let seasonYear = appState.groupService.currentWeek?.seasonYear ?? weekInfo.seasonYear
 
+            let pickMode = appState.selectedPickMode
             let allCards: [ESPNLiveGameCard]
             if let browse = selectedBrowseWeek {
                 allCards = try await ESPNService.shared.liveGameCards(
@@ -121,7 +122,8 @@ final class HomeViewModel {
                     slateEventIds: slateIds,
                     userPicks: userPicks,
                     slateGames: slateGames,
-                    forceRefresh: forceRefresh
+                    forceRefresh: forceRefresh,
+                    pickMode: pickMode
                 ).matching(seasonYear: browse.seasonYear, appWeekNumber: browse.weekNumber)
             } else if let week = appState.groupService.currentWeek {
                 allCards = try await ESPNService.shared.liveGameCards(
@@ -129,7 +131,8 @@ final class HomeViewModel {
                     slateEventIds: slateIds,
                     userPicks: userPicks,
                     slateGames: slateGames,
-                    forceRefresh: forceRefresh
+                    forceRefresh: forceRefresh,
+                    pickMode: pickMode
                 )
             } else {
                 let appWeek = CFBWeekCalendar.resolve(espn: weekInfo)
@@ -139,7 +142,8 @@ final class HomeViewModel {
                     slateEventIds: slateIds,
                     userPicks: userPicks,
                     slateGames: slateGames,
-                    forceRefresh: forceRefresh
+                    forceRefresh: forceRefresh,
+                    pickMode: pickMode
                 ).matching(seasonYear: seasonYear, appWeekNumber: appWeek.weekNumber)
             }
 

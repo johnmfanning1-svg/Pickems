@@ -25,7 +25,7 @@ struct MainTabView: View {
             PickemsTabView()
                 .tabItem { Label("Pickems", systemImage: "checkmark.circle.fill") }
                 .tag(AppTab.pickems)
-                .accessibilityHint("Pick who covers the spread")
+                .accessibilityHint("Pick who \(appState.selectedPickMode.showsSpreads ? "covers the spread" : "wins")")
 
             ProfileView()
                 .tabItem { Label("Profile", systemImage: "person.fill") }

@@ -318,12 +318,29 @@ struct SlateGame: Codable, Identifiable, Equatable {
         return nil
     }
 
-    func coveredTeamId(homeScore: Int, awayScore: Int) -> String? {
+    /// Winning side for scoring. Keep in sync with `firebase/functions/src/scoring.ts` `coveredTeamId`.
+    /// ATS: cover vs the locked line. Straight Up: outright winner; a score tie is a push (`nil`).
+    func coveredTeamId(homeScore: Int, awayScore: Int, pickMode: PickMode = .ats) -> String? {
+        if pickMode == .straightUp {
+            if homeScore == awayScore { return nil }
+            return homeScore > awayScore ? homeTeamId : awayTeamId
+        }
         let spreadMagnitude = abs(spread)
         let margin = Double(homeScore - awayScore)
         let adjusted = margin + (spreadTeamId == homeTeamId ? -spreadMagnitude : spreadMagnitude)
         if adjusted == 0 { return nil }
         return adjusted > 0 ? homeTeamId : awayTeamId
+    }
+
+    /// Heartbreaker near-miss margin. ATS uses cover margin vs the line; Straight Up uses raw score.
+    func nearMissMargin(homeScore: Int, awayScore: Int, pickMode: PickMode = .ats) -> Double {
+        if pickMode == .straightUp {
+            return Double(abs(homeScore - awayScore))
+        }
+        return abs(
+            Double(homeScore - awayScore)
+                + (spreadTeamId == homeTeamId ? -abs(spread) : abs(spread))
+        )
     }
 
     var matchupSeparator: String { isNeutralSite ? "vs" : "@" }

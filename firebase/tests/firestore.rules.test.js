@@ -277,6 +277,28 @@ describe("super admin blast radius", () => {
     await assertSucceeds(getDocs(collection(adminDb, "groups", GROUP_ID, "members")));
   });
 
+  it("lets a commissioner persist rules.pickMode on the group doc", async () => {
+    await seed();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertSucceeds(
+      updateDoc(doc(commishDb, "groups", GROUP_ID), {
+        rules: {
+          selectionMode: "member",
+          selectionsPerMember: 3,
+          slateSize: 12,
+          pickDeadline: "firstKickoff",
+          tieBreaker: "commissionerOverride",
+          customDeadlineHour: 18,
+          customDeadlineMinute: 0,
+          allowConfidencePick: false,
+          allowLatePicks: false,
+          latePickPenaltyWins: 1,
+          pickMode: "straightUp",
+        },
+      })
+    );
+  });
+
   it("still blocks a signed-in non-admin, non-member from the same writes", async () => {
     await seed();
     const outsiderDb = testEnv.authenticatedContext(OUTSIDER).firestore();

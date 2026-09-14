@@ -118,6 +118,17 @@ struct CreateGroupWizardView: View {
                     : "You choose every game for the group each week.")
             }
             Section {
+                Picker("Type", selection: $rules.pickMode) {
+                    ForEach(PickMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+            } header: {
+                Text("League Type")
+            } footer: {
+                Text(rules.pickMode.createFooter)
+            }
+            Section {
                 Picker("Tie breaker", selection: $rules.tieBreaker) {
                     ForEach(TieBreakerPolicy.allCases) { policy in
                         Text(policy.displayName).tag(policy)
@@ -131,7 +142,7 @@ struct CreateGroupWizardView: View {
         }
         .scrollContentBackground(.hidden)
         .onChange(of: rules.selectionMode) { _, mode in
-            // Product rule: spread picks always lock at first kickoff.
+            // Product rule: new leagues lock the whole slate at first kickoff.
             rules.pickDeadline = .firstKickoff
             if mode == .commissioner, rules.slateSize < 1 {
                 rules.slateSize = 12
@@ -156,6 +167,7 @@ struct CreateGroupWizardView: View {
                         Text("\(rules.slateSize) games per week")
                     }
                     Text("Pickems lock at first kickoff")
+                    Text(rules.pickMode.displayName)
                     Text("Tie-breaker: \(rules.tieBreaker.displayName)")
                 }
                 .foregroundStyle(PickemsColors.textPrimary)
@@ -242,7 +254,8 @@ struct CreateGroupWizardView: View {
                     commissionerId: user.id,
                     displayName: user.displayName,
                     avatarColorHex: user.avatarColorHex,
-                    avatarImageURL: user.avatarImageURL
+                    avatarImageURL: user.avatarImageURL,
+                    rules: rules
                 )
                 try await appState.groupService.updateRules(groupId: group.id, rules: rules)
                 appState.groupService.loadGroups(for: user.id)

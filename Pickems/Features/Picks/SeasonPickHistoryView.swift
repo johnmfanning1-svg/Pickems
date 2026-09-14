@@ -186,7 +186,8 @@ struct SeasonPickHistoryView: View {
                     liveCards: isViewingLiveWeek ? appState.picksViewModel.livePickCards : [:],
                     teamRanks: appState.picksViewModel.teamRanks,
                     currentUserId: appState.currentUserId,
-                    hiddenGameIds: hiddenGameIds(for: week)
+                    hiddenGameIds: hiddenGameIds(for: week),
+                    pickMode: appState.selectedPickMode
                 )
                 .padding(.horizontal)
             } else if WeekTransition.pickemsShouldShowLeagueBoard(week) {
@@ -224,7 +225,11 @@ struct SeasonPickHistoryView: View {
     private var yourRecordCaption: String? {
         guard let userId = appState.currentUserId,
               let pick = picksByUserId[userId] else { return nil }
-        let record = ScoringEngine.scorePicks(picks: pick.picks, games: displayGames)
+        let record = ScoringEngine.scorePicks(
+            picks: pick.picks,
+            games: displayGames,
+            pickMode: appState.selectedPickMode
+        )
         return "You went \(record.wins)–\(record.losses)"
     }
 

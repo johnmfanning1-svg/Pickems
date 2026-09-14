@@ -255,7 +255,7 @@ enum WeekTransition {
         }
     }
 
-    /// Spread Pickems can be edited while the week is picking and at least one game is open.
+    /// Pickems can be edited while the week is picking and at least one game is open.
     static func arePicksEditable(_ week: WeekSummary, now: Date = Date()) -> Bool {
         switch week.status {
         case .picking:

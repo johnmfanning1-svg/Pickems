@@ -84,7 +84,8 @@ struct WeekRecapView: View {
             groupName: group.name,
             week: week,
             entries: rankedEntries,
-            userId: appState.authService.currentUser?.id
+            userId: appState.authService.currentUser?.id,
+            pickMode: group.rules.pickMode
         )
     }
 
@@ -96,7 +97,8 @@ struct WeekRecapView: View {
         let computed = WeekAwardsEngine.compute(
             picks: displayPicks,
             games: scoringGames,
-            members: appState.groupService.members
+            members: appState.groupService.members,
+            pickMode: appState.selectedPickMode
         )
         let awards = WeekAwards(
             sharpshooterUserId: computed.sharpshooterUserId,

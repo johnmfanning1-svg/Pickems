@@ -14,7 +14,7 @@ import { writeAudit } from "@/lib/audit";
 import { db } from "@/lib/firebase";
 import { formatTimestamp } from "@/lib/format";
 import { findFreeInviteCode, setInviteCode } from "@/lib/inviteCodes";
-import { DEFAULT_GROUP_RULES, type GroupRules } from "@/lib/types";
+import { DEFAULT_GROUP_RULES, resolvePickMode, type GroupRules } from "@/lib/types";
 
 export function GroupDetailPage() {
   const { id: groupId } = useParams<{ id: string }>();
@@ -111,9 +111,10 @@ export function GroupDetailPage() {
       title: "Save league rules?",
       body: (
         <>
-          Rules drive slate size and deadlines for <strong>{league.name}</strong>. Changing{" "}
-          <code className="font-mono">slateSize</code> mid-week does not re-materialize an existing
-          slate — use the Weeks tab for that.
+          Rules drive slate size, pick mode, and deadlines for <strong>{league.name}</strong>. Changing{" "}
+          <code className="font-mono">pickMode</code> mid-season does not rewrite already-scored weeks until you
+          rescore. Changing <code className="font-mono">slateSize</code> mid-week does not re-materialize an
+          existing slate — use the Weeks tab for that.
         </>
       ),
       tone: "primary",
@@ -362,6 +363,18 @@ export function GroupDetailPage() {
                 value={rules.customDeadlineMinute}
                 onChange={(event) => setRule("customDeadlineMinute", Number(event.target.value))}
               />
+            </Field>
+            <Field
+              label="Pick mode"
+              hint="ats grades the cover. straightUp grades the outright winner (tie = push). iOS commissioners cannot change this after create. Rescore after changing it."
+            >
+              <Select
+                value={resolvePickMode(rules)}
+                onChange={(event) => setRule("pickMode", event.target.value as GroupRules["pickMode"])}
+              >
+                <option value="ats">ats — against the spread</option>
+                <option value="straightUp">straightUp — outright winner</option>
+              </Select>
             </Field>
             <Field label="Tie breaker">
               <Select

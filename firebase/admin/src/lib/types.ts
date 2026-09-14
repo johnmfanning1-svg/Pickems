@@ -16,6 +16,7 @@ export type GameStatus = "scheduled" | "inProgress" | "final";
 export type SelectionMode = "commissioner" | "member";
 export type DeadlinePolicy = "firstKickoff" | "rolling" | "custom";
 export type TieBreakerPolicy = "commissionerOverride" | "headToHead";
+export type PickMode = "ats" | "straightUp";
 export type MemberRole = "commissioner" | "member";
 
 export interface GroupRules {
@@ -29,6 +30,8 @@ export interface GroupRules {
   allowConfidencePick: boolean;
   allowLatePicks: boolean;
   latePickPenaltyWins: number;
+  /** Missing on existing leagues — treat as ats. */
+  pickMode?: PickMode;
 }
 
 export const DEFAULT_GROUP_RULES: GroupRules = {
@@ -42,7 +45,12 @@ export const DEFAULT_GROUP_RULES: GroupRules = {
   allowConfidencePick: false,
   allowLatePicks: false,
   latePickPenaltyWins: 1,
+  pickMode: "ats",
 };
+
+export function resolvePickMode(rules?: Partial<GroupRules> | null): PickMode {
+  return rules?.pickMode === "straightUp" ? "straightUp" : "ats";
+}
 
 export interface GroupDoc {
   id: string;
