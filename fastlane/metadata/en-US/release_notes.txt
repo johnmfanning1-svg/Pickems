@@ -1,4 +1,4 @@
-What's new in 3.5.3
+What's new in 3.5.4
 
 • New leagues start at 0–0 instead of showing another league's record
 • Straight Up: pick outright winners, no spread
