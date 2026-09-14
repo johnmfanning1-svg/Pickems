@@ -120,6 +120,7 @@ enum PickemsHelp {
         message: "Pick this week's games for your league. Already-selected games are greyed out with the member who chose them.",
         tips: [
             "Each member selects up to the league’s per-member limit.",
+            "Pick every game you still owe, then Save. We’ll check that nobody claimed one while you were choosing.",
             "Clear a Selection before the deadline, then pick a replacement.",
             "Pickems do not open just because the slate is full — wait for the deadline or a commissioner lock-early."
         ]
@@ -130,7 +131,7 @@ enum PickemsHelp {
         title: "Make Selections",
         message: "As commissioner, you choose every game for the league this week.",
         tips: [
-            "Browse ESPN games and tap to add them.",
+            "Browse ESPN games, pick as many as you still need, then Save.",
             "Add games until you reach your games-per-week setting.",
             "Pickems lock at the earliest kickoff on the slate."
         ]
@@ -217,7 +218,7 @@ enum PickemsHelp {
             "W-L is wins and losses against the spread. No Pickem on a final slate game is a loss.",
             "Rank is by most wins, not batting average — a late joiner with a hot percentage does not jump people who have more wins.",
             "First place shows batting average. Everyone else shows games back of the leader.",
-            "Tied This Week records wait for a commissioner tap in Commissioner Settings → Resolve Ties (Commissioner Override leagues).",
+            "Tied This Week records wait for Rank in Commissioner Settings → Resolve Ties (Commissioner Override leagues).",
             "Leagues with more than 10 members show Full ranking under the This Week / Season picker, then the top 10.",
             "Tap another member to compare your Pickems with theirs. If this week isn’t public yet, you can still browse previous weeks."
         ]
@@ -241,9 +242,9 @@ enum PickemsHelp {
     static let tieBreaker = HelpTopic(
         id: "groups.tieBreaker",
         title: "Ties",
-        message: "Choose how equal records rank. Commissioner Override waits for your tap after the week is scored. Head-to-Head uses this week’s slate automatically.",
+        message: "Choose how equal records rank. Commissioner Override waits for Rank after the week is scored. Head-to-Head uses this week’s slate automatically.",
         tips: [
-            "Resolve Ties shows the tied group and their record — tap who ranks higher.",
+            "Resolve Ties shows each deadlock — tap Rank, then drag to set This Week order.",
             "Use This Week’s chips to open a scored week if you need to break a past tie.",
             "That ranking is for this week only. Next week starts clean.",
             "Head-to-Head leagues never see Resolve Ties.",
@@ -309,7 +310,7 @@ enum SelectionPhaseCopy {
         "You can still remove a Selection and pick a different game until the Selection deadline."
 
     static let swapHint =
-        "Want a different game? Remove one below, then tap Select Game."
+        "Want a different game? Remove one below, then tap Select Games."
 
     static func submittedCaption(gameCount: Int, week: WeekSummary) -> String {
         let games = "\(gameCount) game\(gameCount == 1 ? "" : "s")"

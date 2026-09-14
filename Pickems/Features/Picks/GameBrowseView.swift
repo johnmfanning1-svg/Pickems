@@ -14,7 +14,8 @@ struct GameBrowseView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themePalette) private var theme
     var replacingEventId: String? = nil
-    let onSelect: (ESPNGame) -> Void
+    var selectionLimitOverride: Int? = nil
+    let onSave: ([ESPNGame]) async throws -> SelectionBrowseSaveResult
 
     @State private var searchText = ""
     @State private var filter: GameBrowseFilter = .all
@@ -22,14 +23,19 @@ struct GameBrowseView: View {
     @State private var loadedGames: [ESPNGame]
     @State private var loading: Bool
     @State private var loadError: String?
+    @State private var selected: [ESPNGame] = []
+    @State private var isSaving = false
+    @State private var saveError: String?
 
     init(
         seedGames: [ESPNGame] = [],
         replacingEventId: String? = nil,
-        onSelect: @escaping (ESPNGame) -> Void
+        selectionLimitOverride: Int? = nil,
+        onSave: @escaping ([ESPNGame]) async throws -> SelectionBrowseSaveResult
     ) {
         self.replacingEventId = replacingEventId
-        self.onSelect = onSelect
+        self.selectionLimitOverride = selectionLimitOverride
+        self.onSave = onSave
         _loadedGames = State(initialValue: seedGames)
         _loading = State(initialValue: seedGames.isEmpty)
     }
@@ -46,6 +52,14 @@ struct GameBrowseView: View {
             return nom.espnEventId
         }
         return nil
+    }
+
+    private var selectionLimit: Int {
+        max(selectionLimitOverride ?? appState.picksViewModel.gameBrowseSelectionLimit(appState: appState), 1)
+    }
+
+    private var selectedEventIds: Set<String> {
+        Set(selected.map(\.espnEventId))
     }
 
     private var nominatedEventIds: Set<String> {
@@ -108,25 +122,27 @@ struct GameBrowseView: View {
 
                 List(filteredGames) { game in
                     let isNominated = nominatedEventIds.contains(game.espnEventId)
+                    let isDraftSelected = selectedEventIds.contains(game.espnEventId)
                     let nominatorName = nominatorNamesByEventId[game.espnEventId]
                     Button {
-                        onSelect(game)
+                        toggle(game, isNominated: isNominated)
                     } label: {
                         GameBrowseRow(
                             game: game,
                             isFavoriteHighlight: isFavoriteGame(game),
                             isNominated: isNominated,
+                            isDraftSelected: isDraftSelected,
                             nominatorName: nominatorName
                         )
                     }
                     .opacity(isNominated ? 0.45 : 1)
-                    .disabled(isNominated)
-                    .allowsHitTesting(!isNominated)
+                    .disabled(isNominated || isSaving)
+                    .allowsHitTesting(!isNominated && !isSaving)
                     .accessibilityRemoveTraits(isNominated ? .isButton : [])
                     .listRowBackground(PickemsColors.cardBackground)
                 }
                 .scrollContentBackground(.hidden)
-                .contentMargins(.bottom, 24, for: .scrollContent)
+                .contentMargins(.bottom, 88, for: .scrollContent)
                 .overlay {
                     if loading, board.isEmpty {
                         ProgressView("Loading games…")
@@ -141,21 +157,29 @@ struct GameBrowseView: View {
                 }
             }
             .background(PickemsColors.background)
-            .navigationTitle("Select Game")
+            .navigationTitle(selectionLimit == 1 ? "Select Game" : "Select Games")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isSaving)
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    Text(loading && board.isEmpty ? "Loading" : "\(filteredGames.count) of \(board.count)")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(PickemsColors.textSecondary)
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .fontWeight(.semibold)
+                        .foregroundStyle(theme.accent)
+                        .disabled(isSaving || selected.isEmpty)
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                saveFooter
+            }
             .task { await refreshBoard() }
+            .onChange(of: nominatedEventIds) { _, taken in
+                selected.removeAll { taken.contains($0.espnEventId) }
+            }
         }
-        .interactiveDismissDisabled(loading)
+        .interactiveDismissDisabled(loading || isSaving)
     }
 
     private func refreshBoard() async {
@@ -182,6 +206,88 @@ struct GameBrowseView: View {
             }
         }
         loading = false
+    }
+
+    private var saveFooter: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let saveError {
+                Text(saveError)
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text(selectionCaption)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(PickemsColors.textSecondary)
+            if loading && board.isEmpty {
+                Text("Loading")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+            } else {
+                Text("\(filteredGames.count) of \(board.count) games")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(PickemsColors.background)
+    }
+
+    private var selectionCaption: String {
+        if selectionLimit == 1 {
+            return selected.isEmpty
+                ? "Pick a game, then Save."
+                : "1 game selected. Save to confirm."
+        }
+        return "\(selected.count) of \(selectionLimit) selected. Save when you're done."
+    }
+
+    private func toggle(_ game: ESPNGame, isNominated: Bool) {
+        guard !isNominated, !isSaving else { return }
+        if let idx = selected.firstIndex(where: { $0.espnEventId == game.espnEventId }) {
+            selected.remove(at: idx)
+            PickemsHaptics.selection()
+            return
+        }
+        if selected.count >= selectionLimit {
+            PickemsHaptics.warning()
+            saveError = selectionLimit == 1
+                ? "You can only pick 1 game. Tap your selected game to change it."
+                : "You can pick \(selectionLimit) games. Tap one to remove it, or Save."
+            return
+        }
+        saveError = nil
+        selected.append(game)
+        PickemsHaptics.selection()
+    }
+
+    private func save() {
+        guard !selected.isEmpty, !isSaving else { return }
+        saveError = nil
+        isSaving = true
+        let games = selected
+        Task {
+            defer { isSaving = false }
+            do {
+                let result = try await onSave(games)
+                if result.collidedEventIds.isEmpty, result.savedCount > 0 {
+                    PickemsHaptics.success()
+                    dismiss()
+                    return
+                }
+                let finishedIds = Set(result.savedEventIds + result.collidedEventIds)
+                selected.removeAll { finishedIds.contains($0.espnEventId) }
+                saveError = result.collisionMessage
+                    ?? "Couldn't save those Selections. Try again."
+                PickemsHaptics.warning()
+            } catch {
+                saveError = UserFacingError.message(for: error, context: .write)
+                    ?? error.localizedDescription
+                PickemsHaptics.warning()
+            }
+        }
     }
 
     private func isFavoriteGame(_ game: ESPNGame) -> Bool {
@@ -300,6 +406,7 @@ struct GameBrowseRow: View {
     let game: ESPNGame
     var isFavoriteHighlight: Bool = false
     var isNominated: Bool = false
+    var isDraftSelected: Bool = false
     var nominatorName: String? = nil
     @Environment(\.themePalette) private var theme
 
@@ -314,13 +421,22 @@ struct GameBrowseRow: View {
                     .accessibilityRemoveTraits(.isButton)
             } else {
                 rowContent
+                    .accessibilityHint(
+                        isDraftSelected
+                            ? "Selected. Tap to remove."
+                            : "Tap to select. Save when you're done."
+                    )
             }
         }
     }
 
     private var rowContent: some View {
         HStack(spacing: 12) {
-            if isFavoriteHighlight {
+            if isDraftSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(theme.accent)
+                    .accessibilityHidden(true)
+            } else if isFavoriteHighlight {
                 Image(systemName: "star.fill")
                     .font(.caption)
                     .foregroundStyle(theme.accent)
@@ -373,6 +489,8 @@ struct GameBrowseRow: View {
 
                 if isNominated {
                     StatusBadge(text: "Taken", color: PickemsColors.textSecondary)
+                } else if isDraftSelected {
+                    StatusBadge(text: "Selected", color: theme.accent)
                 } else {
                     statusLabel
                 }

@@ -3,13 +3,13 @@ import SwiftUI
 /// Weekly commissioner tools. These used to live on Selections / Pickems / Leagues.
 struct CommissionerWeekAdminSections: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.themePalette) private var theme
 
     @Binding var showSelectionDeadlineSheet: Bool
     @Binding var showPickDeadlineSheet: Bool
     @Binding var showAdminGameBrowse: Bool
     @State private var showReopenSelectionsConfirm = false
-    @State private var tieError: String?
-    @State private var resolvingUserId: String?
+    @State private var rankDraft: TieRankDraft?
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var week: WeekSummary? { appState.groupService.currentWeek }
@@ -27,6 +27,23 @@ struct CommissionerWeekAdminSections: View {
                     await appState.groupService.loadAvailableWeeks(groupId: groupId)
                 }
                 await picksVM.ensureTeamRanks(appState: appState)
+            }
+            .sheet(item: $rankDraft) { draft in
+                CommissionerRankTiesSheet(
+                    weekLabel: week?.displayLabel ?? "This week",
+                    entries: draft.entries
+                ) { orderedIds in
+                    guard let groupId = appState.groupService.selectedGroup?.id,
+                          let weekId = week?.id else {
+                        throw GroupService.GroupError.groupNotFound
+                    }
+                    try await appState.groupService.resolveTieGroup(
+                        groupId: groupId,
+                        weekId: weekId,
+                        orderedUserIds: orderedIds
+                    )
+                }
+                .pickemsEnvironment(appState)
             }
         selectionsAdminSection
         slateSection
@@ -83,6 +100,7 @@ struct CommissionerWeekAdminSections: View {
                     if week.isSelectionDeadlinePassed {
                         if uniqueGames < target {
                             Button("Fill Remaining Games") {
+                                appState.picksViewModel.selectionBrowseIntent = .own
                                 showAdminGameBrowse = true
                             }
                             .listRowBackground(PickemsColors.cardBackground)
@@ -131,14 +149,14 @@ struct CommissionerWeekAdminSections: View {
         appState.selectObservedWeek(selected)
     }
 
-    private func tieGroupPrompt(_ group: [StandingEntry]) -> String {
+    private func tieGroupTitle(_ group: [StandingEntry]) -> String {
+        let count = group.count
         let records = Set(group.map { "\($0.weeklyWins)–\($0.weeklyLosses)" })
         if records.count == 1, let record = records.first {
-            let names = LeagueWeekRecapGenerator.joinNames(group.map(\.displayName))
-            return "\(names) \(record) — tap who ranks higher."
+            return "\(count) tied at \(record)"
         }
-        let namedRecords = group.map { "\($0.displayName) \($0.weeklyWins)–\($0.weeklyLosses)" }
-        return "\(LeagueWeekRecapGenerator.joinNames(namedRecords)) — tap who ranks higher."
+        let wins = group.first?.weeklyWins ?? 0
+        return "\(count) tied at \(wins) win\(wins == 1 ? "" : "s")"
     }
 
     private func rollingPickDeadlineButtonTitle(_ week: WeekSummary) -> String {
@@ -305,24 +323,31 @@ struct CommissionerWeekAdminSections: View {
             )
             if !groups.isEmpty {
                 Section {
-                    if let tieError {
-                        Text(tieError)
-                            .foregroundStyle(PickemsColors.warning)
-                            .listRowBackground(PickemsColors.cardBackground)
-                    }
                     ForEach(groups, id: \.tieGroupId) { group in
-                        Text(tieGroupPrompt(group))
-                            .font(.subheadline)
-                            .foregroundStyle(PickemsColors.textSecondary)
-                            .listRowBackground(PickemsColors.cardBackground)
-
-                        ForEach(group) { entry in
-                            Button("\(entry.displayName) ranks higher") {
-                                resolveTie(winner: entry, in: group)
+                        Button {
+                            rankDraft = TieRankDraft(entries: group)
+                        } label: {
+                            HStack(alignment: .center, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(tieGroupTitle(group))
+                                        .foregroundStyle(PickemsColors.textPrimary)
+                                    Text(LeagueWeekRecapGenerator.joinNames(group.map(\.displayName)))
+                                        .font(.caption)
+                                        .foregroundStyle(PickemsColors.textSecondary)
+                                        .lineLimit(2)
+                                }
+                                Spacer(minLength: 8)
+                                Text("Rank")
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(theme.accent)
                             }
-                            .disabled(resolvingUserId != nil)
-                            .listRowBackground(PickemsColors.cardBackground)
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(
+                            "\(tieGroupTitle(group)), \(LeagueWeekRecapGenerator.joinNames(group.map(\.displayName))). Rank."
+                        )
+                        .accessibilityHint("Opens a list. Drag to set This Week order, then save.")
+                        .listRowBackground(PickemsColors.cardBackground)
                     }
                 } header: {
                     HStack {
@@ -333,29 +358,6 @@ struct CommissionerWeekAdminSections: View {
                 } footer: {
                     Text("Ranks this week only. Head-to-head leagues break ties automatically.")
                 }
-            }
-        }
-    }
-
-    private func resolveTie(winner: StandingEntry, in group: [StandingEntry]) {
-        guard let groupId = appState.groupService.selectedGroup?.id,
-              let weekId = week?.id else { return }
-        tieError = nil
-        resolvingUserId = winner.id
-        Task {
-            defer { resolvingUserId = nil }
-            do {
-                try await appState.groupService.resolveTie(
-                    groupId: groupId,
-                    weekId: weekId,
-                    winnerUserId: winner.id,
-                    amongUserIds: group.map(\.id)
-                )
-                PickemsHaptics.success()
-            } catch {
-                tieError = UserFacingError.message(for: error, context: .write)
-                    ?? error.localizedDescription
-                PickemsHaptics.warning()
             }
         }
     }
