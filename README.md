@@ -51,11 +51,13 @@ PickemsWatch/            watchOS glance sources
 firebase/
   firestore.rules
   functions/             Slate lock, scoring, push, season close
-web/                     Marketing + invite landing (not a member app)
-docs/                    Including web architecture assessment
+web/                     Marketing + invite landing (not a member app; not live on pickems.app)
+docs/                    Including domain ownership and web architecture
 ```
 
-Web replica assessment (iOS + website on the same Firebase backend, Vercel Hobby): [docs/WEB_ARCHITECTURE_ASSESSMENT.md](docs/WEB_ARCHITECTURE_ASSESSMENT.md).
+**`pickems.app` is not ours.** Do not point App Store, DNS, Cloudflare, or associated domains at it. Details: [docs/DOMAIN.md](docs/DOMAIN.md).
+
+Web replica assessment (iOS + website on the same Firebase backend, Vercel Hobby): [docs/WEB_ARCHITECTURE_ASSESSMENT.md](docs/WEB_ARCHITECTURE_ASSESSMENT.md). The live admin/join host is Firebase Hosting (`pickems-fb.web.app`), not `pickems.app`.
 
 ## 2.0 Features
 

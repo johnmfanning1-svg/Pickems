@@ -33,7 +33,7 @@ Bootstrap the first admin from a machine with a service-account key:
 
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS=~/secrets/pickems-sa.json
-node firebase/admin-tools/set-admin.mjs john@pickems.app
+node firebase/admin-tools/set-admin.mjs johnmfanning1@gmail.com
 ```
 
 After that, grants and revokes go through the `setAdminRole` callable. A claim
