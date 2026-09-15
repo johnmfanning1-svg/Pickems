@@ -15,8 +15,10 @@ import { NotFoundPage } from "@/pages/NotFoundPage";
 import { WeekPicksPage } from "@/pages/WeekPicksPage";
 
 /**
- * Hosting rewrites every path to /index.html, so browser history routing works
- * without hash URLs. `RequireAdmin` wraps everything except /login.
+ * Hosting rewrites unmatched paths to /index.html so browser history routing
+ * works without hash URLs. `/join` and `/support` are static HTML and are
+ * rewritten to those files before this catch-all. `RequireAdmin` wraps
+ * everything except /login.
  */
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },

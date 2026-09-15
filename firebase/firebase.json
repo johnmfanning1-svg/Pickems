@@ -38,6 +38,14 @@
         "destination": "/join.html"
       },
       {
+        "source": "/support",
+        "destination": "/support.html"
+      },
+      {
+        "source": "/support/**",
+        "destination": "/support.html"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
@@ -71,6 +79,15 @@
       },
       {
         "source": "/index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/support.html",
         "headers": [
           {
             "key": "Cache-Control",

@@ -1,6 +1,7 @@
 # Pickems web admin portal
 
 Ops console for Pickems, deployed to Firebase Hosting at `https://pickems-fb.web.app`.
+Public support (not this SPA) is `https://pickems-fb.web.app/support` — see `docs/DOMAIN.md`.
 Vite 5 + React 18 + TypeScript + Tailwind 3 + React Router 6 + Firebase JS SDK 10
 (modular).
 
@@ -98,6 +99,8 @@ Grant the first admin from a machine with a service-account key (see
 | `/audit/log` | append-only admin action log | `adminAudit` |
 | `/moderation` | messages with `reportCount > 0` | `messages` collection group + `reports` |
 
+Hosting also serves static files that are **not** this router: `/join` (`web/join.html`) and `/support` (`web/support.html`). Those rewrites run before `**` → `/index.html`.
+
 ## Conventions
 
 - **Every mutating action confirms first**, and the dialog names the target.
@@ -124,7 +127,8 @@ cd .. && firebase deploy --only hosting
 ```
 
 Then sign in at `https://pickems-fb.web.app` and **confirm a non-admin account is
-rejected** before handing the URL to anyone.
+rejected** before handing the URL to anyone. Confirm `/support` still serves the
+public contact page and is not swallowed by the SPA.
 
 `hosting.public` is `admin/dist`, with `index.html` set to `no-store` and hashed
 assets set to immutable — so a deploy is picked up on the next page load without
