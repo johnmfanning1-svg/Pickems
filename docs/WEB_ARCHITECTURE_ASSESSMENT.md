@@ -1,11 +1,13 @@
 # Pickems web replica — architecture assessment
 
 **Date:** 28 August 2026  
+**Correction (15 September 2026):** `pickems.app` is **not** a domain we own. This assessment assumed it was our marketing/Universal Link host. It is a third-party Laravel + Discord site registered in October 2024. Do not plan DNS, Vercel, or Firebase Hosting on that name. Source of truth: [DOMAIN.md](DOMAIN.md).
+
 **Question:** If we replicated the entire current Pickems iOS app as a dedicated website to work in tandem with the iOS app, are we set up architecturally to support this? Context: Vercel Hobby plan is now available.
 
 **Verdict:** Yes. The backend is already a multi-client Firebase system. A member-facing website would talk to the same Auth, Firestore, Storage, and Cloud Functions as iOS. Vercel would host the frontend only. It would not replace Firebase, and it is not required for the architecture to work.
 
-The real cost is porting Swift client logic into a web app, plus a short list of platform glue (Apple Sign In on the web, authorized domains, ESPN CORS, push tokens, and `pickems.app` routing). Widgets, Live Activities, and Apple Watch have no web equivalent.
+The real cost is porting Swift client logic into a web app, plus a short list of platform glue (Apple Sign In on the web, authorized domains, ESPN CORS, push tokens, and routing on a hostname **we register**). Widgets, Live Activities, and Apple Watch have no web equivalent.
 
 ---
 
@@ -129,10 +131,10 @@ A member site would register a **second web app** (or reuse the existing web app
 
 | Surface | Stack | URL / path | What it is |
 |---|---|---|---|
-| Marketing homepage | Static HTML | `web/index.html` → `https://pickems.app/` | App Store landing |
-| Invite landing | Static HTML | `web/join.html` → `/join?code=` | Tries `pickems://join`, falls back to App Store |
-| Admin portal | Vite + React 18 + Firebase JS 10 | `firebase/admin` on Firebase Hosting | Super-admin only |
-| AASA | JSON | `web/.well-known/apple-app-site-association` | Universal Links for `/join` only |
+| Marketing homepage | Static HTML | `web/index.html` (intended host TBD) | App Store landing — **not live**; `pickems.app` is not ours, see [DOMAIN.md](DOMAIN.md) |
+| Invite landing | Static HTML | `web/join.html` on Firebase Hosting `/join?code=` | Tries `pickems://join`, falls back to App Store |
+| Admin portal | Vite + React 18 + Firebase JS 10 | `https://pickems-fb.web.app` | Super-admin only |
+| AASA | JSON | Firebase Hosting `/.well-known/apple-app-site-association` | Universal Links for `/join` only; works on `pickems-fb.web.app`, **not** on `pickems.app` |
 
 There is **no Next.js, no Vercel config, and no member-facing SPA** today.
 
@@ -190,21 +192,21 @@ A well-designed member site would keep **almost all traffic on the Firebase JS S
 
 ### Domain split (do this even if Vercel is unused)
 
-Keep concerns on separate hosts so Universal Links and the admin portal do not collide with a catch-all SPA.
+**Do not use `pickems.app`.** Register a new hostname, then keep concerns on separate hosts so Universal Links and the admin portal do not collide with a catch-all SPA. See [DOMAIN.md](DOMAIN.md).
 
 | Host | Role |
 |---|---|
-| `pickems.app` or `app.pickems.app` | Member website (Vercel **or** second Firebase Hosting target) |
+| A domain we register (TBD) | Member website (Vercel **or** second Firebase Hosting target) |
 | `pickems-fb.web.app` | Admin portal + AASA + `/join` fallback (keep as-is unless you migrate carefully) |
-| iOS associated domains | Already: `pickems.app`, `pickems-fb.web.app`, `pickems-fb.firebaseapp.com` |
+| iOS associated domains we can prove | Today: `pickems-fb.web.app`, `pickems-fb.firebaseapp.com`. `pickems.app` is in entitlements by mistake and 404s AASA. |
 
-If the member app lives at `pickems.app`:
+If the member app lives on a hostname we own:
 
 - Serve AASA from that domain (`/.well-known/apple-app-site-association`) or iOS Universal Links break.
 - `/join?code=` must keep working for people without the app **and** for people with the app (current `join.html` + AASA paths `/join`, `/join/*`).
-- Do not put the admin SPA behind the same `** → index.html` rewrite as members; admins should stay on `pickems-fb.web.app` (or `admin.pickems.app`).
+- Do not put the admin SPA behind the same `** → index.html` rewrite as members; admins should stay on `pickems-fb.web.app` (or an `admin.` subdomain we register).
 
-`DeepLinkRouter.swift` already treats `pickems.app` and `www.pickems.app` as Universal Link hosts. Route names to keep in parity: `/join`, `/pickems`, `/selections`, `/live`, `/leagues`, `/discover` (plus `?code=` / `?group=`).
+`DeepLinkRouter.swift` still lists `pickems.app` as a Universal Link host from the original mistake. Route names to keep in parity on a domain we own: `/join`, `/pickems`, `/selections`, `/live`, `/leagues`, `/discover` (plus `?code=` / `?group=`).
 
 ---
 
@@ -294,7 +296,7 @@ Backend (mostly console + small functions change, not a rewrite):
 - [ ] Decide push: skip for v1, **or** change `users/{uid}` token shape and `notifications.ts` to send APNs + webpush without clobbering iOS.
 - [ ] Decide ESPN: proxy vs Firestore-only live scores.
 - [ ] Keep admin portal and AASA reachable; do not swallow them in a member SPA rewrite.
-- [ ] Confirm `pickems.app` DNS: Vercel vs Firebase Hosting vs split (`app.` vs apex).
+- [ ] Confirm DNS on a hostname we register (not `pickems.app`): Vercel vs Firebase Hosting vs split. See [DOMAIN.md](DOMAIN.md).
 
 Product / client (the actual project):
 
@@ -332,6 +334,7 @@ Reimplementing iOS service-layer behavior in TypeScript with strict fidelity to 
 | TS document types | `firebase/admin/src/lib/types.ts` |
 | Web Firebase config | `firebase/admin/.env.example`, `firebase/admin/src/lib/firebase.ts` |
 | Hosting / AASA / join | `firebase/firebase.json`, `firebase/scripts/stage-hosting.sh`, `web/` |
+| Domain ownership (not pickems.app) | `docs/DOMAIN.md` |
 | iOS paths | `Pickems/Core/Networking/FirestorePaths.swift` |
 | iOS services | `Pickems/Core/Services/*.swift` |
 | Deep links | `Pickems/Core/Utilities/DeepLinkRouter.swift` |

@@ -47,6 +47,9 @@ enum DeepLinkRouter {
     nonisolated private static func isUniversalLinkHost(_ host: String?) -> Bool {
         guard let host else { return false }
         switch host.lowercased() {
+        // pickems.app is NOT our domain (registered Oct 2024 by someone else).
+        // Kept so old binaries still parse those URLs; do not add DNS or AASA for it.
+        // See docs/DOMAIN.md.
         case "pickems.app",
              "www.pickems.app",
              "pickems-fb.web.app",

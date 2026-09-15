@@ -7,8 +7,8 @@
  * account, and is the only privileged path that runs off a developer machine.
  *
  *   export GOOGLE_APPLICATION_CREDENTIALS=~/secrets/pickems-sa.json
- *   node firebase/admin-tools/set-admin.mjs john@pickems.app
- *   node firebase/admin-tools/set-admin.mjs john@pickems.app --revoke
+ *   node firebase/admin-tools/set-admin.mjs johnmfanning1@gmail.com
+ *   node firebase/admin-tools/set-admin.mjs johnmfanning1@gmail.com --revoke
  *
  * Never move the service-account JSON into this repo. See Risk R2.
  */

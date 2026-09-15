@@ -26,6 +26,8 @@ Read the matching SOP before acting (repo root):
 
 Never raise `appConfig/live.minimumBuild` unless the user explicitly asked. Ceiling is the **App Store** build (not TestFlight-only). Never set `resetRatingsRequest`. Never commit demo passwords. Never leave review credentials in `/tmp` JS files.
 
+**`pickems.app` is not ours.** Do not set App Store support URL, associated domains, or DNS to that hostname. See `docs/DOMAIN.md`.
+
 ## Identity (do not rediscover)
 
 | | |

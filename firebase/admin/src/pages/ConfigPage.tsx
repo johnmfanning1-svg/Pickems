@@ -360,7 +360,7 @@ function AdminRolesCard() {
           <TextInput
             value={identifier}
             onChange={(event) => setIdentifier(event.target.value)}
-            placeholder="owner@pickems.app"
+            placeholder="owner@example.com"
             className="w-80"
           />
         </Field>

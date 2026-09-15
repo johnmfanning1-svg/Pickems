@@ -4,6 +4,8 @@
 **Bundle ID:** `FannypackInc.Pickems` · **Apple ID:** `6785697079`
 **Validation target:** TestFlight, tested by PO in **Google Chrome** (App Store Connect web) — not the Cursor browser.
 
+**Correction (Sep 2026):** Lane K’s `pickems.app` SEO and `john@pickems.app` examples assumed a domain we do not own. See [DOMAIN.md](DOMAIN.md). This plan is historical; do not execute those hostname steps.
+
 ---
 
 ## 0. Ground truth established before planning

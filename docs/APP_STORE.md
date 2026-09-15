@@ -17,6 +17,7 @@ ASO copy: [ASO.md](ASO.md) · `fastlane/metadata/en-US/`.
 | Release type | `AFTER_APPROVAL` (manual release after Apple approves) |
 | Connect UI | [iOS version deliverable](https://appstoreconnect.apple.com/apps/6785697079/distribution/ios/version/deliverable) |
 | Encryption | `ITSAppUsesNonExemptEncryption` = false |
+| Support URL | `fastlane/metadata/en-US/support_url.txt` currently says `https://pickems.app` — **not our domain**. Do not treat it as a Fannypack site. See [DOMAIN.md](DOMAIN.md). |
 
 Demo account **email** (already in Connect): `review.pickems.appstore@gmail.com`. Copy the password from the previous version’s `appStoreReviewDetail` over iris. **Never commit it. Delete `/tmp` scripts that contain it when the submit is done.**
 
@@ -30,6 +31,7 @@ Demo account **email** (already in Connect): `review.pickems.appstore@gmail.com`
 - Use Cursor’s browser for Connect (Apple login blocks it)
 - Create a new version while another iOS version is `WAITING_FOR_REVIEW` or `IN_REVIEW` — cancel that review first
 - Re-run production Week 0 migration, call ESPN with `week=0`, or auto-migrate on client launch
+- Point support URL, associated domains, or hosting at `pickems.app` (not ours — [DOMAIN.md](DOMAIN.md))
 
 ---
 
