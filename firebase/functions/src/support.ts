@@ -1,4 +1,4 @@
-import * as admin from "firebase-admin";
+import { FieldValue, Firestore, getFirestore } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
 import { defineString } from "firebase-functions/params";
 import { logger } from "firebase-functions";
@@ -34,8 +34,8 @@ const supportWeb3FormsKey = defineString("SUPPORT_WEB3FORMS_ACCESS_KEY", {
 
 const rateLimit = new SlidingWindowRateLimit();
 
-function db(): admin.firestore.Firestore {
-  return admin.firestore();
+function db(): Firestore {
+  return getFirestore();
 }
 
 function wantsJson(req: { headers: Record<string, unknown>; method?: string }): boolean {
@@ -123,7 +123,7 @@ async function persistSupportMessage(
     message: payload.message,
     deliveredVia,
     clientIp: ip,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   });
 }
 
