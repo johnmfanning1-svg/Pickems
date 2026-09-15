@@ -28,6 +28,43 @@
       "firebase.json",
       "**/node_modules/**"
     ],
+    "redirects": [
+      {
+        "source": "/login",
+        "destination": "/admin/login",
+        "type": 301
+      },
+      {
+        "source": "/groups",
+        "destination": "/admin/groups",
+        "type": 301
+      },
+      {
+        "source": "/groups/**",
+        "destination": "/admin/groups/:splat",
+        "type": 301
+      },
+      {
+        "source": "/config",
+        "destination": "/admin/config",
+        "type": 301
+      },
+      {
+        "source": "/support-inbox",
+        "destination": "/admin/support-inbox",
+        "type": 301
+      },
+      {
+        "source": "/audit/**",
+        "destination": "/admin/audit/:splat",
+        "type": 301
+      },
+      {
+        "source": "/moderation",
+        "destination": "/admin/moderation",
+        "type": 301
+      }
+    ],
     "rewrites": [
       {
         "source": "/join",
@@ -53,8 +90,12 @@
         }
       },
       {
-        "source": "**",
-        "destination": "/index.html"
+        "source": "/admin",
+        "destination": "/admin/index.html"
+      },
+      {
+        "source": "/admin/**",
+        "destination": "/admin/index.html"
       }
     ],
     "headers": [
@@ -86,6 +127,15 @@
       },
       {
         "source": "/index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/admin/index.html",
         "headers": [
           {
             "key": "Cache-Control",

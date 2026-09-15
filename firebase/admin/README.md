@@ -1,7 +1,7 @@
 # Pickems web admin portal
 
-Ops console for Pickems, deployed to Firebase Hosting at `https://pickems-fb.web.app`.
-Public support (not this SPA) is `https://pickems-fb.web.app/support` — see `docs/DOMAIN.md`.
+Ops console for Pickems, deployed to Firebase Hosting at `https://pickems-fb.web.app/admin/`.
+Public homepage (not this SPA) is `https://pickems-fb.web.app/`. Public support is `https://pickems-fb.web.app/support` — see `docs/DOMAIN.md`.
 Vite 5 + React 18 + TypeScript + Tailwind 3 + React Router 6 + Firebase JS SDK 10
 (modular).
 
@@ -51,7 +51,7 @@ why `npm run build` works on a clean checkout — a placeholder build renders a
 |--|--|
 | `npm run dev` | Vite dev server on :5173 against **production** Firebase |
 | `npm run dev:emulators` | same, but against the local emulator suite |
-| `npm run build` | `tsc --noEmit` then `vite build` into `dist/` (release gate G3) |
+| `npm run build` | `tsc --noEmit` then `vite build` into `dist/admin/` (release gate G3) |
 | `npm run typecheck` | types only |
 | `npm run lint` | eslint, zero warnings tolerated |
 | `npm run preview` | serves the built `dist/` locally |
@@ -62,6 +62,8 @@ why `npm run build` works on a clean checkout — a placeholder build renders a
 cd firebase && firebase emulators:start          # auth 9099, firestore 8080, functions 5001
 cd admin && npm run dev:emulators
 ```
+
+Vite `base` is `/admin/`, so the local app is `http://localhost:5173/admin/`.
 
 The emulator Auth UI has no custom claims editor, so create a user in the
 emulator and set the claim through the emulator's REST API, or run against
@@ -75,7 +77,7 @@ mode and red in production.
    moments ago is absent from the cached token.
 3. `claims.admin !== true` → immediate `signOut()` and
    "This account is not authorized." No half-authenticated session is left behind.
-4. `RequireAdmin` wraps every route except `/login`.
+4. `RequireAdmin` wraps every route except `/login` (browser URL `/admin/login`).
 5. The claim is re-checked on `onIdTokenChanged`, which fires on the hourly token
    refresh — so a revoked admin loses access within the hour without anyone having
    to sign them out.
@@ -84,6 +86,8 @@ Grant the first admin from a machine with a service-account key (see
 `../README.md`), then use `/config` → **Super-admin roles** for everyone after.
 
 ## Routes
+
+In-app paths below are relative to basename `/admin` (so `/login` is `https://pickems-fb.web.app/admin/login`).
 
 | Route | Purpose | Backing |
 |--|--|--|
@@ -100,7 +104,7 @@ Grant the first admin from a machine with a service-account key (see
 | `/audit/log` | append-only admin action log | `adminAudit` |
 | `/moderation` | messages with `reportCount > 0` | `messages` collection group + `reports` |
 
-Hosting also serves static files that are **not** this router: `/join` (`web/join.html`) and `/support` (`web/support.html`). `/api/support` rewrites to the `submitSupport` function. Those rewrites run before `**` → `/index.html`.
+Hosting also serves static files that are **not** this router: `/` (`web/index.html` marketing), `/join` (`web/join.html`), and `/support` (`web/support.html`). `/api/support` rewrites to the `submitSupport` function. `/admin` and `/admin/**` rewrite to `/admin/index.html`.
 
 ## Conventions
 
@@ -127,14 +131,14 @@ cd firebase/admin && npm ci && npm run build
 cd .. && firebase deploy --only hosting
 ```
 
-Then sign in at `https://pickems-fb.web.app` and **confirm a non-admin account is
-rejected** before handing the URL to anyone. Confirm `/support` still serves the
-public contact page and is not swallowed by the SPA.
+Then sign in at `https://pickems-fb.web.app/admin/` and **confirm a non-admin account is
+rejected** before handing the URL to anyone. Confirm `/` still serves the
+marketing homepage and `/support` still serves the public contact page.
 
-`hosting.public` is `admin/dist`, with `index.html` set to `no-store` and hashed
+`hosting.public` is `admin/dist`, with marketing `index.html` and `/admin/index.html` set to `no-store` and hashed
 assets set to immutable — so a deploy is picked up on the next page load without
 a stale-bundle window. `dist/` is gitignored except for a tracked `.gitkeep`,
-which the `postbuild` script restores after Vite empties the directory.
+which the `postbuild` script restores after Vite empties `dist/admin/`.
 
 ## Known gaps
 
