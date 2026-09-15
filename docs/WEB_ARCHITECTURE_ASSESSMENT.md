@@ -7,7 +7,7 @@
 
 The real cost is porting Swift client logic into a web app, plus a short list of platform glue (Apple Sign In on the web, authorized domains, ESPN CORS, push tokens, and public hostname routing). Widgets, Live Activities, and Apple Watch have no web equivalent.
 
-**Domain note (2026-09):** `pickems.app` is **not** a Pickems domain. Do not register it or publish it as Support / Marketing URL. Public pages today are on Firebase Hosting: `https://pickems-fb.web.app/support` and `/join`. See [DOMAIN.md](DOMAIN.md).
+**Domain note (2026-09):** `pickems.app` is **not** a Pickems domain. Do not register it or publish it as Support / Marketing URL. Public pages today are on Firebase Hosting: `https://pickems-fb.web.app/` (marketing), `/support`, and `/join`. See [DOMAIN.md](DOMAIN.md).
 
 ---
 
@@ -131,10 +131,10 @@ A member site would register a **second web app** (or reuse the existing web app
 
 | Surface | Stack | URL / path | What it is |
 |---|---|---|---|
-| Marketing homepage | Static HTML | `web/index.html` (not currently the Hosting `/` — that is the admin SPA) | App Store landing copy; canonicals point at `pickems-fb.web.app` |
+| Marketing homepage | Static HTML | `web/index.html` → `https://pickems-fb.web.app/` | App Store landing with screenshots; canonicals point at `pickems-fb.web.app/` |
 | Invite landing | Static HTML | `web/join.html` → `https://pickems-fb.web.app/join?code=` | Tries `pickems://join`, falls back to App Store |
 | Support | Static HTML + Functions | `web/support.html` → `https://pickems-fb.web.app/support` | App Store Support URL; form POSTs to `submitSupport` (inbox is server-side) |
-| Admin portal | Vite + React 18 + Firebase JS 10 | `firebase/admin` on Firebase Hosting (`/`) | Super-admin only |
+| Admin portal | Vite + React 18 + Firebase JS 10 | `firebase/admin` on Firebase Hosting (`/admin/`) | Super-admin only |
 | AASA | JSON | `web/.well-known/apple-app-site-association` | Universal Links for `/join` only |
 
 There is **no Next.js, no Vercel config, and no member-facing SPA** today.
@@ -197,7 +197,7 @@ Keep concerns on separate hosts so Universal Links and the admin portal do not c
 
 | Host | Role |
 |---|---|
-| `pickems-fb.web.app` | **What we actually operate today:** admin SPA at `/`, public `/support`, `/join`, AASA |
+| `pickems-fb.web.app` | **What we actually operate today:** marketing `/`, admin SPA at `/admin/`, public `/support`, `/join`, AASA |
 | `pickems.app` | **Not ours.** Do not buy, DNS, or list as App Store Support/Marketing URL. See [DOMAIN.md](DOMAIN.md). |
 
 If the member app lives at `pickems.app`:

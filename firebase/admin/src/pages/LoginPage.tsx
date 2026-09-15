@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { UNAUTHORIZED_MESSAGE, useAuth } from "@/auth/AuthContext";
+import { toRouterPath } from "@/lib/adminBase";
 import { Banner, ErrorBanner } from "@/components/Banner";
 import { Button } from "@/components/Button";
 import { Field, TextInput } from "@/components/Fields";
@@ -18,7 +19,7 @@ export function LoginPage() {
 
   if (status === "loading") return <FullPageSpinner label="Checking session…" />;
   if (status === "admin") {
-    const from = (location.state as { from?: string } | null)?.from;
+    const from = toRouterPath((location.state as { from?: string } | null)?.from ?? "/");
     return <Navigate to={from && from !== "/login" ? from : "/"} replace />;
   }
 

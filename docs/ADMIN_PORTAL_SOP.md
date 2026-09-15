@@ -1,7 +1,8 @@
 # Pickems Admin Portal — Standard Operating Procedure
 
-> **URL:** Deployed to Firebase Hosting at `https://pickems-fb.web.app`.  
+> **URL:** Deployed to Firebase Hosting at `https://pickems-fb.web.app/admin/`.  
 > **Access:** Requires the `admin: true` Firebase Auth custom claim. Non-admins are signed out immediately on login.  
+> **Public homepage (not this portal):** `https://pickems-fb.web.app/` — App Store marketing.  
 > **Public support page (not this portal):** `https://pickems-fb.web.app/support` — form delivery is the `submitSupport` function, not a public mailbox. See [DOMAIN.md](DOMAIN.md).
 
 ---
@@ -232,7 +233,7 @@ Merge arbitrary keys into `appConfig/live` without touching the typed fields abo
 
 **Route:** `/support-inbox`
 
-The public page at `https://pickems-fb.web.app/support` posts to the `submitSupport` Cloud Function. Messages land in `supportMessages` (admin-only). Optionally set **Forward copies to** here; that writes `adminConfig/support.inboxEmail`, which only the admin claim can read.
+The public page at `https://pickems-fb.web.app/support` posts to the `submitSupport` Cloud Function. Messages land in `supportMessages` (admin-only). Optionally set **Forward copies to** here; that writes `adminConfig/support.inboxEmail`, which only the admin claim can read. In the portal this screen is `/admin/support-inbox`.
 
 Do not put a personal mailbox, `mailto:`, or FormSubmit URL on `web/support.html`.
 
@@ -368,7 +369,7 @@ firebase deploy --only functions
 # 4. Build and deploy the web portal
 cd admin && npm run build && cd ..
 firebase deploy --only hosting
-# Also publishes /join and /support from web/ via scripts/stage-hosting.sh
+# Also publishes / , /join, and /support from web/ via scripts/stage-hosting.sh
 ```
 
 **Order matters:** deploy indexes before rules (rules may reference new indexes), and rules before functions (functions may write to paths the new rules protect).

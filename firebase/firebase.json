@@ -28,6 +28,63 @@
       "firebase.json",
       "**/node_modules/**"
     ],
+    "redirects": [
+      {
+        "source": "/login",
+        "destination": "/admin/login",
+        "type": 301
+      },
+      {
+        "source": "/groups",
+        "destination": "/admin/groups",
+        "type": 301
+      },
+      {
+        "source": "/groups/:id",
+        "destination": "/admin/groups/:id",
+        "type": 301
+      },
+      {
+        "source": "/groups/:id/members",
+        "destination": "/admin/groups/:id/members",
+        "type": 301
+      },
+      {
+        "source": "/groups/:id/weeks",
+        "destination": "/admin/groups/:id/weeks",
+        "type": 301
+      },
+      {
+        "source": "/groups/:id/weeks/:weekId/picks",
+        "destination": "/admin/groups/:id/weeks/:weekId/picks",
+        "type": 301
+      },
+      {
+        "source": "/config",
+        "destination": "/admin/config",
+        "type": 301
+      },
+      {
+        "source": "/support-inbox",
+        "destination": "/admin/support-inbox",
+        "type": 301
+      },
+      {
+        "source": "/audit/weeks",
+        "destination": "/admin/audit/weeks",
+        "type": 301
+      },
+      {
+        "source": "/audit/log",
+        "destination": "/admin/audit/log",
+        "type": 301
+      },
+      {
+        "source": "/moderation",
+        "destination": "/admin/moderation",
+        "type": 301
+      }
+    ],
     "rewrites": [
       {
         "source": "/join",
@@ -53,8 +110,12 @@
         }
       },
       {
-        "source": "**",
-        "destination": "/index.html"
+        "source": "/admin",
+        "destination": "/admin/index.html"
+      },
+      {
+        "source": "/admin/**",
+        "destination": "/admin/index.html"
       }
     ],
     "headers": [
@@ -86,6 +147,15 @@
       },
       {
         "source": "/index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/admin/index.html",
         "headers": [
           {
             "key": "Cache-Control",

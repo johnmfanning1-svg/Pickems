@@ -78,7 +78,7 @@ Apple requires device-class screenshots for review. Prioritize:
 | Description | Rewritten around nomination slate, ATS, standings, awards, widgets, chat |
 | Promotional text | Seasonal / feature highlight (editable without a new binary) |
 | What's New | Feedback-release notes covering AUTH → ASO workstreams |
-| SEO | `web/` static pages on Firebase Hosting (`https://pickems-fb.web.app/support`). **Do not use pickems.app** — we do not own it. See [DOMAIN.md](DOMAIN.md). |
+| SEO | `web/` static pages on Firebase Hosting (`https://pickems-fb.web.app/` marketing home, `/support`). **Do not use pickems.app** — we do not own it. See [DOMAIN.md](DOMAIN.md). |
 | Review risk | Chat moderation called out for Guideline 1.2 — see `docs/APP_STORE.md` |
 
 **Next ASO pass ideas (post-2.3.0):** screenshot A/B on frame 1 (filters vs nomination), subtitle test (`ATS leagues for CFB` if chars allow after localization), add `en-GB` keyword set.

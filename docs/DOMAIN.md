@@ -4,11 +4,12 @@
 
 | Use | URL |
 |--|--|
+| **Marketing homepage** | `https://pickems-fb.web.app/` |
 | App Store **Support URL** | `https://pickems-fb.web.app/support` |
 | Support form (same page) | `https://pickems-fb.web.app/support` |
 | Invite landing | `https://pickems-fb.web.app/join?code=` |
-| Admin portal (not public marketing) | `https://pickems-fb.web.app/` |
-| Admin support inbox (signed-in admins) | `https://pickems-fb.web.app/support-inbox` |
+| Admin portal (not public marketing) | `https://pickems-fb.web.app/admin/` |
+| Admin support inbox (signed-in admins) | `https://pickems-fb.web.app/admin/support-inbox` |
 | Privacy Policy (today) | `https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/main/docs/privacy-policy.html` |
 | Terms of Use (today) | `https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/main/docs/terms.html` |
 
@@ -20,7 +21,7 @@ Firebase project: `pickems-fb`. Default Hosting site: `pickems-fb.web.app` / `pi
 
 ## Support page
 
-Static HTML at `web/support.html`, copied into the Hosting bundle next to `/join` by `firebase/scripts/stage-hosting.sh`. Hosting rewrites `/support` → `/support.html` **before** the admin SPA catch-all (`**` → `/index.html`).
+Static HTML at `web/support.html`, copied into the Hosting bundle next to `/` and `/join` by `firebase/scripts/stage-hosting.sh`. Hosting rewrites `/support` → `/support.html` and `/admin/**` → `/admin/index.html`. Public `/` is `web/index.html`, not the admin SPA.
 
 **Do not put a personal mailbox, `mailto:`, or FormSubmit `/you@gmail.com` URL on this page.** The form POSTs to `/api/support`, which Hosting rewrites to the `submitSupport` Cloud Function. That function:
 
@@ -32,7 +33,7 @@ The recipient is never shipped in HTML, git, or `appConfig/live` (that document 
 
 | Where | How |
 |--|--|
-| Admin portal | `/support-inbox` → **Forward copies to** (writes `adminConfig/support.inboxEmail`, admin-claim only) |
+| Admin portal | `/admin/support-inbox` → **Forward copies to** (writes `adminConfig/support.inboxEmail`, admin-claim only) |
 | Functions env | `SUPPORT_INBOX_EMAIL` in `firebase/functions/.env.pickems-fb` or Cloud Console (see `firebase/functions/.env.example`) |
 | Web3Forms key | `SUPPORT_WEB3FORMS_ACCESS_KEY` — preferred mail path when set; the key is not an email address |
 
@@ -53,7 +54,7 @@ Already in this repo (source of truth for the next metadata upload):
 Must be changed **manually in App Store Connect** (or by running `bundle exec fastlane metadata`) if the live listing still shows `pickems.app`:
 
 1. [App Information](https://appstoreconnect.apple.com/apps/6785697079/distribution/info) → **Support URL** → `https://pickems-fb.web.app/support`
-2. Leave **Marketing URL** empty unless we actually ship a public homepage we control (do not put `pickems.app` there).
+2. After Hosting ships the public homepage, **Marketing URL** can be `https://pickems-fb.web.app/` (do not put `pickems.app` there).
 3. Privacy URL can stay on the GitHub raw HTML until we host `docs/privacy-policy.html` on Firebase Hosting. That policy must link to `/support`, not a personal mailbox.
 
 Connect work uses logged-in Chrome + iris — see [APP_STORE.md](APP_STORE.md). Cursor’s browser cannot complete Apple login.
@@ -71,7 +72,7 @@ cd firebase
 npx -y firebase-tools@latest deploy --only functions:submitSupport,hosting --project pickems-fb
 ```
 
-`firebase.json` `predeploy` runs `scripts/stage-hosting.sh`, which typechecks/builds the admin portal and copies `web/join.html`, `web/support.html`, AASA, `robots.txt`, and `sitemap.xml` into `admin/dist`.
+`firebase.json` `predeploy` runs `scripts/stage-hosting.sh`, which typechecks/builds the admin portal into `admin/dist/admin/` and copies `web/index.html`, screenshot assets, `web/join.html`, `web/support.html`, AASA, `robots.txt`, and `sitemap.xml` into `admin/dist`.
 
 A full functions deploy (`deploy --only functions`) also ships `submitSupport`. Its env params default to empty strings, so missing inbox config does **not** block scoring-function deploys.
 
