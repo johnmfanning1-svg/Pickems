@@ -23,7 +23,8 @@ Agent entry point: `.cursor/skills/ship-ios/SKILL.md`. Related: [TESTFLIGHT.md](
 - Raise the gate unless the user **explicitly** asked to force a minimum build / force-update
 - Set `minimumBuild` **above** the build currently downloadable on the **App Store**
 - Treat a TestFlight-only build as a safe ceiling — the gate’s button does not open TestFlight
-- Raise it while the new version is still `WAITING_FOR_REVIEW`, `PENDING_DEVELOPER_RELEASE`, or processing
+- Raise it while the new version is still `WAITING_FOR_REVIEW`, `PENDING_DEVELOPER_RELEASE` (**Apple Approved** is this state), or processing
+- Treat “Apple approved the TestFlight build” as store-live. Release type is `AFTER_APPROVAL`; the public listing stays on the previous version until someone **releases** it
 - Overwrite the rest of `appConfig/live` (chat flags, announcements). Merge `minimumBuild` only
 - Leave a typo string in the field and assume it blocks anyone — unreadable / non-positive values **fail open** (gate off)
 
@@ -56,15 +57,46 @@ That is the maximum. You may set a **lower** already-shipped store build if you 
 minimumBuild  ≤  App Store CFBundleVersion
 ```
 
-If 3.2.3 is approved but not yet released (`AFTER_APPROVAL`), the live listing is still the previous version. Wait until that version is actually on the store, then raise the gate.
+If a version is approved but not yet released (`AFTER_APPROVAL` / `PENDING_DEVELOPER_RELEASE`), the live listing is still the previous version. Wait until that version is actually on the store, then raise the gate.
+
+The force-update button opens `https://apps.apple.com/app/id6785697079`. If `minimumBuild` is **above** what that URL installs, users are stuck on **Update required** with no TestFlight escape.
+
+### Public store check (required; no Connect login)
+
+```bash
+python3 - <<'PY'
+import json, urllib.request
+with urllib.request.urlopen("https://itunes.apple.com/lookup?id=6785697079") as r:
+    app = json.load(r)["results"][0]
+print(app["version"], app["currentVersionReleaseDate"])
+PY
+```
+
+`version` is the marketing string (`3.3.2`), not the build. Convention: `3.3.2` ↔ build `332`. Do not write `332` until this lookup prints `3.3.2`.
+
+---
+
+## Worked example: force 332 (3.3.2)
+
+Use this after Apple approves TestFlight build `332` and the user asks to force-update onto it.
+
+1. Confirm the ask: force-update / raise `minimumBuild` to **332**.
+2. Run the public store check above.
+   - Lookup still `3.2.3` (or anything other than `3.3.2`) → **stop**. Do not write Firestore. 332 is not downloadable from the App Store yet.
+   - Lookup `3.3.2` → continue.
+3. In App Store Connect, confirm the iOS version is `READY_FOR_DISTRIBUTION` and the attached build is `332`.
+4. Read `appConfig/live.minimumBuild` (portal `/config`, or `firestore_get_document` on `projects/pickems-fb/databases/(default)/documents/appConfig/live`).
+5. Set `minimumBuild` to `332` (portal Publish, or masked update below). Read it back.
+6. Tell the user: anyone on `CFBundleVersion` **strictly below 332** sees **Update required** and is sent to the App Store. Build **332** and newer pass. TestFlight-only builds above 332 are unaffected; App Store users can only install what the listing serves.
 
 ---
 
 ## 1. Confirm the ask and the store build
 
 1. User asked to force-update / raise `minimumBuild`.
-2. In App Store Connect (Chrome iris), confirm the target iOS version is `READY_FOR_DISTRIBUTION` and note its attached build number.
-3. Read the current field before writing.
+2. Public store check (above) matches the intended marketing version.
+3. In App Store Connect (Chrome iris), confirm the target iOS version is `READY_FOR_DISTRIBUTION` and note its attached build number.
+4. Read the current field before writing.
 
 Portal: `/config` on the admin app. Agent: `firestore_get_document` on
 
@@ -76,7 +108,7 @@ Portal: `/config` on the admin app. Agent: `firestore_get_document` on
 
 **Human (preferred):** Admin portal → **App config** → `minimumBuild` → Publish. Confirm the warning. Blank clears the gate (`null`).
 
-**Agent (only when asked):** `firestore_update_document` with `updateMask.fieldPaths: ["minimumBuild"]` so other flags are untouched. Integer string, e.g. `"323"`. Then read the document back.
+**Agent (only when asked, and only after the public store check passes):** `firestore_update_document` with `updateMask.fieldPaths: ["minimumBuild"]` so other flags are untouched. Integer string, e.g. `"332"`. Then read the document back.
 
 Do not use the portal’s raw-JSON merge for this field.
 
