@@ -8,6 +8,7 @@
 | Support form (same page) | `https://pickems-fb.web.app/support` |
 | Invite landing | `https://pickems-fb.web.app/join?code=` |
 | Admin portal (not public marketing) | `https://pickems-fb.web.app/` |
+| Admin support inbox (signed-in admins) | `https://pickems-fb.web.app/support-inbox` |
 | Privacy Policy (today) | `https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/main/docs/privacy-policy.html` |
 | Terms of Use (today) | `https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/main/docs/terms.html` |
 
@@ -21,17 +22,25 @@ Firebase project: `pickems-fb`. Default Hosting site: `pickems-fb.web.app` / `pi
 
 Static HTML at `web/support.html`, copied into the Hosting bundle next to `/join` by `firebase/scripts/stage-hosting.sh`. Hosting rewrites `/support` → `/support.html` **before** the admin SPA catch-all (`**` → `/index.html`).
 
-The form posts to [FormSubmit.co](https://formsubmit.co) (`https://formsubmit.co/johnmfanning1@gmail.com`) as a normal HTML POST (not AJAX). That is a free email-form backend: no paid SaaS, no Cloud Functions, no custom domain. Messages arrive in Gmail at `johnmfanning1@gmail.com`. After a successful submit, FormSubmit redirects back to `/support?sent=1`. The page also offers a `mailto:` fallback.
+**Do not put a personal mailbox, `mailto:`, or FormSubmit `/you@gmail.com` URL on this page.** The form POSTs to `/api/support`, which Hosting rewrites to the `submitSupport` Cloud Function. That function:
 
-Datacenter / scripted POSTs to FormSubmit are often challenged by Cloudflare; a regular browser submit is the supported path.
+1. Validates the payload (honeypot, email, length, rate limit)
+2. Writes `supportMessages/{id}` with the Admin SDK (no public create rule)
+3. Forwards a copy by email if an inbox is configured **server-side**
 
-### One-time FormSubmit activation
+The recipient is never shipped in HTML, git, or `appConfig/live` (that document is readable by every signed-in member). Configure it in one of these private places:
 
-FormSubmit does **not** deliver the first submission as a normal support email. It sends a confirmation to `johnmfanning1@gmail.com` (check spam). Click **Activate Form** / confirm the address once.
+| Where | How |
+|--|--|
+| Admin portal | `/support-inbox` → **Forward copies to** (writes `adminConfig/support.inboxEmail`, admin-claim only) |
+| Functions env | `SUPPORT_INBOX_EMAIL` in `firebase/functions/.env.pickems-fb` or Cloud Console (see `firebase/functions/.env.example`) |
+| Web3Forms key | `SUPPORT_WEB3FORMS_ACCESS_KEY` — preferred mail path when set; the key is not an email address |
 
-After that, every later submit from `/support` is forwarded to Gmail. No monthly fee on the free tier.
+Env vars win over the Firestore inbox field. Web3Forms wins over FormSubmit. If no mail backend is configured, the form still succeeds: the row is in **Support inbox** in the portal.
 
-Do **not** write public contact mail into Firestore. An unauthenticated `supportMessages` create rule would be a spam/storage hole; skip it until there is an authenticated or Functions-backed path.
+Do **not** add an unauthenticated `supportMessages` create rule. That would be a spam/storage hole. Clients may read/delete only with `admin: true`; only `submitSupport` creates rows.
+
+First FormSubmit delivery from a new inbox may send an activation mail to that inbox. Web3Forms does not need that step once the access key exists.
 
 ---
 
@@ -45,7 +54,7 @@ Must be changed **manually in App Store Connect** (or by running `bundle exec fa
 
 1. [App Information](https://appstoreconnect.apple.com/apps/6785697079/distribution/info) → **Support URL** → `https://pickems-fb.web.app/support`
 2. Leave **Marketing URL** empty unless we actually ship a public homepage we control (do not put `pickems.app` there).
-3. Privacy URL can stay on the GitHub raw HTML until we host `docs/privacy-policy.html` on Firebase Hosting.
+3. Privacy URL can stay on the GitHub raw HTML until we host `docs/privacy-policy.html` on Firebase Hosting. That policy must link to `/support`, not a personal mailbox.
 
 Connect work uses logged-in Chrome + iris — see [APP_STORE.md](APP_STORE.md). Cursor’s browser cannot complete Apple login.
 
@@ -53,23 +62,25 @@ Associated domains in `Pickems/Pickems.entitlements` still list `applinks:pickem
 
 ---
 
-## Deploy Hosting
+## Deploy Hosting + the support function
 
 Documented path (from `firebase/`):
 
 ```bash
 cd firebase
-npx -y firebase-tools@latest deploy --only hosting --project pickems-fb
+npx -y firebase-tools@latest deploy --only functions:submitSupport,hosting --project pickems-fb
 ```
 
 `firebase.json` `predeploy` runs `scripts/stage-hosting.sh`, which typechecks/builds the admin portal and copies `web/join.html`, `web/support.html`, AASA, `robots.txt`, and `sitemap.xml` into `admin/dist`.
+
+A full functions deploy (`deploy --only functions`) also ships `submitSupport`. Its env params default to empty strings, so missing inbox config does **not** block scoring-function deploys.
 
 Equivalent after a local admin build:
 
 ```bash
 cd firebase/admin && npm ci && npm run build
 cd .. && bash scripts/stage-hosting.sh
-npx -y firebase-tools@latest deploy --only hosting --project pickems-fb
+npx -y firebase-tools@latest deploy --only functions:submitSupport,hosting --project pickems-fb
 ```
 
 Preview channel (optional):

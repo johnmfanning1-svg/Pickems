@@ -460,6 +460,19 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    // Private support inbox address and related ops config. Never put this on
+    // appConfig/live — that document is readable by every signed-in member.
+    match /adminConfig/{configId} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    // Public /support form writes go through the submitSupport Cloud Function
+    // (Admin SDK). Clients cannot create rows; that would be a spam hole.
+    match /supportMessages/{messageId} {
+      allow read, delete: if isSuperAdmin();
+      allow create, update: if false;
+    }
+
     // Append-only trail of every privileged action. Callables write these with
     // the Admin SDK (which bypasses rules); the client path stays create-only.
     match /adminAudit/{entryId} {

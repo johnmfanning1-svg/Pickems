@@ -38,6 +38,9 @@ import {
 admin.initializeApp();
 const db = admin.firestore();
 
+// Public /support form — inbox address lives in env / adminConfig, not HTML.
+export { submitSupport } from "./support";
+
 // Callable admin surface for the web portal — claim-gated, audit-logged.
 export {
   setAdminRole,

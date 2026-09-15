@@ -15,7 +15,7 @@ firebase/
   tests/                   # Firestore rules unit tests (release gate G0)
 ```
 
-Public static pages (`web/join.html`, `web/support.html`, AASA) are copied into `admin/dist` by `scripts/stage-hosting.sh` on Hosting predeploy. Support lives at `https://pickems-fb.web.app/support` — see [docs/DOMAIN.md](../docs/DOMAIN.md). `pickems.app` is not our domain.
+Public static pages (`web/join.html`, `web/support.html`, AASA) are copied into `admin/dist` by `scripts/stage-hosting.sh` on Hosting predeploy. Support lives at `https://pickems-fb.web.app/support` — the form POSTs to `/api/support` (`submitSupport` Cloud Function). Never put a personal mailbox on that page; see [docs/DOMAIN.md](../docs/DOMAIN.md). `pickems.app` is not our domain.
 
 ## Privilege model
 
@@ -100,7 +100,7 @@ cd admin && npm ci && npm run build && cd ..
 firebase deploy --only hosting
 ```
 
-That Hosting deploy also publishes `/join` and `/support` (staged from `web/`). Public support URL: `https://pickems-fb.web.app/support`.
+That Hosting deploy also publishes `/join` and `/support` (staged from `web/`). Public support URL: `https://pickems-fb.web.app/support`. Deploy `submitSupport` with Hosting so `/api/support` is not a 404.
 
 Rollback: redeploy `firestore.rules` from the previous git revision — rules are
 versioned in the console and revert independently of the app build. Chat can be

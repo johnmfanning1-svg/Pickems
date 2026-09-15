@@ -27,3 +27,5 @@ firebase/admin-tools/*.json
 # GoogleService-Info.plist is included as placeholder; replace locally
 build/
 .env
+firebase/functions/.env.*
+!firebase/functions/.env.example

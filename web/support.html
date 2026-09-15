@@ -287,15 +287,9 @@
       <h1>Support</h1>
       <p class="lede">
         Questions about leagues, picks, billing, or the iOS app? Send a note and we will reply at the email you leave.
-        You can also write
-        <a href="mailto:johnmfanning1@gmail.com">johnmfanning1@gmail.com</a>.
       </p>
 
-      <form id="support-form" action="https://formsubmit.co/johnmfanning1@gmail.com" method="POST">
-        <input type="hidden" name="_next" value="https://pickems-fb.web.app/support?sent=1" />
-        <input type="hidden" name="_subject" id="mail-subject" value="Pickems support request" />
-        <input type="hidden" name="_template" value="table" />
-        <input type="hidden" name="_captcha" value="false" />
+      <form id="support-form" action="/api/support" method="POST">
         <input type="text" name="_honey" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true" />
 
         <label>
@@ -334,7 +328,6 @@
       <a href="https://apps.apple.com/app/id6785697079">App Store</a>
       <a href="https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/main/docs/privacy-policy.html">Privacy Policy</a>
       <a href="https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/main/docs/terms.html">Terms of Use</a>
-      <a href="mailto:johnmfanning1@gmail.com">johnmfanning1@gmail.com</a>
       <span>© Fannypack Inc.</span>
     </footer>
   </div>
@@ -345,18 +338,10 @@
       var statusEl = document.getElementById("status");
       var send = document.getElementById("send");
       var thanks = document.getElementById("thanks");
-      var subjectField = document.getElementById("subject-field");
-      var mailSubject = document.getElementById("mail-subject");
-      var nextField = form.querySelector('input[name="_next"]');
 
       function showSent() {
         document.body.classList.add("is-sent");
         thanks.focus();
-      }
-
-      var origin = window.location.origin;
-      if (nextField && (/^https:\/\/pickems-fb\.(web\.app|firebaseapp\.com)$/.test(origin) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin))) {
-        nextField.value = origin + "/support?sent=1";
       }
 
       if (new URLSearchParams(window.location.search).get("sent") === "1") {
@@ -371,6 +356,8 @@
         var email = String(form.email.value || "").trim();
         var message = String(form.message.value || "").trim();
         var honey = String(form._honey.value || "").trim();
+        var name = String(form.name.value || "").trim();
+        var subject = String(form.subject.value || "").trim();
 
         if (honey) {
           event.preventDefault();
@@ -394,10 +381,45 @@
           return;
         }
 
-        var subject = String(subjectField.value || "").trim();
-        mailSubject.value = subject ? ("Pickems support: " + subject) : "Pickems support request";
+        event.preventDefault();
         send.disabled = true;
         statusEl.textContent = "Sending…";
+
+        fetch("/api/support", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            name: name,
+            email: email,
+            subject: subject,
+            message: message,
+            honey: honey
+          })
+        }).then(function (response) {
+          return response.json().then(function (data) {
+            return { ok: response.ok && data && data.ok === true, error: data && data.error };
+          }).catch(function () {
+            return { ok: response.ok, error: null };
+          });
+        }).then(function (result) {
+          if (result.ok) {
+            if (window.history && window.history.replaceState) {
+              window.history.replaceState(null, "", "/support?sent=1");
+            }
+            showSent();
+            return;
+          }
+          send.disabled = false;
+          statusEl.classList.add("error");
+          statusEl.textContent = result.error || "Could not send that just now. Try again in a minute.";
+        }).catch(function () {
+          send.disabled = false;
+          statusEl.classList.add("error");
+          statusEl.textContent = "Could not send that just now. Try again in a minute.";
+        });
       });
     })();
   </script>

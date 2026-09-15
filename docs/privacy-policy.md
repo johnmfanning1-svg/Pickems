@@ -1,6 +1,6 @@
 # Pickems Privacy Policy
 
-**Last updated:** July 16, 2026
+**Last updated:** September 15, 2026
 
 Pickems (“we”, “us”) is a college football pick’em app for private and public leagues. This policy explains what data we collect and how it is used.
 
@@ -30,4 +30,4 @@ You can delete your account in the app: **Profile → Delete Account**. This rem
 
 ## Contact
 
-Questions: **johnmfanning1@gmail.com**
+Questions: [https://pickems-fb.web.app/support](https://pickems-fb.web.app/support)

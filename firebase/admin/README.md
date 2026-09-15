@@ -95,11 +95,12 @@ Grant the first admin from a machine with a service-account key (see
 | `/groups/:id/weeks` | status transitions, `pickDeadline`, re-materialize, spreads, delete | `adminSetWeekStatus`, `adminRematerializeNominations` |
 | `/groups/:id/weeks/:weekId/picks` | members × slate grid, edit picks, lock/unlock, rescore | `adminUpsertPick`, `adminRescoreWeek` |
 | `/config` | `appConfig/live` flags + super-admin roles | `appConfig`, `setAdminRole` |
+| `/support-inbox` | Public `/support` messages + private forward-to address | `supportMessages`, `adminConfig/support` |
 | `/audit/weeks` | Risk R1 tool — misaligned, duplicate, orphan weeks; 2026 Week 0 split | `adminAuditWeekIds`, `adminMigrateWeek0Split` |
 | `/audit/log` | append-only admin action log | `adminAudit` |
 | `/moderation` | messages with `reportCount > 0` | `messages` collection group + `reports` |
 
-Hosting also serves static files that are **not** this router: `/join` (`web/join.html`) and `/support` (`web/support.html`). Those rewrites run before `**` → `/index.html`.
+Hosting also serves static files that are **not** this router: `/join` (`web/join.html`) and `/support` (`web/support.html`). `/api/support` rewrites to the `submitSupport` function. Those rewrites run before `**` → `/index.html`.
 
 ## Conventions
 

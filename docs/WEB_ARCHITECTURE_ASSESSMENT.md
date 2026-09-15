@@ -133,7 +133,7 @@ A member site would register a **second web app** (or reuse the existing web app
 |---|---|---|---|
 | Marketing homepage | Static HTML | `web/index.html` (not currently the Hosting `/` — that is the admin SPA) | App Store landing copy; canonicals point at `pickems-fb.web.app` |
 | Invite landing | Static HTML | `web/join.html` → `https://pickems-fb.web.app/join?code=` | Tries `pickems://join`, falls back to App Store |
-| Support | Static HTML | `web/support.html` → `https://pickems-fb.web.app/support` | App Store Support URL; FormSubmit → Gmail |
+| Support | Static HTML + Functions | `web/support.html` → `https://pickems-fb.web.app/support` | App Store Support URL; form POSTs to `submitSupport` (inbox is server-side) |
 | Admin portal | Vite + React 18 + Firebase JS 10 | `firebase/admin` on Firebase Hosting (`/`) | Super-admin only |
 | AASA | JSON | `web/.well-known/apple-app-site-association` | Universal Links for `/join` only |
 
