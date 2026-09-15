@@ -1,7 +1,8 @@
 # Pickems Admin Portal — Standard Operating Procedure
 
-> **URL:** Deployed to Firebase Hosting at your project's default domain (e.g. `https://<project-id>.web.app`).  
-> **Access:** Requires the `admin: true` Firebase Auth custom claim. Non-admins are signed out immediately on login.
+> **URL:** Deployed to Firebase Hosting at `https://pickems-fb.web.app`.  
+> **Access:** Requires the `admin: true` Firebase Auth custom claim. Non-admins are signed out immediately on login.  
+> **Public support page (not this portal):** `https://pickems-fb.web.app/support` — see [DOMAIN.md](DOMAIN.md).
 
 ---
 
@@ -355,6 +356,7 @@ firebase deploy --only functions
 # 4. Build and deploy the web portal
 cd admin && npm run build && cd ..
 firebase deploy --only hosting
+# Also publishes /join and /support from web/ via scripts/stage-hosting.sh
 ```
 
 **Order matters:** deploy indexes before rules (rules may reference new indexes), and rules before functions (functions may write to paths the new rules protect).

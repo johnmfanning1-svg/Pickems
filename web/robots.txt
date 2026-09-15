@@ -1,4 +1,14 @@
 User-agent: *
-Allow: /
+Allow: /support
+Allow: /support.html
+Allow: /join
+Allow: /join.html
+Allow: /robots.txt
+Allow: /sitemap.xml
+Disallow: /groups
+Disallow: /config
+Disallow: /audit
+Disallow: /moderation
+Disallow: /login
 
-Sitemap: https://pickems.app/sitemap.xml
+Sitemap: https://pickems-fb.web.app/sitemap.xml

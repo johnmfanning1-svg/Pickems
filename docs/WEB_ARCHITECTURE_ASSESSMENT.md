@@ -5,7 +5,9 @@
 
 **Verdict:** Yes. The backend is already a multi-client Firebase system. A member-facing website would talk to the same Auth, Firestore, Storage, and Cloud Functions as iOS. Vercel would host the frontend only. It would not replace Firebase, and it is not required for the architecture to work.
 
-The real cost is porting Swift client logic into a web app, plus a short list of platform glue (Apple Sign In on the web, authorized domains, ESPN CORS, push tokens, and `pickems.app` routing). Widgets, Live Activities, and Apple Watch have no web equivalent.
+The real cost is porting Swift client logic into a web app, plus a short list of platform glue (Apple Sign In on the web, authorized domains, ESPN CORS, push tokens, and public hostname routing). Widgets, Live Activities, and Apple Watch have no web equivalent.
+
+**Domain note (2026-09):** `pickems.app` is **not** a Pickems domain. Do not register it or publish it as Support / Marketing URL. Public pages today are on Firebase Hosting: `https://pickems-fb.web.app/support` and `/join`. See [DOMAIN.md](DOMAIN.md).
 
 ---
 
@@ -129,9 +131,10 @@ A member site would register a **second web app** (or reuse the existing web app
 
 | Surface | Stack | URL / path | What it is |
 |---|---|---|---|
-| Marketing homepage | Static HTML | `web/index.html` → `https://pickems.app/` | App Store landing |
-| Invite landing | Static HTML | `web/join.html` → `/join?code=` | Tries `pickems://join`, falls back to App Store |
-| Admin portal | Vite + React 18 + Firebase JS 10 | `firebase/admin` on Firebase Hosting | Super-admin only |
+| Marketing homepage | Static HTML | `web/index.html` (not currently the Hosting `/` — that is the admin SPA) | App Store landing copy; canonicals point at `pickems-fb.web.app` |
+| Invite landing | Static HTML | `web/join.html` → `https://pickems-fb.web.app/join?code=` | Tries `pickems://join`, falls back to App Store |
+| Support | Static HTML | `web/support.html` → `https://pickems-fb.web.app/support` | App Store Support URL; FormSubmit → Gmail |
+| Admin portal | Vite + React 18 + Firebase JS 10 | `firebase/admin` on Firebase Hosting (`/`) | Super-admin only |
 | AASA | JSON | `web/.well-known/apple-app-site-association` | Universal Links for `/join` only |
 
 There is **no Next.js, no Vercel config, and no member-facing SPA** today.
@@ -194,9 +197,8 @@ Keep concerns on separate hosts so Universal Links and the admin portal do not c
 
 | Host | Role |
 |---|---|
-| `pickems.app` or `app.pickems.app` | Member website (Vercel **or** second Firebase Hosting target) |
-| `pickems-fb.web.app` | Admin portal + AASA + `/join` fallback (keep as-is unless you migrate carefully) |
-| iOS associated domains | Already: `pickems.app`, `pickems-fb.web.app`, `pickems-fb.firebaseapp.com` |
+| `pickems-fb.web.app` | **What we actually operate today:** admin SPA at `/`, public `/support`, `/join`, AASA |
+| `pickems.app` | **Not ours.** Do not buy, DNS, or list as App Store Support/Marketing URL. See [DOMAIN.md](DOMAIN.md). |
 
 If the member app lives at `pickems.app`:
 
@@ -294,7 +296,7 @@ Backend (mostly console + small functions change, not a rewrite):
 - [ ] Decide push: skip for v1, **or** change `users/{uid}` token shape and `notifications.ts` to send APNs + webpush without clobbering iOS.
 - [ ] Decide ESPN: proxy vs Firestore-only live scores.
 - [ ] Keep admin portal and AASA reachable; do not swallow them in a member SPA rewrite.
-- [ ] Confirm `pickems.app` DNS: Vercel vs Firebase Hosting vs split (`app.` vs apex).
+- [ ] Do **not** configure DNS for `pickems.app` (not our domain). Public URLs stay on `pickems-fb.web.app` until a domain we own is purchased.
 
 Product / client (the actual project):
 
@@ -331,9 +333,10 @@ Reimplementing iOS service-layer behavior in TypeScript with strict fidelity to 
 | Admin callables | `firebase/functions/src/admin.ts` |
 | TS document types | `firebase/admin/src/lib/types.ts` |
 | Web Firebase config | `firebase/admin/.env.example`, `firebase/admin/src/lib/firebase.ts` |
-| Hosting / AASA / join | `firebase/firebase.json`, `firebase/scripts/stage-hosting.sh`, `web/` |
+| Hosting / AASA / join / support | `firebase/firebase.json`, `firebase/scripts/stage-hosting.sh`, `web/` |
+| Marketing + invite + support HTML | `web/index.html`, `web/join.html`, `web/support.html` |
+| Public URL policy | `docs/DOMAIN.md` |
 | iOS paths | `Pickems/Core/Networking/FirestorePaths.swift` |
 | iOS services | `Pickems/Core/Services/*.swift` |
 | Deep links | `Pickems/Core/Utilities/DeepLinkRouter.swift` |
-| Marketing + invite HTML | `web/index.html`, `web/join.html` |
 | Admin portal SOP | `docs/ADMIN_PORTAL_SOP.md` |

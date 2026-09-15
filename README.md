@@ -51,8 +51,8 @@ PickemsWatch/            watchOS glance sources
 firebase/
   firestore.rules
   functions/             Slate lock, scoring, push, season close
-web/                     Marketing + invite landing (not a member app)
-docs/                    Including web architecture assessment
+web/                     Public static pages (invite + support) staged onto Firebase Hosting
+docs/                    Including DOMAIN.md (public URLs — pickems.app is not ours)
 ```
 
 Web replica assessment (iOS + website on the same Firebase backend, Vercel Hobby): [docs/WEB_ARCHITECTURE_ASSESSMENT.md](docs/WEB_ARCHITECTURE_ASSESSMENT.md).
@@ -110,6 +110,7 @@ Hosted [X MCP](https://docs.x.com/tools/mcp) so Cursor can search X, read API do
 - App Review submit: [docs/APP_STORE.md](docs/APP_STORE.md)
 - Force a minimum build: [docs/MINIMUM_BUILD.md](docs/MINIMUM_BUILD.md)
 - ASO copy: [docs/ASO.md](docs/ASO.md) · `fastlane/metadata/en-US/`
+- Public URLs / App Store Support URL: [docs/DOMAIN.md](docs/DOMAIN.md) (`https://pickems-fb.web.app/support`, not pickems.app)
 - Privacy: [docs/privacy-policy.md](docs/privacy-policy.md)
 
 ## Cost
