@@ -1,6 +1,6 @@
 # Pickems Terms of Service
 
-**Last updated:** July 16, 2026
+**Last updated:** September 15, 2026
 
 By using Pickems you agree to these terms.
 
@@ -26,4 +26,4 @@ You may delete your account at any time in Profile. We may suspend accounts that
 
 ## Contact
 
-**johnmfanning1@gmail.com**
+[https://pickems-fb.web.app/support](https://pickems-fb.web.app/support)

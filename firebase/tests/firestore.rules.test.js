@@ -266,6 +266,46 @@ describe("appConfig and adminAudit", () => {
   });
 });
 
+describe("support inbox", () => {
+  it("keeps the public support inbox admin-only and function-written", async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, "supportMessages", "m1"), {
+        email: "fan@example.com",
+        message: "help",
+        createdAt: new Date(),
+      });
+      await setDoc(doc(db, "adminConfig", "support"), {
+        inboxEmail: "ops@example.com",
+      });
+    });
+
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertFails(getDoc(doc(memberDb, "supportMessages", "m1")));
+    await assertFails(
+      setDoc(doc(memberDb, "supportMessages", "from-web"), {
+        email: "fan@example.com",
+        message: "spam",
+      })
+    );
+    await assertFails(getDoc(doc(memberDb, "adminConfig", "support")));
+    await assertFails(
+      setDoc(doc(memberDb, "adminConfig", "support"), { inboxEmail: "stolen@example.com" })
+    );
+
+    const adminDb = adminCtx().firestore();
+    await assertSucceeds(getDoc(doc(adminDb, "supportMessages", "m1")));
+    await assertSucceeds(getDoc(doc(adminDb, "adminConfig", "support")));
+    await assertSucceeds(
+      setDoc(doc(adminDb, "adminConfig", "support"), { inboxEmail: "ops@example.com" })
+    );
+    await assertFails(
+      setDoc(doc(adminDb, "supportMessages", "from-portal"), { message: "nope" })
+    );
+    await assertSucceeds(deleteDoc(doc(adminDb, "supportMessages", "m1")));
+  });
+});
+
 describe("super admin blast radius", () => {
   it("lets an admin write a group they are not a member of", async () => {
     await seed();

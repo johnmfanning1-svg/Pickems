@@ -19,6 +19,8 @@ import type {
   PickDoc,
   SlateGameDoc,
   SubmissionDoc,
+  SupportInboxConfigDoc,
+  SupportMessageDoc,
   UserDoc,
   WeekDoc,
 } from "@/lib/types";
@@ -154,6 +156,27 @@ export function useSubmissions(
 
 export function useAppConfig() {
   return useDocument<AppConfigDoc>(useMemo(() => doc(db, "appConfig", "live"), []));
+}
+
+export function useSupportInboxConfig() {
+  return useDocument<SupportInboxConfigDoc>(
+    useMemo(() => doc(db, "adminConfig", "support"), []),
+  );
+}
+
+export function useSupportMessages(max = 200): QueryState<SupportMessageDoc> {
+  const state = useCollection<SupportMessageDoc>(
+    useMemo(() => collection(db, "supportMessages"), []),
+  );
+  return useMemo(
+    () => ({
+      ...state,
+      data: [...state.data]
+        .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0))
+        .slice(0, max),
+    }),
+    [state, max],
+  );
 }
 
 /**

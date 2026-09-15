@@ -7,6 +7,7 @@ const NAV_ITEMS: { to: string; label: string; end?: boolean }[] = [
   { to: "/", label: "Dashboard", end: true },
   { to: "/groups", label: "Groups" },
   { to: "/config", label: "App config" },
+  { to: "/support-inbox", label: "Support inbox" },
   { to: "/moderation", label: "Moderation" },
   { to: "/audit/weeks", label: "Week audit" },
   { to: "/audit/log", label: "Audit log" },

@@ -215,6 +215,29 @@ export interface MessageReportDoc {
 }
 
 /**
+ * Public /support submissions. Written only by the `submitSupport` Cloud
+ * Function (Admin SDK). The portal may read and delete; it cannot create.
+ */
+export interface SupportMessageDoc {
+  name?: string | null;
+  email?: string | null;
+  subject?: string | null;
+  message?: string | null;
+  deliveredVia?: string | null;
+  clientIp?: string | null;
+  createdAt?: Timestamp | null;
+}
+
+/**
+ * Admin-only ops config. Do not store the support inbox on `appConfig/live` —
+ * that document is readable by every signed-in member.
+ */
+export interface SupportInboxConfigDoc {
+  inboxEmail?: string | null;
+  updatedAt?: Timestamp | null;
+}
+
+/**
  * `appConfig/live` — remote flags read by every signed-in client at launch.
  * Typed fields get real inputs; anything else is editable as raw JSON so the
  * portal never becomes the reason a new flag can't ship.

@@ -2,7 +2,7 @@
 
 > **URL:** Deployed to Firebase Hosting at `https://pickems-fb.web.app`.  
 > **Access:** Requires the `admin: true` Firebase Auth custom claim. Non-admins are signed out immediately on login.  
-> **Public support page (not this portal):** `https://pickems-fb.web.app/support` — see [DOMAIN.md](DOMAIN.md).
+> **Public support page (not this portal):** `https://pickems-fb.web.app/support` — form delivery is the `submitSupport` function, not a public mailbox. See [DOMAIN.md](DOMAIN.md).
 
 ---
 
@@ -223,6 +223,18 @@ Edits the `appConfig/live` Firestore document, which every signed-in client read
 ### Other keys (raw JSON)
 
 Merge arbitrary keys into `appConfig/live` without touching the typed fields above. There is no schema check — a typo here ships a flag the app never reads. Requires typing "live" to confirm.
+
+**Never store the support inbox address on `appConfig/live`.** Every signed-in member can read that document. Use **Support inbox** (`/support-inbox`) instead.
+
+---
+
+## Support inbox
+
+**Route:** `/support-inbox`
+
+The public page at `https://pickems-fb.web.app/support` posts to the `submitSupport` Cloud Function. Messages land in `supportMessages` (admin-only). Optionally set **Forward copies to** here; that writes `adminConfig/support.inboxEmail`, which only the admin claim can read.
+
+Do not put a personal mailbox, `mailto:`, or FormSubmit URL on `web/support.html`.
 
 ---
 

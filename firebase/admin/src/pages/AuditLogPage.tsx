@@ -31,6 +31,8 @@ const KNOWN_ACTIONS = [
   "adminUpdateGameSpread",
   "adminUpdateAppConfig",
   "adminUpdateAppConfigRaw",
+  "adminUpdateSupportInbox",
+  "adminDeleteSupportMessage",
   "adminSoftDeleteMessage",
   "adminRestoreMessage",
   "adminDeleteMessage",

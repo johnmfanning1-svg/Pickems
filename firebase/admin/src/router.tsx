@@ -12,6 +12,7 @@ import { GroupsPage } from "@/pages/GroupsPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { ModerationPage } from "@/pages/ModerationPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
+import { SupportInboxPage } from "@/pages/SupportInboxPage";
 import { WeekPicksPage } from "@/pages/WeekPicksPage";
 
 /**
@@ -35,6 +36,7 @@ export const router = createBrowserRouter([
           { path: "/groups/:id/weeks", element: <GroupWeeksPage /> },
           { path: "/groups/:id/weeks/:weekId/picks", element: <WeekPicksPage /> },
           { path: "/config", element: <ConfigPage /> },
+          { path: "/support-inbox", element: <SupportInboxPage /> },
           { path: "/audit/weeks", element: <AuditWeeksPage /> },
           { path: "/audit/log", element: <AuditLogPage /> },
           { path: "/moderation", element: <ModerationPage /> },

@@ -32,6 +32,7 @@ npx firebase-tools@latest deploy --only firestore:rules,functions
 | `onWeekStatusChange` | Materialize nominations → games; week scored push |
 | `deadlineReminders` | FCM to members who haven't submitted |
 | `lockAndScoreWeeks` | Lock at deadline, ESPN score sync, standings, game-final / lead-change push |
+| `submitSupport` | Public `/support` form — stores the message and forwards to a private inbox |
 | `autoCloseSeasons` | Mid-January dynasty archive |
 | `syncPublicLeagueIndex` | Discover index for public leagues |
 
