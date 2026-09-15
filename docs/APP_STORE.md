@@ -17,6 +17,7 @@ ASO copy: [ASO.md](ASO.md) · `fastlane/metadata/en-US/`.
 | Release type | `AFTER_APPROVAL` (manual release after Apple approves) |
 | Connect UI | [iOS version deliverable](https://appstoreconnect.apple.com/apps/6785697079/distribution/ios/version/deliverable) |
 | Encryption | `ITSAppUsesNonExemptEncryption` = false |
+| Marketing URL | `https://pickems-fb.web.app/` — **not** pickems.app, **not** an App Store listing URL (see [DOMAIN.md](DOMAIN.md)) |
 | Support URL | `https://pickems-fb.web.app/support` — **not** pickems.app (we do not own that domain; see [DOMAIN.md](DOMAIN.md)) |
 
 Demo account **email** (already in Connect): `review.pickems.appstore@gmail.com`. Copy the password from the previous version’s `appStoreReviewDetail` over iris. **Never commit it. Delete `/tmp` scripts that contain it when the submit is done.**
@@ -165,7 +166,7 @@ bundle exec fastlane metadata
 
 Use when ASO fields in `fastlane/metadata/en-US/` changed. Binary upload is [TESTFLIGHT.md](TESTFLIGHT.md), not this lane.
 
-**Support URL** lives in `fastlane/metadata/en-US/support_url.txt` (`https://pickems-fb.web.app/support`). Uploading metadata (or pasting the same URL in Connect → App Information) is required for the **live** listing. That field is app-level; a version submit does not always overwrite it. Never set it to `pickems.app`.
+**Marketing URL** lives in `fastlane/metadata/en-US/marketing_url.txt` (`https://pickems-fb.web.app/`). **Support URL** lives in `fastlane/metadata/en-US/support_url.txt` (`https://pickems-fb.web.app/support`). Uploading metadata (or pasting the same URLs in Connect → App Information) is required for the **live** listing. Those fields are app-level; a version submit does not always overwrite them. Never set either to `pickems.app`, and never point Marketing URL at an App Store listing.
 
 ---
 
@@ -175,6 +176,7 @@ Use when ASO fields in `fastlane/metadata/en-US/` changed. Binary upload is [TES
 - [ ] Chat: Report, Block, Delete own, Terms linked (Guideline 1.2)
 - [ ] Account deletion: Profile → Delete Account
 - [ ] Privacy / Terms URLs load over HTTPS
+- [ ] Marketing URL is `https://pickems-fb.web.app/` (not pickems.app, not an App Store listing) and the homepage loads
 - [ ] Support URL is `https://pickems-fb.web.app/support` (not pickems.app) and the form loads
 - [ ] Sheets that present league flows still use `.pickemsEnvironment` (1.0 crash)
 - [ ] Watch remains `SKIP_INSTALL`; do not change embedding as part of a routine ship

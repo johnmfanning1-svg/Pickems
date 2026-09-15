@@ -49,12 +49,13 @@ First FormSubmit delivery from a new inbox may send an activation mail to that i
 
 Already in this repo (source of truth for the next metadata upload):
 
+- `fastlane/metadata/en-US/marketing_url.txt` → `https://pickems-fb.web.app/`
 - `fastlane/metadata/en-US/support_url.txt` → `https://pickems-fb.web.app/support`
 
-Must be changed **manually in App Store Connect** (or by running `bundle exec fastlane metadata`) if the live listing still shows `pickems.app`:
+Must be changed **manually in App Store Connect** (or by running `bundle exec fastlane metadata`) if the live listing still shows `pickems.app` or an empty Marketing URL:
 
 1. [App Information](https://appstoreconnect.apple.com/apps/6785697079/distribution/info) → **Support URL** → `https://pickems-fb.web.app/support`
-2. After Hosting ships the public homepage, **Marketing URL** can be `https://pickems-fb.web.app/` (do not put `pickems.app` there).
+2. **Marketing URL** → `https://pickems-fb.web.app/` (do not put `pickems.app` or an App Store listing URL there).
 3. Privacy URL can stay on the GitHub raw HTML until we host `docs/privacy-policy.html` on Firebase Hosting. That policy must link to `/support`, not a personal mailbox.
 
 Connect work uses logged-in Chrome + iris — see [APP_STORE.md](APP_STORE.md). Cursor’s browser cannot complete Apple login.
