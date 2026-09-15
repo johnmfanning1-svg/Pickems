@@ -347,11 +347,16 @@
       var thanks = document.getElementById("thanks");
       var subjectField = document.getElementById("subject-field");
       var mailSubject = document.getElementById("mail-subject");
-      var endpoint = "https://formsubmit.co/ajax/johnmfanning1@gmail.com";
+      var nextField = form.querySelector('input[name="_next"]');
 
       function showSent() {
         document.body.classList.add("is-sent");
         thanks.focus();
+      }
+
+      var origin = window.location.origin;
+      if (nextField && (/^https:\/\/pickems-fb\.(web\.app|firebaseapp\.com)$/.test(origin) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin))) {
+        nextField.value = origin + "/support?sent=1";
       }
 
       if (new URLSearchParams(window.location.search).get("sent") === "1") {
@@ -360,21 +365,21 @@
       }
 
       form.addEventListener("submit", function (event) {
-        event.preventDefault();
         statusEl.classList.remove("error");
         statusEl.textContent = "";
 
-        var data = new FormData(form);
-        var email = String(data.get("email") || "").trim();
-        var message = String(data.get("message") || "").trim();
-        var honey = String(data.get("_honey") || "").trim();
+        var email = String(form.email.value || "").trim();
+        var message = String(form.message.value || "").trim();
+        var honey = String(form._honey.value || "").trim();
 
         if (honey) {
+          event.preventDefault();
           showSent();
           return;
         }
 
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          event.preventDefault();
           statusEl.classList.add("error");
           statusEl.textContent = "Enter a valid email so we can reply.";
           form.email.focus();
@@ -382,6 +387,7 @@
         }
 
         if (!message) {
+          event.preventDefault();
           statusEl.classList.add("error");
           statusEl.textContent = "Write a short message.";
           form.message.focus();
@@ -390,44 +396,8 @@
 
         var subject = String(subjectField.value || "").trim();
         mailSubject.value = subject ? ("Pickems support: " + subject) : "Pickems support request";
-        data.set("_subject", mailSubject.value);
-        data.set("email", email);
-        data.set("message", message);
-
         send.disabled = true;
         statusEl.textContent = "Sending…";
-
-        fetch(endpoint, {
-          method: "POST",
-          headers: { Accept: "application/json" },
-          body: data
-        })
-          .then(function (res) {
-            return res.text().then(function (text) {
-              var json = null;
-              try { json = JSON.parse(text); } catch (err) { json = null; }
-              return { ok: res.ok, json: json, text: text };
-            });
-          })
-          .then(function (result) {
-            var success = result.json && String(result.json.success) === "true";
-            var body = (result.text || "").toLowerCase();
-            if (success || result.ok) {
-              showSent();
-              return;
-            }
-            if (body.indexOf("confirm") !== -1 || body.indexOf("activate") !== -1) {
-              showSent();
-              return;
-            }
-            throw new Error("submit failed");
-          })
-          .catch(function () {
-            send.disabled = false;
-            statusEl.classList.add("error");
-            statusEl.textContent = "Couldn’t send from the browser. Submitting the form instead…";
-            form.submit();
-          });
       });
     })();
   </script>
