@@ -83,6 +83,8 @@ Apple requires device-class screenshots for review. Prioritize:
 
 **Next ASO pass ideas (post-2.3.0):** screenshot A/B on frame 1 (filters vs nomination), subtitle test (`ATS leagues for CFB` if chars allow after localization), add `en-GB` keyword set.
 
+**Marketing URL (App Store Connect, app-level):** `https://pickems-fb.web.app/`. Source file: `fastlane/metadata/en-US/marketing_url.txt`. Do not use `pickems.app` or an App Store listing URL.
+
 **Support URL (App Store Connect, app-level):** `https://pickems-fb.web.app/support`. Source file: `fastlane/metadata/en-US/support_url.txt`. If the live listing still shows `pickems.app`, update it in Connect or run `bundle exec fastlane metadata`.
 
 ---
