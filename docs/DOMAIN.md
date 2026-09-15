@@ -21,7 +21,9 @@ Firebase project: `pickems-fb`. Default Hosting site: `pickems-fb.web.app` / `pi
 
 Static HTML at `web/support.html`, copied into the Hosting bundle next to `/join` by `firebase/scripts/stage-hosting.sh`. Hosting rewrites `/support` → `/support.html` **before** the admin SPA catch-all (`**` → `/index.html`).
 
-The form posts to [FormSubmit.co](https://formsubmit.co) (`https://formsubmit.co/johnmfanning1@gmail.com`). That is a free email-form backend: no paid SaaS, no Cloud Functions, no custom domain. Messages arrive in Gmail at `johnmfanning1@gmail.com`. The page also offers a `mailto:` fallback.
+The form posts to [FormSubmit.co](https://formsubmit.co) (`https://formsubmit.co/johnmfanning1@gmail.com`) as a normal HTML POST (not AJAX). That is a free email-form backend: no paid SaaS, no Cloud Functions, no custom domain. Messages arrive in Gmail at `johnmfanning1@gmail.com`. After a successful submit, FormSubmit redirects back to `/support?sent=1`. The page also offers a `mailto:` fallback.
+
+Datacenter / scripted POSTs to FormSubmit are often challenged by Cloudflare; a regular browser submit is the supported path.
 
 ### One-time FormSubmit activation
 
