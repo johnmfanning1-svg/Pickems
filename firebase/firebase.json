@@ -40,8 +40,23 @@
         "type": 301
       },
       {
-        "source": "/groups/**",
-        "destination": "/admin/groups/:splat",
+        "source": "/groups/:id",
+        "destination": "/admin/groups/:id",
+        "type": 301
+      },
+      {
+        "source": "/groups/:id/members",
+        "destination": "/admin/groups/:id/members",
+        "type": 301
+      },
+      {
+        "source": "/groups/:id/weeks",
+        "destination": "/admin/groups/:id/weeks",
+        "type": 301
+      },
+      {
+        "source": "/groups/:id/weeks/:weekId/picks",
+        "destination": "/admin/groups/:id/weeks/:weekId/picks",
         "type": 301
       },
       {
@@ -55,8 +70,13 @@
         "type": 301
       },
       {
-        "source": "/audit/**",
-        "destination": "/admin/audit/:splat",
+        "source": "/audit/weeks",
+        "destination": "/admin/audit/weeks",
+        "type": 301
+      },
+      {
+        "source": "/audit/log",
+        "destination": "/admin/audit/log",
         "type": 301
       },
       {
