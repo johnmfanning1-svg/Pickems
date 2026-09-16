@@ -41,6 +41,7 @@ struct PicksView: View {
                     }
 
                     if let week = workspaceWeek {
+                        weekDeadlineHeader(for: week)
                         statusContent(for: week)
                     } else {
                         noActiveWeekEmptyState
@@ -249,14 +250,6 @@ struct PicksView: View {
                     appState.selectedTab = .pickems
                 }
                 .padding(.horizontal)
-            } else if let deadline = week.selectionDeadline {
-                SelectionDeadlineBanner(deadline: deadline)
-            } else if week.status == .selection, appState.isCommissioner {
-                ContextualTipBanner(
-                    icon: "gearshape.fill",
-                    message: "Set the Selection deadline and other weekly admin in Commissioner Settings."
-                )
-                .padding(.horizontal)
             }
             if week.skipsSelection {
                 EmptyView()
@@ -280,7 +273,6 @@ struct PicksView: View {
         case .pickems:
             if WeekTransition.arePickemsOpen(week) {
                 if !WeekTransition.pickemsShouldShowFullLockedPhase(week) {
-                    pickemsLockBanner(for: week)
                     if picksMatchWeek(week) {
                         SecondaryButton("See who's in", icon: "person.crop.circle.badge.clock") {
                             appState.present(.submissionStatus)
@@ -431,18 +423,16 @@ struct PicksView: View {
     }
 
     @ViewBuilder
-    private func pickemsLockBanner(for week: WeekSummary) -> some View {
-        let games = appState.pickService.slateGames
-        if let next = PickDeadlineCalculator.nextLockDate(week: week, games: games) {
-            PickDeadlineBanner(
-                deadline: next,
-                isRolling: week.isRollingLock,
-                openCount: PickDeadlineCalculator.openGameCount(week: week, games: games),
-                totalCount: games.count
+    private func weekDeadlineHeader(for week: WeekSummary) -> some View {
+        let games = picksMatchWeek(week) ? appState.pickService.slateGames : []
+        WeekDeadlineHeader(
+            snapshot: WorkspaceDeadlineDisplay.snapshot(
+                kind: kind == .selections ? .selections : .pickems,
+                week: week,
+                isCommissioner: appState.isCommissioner,
+                games: games
             )
-        } else if let deadline = week.pickDeadline {
-            PickDeadlineBanner(deadline: deadline)
-        }
+        )
     }
 
     @ViewBuilder
