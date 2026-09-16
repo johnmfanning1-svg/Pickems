@@ -75,6 +75,12 @@ struct PickDeadlineCalculatorTests {
         #expect(label.contains("m left"))
     }
 
+    @Test func countdownLabelUsesProvidedNow() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        #expect(PickDeadlineCalculator.countdownLabel(to: now.addingTimeInterval(-1), now: now) == "Picks locked")
+        #expect(PickDeadlineCalculator.countdownLabel(to: now.addingTimeInterval(90 * 60), now: now) == "1h 30m left")
+    }
+
     @Test func rollingPolicyUsesEarliestKickoffForFirstLock() {
         let kickoffs = [
             Date(timeIntervalSince1970: 1_000_000),

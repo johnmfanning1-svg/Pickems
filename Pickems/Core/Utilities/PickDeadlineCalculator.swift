@@ -42,8 +42,8 @@ enum PickDeadlineCalculator {
         return formatter.string(from: deadline)
     }
 
-    static func countdownLabel(to deadline: Date) -> String {
-        let remaining = deadline.timeIntervalSinceNow
+    static func countdownLabel(to deadline: Date, now: Date = Date()) -> String {
+        let remaining = deadline.timeIntervalSince(now)
         if remaining <= 0 { return "Picks locked" }
 
         let hours = Int(remaining) / 3600
