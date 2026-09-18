@@ -17,6 +17,9 @@ firebase/admin/dist/*
 firebase/admin/.env.local
 firebase/admin/.env.*.local
 
+# Marketing site staging copy for Hosting (source of truth is /web)
+firebase/hosting-public/
+
 # Service-account keys for admin-tools must never enter the repo (Risk R2).
 firebase/admin-tools/*.json
 

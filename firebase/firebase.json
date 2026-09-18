@@ -23,7 +23,7 @@
     "rules": "storage.rules"
   },
   "hosting": {
-    "public": "admin/dist",
+    "public": "hosting-public",
     "ignore": [
       "firebase.json",
       "**/node_modules/**"
@@ -36,6 +36,14 @@
       {
         "source": "/join/**",
         "destination": "/join.html"
+      },
+      {
+        "source": "/support",
+        "destination": "/support.html"
+      },
+      {
+        "source": "/support/**",
+        "destination": "/support.html"
       },
       {
         "source": "**",
@@ -87,9 +95,6 @@
           }
         ]
       }
-    ],
-    "predeploy": [
-      "bash scripts/stage-hosting.sh"
     ]
   },
   "emulators": {

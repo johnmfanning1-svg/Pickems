@@ -1,1 +1,1 @@
-pickem,pick em,against the spread,ats,live scores,commissioner,bowl,fbs,ncaaf,league,playoff
+pickem,pick em,against the spread,ats,straight up,live scores,commissioner,bowl,fbs,ncaaf,league
