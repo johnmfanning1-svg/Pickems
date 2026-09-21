@@ -679,7 +679,8 @@ final class GroupService {
                 seasonLosses: 0,
                 avatarImageURL: avatarImageURL
             )
-            try await groupRef.collection("members").document(commissionerId).setData(from: member)
+            try await groupRef.collection("members").document(commissionerId)
+                .setData(try memberDocumentForCreate(member))
             selectedGroup = group
             if !groups.contains(where: { $0.id == group.id }) {
                 groups.append(group)
@@ -705,43 +706,147 @@ final class GroupService {
         avatarColorHex: String,
         avatarImageURL: String? = nil
     ) async throws {
-        let normalizedCode = inviteCode.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCode = InviteCodeRules.normalize(inviteCode)
+        guard InviteCodeRules.isValidFormat(normalizedCode) else {
+            throw GroupError.invalidInviteCodeFormat
+        }
+
         let codeDoc = try await db.collection("inviteCodes").document(normalizedCode).getDocument()
-        guard codeDoc.exists, let groupId = codeDoc.data()?["groupId"] as? String else {
+        guard codeDoc.exists, let groupId = codeDoc.data()?["groupId"] as? String, !groupId.isEmpty else {
             throw GroupError.invalidInviteCode
         }
 
-        let doc = try await db.collection("groups").document(groupId).getDocument()
-        guard doc.exists else {
-            throw GroupError.invalidInviteCode
-        }
-
-        var group = try doc.data(as: PickemGroup.self)
-        guard !group.memberIds.contains(userId) else {
-            adoptSelectedGroup(group)
-            await syncCurrentWeekFromESPN(groupId: group.id)
+        let groupRef = db.collection("groups").document(groupId)
+        // Group docs are members-only, so a permission error means "not in yet",
+        // not a bad code. The code was already resolved via inviteCodes.
+        if let existing = try await readableGroup(groupRef), existing.memberIds.contains(userId) {
+            try await ensureOwnMemberDocument(
+                groupRef: groupRef,
+                userId: userId,
+                displayName: displayName,
+                avatarColorHex: avatarColorHex,
+                avatarImageURL: avatarImageURL,
+                role: existing.commissionerId == userId ? .commissioner : .member
+            )
+            adoptSelectedGroup(existing)
+            await syncCurrentWeekFromESPN(groupId: existing.id)
             return
         }
 
-        try await doc.reference.updateData(["memberIds": FieldValue.arrayUnion([userId])])
+        // Ticket must be committed before the memberIds write. Rules read the
+        // ticket with get(), which does not see other writes in the same batch.
+        // If this build ships before the rules do, the ticket write is denied
+        // and the previous memberIds update still works. After the rules deploy,
+        // that update is denied unless the ticket was just accepted.
+        let ticketRef = groupRef.collection("joinTickets").document(userId)
+        let membershipUpdate: [String: Any] = [
+            "memberIds": FieldValue.arrayUnion([userId]),
+        ]
+        var joined = false
+        do {
+            try await ticketRef.setData([
+                "code": normalizedCode,
+                "createdAt": FieldValue.serverTimestamp(),
+            ])
+            try await groupRef.updateData(membershipUpdate)
+            joined = true
+        } catch {
+            if !Self.isPermissionDenied(error) { throw error }
+        }
+        if !joined {
+            do {
+                try await groupRef.updateData(membershipUpdate)
+            } catch {
+                throw joinFailure(from: error)
+            }
+        }
+
+        await deleteJoinTicket(groupId: groupId, userId: userId)
+        try await ensureOwnMemberDocument(
+            groupRef: groupRef,
+            userId: userId,
+            displayName: displayName,
+            avatarColorHex: avatarColorHex,
+            avatarImageURL: avatarImageURL,
+            role: .member
+        )
+
+        let doc = try await groupRef.getDocument(source: .server)
+        guard var group = try? doc.data(as: PickemGroup.self) else {
+            throw GroupError.invalidInviteCode
+        }
         if !group.memberIds.contains(userId) {
             group.memberIds.append(userId)
         }
+        adoptSelectedGroup(group)
+        await syncCurrentWeekFromESPN(groupId: group.id)
+        await reconcileSelectionWeekSnapshot(groupId: group.id, rules: group.rules)
+    }
 
+    /// Server-stamped create payload. Rules reject a client `joinedAt` and any
+    /// season record other than 0–0, which is what scoring increments later.
+    private func memberDocumentForCreate(_ member: GroupMember) throws -> [String: Any] {
+        var payload = try Firestore.Encoder().encode(member)
+        payload["joinedAt"] = FieldValue.serverTimestamp()
+        return payload
+    }
+
+    private func readableGroup(_ ref: DocumentReference) async throws -> PickemGroup? {
+        do {
+            let doc = try await ref.getDocument(source: .server)
+            guard doc.exists else { return nil }
+            return try doc.data(as: PickemGroup.self)
+        } catch {
+            let ns = error as NSError
+            if ns.domain == FirestoreErrorDomain,
+               ns.code == FirestoreErrorCode.permissionDenied.rawValue {
+                return nil
+            }
+            throw error
+        }
+    }
+
+    private func ensureOwnMemberDocument(
+        groupRef: DocumentReference,
+        userId: String,
+        displayName: String,
+        avatarColorHex: String,
+        avatarImageURL: String?,
+        role: GroupMember.MemberRole
+    ) async throws {
+        let ref = groupRef.collection("members").document(userId)
+        let snap = try await ref.getDocument(source: .server)
+        if snap.exists { return }
         let member = GroupMember(
             id: userId,
             displayName: displayName,
             avatarColorHex: avatarColorHex,
-            role: .member,
+            role: role,
             joinedAt: Date(),
             seasonWins: 0,
             seasonLosses: 0,
             avatarImageURL: avatarImageURL
         )
-        try await doc.reference.collection("members").document(userId).setData(from: member)
-        adoptSelectedGroup(group)
-        await syncCurrentWeekFromESPN(groupId: group.id)
-        await reconcileSelectionWeekSnapshot(groupId: group.id, rules: group.rules)
+        try await ref.setData(try memberDocumentForCreate(member))
+    }
+
+    private func joinFailure(from error: Error) -> Error {
+        if Self.isPermissionDenied(error) {
+            return GroupError.invalidInviteCode
+        }
+        return error
+    }
+
+    private static func isPermissionDenied(_ error: Error) -> Bool {
+        let ns = error as NSError
+        return ns.domain == FirestoreErrorDomain
+            && ns.code == FirestoreErrorCode.permissionDenied.rawValue
+    }
+
+    private func deleteJoinTicket(groupId: String, userId: String) async {
+        try? await db.collection("groups").document(groupId)
+            .collection("joinTickets").document(userId)
+            .delete()
     }
 
     /// Keeps league member rows in sync when a user changes their unique display name.
@@ -863,6 +968,7 @@ final class GroupService {
     private func removeMemberFromGroup(group: PickemGroup, userId: String) async throws {
         let groupId = group.id
         let updatedIds = group.memberIds.filter { $0 != userId }
+        await deleteJoinTicket(groupId: groupId, userId: userId)
         try await db.collection("groups").document(groupId).updateData(["memberIds": updatedIds])
         try await db.collection("groups").document(groupId)
             .collection("members").document(userId).delete()
@@ -1163,6 +1269,7 @@ final class GroupService {
         guard group.memberIds.contains(userId) else { return }
 
         let updatedIds = group.memberIds.filter { $0 != userId }
+        await deleteJoinTicket(groupId: groupId, userId: userId)
         try await db.collection("groups").document(groupId).updateData(["memberIds": updatedIds])
         try await db.collection("groups").document(groupId)
             .collection("members").document(userId).delete()
