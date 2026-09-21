@@ -18,6 +18,9 @@ import {
   query,
   where,
   serverTimestamp,
+  arrayUnion,
+  arrayRemove,
+  increment,
 } from "firebase/firestore";
 import { afterAll, afterEach, beforeAll, describe, it } from "vitest";
 
@@ -49,6 +52,7 @@ async function seed() {
       memberIds: [COMMISH, MEMBER, OTHER_MEMBER],
       isPublic: false,
     });
+    await setDoc(doc(db, "inviteCodes", "ABC123"), { groupId: GROUP_ID });
     for (const uid of [COMMISH, MEMBER, OTHER_MEMBER]) {
       await setDoc(doc(db, "groups", GROUP_ID, "members", uid), {
         id: uid,
@@ -899,5 +903,253 @@ describe("rolling pick lock", () => {
         weekLockAt: new Date(),
       })
     );
+  });
+});
+
+describe("P0: invite join, season record, lock snapshot", () => {
+  function safeMember(uid, role = "member") {
+    return {
+      id: uid,
+      displayName: uid.slice(0, 20),
+      avatarColorHex: "#DC2626",
+      role,
+      joinedAt: serverTimestamp(),
+      seasonWins: 0,
+      seasonLosses: 0,
+    };
+  }
+
+  async function writeJoinTicket(db, uid, code = "ABC123") {
+    await setDoc(doc(db, "groups", GROUP_ID, "joinTickets", uid), {
+      code,
+      createdAt: serverTimestamp(),
+    });
+  }
+
+  it("hides the group doc from outsiders and still lets members read it", async () => {
+    await seed();
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER).firestore();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertFails(getDoc(doc(outsiderDb, "groups", GROUP_ID)));
+    await assertSucceeds(getDoc(doc(memberDb, "groups", GROUP_ID)));
+    await assertSucceeds(getDoc(doc(adminCtx().firestore(), "groups", GROUP_ID)));
+  });
+
+  it("rejects a naked memberIds write and accepts a fresh invite ticket", async () => {
+    await seed();
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER).firestore();
+    const group = doc(outsiderDb, "groups", GROUP_ID);
+
+    await assertFails(updateDoc(group, { memberIds: arrayUnion(OUTSIDER) }));
+    await assertFails(
+      setDoc(doc(outsiderDb, "groups", GROUP_ID, "joinTickets", OUTSIDER), {
+        code: "NOPE00",
+        createdAt: serverTimestamp(),
+      })
+    );
+    await assertFails(
+      setDoc(doc(outsiderDb, "groups", GROUP_ID, "joinTickets", OUTSIDER), {
+        code: "ABC123",
+        createdAt: new Date(),
+      })
+    );
+
+    await assertSucceeds(writeJoinTicket(outsiderDb, OUTSIDER));
+    // Retry overwrites the ticket; rules allow that only while still outside.
+    await assertSucceeds(writeJoinTicket(outsiderDb, OUTSIDER));
+    await assertSucceeds(updateDoc(group, { memberIds: arrayUnion(OUTSIDER) }));
+    await assertSucceeds(
+      setDoc(doc(outsiderDb, "groups", GROUP_ID, "members", OUTSIDER), safeMember(OUTSIDER))
+    );
+    await assertSucceeds(getDoc(group));
+  });
+
+  it("lets a removed member rejoin only with a fresh code proof", async () => {
+    await seed();
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER).firestore();
+    const group = doc(outsiderDb, "groups", GROUP_ID);
+
+    await writeJoinTicket(outsiderDb, OUTSIDER);
+    await updateDoc(group, { memberIds: arrayUnion(OUTSIDER) });
+
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await updateDoc(doc(db, "groups", GROUP_ID), {
+        memberIds: arrayRemove(OUTSIDER),
+      });
+      await setDoc(doc(db, "groups", GROUP_ID, "joinTickets", OUTSIDER), {
+        code: "ABC123",
+        createdAt: new Date(Date.now() - 15 * 60 * 1000),
+      });
+    });
+
+    await assertFails(updateDoc(group, { memberIds: arrayUnion(OUTSIDER) }));
+    await assertSucceeds(writeJoinTicket(outsiderDb, OUTSIDER));
+    await assertSucceeds(updateDoc(group, { memberIds: arrayUnion(OUTSIDER) }));
+  });
+
+  it("lets a member leave without a join ticket, then blocks self-delete until they have left", async () => {
+    await seed();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const memberDoc = doc(memberDb, "groups", GROUP_ID, "members", MEMBER);
+
+    await assertFails(deleteDoc(memberDoc));
+    await assertSucceeds(
+      updateDoc(doc(memberDb, "groups", GROUP_ID), { memberIds: arrayRemove(MEMBER) })
+    );
+    await assertSucceeds(deleteDoc(memberDoc));
+  });
+
+  it("blocks forging seasonWins on create, including after delete", async () => {
+    await seed();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER).firestore();
+    const memberDoc = doc(memberDb, "groups", GROUP_ID, "members", MEMBER);
+
+    await assertFails(deleteDoc(memberDoc));
+    await assertFails(
+      setDoc(doc(outsiderDb, "groups", GROUP_ID, "members", OUTSIDER), {
+        ...safeMember(OUTSIDER),
+        seasonWins: 999,
+      })
+    );
+
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await deleteDoc(doc(db, "groups", GROUP_ID, "members", MEMBER));
+    });
+
+    await assertFails(
+      setDoc(memberDoc, { ...safeMember(MEMBER), seasonWins: 999, seasonLosses: 0 })
+    );
+    await assertFails(setDoc(memberDoc, { ...safeMember(MEMBER), role: "commissioner" }));
+    await assertFails(
+      setDoc(memberDoc, { ...safeMember(MEMBER), joinedAt: new Date(0) })
+    );
+    // A device clock (installed builds) is accepted inside the skew window.
+    await assertSucceeds(
+      setDoc(memberDoc, { ...safeMember(MEMBER), joinedAt: new Date() })
+    );
+  });
+
+  it("lets the commissioner create their own 0-0 member doc and nobody else spoof the role", async () => {
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertSucceeds(
+      setDoc(doc(commishDb, "groups", "fresh"), {
+        id: "fresh",
+        name: "Fresh",
+        inviteCode: "FRESH1",
+        commissionerId: COMMISH,
+        memberIds: [COMMISH],
+      })
+    );
+    await assertSucceeds(
+      setDoc(doc(commishDb, "groups", "fresh", "members", COMMISH), safeMember(COMMISH, "commissioner"))
+    );
+    await assertFails(
+      setDoc(
+        doc(commishDb, "groups", "fresh", "members", "extra"),
+        safeMember("extra")
+      )
+    );
+  });
+
+  it("blocks members from rewriting the lock snapshot or opening picking", async () => {
+    await seed();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const week = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID);
+    const far = new Date("2099-01-01T00:00:00Z");
+
+    await assertFails(
+      updateDoc(week, {
+        pickLockMode: "rolling",
+        weekLockAt: far,
+        gameIds: ["game1"],
+        gameKickoffs: { game1: far },
+        remainingLockAt: far,
+      })
+    );
+    await assertFails(updateDoc(week, { nominationCount: 6, weekLockAt: far }));
+    await assertSucceeds(updateDoc(week, { nominationCount: increment(1) }));
+
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID), {
+        status: "selection",
+      });
+    });
+    await assertFails(
+      updateDoc(week, {
+        status: "picking",
+        pickDeadline: far,
+        nominationCount: 5,
+      })
+    );
+
+    await assertFails(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "weeks", "2026-W10"), {
+        id: "2026-W10",
+        seasonYear: 2026,
+        weekNumber: 10,
+        status: "picking",
+        nominationCount: 0,
+        pickDeadline: far,
+        pickLockMode: "rolling",
+        weekLockAt: far,
+      })
+    );
+    await assertSucceeds(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "weeks", "2026-W9"), {
+        id: "2026-W9",
+        seasonYear: 2026,
+        weekNumber: 9,
+        status: "selection",
+        slateSize: 12,
+        selectionMode: "member",
+        selectionsPerMember: 3,
+        nominationCount: 0,
+      })
+    );
+    await assertSucceeds(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "weeks", "2026-W0"), {
+        id: "2026-W0",
+        seasonYear: 2026,
+        weekNumber: 0,
+        status: "picking",
+        slateSize: 8,
+        selectionMode: "commissioner",
+        selectionsPerMember: 3,
+        nominationCount: 0,
+        slateSource: "fixedBoard",
+        lockedAt: new Date(),
+      })
+    );
+  });
+
+  it("keeps an in-window pick write working and a past-deadline write denied", async () => {
+    await seed();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const pick = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", MEMBER);
+    const week = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID);
+
+    await assertSucceeds(
+      updateDoc(pick, { picks: { game1: "away" }, isLocked: false })
+    );
+
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID), {
+        pickDeadline: new Date(Date.now() - 60 * 1000),
+        status: "picking",
+      });
+    });
+    await assertFails(updateDoc(pick, { picks: { game1: "home" }, isLocked: false }));
+    await assertFails(
+      updateDoc(week, {
+        pickLockMode: "rolling",
+        weekLockAt: new Date("2099-01-01T00:00:00Z"),
+        gameKickoffs: { game1: new Date("2099-01-01T00:00:00Z") },
+        gameIds: ["game1"],
+      })
+    );
+    await assertFails(updateDoc(pick, { picks: { game1: "home" }, isLocked: false }));
   });
 });

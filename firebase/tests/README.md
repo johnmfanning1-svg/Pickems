@@ -51,3 +51,7 @@ deploys. `afterEach` clears the emulator, and each case reseeds its own fixtures
   member's is not, while an admin can read both (the portal's pick grid depends
   on it); the commissioner week field allow-list still rejects `slateSize`;
   submissions stay member-writable and picks stay unforgeable.
+- **P0 join / record / lock** — non-members cannot read a group doc; joining
+  requires a fresh invite-code ticket; members cannot delete-and-recreate a
+  season record; members cannot rewrite a week's lock snapshot or mint an open
+  picking week. Leaving the league still works without a ticket.
