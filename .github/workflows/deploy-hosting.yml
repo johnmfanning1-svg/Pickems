@@ -1,9 +1,15 @@
 name: Deploy Hosting Only
 
-# Manual Firebase Hosting deploy for pickems-fb.web.app.
+# Firebase Hosting deploy for pickems-fb.web.app.
 # Does not deploy Firestore rules, Storage rules, or Cloud Functions.
+# Push runs only when this workflow file changes, so a marketing-only
+# merge does not publish Hosting by itself and never publishes rules.
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/deploy-hosting.yml"
 
 jobs:
   deploy:
