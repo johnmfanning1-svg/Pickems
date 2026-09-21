@@ -1,0 +1,37 @@
+name: Deploy Hosting Only
+
+# Manual Firebase Hosting deploy for pickems-fb.web.app.
+# Does not deploy Firestore rules, Storage rules, or Cloud Functions.
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: firebase/admin/package-lock.json
+
+      - name: Install admin portal dependencies
+        working-directory: firebase/admin
+        run: npm ci
+
+      - name: Deploy Firebase Hosting only
+        working-directory: firebase
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FIREBASE_TOKEN}" ]; then
+            echo "Missing FIREBASE_TOKEN repository secret."
+            exit 1
+          fi
+          echo "Hosting-only deploy. Firestore rules, Storage rules, and Functions are excluded."
+          npx -y firebase-tools@latest deploy --only hosting --non-interactive --project pickems-fb --token "$FIREBASE_TOKEN"
