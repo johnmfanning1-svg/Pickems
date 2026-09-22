@@ -584,7 +584,7 @@ twq('config','rfm1d');
       var node = event.target;
       var link = node && node.closest ? node.closest("a") : null;
       if (!link || !link.href || link.href.indexOf("https://apps.apple.com/") !== 0) return;
-      if (typeof twq === "function") twq("event", "Download", {});
+      if (typeof twq === "function") twq("event", "tw-rfm1d-rfm2h", {});
     });
   </script>
 </body>
