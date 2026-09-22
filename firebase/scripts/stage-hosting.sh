@@ -19,6 +19,8 @@ cp ../../web/sitemap.xml dist/sitemap.xml
 cp ../../web/.well-known/apple-app-site-association dist/.well-known/apple-app-site-association
 cp ../../web/apple-app-site-association dist/apple-app-site-association
 cp ../../web/assets/logo.png dist/assets/logo.png
+cp ../../web/assets/promo.mp4 dist/assets/promo.mp4
+cp ../../web/assets/promo-poster.jpg dist/assets/promo-poster.jpg
 cp ../../web/assets/home.jpg dist/assets/home.jpg
 cp ../../web/assets/select-games.jpg dist/assets/select-games.jpg
 cp ../../web/assets/spread-pickems.jpg dist/assets/spread-pickems.jpg

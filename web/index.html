@@ -253,8 +253,25 @@
       font-size: 0.88rem;
     }
 
-    .hero-phone {
+    .hero-promo {
       justify-self: center;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+    }
+
+    .hero-promo video {
+      display: block;
+      width: auto;
+      height: auto;
+      max-width: min(100%, 420px);
+      max-height: 70vh;
+      margin-inline: auto;
+      border-radius: 1.35rem;
+      background: #0a0a0e;
+      box-shadow: 0 28px 64px rgba(0, 0, 0, 0.48);
+      object-fit: contain;
     }
 
     .phone {
@@ -413,7 +430,7 @@
 
     @media (min-width: 820px) {
       .hero {
-        grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+        grid-template-columns: minmax(0, 1fr) minmax(240px, 420px);
         align-items: center;
         padding-top: 3.4rem;
         padding-bottom: 2.4rem;
@@ -492,15 +509,21 @@ twq('config','rfm1d');
             <li class="pill">No subscriptions</li>
           </ul>
         </div>
-        <div class="hero-phone">
-          <div class="phone">
-            <img
-              src="assets/home.jpg"
-              width="1170"
-              height="2532"
-              alt="Pickems Home: Join or Create a league, ESPN CFB headlines, and Top 25 matchups for the week."
-            />
-          </div>
+        <div class="hero-promo">
+          <video
+            src="assets/promo.mp4"
+            poster="assets/promo-poster.jpg"
+            autoplay
+            muted
+            loop
+            playsinline
+            preload="metadata"
+            width="1080"
+            height="1920"
+            aria-label="CFB Pickems promo: private college football pick’em leagues on iPhone."
+          >
+            CFB Pickems promo
+          </video>
         </div>
       </section>
 
