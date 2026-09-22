@@ -165,6 +165,24 @@
 
     nav a:hover, nav a:focus-visible { color: var(--ink); outline: none; }
 
+    nav a.x-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      color: var(--ink);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    nav a.x-link svg {
+      width: 1rem;
+      height: 1rem;
+      flex-shrink: 0;
+      fill: currentColor;
+    }
+
+    nav a.x-link:hover, nav a.x-link:focus-visible { color: var(--accent); }
+
     nav a:focus-visible, .cta:focus-visible, .brand:focus-visible, footer a:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 3px;
@@ -384,6 +402,15 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
+    @media (max-width: 720px) {
+      header.top {
+        flex-wrap: wrap;
+        row-gap: 0.65rem;
+      }
+
+      nav { margin-left: auto; }
+    }
+
     @media (min-width: 820px) {
       .hero {
         grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
@@ -433,6 +460,12 @@ twq('config','rfm1d');
         <a href="https://apps.apple.com/us/app/cfb-pickems/id6785697079">App Store</a>
         <a href="/support">Support</a>
         <a href="https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/main/docs/privacy-policy.html">Privacy</a>
+        <a class="x-link" href="https://x.com/CFB_PICKEMS" target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.727-8.835L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+          </svg>
+          @CFB_PICKEMS
+        </a>
       </nav>
     </header>
 
