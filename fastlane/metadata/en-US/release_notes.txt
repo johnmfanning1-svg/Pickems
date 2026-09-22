@@ -1,6 +1,6 @@
-What's new in 3.5.6
+What's new in 3.5.7
 
+• TestFlight rebuild of 3.5.6
 • No gambling — website, store subtitle, and promo lead with it
-• New App Store screenshots for Pickems, Selections, and the league board
 
 Thanks for helping us UAT this build.
