@@ -4,6 +4,7 @@ name: Deploy Hosting Only
 # Does not deploy Firestore rules, Storage rules, or Cloud Functions.
 # Push runs only when this workflow file changes, so a marketing-only
 # merge does not publish Hosting by itself and never publishes rules.
+# Publish trigger: App Store click event tw-rfm1d-rfm2h.
 on:
   workflow_dispatch:
   push:
