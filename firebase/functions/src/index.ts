@@ -57,6 +57,9 @@ export {
 // Group chat — push fan-out plus the report counter clients cannot write.
 export { onMessageCreated, onReportCreated } from "./chat";
 
+// Shock tweet drafts. Admin SDK writes; does not post to X.
+export { detectShockTweets, runDetectShockTweets } from "./shockTweets";
+
 /** When a week flips to picking, materialize nominations into games if needed. */
 export const onWeekStatusChange = onDocumentUpdated(
   "groups/{groupId}/weeks/{weekId}",
