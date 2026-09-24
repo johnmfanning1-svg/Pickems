@@ -1,48 +1,37 @@
-# Selection slate-limit fix (Core 4 OG / late joiners)
+# Selection slate-limit UX + late-joiner `slateSize` reconcile
 
-## Incident (production, verified)
+**Ship window:** Sunday (App Store build). Live data for Core 4 already patched Wed Sep 23.
+**Repo:** `johnmfanning1-svg/Pickems` · Firebase `pickems-fb` · iOS `FannypackInc.Pickems`
+**Branch:** `fix/selection-slate-limit-ux`
 
-- League: **Core 4 OG** (`groups/qb2aPmmAm1ZSWZnQVnNL`)
-- Week: **2026-W4**
-- Symptom: `week.slateSize` stayed at **9** after the roster grew to **4 members × `selectionsPerMember` 3 = expected 12**.
-- Three members filled all 9 unique slots. **Jack (JBanda)** had personal slots left (0 noms, open deadline) but **Save** threw `PickError.nominationLimitReached` with copy that also blamed the Selection deadline.
-- Browse footer still showed **"1 of 3 selected"** because `GameBrowseView` floored the limit with `max(..., 1)` even when remaining slate slots were 0.
+## Problem
+Member-mode weeks store `week.slateSize` derived as `members × selectionsPerMember` at mint time. If someone joins later and reconcile fails or never runs, the week can stay short. Other members can fill every slot. A member with **0 personal nominations** and an **open deadline** still sees Select Games, can pick (Browse limit floored / stale), then Save throws:
 
-Live data was already patched: W4 `slateSize` bumped to **12**. This change is the durable product/code fix.
+> You've reached your Selection limit or the Selection deadline has passed.
 
-## Root cause
+That string conflates personal limit, slate full, and deadline. Real cause for Jack (Core 4 OG W4): **slate full at wrong size (9 vs expected 12)**.
 
-1. **Stale `week.slateSize` after late join** — `reconcileSelectionWeekSnapshot` existed on `joinGroup` / `updateRules`, but the groups listener skipped week sync when membership grew while already observing the same week, so slate size often never expanded.
-2. **Conflated errors** — `submitNominations` zeroed remaining slots for personal limit, slate full, *or* deadline, then always threw `nominationLimitReached`.
-3. **Dead-end Select Games UX** — Browse/`PicksView` still offered a pick flow when the league slate had no room.
+## Live mitigation (done)
+| League | Week | Action |
+| --- | --- | --- |
+| Core 4 OG `qb2aPmmAm1ZSWZnQVnNL` | `2026-W4` | `slateSize` 9 → **12**; Jack confirmed Save works |
+| Alexas Pickems `cKbju3nUMOZ19RkVDy4X` | W2/W3 short (3 vs 6) | **Left alone** (idle) per John |
+| PPP, Bettors High, Jacks Spread, Seagulls, Apple Test, The Boys | current weeks | OK / N/A |
 
-## What changed (this PR)
+## Product fix (code — on branch)
+1. **Distinct errors** (`PickService.PickError`): personal Selection limit · `slateFull` · `selectionClosed` (deadline).
+2. **UX:** don’t offer a dead-end Select Games when remaining slate slots are 0; fix `GameBrowseView` `max(..., 1)` floor when remaining is 0.
+3. **Reconcile:** expand `week.slateSize` to `rules.expectedSlateSize(memberCount)` during `.selection` on join / select / membership / mismatch; never shrink below unique taken games.
+4. **Save/browse math:** use `max(week.slateSize, expected)` so a stale short client snapshot doesn’t falsely zero slots when expected is larger.
 
-| Area | Change |
-|------|--------|
-| `PickService.submitNominations` / `PickError` | Distinct errors: personal Selection limit, league slate full, Selection deadline (`selectionClosed`). Re-read server `slateSize` and use `max(client, expected)` so a stale snapshot cannot falsely zero slots; self-heal by writing expanded `slateSize` when expected is larger. |
-| `GameBrowseView` / `PicksView` / commissioner manage sheet | No usable Select Games flow when remaining slate slots are 0; removed `max(..., 1)` floor; clear slate-full copy. |
-| `GroupService.reconcileSelectionWeekSnapshot` | Authoritative `memberCount`; expand on join / select / membership listener / week snapshot mismatch; **never shrink below** unique nomination+game count. |
-| `SelectionSlateReconcile` + tests | Pure helpers for target/effective/remaining slate math. |
+Files: `PickService.swift`, `GroupService.swift`, `SelectionSlateReconcile.swift`, `GameBrowseView.swift`, `PicksView.swift`, `PicksViewModel.swift`, `CommissionerManageSelectionsSheet.swift`, `SelectionSlateReconcileTests.swift`.
 
-## Sunday ship steps
+## Sunday ship order
+1. Finish/verify PR → merge when approved  
+2. TestFlight from `main`  
+3. Smoke selection paths  
+4. App Store  
+5. Keep P0 Firestore rules deploy gated behind join-ticket TF (existing release rule)
 
-Do **not** merge or deploy Firebase from the agent. Ship when ready for App Store:
-
-1. **Review & merge** this PR into `main` when approved.
-2. **Build** a release candidate from `main` (Xcode archive).
-3. **TestFlight**
-   - Upload the build.
-   - Smoke on a member-mode league during `.selection`:
-     - Late join while slate is partially filled → `slateSize` expands to `members × selectionsPerMember`.
-     - Member with personal slots left but slate full → no dead-end Select Games; sees slate-full messaging (not deadline copy).
-     - Personal limit vs deadline still show their own errors.
-4. **App Store**
-   - Submit the same (or next) build after TestFlight sign-off.
-   - No Hosting/Firebase Functions deploy required for this fix (client + week doc reconcile only). Live W4 data patch already applied.
-
-## Follow-ups / risks
-
-- `PickError.slateFull` copy is now member-slate oriented; commissioner “open week with empty games” still reuses that case (rare).
-- Week-listener reconcile can write once when membership/rules disagree with `week.slateSize`; guarded to no-op when already aligned.
-- XCTest/Swift Testing for this target is not runnable on the Linux agent box — run `SelectionSlateReconcileTests` (and related) in Xcode before ship.
+## Cursor paste prompt
+See `SELECTION_SLATE_LIMIT_SUNDAY_PROMPT.md` in this folder.
