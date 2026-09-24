@@ -258,16 +258,12 @@ final class PickService {
     }
 
     func loadAllPicks(groupId: String, weekId: String) async {
+        let picksQuery = db.collection("groups").document(groupId)
+            .collection("weeks").document(weekId)
+            .collection("picks")
         do {
-            let snapshot = try await db.collection("groups").document(groupId)
-                .collection("weeks").document(weekId)
-                .collection("picks").getDocuments(source: .server)
-            allPicks = snapshot.documents.compactMap { try? $0.data(as: UserPick.self) }
-            // Ensure own pick stays present even if the list snapshot raced ahead of a write.
-            mergeOwnPickIntoAllPicks(userPick)
-            if let current = errorMessage, UserFacingError.looksLikePermissionMessage(current) {
-                errorMessage = nil
-            }
+            let snapshot = try await picksQuery.getDocuments(source: .server)
+            applyAllPicksSnapshot(snapshot)
         } catch {
             // Before lock/deadline, rules hide other members' picks — expected, not a user error.
             // Collection list fails; explicitly get picks/{uid} (readable for self) and merge.
@@ -287,7 +283,31 @@ final class PickService {
                 }
                 return
             }
+            if UserFacingError.isServerSourceUnavailable(error) {
+                AppLog.notice(AppLog.firestore, "loadAllPicks server hop failed; falling back to cache", metadata: [
+                    "group_id": groupId,
+                    "week_id": weekId,
+                ])
+                do {
+                    let snapshot = try await picksQuery.getDocuments()
+                    applyAllPicksSnapshot(snapshot)
+                    errorMessage = UserFacingError.refreshUnavailableMessage
+                    return
+                } catch {
+                    UserFacingError.apply(error, to: &errorMessage)
+                    return
+                }
+            }
             UserFacingError.apply(error, to: &errorMessage)
+        }
+    }
+
+    private func applyAllPicksSnapshot(_ snapshot: QuerySnapshot) {
+        allPicks = snapshot.documents.compactMap { try? $0.data(as: UserPick.self) }
+        // Ensure own pick stays present even if the list snapshot raced ahead of a write.
+        mergeOwnPickIntoAllPicks(userPick)
+        if let current = errorMessage, UserFacingError.looksLikePermissionMessage(current) {
+            errorMessage = nil
         }
     }
 
@@ -298,35 +318,71 @@ final class PickService {
         let weekRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
         do {
-            async let nomsSnap = weekRef.collection("nominations").getDocuments(source: .server)
-            async let gamesSnap = weekRef.collection("games").getDocuments(source: .server)
-            async let pickSnap = weekRef.collection("picks").document(userId).getDocument(source: .server)
-            async let subsSnap = weekRef.collection("submissions").getDocuments(source: .server)
-            let (nominationsSnap, gamesSnapshot, ownPickSnap, submissionsSnap) = try await (
-                nomsSnap, gamesSnap, pickSnap, subsSnap
+            try await applyWeekRefreshPayload(
+                weekRef: weekRef,
+                groupId: groupId,
+                weekId: weekId,
+                userId: userId,
+                source: .server
             )
-            // Observation can remount during this await. Apply the payload for the
-            // week we fetched; re-observe if listeners landed on a different week.
-            if observedWeekId != weekId || observedGroupId != groupId {
-                observeWeek(groupId: groupId, weekId: weekId, userId: userId)
-            }
-            nominations = nominationsSnap.documents.compactMap { try? $0.data(as: Nomination.self) }
-            slateGames = SlateGameDecoding.sortedByKickoff(
-                gamesSnapshot.documents.compactMap { doc in
-                    SlateGame.fromDocument(id: doc.documentID, data: doc.data())
-                }
-            )
-            if ownPickSnap.exists, let pick = try? ownPickSnap.data(as: UserPick.self) {
-                userPick = pick
-                mergeOwnPickIntoAllPicks(pick)
-            }
-            submissions = submissionsSnap.documents.compactMap { try? $0.data(as: PickSubmission.self) }
-            refreshNominationSubmissionState(groupId: groupId, weekId: weekId, userId: userId)
             errorMessage = nil
         } catch {
-            UserFacingError.apply(error, to: &errorMessage)
+            if UserFacingError.isServerSourceUnavailable(error) {
+                AppLog.notice(AppLog.firestore, "refreshFromServer server hop failed; falling back to cache", metadata: [
+                    "group_id": groupId,
+                    "week_id": weekId,
+                ])
+                do {
+                    try await applyWeekRefreshPayload(
+                        weekRef: weekRef,
+                        groupId: groupId,
+                        weekId: weekId,
+                        userId: userId,
+                        source: .default
+                    )
+                    // Server refresh failed but cache/default recovered — soft banner, keep UI.
+                    errorMessage = UserFacingError.refreshUnavailableMessage
+                } catch {
+                    UserFacingError.apply(error, to: &errorMessage)
+                }
+            } else {
+                UserFacingError.apply(error, to: &errorMessage)
+            }
         }
         await loadAllPicks(groupId: groupId, weekId: weekId)
+    }
+
+    private func applyWeekRefreshPayload(
+        weekRef: DocumentReference,
+        groupId: String,
+        weekId: String,
+        userId: String,
+        source: FirestoreSource
+    ) async throws {
+        async let nomsSnap = weekRef.collection("nominations").getDocuments(source: source)
+        async let gamesSnap = weekRef.collection("games").getDocuments(source: source)
+        async let pickSnap = weekRef.collection("picks").document(userId).getDocument(source: source)
+        async let subsSnap = weekRef.collection("submissions").getDocuments(source: source)
+        let (nominationsSnap, gamesSnapshot, ownPickSnap, submissionsSnap) = try await (
+            nomsSnap, gamesSnap, pickSnap, subsSnap
+        )
+        // Observation can remount during this await. Apply the payload for the
+        // week we fetched; re-observe if listeners landed on a different week.
+        if observedWeekId != weekId || observedGroupId != groupId {
+            observeWeek(groupId: groupId, weekId: weekId, userId: userId)
+        }
+        nominations = nominationsSnap.documents.compactMap { try? $0.data(as: Nomination.self) }
+        slateGames = SlateGameDecoding.sortedByKickoff(
+            gamesSnapshot.documents.compactMap { doc in
+                SlateGame.fromDocument(id: doc.documentID, data: doc.data())
+            }
+        )
+        if ownPickSnap.exists, let pick = try? ownPickSnap.data(as: UserPick.self) {
+            userPick = pick
+            mergeOwnPickIntoAllPicks(pick)
+        }
+        submissions = submissionsSnap.documents.compactMap { try? $0.data(as: PickSubmission.self) }
+        refreshNominationSubmissionState(groupId: groupId, weekId: weekId, userId: userId)
     }
 
     /// Upserts the signed-in member's pick into `allPicks` without wiping other entries.
@@ -1578,6 +1634,17 @@ final class PickService {
         } catch {
             if UserFacingError.isPermissionDenied(error) {
                 picks = []
+            } else if UserFacingError.isServerSourceUnavailable(error) {
+                AppLog.notice(AppLog.firestore, "fetchLeagueBoard picks server hop failed; falling back to cache", metadata: [
+                    "group_id": groupId,
+                    "week_id": weekId,
+                ])
+                do {
+                    let picksSnap = try await weekRef.collection(FirestoreCollection.picks).getDocuments()
+                    picks = picksSnap.documents.compactMap { try? $0.data(as: UserPick.self) }
+                } catch {
+                    throw error
+                }
             } else {
                 throw error
             }

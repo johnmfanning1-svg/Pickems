@@ -1704,17 +1704,25 @@ final class GroupService {
     /// One-shot server fetch for pull-to-refresh. Listeners stay attached.
     func refreshFromServer() async {
         guard let groupId = selectedGroup?.id else { return }
+        let groupRef = db.collection("groups").document(groupId)
         do {
-            let groupSnap = try await db.collection("groups").document(groupId)
-                .getDocument(source: .server)
-            if let group = try? groupSnap.data(as: PickemGroup.self) {
-                selectedGroup = group
-                if let idx = groups.firstIndex(where: { $0.id == group.id }) {
-                    groups[idx] = group
-                }
-            }
+            let groupSnap = try await groupRef.getDocument(source: .server)
+            applyRefreshedGroup(groupSnap)
         } catch {
-            UserFacingError.apply(error, to: &errorMessage)
+            if UserFacingError.isServerSourceUnavailable(error) {
+                AppLog.notice(AppLog.firestore, "group refreshFromServer server hop failed; falling back to cache", metadata: [
+                    "group_id": groupId,
+                ])
+                do {
+                    let groupSnap = try await groupRef.getDocument()
+                    applyRefreshedGroup(groupSnap)
+                    errorMessage = UserFacingError.refreshUnavailableMessage
+                } catch {
+                    UserFacingError.apply(error, to: &errorMessage)
+                }
+            } else {
+                UserFacingError.apply(error, to: &errorMessage)
+            }
         }
 
         if let info = try? await ESPNService.shared.currentWeek(forceRefresh: true) {
@@ -1724,19 +1732,27 @@ final class GroupService {
         // Refresh the week on screen (pinned browse or active), not only ESPN current.
         let weekId = currentWeek?.id ?? observedWeekId
         if let weekId {
+            let weekRef = db.collection("groups").document(groupId)
+                .collection("weeks").document(weekId)
             do {
-                let weekSnap = try await db.collection("groups").document(groupId)
-                    .collection("weeks").document(weekId)
-                    .getDocument(source: .server)
-                if weekSnap.exists, let week = try? weekSnap.data(as: WeekSummary.self) {
-                    // Apply the displayed week's snapshot. Do not replace a pinned
-                    // browse with a different week id that raced in during the fetch.
-                    if currentWeek?.id == nil || currentWeek?.id == week.id {
-                        currentWeek = week
-                    }
-                }
+                let weekSnap = try await weekRef.getDocument(source: .server)
+                applyRefreshedWeek(weekSnap)
             } catch {
-                UserFacingError.apply(error, to: &errorMessage)
+                if UserFacingError.isServerSourceUnavailable(error) {
+                    AppLog.notice(AppLog.firestore, "week refreshFromServer server hop failed; falling back to cache", metadata: [
+                        "group_id": groupId,
+                        "week_id": weekId,
+                    ])
+                    do {
+                        let weekSnap = try await weekRef.getDocument()
+                        applyRefreshedWeek(weekSnap)
+                        errorMessage = UserFacingError.refreshUnavailableMessage
+                    } catch {
+                        UserFacingError.apply(error, to: &errorMessage)
+                    }
+                } else {
+                    UserFacingError.apply(error, to: &errorMessage)
+                }
             }
 
             do {
@@ -1747,9 +1763,27 @@ final class GroupService {
                     standings = try? standingsSnap.data(as: GroupStandings.self)
                 }
             } catch {
-                AppLog.error(AppLog.firestore, "standings refresh failed", error: error, metadata: [
-                    "group_id": groupId,
-                ])
+                if UserFacingError.isServerSourceUnavailable(error) {
+                    AppLog.notice(AppLog.firestore, "standings refresh server hop failed; falling back to cache", metadata: [
+                        "group_id": groupId,
+                    ])
+                    do {
+                        let standingsSnap = try await db.collection("groups").document(groupId)
+                            .collection("standings").document("current")
+                            .getDocument()
+                        if standingsSnap.exists, selectedGroup?.id == groupId {
+                            standings = try? standingsSnap.data(as: GroupStandings.self)
+                        }
+                    } catch {
+                        AppLog.error(AppLog.firestore, "standings refresh failed", error: error, metadata: [
+                            "group_id": groupId,
+                        ])
+                    }
+                } else {
+                    AppLog.error(AppLog.firestore, "standings refresh failed", error: error, metadata: [
+                        "group_id": groupId,
+                    ])
+                }
             }
         }
 
@@ -1767,12 +1801,54 @@ final class GroupService {
             members = loaded
             membersGroupId = groupId
         } catch {
-            AppLog.error(AppLog.firestore, "members refresh failed", error: error, metadata: [
-                "group_id": groupId,
-            ])
+            if UserFacingError.isServerSourceUnavailable(error) {
+                AppLog.notice(AppLog.firestore, "members refresh server hop failed; falling back to cache", metadata: [
+                    "group_id": groupId,
+                ])
+                do {
+                    let membersSnapshot = try await db.collection("groups").document(groupId)
+                        .collection("members")
+                        .getDocuments()
+                    var loaded = membersSnapshot.documents.compactMap { try? $0.data(as: GroupMember.self) }
+                    loaded = await hydrateMemberAvatars(loaded)
+                    guard selectedGroup?.id == groupId else { return }
+                    let allowed = Set(selectedGroup?.memberIds ?? [])
+                    if !allowed.isEmpty {
+                        loaded = loaded.filter { allowed.contains($0.id) }
+                    }
+                    members = loaded
+                    membersGroupId = groupId
+                } catch {
+                    AppLog.error(AppLog.firestore, "members refresh failed", error: error, metadata: [
+                        "group_id": groupId,
+                    ])
+                }
+            } else {
+                AppLog.error(AppLog.firestore, "members refresh failed", error: error, metadata: [
+                    "group_id": groupId,
+                ])
+            }
         }
 
         await loadAvailableWeeks(groupId: groupId)
+    }
+
+    private func applyRefreshedGroup(_ groupSnap: DocumentSnapshot) {
+        if let group = try? groupSnap.data(as: PickemGroup.self) {
+            selectedGroup = group
+            if let idx = groups.firstIndex(where: { $0.id == group.id }) {
+                groups[idx] = group
+            }
+        }
+    }
+
+    private func applyRefreshedWeek(_ weekSnap: DocumentSnapshot) {
+        guard weekSnap.exists, let week = try? weekSnap.data(as: WeekSummary.self) else { return }
+        // Apply the displayed week's snapshot. Do not replace a pinned
+        // browse with a different week id that raced in during the fetch.
+        if currentWeek?.id == nil || currentWeek?.id == week.id {
+            currentWeek = week
+        }
     }
 
     private func adoptSelectedGroup(_ group: PickemGroup) {

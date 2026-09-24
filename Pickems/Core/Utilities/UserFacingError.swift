@@ -4,6 +4,11 @@ import FirebaseFirestore
 /// Maps raw Firebase / system errors into copy users should see — never
 /// "Missing or insufficient permissions."
 enum UserFacingError {
+    /// Shown when a forced server read fails (offline / FirestoreSourceServer) so
+    /// pull-to-refresh does not dump the SDK string into Pickems banners.
+    static let refreshUnavailableMessage =
+        "Couldn't refresh right now. Pull to refresh or try again in a moment."
+
     /// User-visible message. Returns `nil` when the failure is expected noise
     /// (e.g. listing private picks before the deadline) and should not be shown.
     static func message(for error: Error, context: Context = .generic) -> String? {
@@ -27,12 +32,19 @@ enum UserFacingError {
             }
         }
 
+        if isServerSourceUnavailable(error) {
+            return refreshUnavailableMessage
+        }
+
         let raw = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         if raw.isEmpty {
             return "Something went wrong. Please try again."
         }
         if looksLikeRawFirebasePermissionCopy(raw) {
             return "Couldn't load that right now. Pull to refresh or try again in a moment."
+        }
+        if looksLikeServerSourceUnavailableCopy(raw) {
+            return refreshUnavailableMessage
         }
         return raw
     }
@@ -72,8 +84,37 @@ enum UserFacingError {
         return looksLikeRawFirebasePermissionCopy(nsError.localizedDescription)
     }
 
+    /// Forced `source: .server` hop failed (offline, timeout, or SDK FirestoreSourceServer).
+    static func isServerSourceUnavailable(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == FirestoreErrorDomain {
+            let code = nsError.code
+            if code == FirestoreErrorCode.unavailable.rawValue
+                || code == FirestoreErrorCode.deadlineExceeded.rawValue {
+                return true
+            }
+        }
+        return looksLikeServerSourceUnavailableCopy(nsError.localizedDescription)
+    }
+
     static func looksLikePermissionMessage(_ text: String) -> Bool {
         looksLikeRawFirebasePermissionCopy(text)
+    }
+
+    static func looksLikeServerSourceUnavailableCopy(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        if lower.contains("firestoresourceserver") {
+            return true
+        }
+        // Exact SDK dump from pull-to-refresh when the server hop fails:
+        // "Failed to get document(s) from server. … FirestoreSourceServer"
+        if lower.contains("failed to get document") && lower.contains("server") {
+            return true
+        }
+        if lower.contains("client is offline") {
+            return true
+        }
+        return false
     }
 
     private static func looksLikeRawFirebasePermissionCopy(_ text: String) -> Bool {
