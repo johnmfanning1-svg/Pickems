@@ -541,11 +541,34 @@ enum StandingBoard {
         return members.filter { allowed.contains($0.id) }
     }
 
+    /// `standings/current` weekly W–L belongs to `standingsWeekNumber`. When that is not the
+    /// week on screen (e.g. last week was scored and the new week has no live refresh yet),
+    /// those tallies are last week's — zero them rather than label them "This Week".
+    /// Season totals are kept: they only change when a week is scored.
+    static func weeklyTalliesMatch(standingsWeekNumber: Int?, displayedWeekNumber: Int?) -> Bool {
+        guard let standingsWeekNumber, let displayedWeekNumber else { return true }
+        return standingsWeekNumber == displayedWeekNumber
+    }
+
     static func baseEntries(
         standingsEntries: [StandingEntry]?,
         members: [GroupMember],
-        memberIds: [String] = []
+        memberIds: [String] = [],
+        standingsWeekNumber: Int? = nil,
+        displayedWeekNumber: Int? = nil
     ) -> [StandingEntry] {
+        var standingsEntries = standingsEntries
+        if !weeklyTalliesMatch(
+            standingsWeekNumber: standingsWeekNumber,
+            displayedWeekNumber: displayedWeekNumber
+        ) {
+            standingsEntries = standingsEntries?.map { entry in
+                var copy = entry
+                copy.weeklyWins = 0
+                copy.weeklyLosses = 0
+                return copy
+            }
+        }
         let roster = Self.roster(members: members, memberIds: memberIds)
         if roster.isEmpty {
             let entries = standingsEntries ?? []
