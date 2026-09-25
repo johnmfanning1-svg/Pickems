@@ -34,6 +34,7 @@ import {
   lastKickoffMillis,
   revealLockedGames,
 } from "./pickLock";
+import { shouldRefreshLiveStandings } from "./liveStandings";
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -461,10 +462,27 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
 
       const allFinal =
         updatedGames.length > 0 && updatedGames.every((g) => g.status === "final");
+      const anyGameFinal = updatedGames.some((g) => g.status === "final");
       if ((week.status === "locked" || week.status === "picking") && allFinal) {
         await scoreWeek(groupId, weekId, week.weekNumber as number, updatedGames, memberIds, pickMode);
-      } else if (anyFinalizedThisPass && week.status === "locked") {
-        await refreshLiveStandings(groupId, weekId, week.weekNumber as number, updatedGames, pickMode);
+      } else if (anyGameFinal) {
+        // Rolling weeks stay `picking` until the last kickoff; refresh on those finals too,
+        // and self-heal a standings doc still pointing at last week.
+        let standingsWeekNumber: unknown = undefined;
+        if (!anyFinalizedThisPass) {
+          const standingsSnap = await groupDoc.ref.collection("standings").doc("current").get();
+          standingsWeekNumber = standingsSnap.data()?.weekNumber;
+        }
+        const refresh = shouldRefreshLiveStandings({
+          weekStatus: week.status,
+          weekNumber: week.weekNumber,
+          anyFinalizedThisPass,
+          anyGameFinal,
+          standingsWeekNumber,
+        });
+        if (refresh) {
+          await refreshLiveStandings(groupId, weekId, week.weekNumber as number, updatedGames, pickMode);
+        }
       }
     }
   }
