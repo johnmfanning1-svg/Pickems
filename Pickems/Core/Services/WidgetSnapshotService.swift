@@ -145,7 +145,8 @@ enum WidgetSnapshotService {
             members: fetched.members,
             memberIds: group.memberIds,
             tieBreaker: group.rules.tieBreaker,
-            tieBreakOrder: fetched.week?.tieBreakOrder ?? []
+            tieBreakOrder: fetched.week?.tieBreakOrder ?? [],
+            displayedWeekNumber: fetched.week?.weekNumber
         )
         saveStandingsSnapshot(
             group: group,
@@ -172,7 +173,8 @@ enum WidgetSnapshotService {
             members: [],
             memberIds: group.memberIds,
             tieBreaker: group.rules.tieBreaker,
-            tieBreakOrder: appState.groupService.currentWeek?.tieBreakOrder ?? []
+            tieBreakOrder: appState.groupService.currentWeek?.tieBreakOrder ?? [],
+            displayedWeekNumber: appState.groupService.currentWeek?.weekNumber
         )
     }
 
@@ -181,12 +183,15 @@ enum WidgetSnapshotService {
         members: [GroupMember],
         memberIds: [String] = [],
         tieBreaker: TieBreakerPolicy,
-        tieBreakOrder: [String] = []
+        tieBreakOrder: [String] = [],
+        displayedWeekNumber: Int? = nil
     ) -> [StandingEntry] {
         let base = StandingBoard.baseEntries(
             standingsEntries: standings?.entries,
             members: members,
-            memberIds: memberIds
+            memberIds: memberIds,
+            standingsWeekNumber: standings?.weekNumber,
+            displayedWeekNumber: displayedWeekNumber
         )
         guard !base.isEmpty else { return [] }
         return ScoringEngine.rankedStandings(
@@ -242,8 +247,9 @@ enum WidgetSnapshotService {
         standings: GroupStandings?,
         week: WeekSummary?
     ) -> Int {
-        if let weekNumber = standings?.weekNumber { return weekNumber }
+        // Prefer the displayed week: stale last-week tallies are zeroed against it.
         if let weekNumber = week?.weekNumber { return weekNumber }
+        if let weekNumber = standings?.weekNumber { return weekNumber }
         if let current = appState.groupService.currentWeek?.weekNumber { return current }
         if let espn = appState.groupService.cfbWeek {
             return CFBWeekCalendar.resolve(espn: espn).weekNumber
