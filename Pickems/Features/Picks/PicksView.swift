@@ -363,6 +363,7 @@ struct PicksView: View {
         let memberCount = max(memberIds.count, 1)
         let targetGames = rules.expectedSlateSize(memberCount: memberCount)
         let deadlinePassed = week.isSelectionDeadlinePassed
+        let slateFull = viewModel.isLeagueSlateFullForOwnSelections(appState: appState)
 
         return VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
@@ -375,6 +376,12 @@ struct PicksView: View {
                 EmptyView()
             } else if atLimit {
                 nominationSubmitSection(userNoms: userNoms, perMember: perMember, week: week)
+            } else if slateFull {
+                Text("The league slate is full — no Selection slots left this week.")
+                    .font(.subheadline)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal)
             } else if WeekTransition.canRemakeSelections(week) {
                 let remaining = perMember - userNoms
                 PrimaryButton(title: remaining == 1 ? "Select Game" : "Select Games") {

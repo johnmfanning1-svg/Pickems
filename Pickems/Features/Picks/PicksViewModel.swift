@@ -204,16 +204,29 @@ final class PicksViewModel {
         )
         let noms = appState.pickService.nominations
         let slate = appState.pickService.slateGames
+        let expected = rules.expectedSlateSize(memberCount: max(group.memberCount, 1))
 
         switch selectionBrowseIntent {
         case .replace:
             return 1
         case .addFor(let memberId, _):
             let used = noms.filter { $0.submittedBy == memberId }.count
-            return max(perMember - used, 0)
+            let unique = Set(noms.map(\.espnEventId) + slate.map(\.espnEventId)).count
+            let slateSize = SelectionSlateReconcile.effectiveSlateSize(
+                weekSlateSize: week.slateSize > 0 ? week.slateSize : rules.slateSize,
+                expected: expected
+            )
+            let remainingSlate = SelectionSlateReconcile.remainingSlateSlots(
+                slateSize: slateSize,
+                takenUniqueGames: unique
+            )
+            return max(0, min(perMember - used, remainingSlate))
         case .own:
             if usesCommissionerGameWrite(week: week, appState: appState) {
-                let slateSize = week.slateSize > 0 ? week.slateSize : rules.slateSize
+                let slateSize = SelectionSlateReconcile.effectiveSlateSize(
+                    weekSlateSize: week.slateSize > 0 ? week.slateSize : rules.slateSize,
+                    expected: expected
+                )
                 let current: Int
                 if week.status == .picking {
                     current = slate.count
@@ -228,9 +241,44 @@ final class PicksViewModel {
             let userId = appState.currentUserId ?? ""
             let used = noms.filter { $0.submittedBy == userId }.count
             let unique = Set(noms.map(\.espnEventId) + slate.map(\.espnEventId)).count
-            let slateSize = week.slateSize
-            return max(0, min(perMember - used, slateSize - unique))
+            let slateSize = SelectionSlateReconcile.effectiveSlateSize(
+                weekSlateSize: week.slateSize,
+                expected: expected
+            )
+            let remainingSlate = SelectionSlateReconcile.remainingSlateSlots(
+                slateSize: slateSize,
+                takenUniqueGames: unique
+            )
+            return max(0, min(perMember - used, remainingSlate))
         }
+    }
+
+    /// True when the member still has personal slots but the league slate has no room.
+    func isLeagueSlateFullForOwnSelections(appState: AppState) -> Bool {
+        guard let week = appState.groupService.currentWeek,
+              let group = appState.groupService.selectedGroup,
+              week.status == .selection,
+              week.selectionMode == .member else { return false }
+        let rules = group.rules
+        let perMember = max(
+            week.selectionsPerMember > 0 ? week.selectionsPerMember : rules.selectionsPerMember,
+            1
+        )
+        let userId = appState.currentUserId ?? ""
+        let noms = appState.pickService.nominations
+        let slate = appState.pickService.slateGames
+        let used = noms.filter { $0.submittedBy == userId }.count
+        guard used < perMember else { return false }
+        let unique = Set(noms.map(\.espnEventId) + slate.map(\.espnEventId)).count
+        let expected = rules.expectedSlateSize(memberCount: max(group.memberCount, 1))
+        let slateSize = SelectionSlateReconcile.effectiveSlateSize(
+            weekSlateSize: week.slateSize,
+            expected: expected
+        )
+        return SelectionSlateReconcile.remainingSlateSlots(
+            slateSize: slateSize,
+            takenUniqueGames: unique
+        ) <= 0
     }
 
     func saveBrowseSelections(

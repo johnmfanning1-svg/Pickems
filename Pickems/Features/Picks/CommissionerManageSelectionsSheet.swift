@@ -69,6 +69,7 @@ struct CommissionerManageSelectionsSheet: View {
                                 HStack {
                                     Button {
                                         replacing = nom
+                                        appState.picksViewModel.selectionBrowseIntent = .replace(nom)
                                         showBrowse = true
                                     } label: {
                                         Label("Replace", systemImage: "arrow.triangle.2.circlepath")
@@ -86,9 +87,34 @@ struct CommissionerManageSelectionsSheet: View {
                 }
 
                 if nominations.count < perMember {
-                    PrimaryButton(title: "Add Selection", isLoading: isWorking) {
-                        replacing = nil
-                        showBrowse = true
+                    let unique = Set(
+                        appState.pickService.nominations.map(\.espnEventId)
+                            + appState.pickService.slateGames.map(\.espnEventId)
+                    ).count
+                    let expected = (appState.groupService.selectedGroup?.rules.expectedSlateSize(
+                        memberCount: max(appState.groupService.selectedGroup?.memberCount ?? 1, 1)
+                    )) ?? max(week.slateSize, 1)
+                    let slateSize = SelectionSlateReconcile.effectiveSlateSize(
+                        weekSlateSize: week.slateSize,
+                        expected: expected
+                    )
+                    let remainingSlate = SelectionSlateReconcile.remainingSlateSlots(
+                        slateSize: slateSize,
+                        takenUniqueGames: unique
+                    )
+                    if remainingSlate > 0 {
+                        PrimaryButton(title: "Add Selection", isLoading: isWorking) {
+                            replacing = nil
+                            appState.picksViewModel.selectionBrowseIntent = .addFor(
+                                memberId: member.id,
+                                displayName: member.displayName
+                            )
+                            showBrowse = true
+                        }
+                    } else {
+                        Text("The league slate is full — no Selection slots left this week.")
+                            .font(.caption)
+                            .foregroundStyle(PickemsColors.textSecondary)
                     }
                 }
 
@@ -115,7 +141,7 @@ struct CommissionerManageSelectionsSheet: View {
             GameBrowseView(
                 seedGames: appState.picksViewModel.espnGames,
                 replacingEventId: replacing?.espnEventId,
-                selectionLimitOverride: replacing != nil ? 1 : max(perMember - nominations.count, 1)
+                selectionLimitOverride: replacing != nil ? 1 : nil
             ) { games in
                 try await applyBrowse(games)
             }
