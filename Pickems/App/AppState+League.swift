@@ -159,7 +159,9 @@ extension AppState {
         let baseEntries = StandingBoard.baseEntries(
             standingsEntries: groupService.standings?.entries,
             members: members,
-            memberIds: group?.memberIds ?? []
+            memberIds: group?.memberIds ?? [],
+            standingsWeekNumber: groupService.standings?.weekNumber,
+            displayedWeekNumber: groupService.currentWeek?.weekNumber
         )
         guard !baseEntries.isEmpty else { return [] }
 

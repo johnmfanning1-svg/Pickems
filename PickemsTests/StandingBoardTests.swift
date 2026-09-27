@@ -78,6 +78,62 @@ struct StandingBoardTests {
         #expect(!ranked.contains(where: { $0.id == "jack" }))
     }
 
+    @Test func zeroesLastWeeksTalliesWhenStandingsLagDisplayedWeek() {
+        // PPP: standings/current still weekNumber 3 (7–5, 6–6…) while Week 4 is on screen.
+        let standings = [
+            entry("b", "bbenson", weeklyWins: 7, weeklyLosses: 5, seasonWins: 35, seasonLosses: 26),
+            entry("you", "Fannypack", weeklyWins: 6, weeklyLosses: 6, seasonWins: 29, seasonLosses: 32),
+        ]
+        let members = [member("b", "bbenson"), member("you", "Fannypack")]
+        let merged = StandingBoard.baseEntries(
+            standingsEntries: standings,
+            members: members,
+            standingsWeekNumber: 3,
+            displayedWeekNumber: 4
+        )
+        #expect(merged.map(\.weeklyWins) == [0, 0])
+        #expect(merged.map(\.weeklyLosses) == [0, 0])
+        #expect(merged.map(\.seasonWins) == [35, 29])
+        #expect(merged.map(\.seasonLosses) == [26, 32])
+    }
+
+    @Test func keepsWeeklyTalliesWhenStandingsMatchDisplayedWeek() {
+        let standings = [
+            entry("you", "Fannypack", weeklyWins: 1, weeklyLosses: 0, seasonWins: 29, seasonLosses: 32),
+        ]
+        let merged = StandingBoard.baseEntries(
+            standingsEntries: standings,
+            members: [member("you", "Fannypack")],
+            standingsWeekNumber: 4,
+            displayedWeekNumber: 4
+        )
+        #expect(merged.first?.weeklyWins == 1)
+        #expect(merged.first?.weeklyLosses == 0)
+        #expect(StandingBoard.weeklyTalliesMatch(standingsWeekNumber: nil, displayedWeekNumber: 4))
+        #expect(StandingBoard.weeklyTalliesMatch(standingsWeekNumber: 3, displayedWeekNumber: nil))
+    }
+
+    @Test @MainActor func widgetRankingZeroesStaleWeeklyTallies() {
+        let standings = GroupStandings(
+            groupId: "ppp",
+            weekNumber: 3,
+            entries: [
+                entry("b", "bbenson", weeklyWins: 7, weeklyLosses: 5, seasonWins: 35, seasonLosses: 26),
+            ],
+            updatedAt: Date()
+        )
+        let ranked = WidgetSnapshotService.rankedDisplayEntries(
+            standings: standings,
+            members: [],
+            memberIds: ["b"],
+            tieBreaker: .commissionerOverride,
+            displayedWeekNumber: 4
+        )
+        #expect(ranked.first?.weeklyWins == 0)
+        #expect(ranked.first?.weeklyLosses == 0)
+        #expect(ranked.first?.seasonWins == 35)
+    }
+
     private func entry(
         _ id: String,
         _ name: String,
