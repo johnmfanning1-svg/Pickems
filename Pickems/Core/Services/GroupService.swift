@@ -113,11 +113,20 @@ final class GroupService {
                     if previousSelectedId != self.selectedGroup?.id {
                         self.resetRosterForGroupChange()
                     }
-                    if let groupId = self.selectedGroup?.id {
+                    if let group = self.selectedGroup {
+                        let groupId = group.id
                         // Avoid re-entrant ESPN/week observe on every membership metadata tick.
                         let selectionChanged = previousSelectedId != groupId
                         if selectionChanged || self.observedGroupId != groupId || self.currentWeek == nil {
                             await self.syncCurrentWeekFromESPN(groupId: groupId)
+                        } else {
+                            // Late joiners: membership grew while already observing this week.
+                            // Expand selection-week slateSize without a full ESPN remount.
+                            await self.reconcileSelectionWeekSnapshot(
+                                groupId: groupId,
+                                rules: group.rules,
+                                memberCount: group.memberCount
+                            )
                         }
                     } else {
                         self.clearWeekObservationIfNeeded()
@@ -135,6 +144,11 @@ final class GroupService {
         seasonDateRangeByWeekId = [:]
         Task {
             await syncCurrentWeekFromESPN(groupId: group.id)
+            await reconcileSelectionWeekSnapshot(
+                groupId: group.id,
+                rules: group.rules,
+                memberCount: group.memberCount
+            )
             await loadAvailableWeeks(groupId: group.id)
         }
     }
@@ -357,7 +371,13 @@ final class GroupService {
                     publishCurrentWeekIfUnpinned(existing)
                     await seedFixedSlateIfNeeded(groupId: groupId, weekId: weekId, week: existing)
                 }
-                await reconcileSelectionWeekSnapshot(groupId: groupId, rules: rules)
+                await reconcileSelectionWeekSnapshot(
+                    groupId: groupId,
+                    rules: rules,
+                    memberCount: selectedGroup?.id == groupId
+                        ? selectedGroup?.memberCount
+                        : nil
+                )
             }
         } catch {
             UserFacingError.apply(error, to: &errorMessage)
@@ -730,6 +750,11 @@ final class GroupService {
             )
             adoptSelectedGroup(existing)
             await syncCurrentWeekFromESPN(groupId: existing.id)
+            await reconcileSelectionWeekSnapshot(
+                groupId: existing.id,
+                rules: existing.rules,
+                memberCount: existing.memberCount
+            )
             return
         }
 
@@ -780,7 +805,11 @@ final class GroupService {
         }
         adoptSelectedGroup(group)
         await syncCurrentWeekFromESPN(groupId: group.id)
-        await reconcileSelectionWeekSnapshot(groupId: group.id, rules: group.rules)
+        await reconcileSelectionWeekSnapshot(
+            groupId: group.id,
+            rules: group.rules,
+            memberCount: group.memberCount
+        )
     }
 
     /// Server-stamped create payload. Rules reject a client `joinedAt` and any
@@ -1298,26 +1327,52 @@ final class GroupService {
         }
 
         // Keep an open selection-week snapshot aligned with the active either/or knob.
-        await reconcileSelectionWeekSnapshot(groupId: groupId, rules: rules)
+        await reconcileSelectionWeekSnapshot(
+            groupId: groupId,
+            rules: rules,
+            memberCount: selectedGroup?.memberCount
+        )
     }
 
     /// Member-mode weeks store a derived slate size (`members × Selections`). Rewrite it
-    /// whenever membership or rules change so UI and nomination limits don't keep the
-    /// old commissioner default of 12.
-    func reconcileSelectionWeekSnapshot(groupId: String, rules: GroupRules) async {
+    /// whenever membership or rules change so UI and nomination limits don't keep a
+    /// stale smaller snapshot after a late joiner.
+    ///
+    /// - Parameter memberCount: Prefer the group doc just written (`memberIds.count`).
+    ///   Falls back to `selectedGroup` / loaded `members` when omitted.
+    func reconcileSelectionWeekSnapshot(
+        groupId: String,
+        rules: GroupRules,
+        memberCount: Int? = nil
+    ) async {
         guard var week = currentWeek, week.status == .selection, !week.skipsSelection else { return }
-        let memberCount = max(selectedGroup?.memberIds.count ?? members.count, 1)
-        let expected = rules.expectedSlateSize(memberCount: memberCount)
-        guard week.slateSize != expected
+        let count = max(
+            memberCount
+                ?? selectedGroup?.memberIds.count
+                ?? members.count,
+            1
+        )
+        let expected = rules.expectedSlateSize(memberCount: count)
+        var takenUnique = 0
+        if expected < week.slateSize {
+            // Only pay for a taken-count read when we might shrink.
+            takenUnique = await uniqueTakenGameCount(groupId: groupId, weekId: week.id)
+        }
+        let target = SelectionSlateReconcile.targetSlateSize(
+            expected: expected,
+            currentSlateSize: week.slateSize,
+            takenUniqueGames: takenUnique
+        )
+        guard week.slateSize != target
             || week.selectionMode != rules.selectionMode
             || week.selectionsPerMember != rules.selectionsPerMember else { return }
         do {
             try await db.week(groupId: groupId, weekId: week.id).updateData([
-                "slateSize": expected,
+                "slateSize": target,
                 "selectionMode": rules.selectionMode.rawValue,
                 "selectionsPerMember": rules.selectionsPerMember,
             ])
-            week.slateSize = expected
+            week.slateSize = target
             week.selectionMode = rules.selectionMode
             week.selectionsPerMember = rules.selectionsPerMember
             currentWeek = week
@@ -1326,6 +1381,33 @@ final class GroupService {
                 "group_id": groupId,
                 "week_id": week.id,
             ])
+        }
+    }
+
+    /// Unique espnEventIds across nominations and materialized games for a week.
+    private func uniqueTakenGameCount(groupId: String, weekId: String) async -> Int {
+        let weekRef = db.week(groupId: groupId, weekId: weekId)
+        do {
+            async let nomsSnap = weekRef.nominations.getDocuments(source: .server)
+            async let gamesSnap = weekRef.games.getDocuments(source: .server)
+            let (noms, games) = try await (nomsSnap, gamesSnap)
+            var ids = Set(noms.documents.compactMap { doc -> String? in
+                SlateGameDecoding.stringValue(doc.data()["espnEventId"])
+            })
+            for doc in games.documents {
+                if let game = SlateGame.fromDocument(id: doc.documentID, data: doc.data()) {
+                    ids.insert(game.espnEventId)
+                }
+            }
+            return ids.count
+        } catch {
+            AppLog.notice(AppLog.firestore, "uniqueTakenGameCount failed", metadata: [
+                "group_id": groupId,
+                "week_id": weekId,
+                "error": error.localizedDescription,
+            ])
+            // Fail closed for shrink: treat taken as current slateSize so we don't orphan.
+            return currentWeek?.slateSize ?? 0
         }
     }
 
@@ -1596,6 +1678,23 @@ final class GroupService {
                             return
                         }
                         self.currentWeek = week
+                        if week.status == .selection,
+                           !week.skipsSelection,
+                           let group = self.selectedGroup,
+                           group.id == groupId {
+                            let expected = group.rules.expectedSlateSize(
+                                memberCount: max(group.memberCount, 1)
+                            )
+                            if week.slateSize != expected
+                                || week.selectionMode != group.rules.selectionMode
+                                || week.selectionsPerMember != group.rules.selectionsPerMember {
+                                await self.reconcileSelectionWeekSnapshot(
+                                    groupId: groupId,
+                                    rules: group.rules,
+                                    memberCount: group.memberCount
+                                )
+                            }
+                        }
                     } catch {
                         AppLog.error(AppLog.firestore, "week decode failed", error: error, metadata: [
                             "group_id": groupId,

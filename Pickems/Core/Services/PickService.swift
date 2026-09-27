@@ -498,7 +498,7 @@ final class PickService {
         nominations requested: [Nomination],
         rules: GroupRules,
         week: WeekSummary,
-        memberIds _: [String],
+        memberIds: [String],
         isCommissioner: Bool = false
     ) async throws -> SelectionBrowseSaveResult {
         switch week.status {
@@ -516,6 +516,19 @@ final class PickService {
         }
 
         let weekRef = db.week(groupId: groupId, weekId: weekId)
+        // Prefer server week.slateSize so a stale client snapshot cannot falsely zero slots.
+        let serverWeekSnap = try await weekRef.getDocument(source: .server)
+        let serverSlateSize = (try? serverWeekSnap.data(as: WeekSummary.self))?.slateSize ?? week.slateSize
+        let expectedSlate = rules.expectedSlateSize(memberCount: max(memberIds.count, 1))
+        let effectiveSlateSize = SelectionSlateReconcile.effectiveSlateSize(
+            weekSlateSize: max(week.slateSize, serverSlateSize),
+            expected: expectedSlate
+        )
+        // Self-heal a stale week snapshot (e.g. late joiner before reconcile landed).
+        if effectiveSlateSize > serverSlateSize {
+            try? await weekRef.updateData(["slateSize": effectiveSlateSize])
+        }
+
         let nomsSnap = try await weekRef.nominations.getDocuments(source: .server)
         let serverNoms = nomsSnap.documents.compactMap { try? $0.data(as: Nomination.self) }
         let gamesSnap = try await weekRef.games.getDocuments(source: .server)
@@ -529,14 +542,22 @@ final class PickService {
         let uniqueCount = taken.count
         let userCount = serverNoms.filter { $0.submittedBy == submittedBy }.count
         let remainingUser = max(perMember - userCount, 0)
-        let remainingSlate = max(week.slateSize - uniqueCount, 0)
-        var remainingSlots = min(remainingUser, remainingSlate)
+        let remainingSlate = SelectionSlateReconcile.remainingSlateSlots(
+            slateSize: effectiveSlateSize,
+            takenUniqueGames: uniqueCount
+        )
+
+        // Deadline is its own path — never conflate with personal/slate limits.
         if !isCommissioner, ScoringEngine.isPastDeadline(deadline: week.selectionDeadline) {
-            remainingSlots = 0
+            throw PickError.selectionClosed
         }
-        if remainingSlots <= 0 {
+        if remainingUser <= 0 {
             throw PickError.nominationLimitReached
         }
+        if remainingSlate <= 0 {
+            throw PickError.slateFull
+        }
+        let remainingSlots = min(remainingUser, remainingSlate)
 
         let plan = SelectionBatchPlanner.plan(
             requestedIds: requested.map(\.espnEventId),
@@ -1629,8 +1650,8 @@ final class PickService {
         var errorDescription: String? {
             switch self {
             case .duplicateGame: return "This game has already been selected."
-            case .nominationLimitReached: return "You've reached your Selection limit or the Selection deadline has passed."
-            case .slateFull: return "The slate is full — or there are no games to open yet."
+            case .nominationLimitReached: return "You've reached your Selection limit."
+            case .slateFull: return "The league slate is full — no Selection slots left this week."
             case .deadlinePassed: return "The Pickems deadline has passed."
             case .incompletePicks: return "Please pick every game before submitting your Pickems."
             case .unauthorized: return "You can't remove this Selection."

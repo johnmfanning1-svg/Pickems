@@ -54,9 +54,13 @@ struct GameBrowseView: View {
         return nil
     }
 
+    /// Remaining slots the caller may save. May be 0 when the league slate is full
+    /// (do not floor to 1 — that offered a dead-end pick flow).
     private var selectionLimit: Int {
-        max(selectionLimitOverride ?? appState.picksViewModel.gameBrowseSelectionLimit(appState: appState), 1)
+        max(selectionLimitOverride ?? appState.picksViewModel.gameBrowseSelectionLimit(appState: appState), 0)
     }
+
+    private var hasSelectableSlots: Bool { selectionLimit > 0 }
 
     private var selectedEventIds: Set<String> {
         Set(selected.map(\.espnEventId))
@@ -135,9 +139,9 @@ struct GameBrowseView: View {
                             nominatorName: nominatorName
                         )
                     }
-                    .opacity(isNominated ? 0.45 : 1)
-                    .disabled(isNominated || isSaving)
-                    .allowsHitTesting(!isNominated && !isSaving)
+                    .opacity(isNominated || !hasSelectableSlots ? 0.45 : 1)
+                    .disabled(isNominated || isSaving || !hasSelectableSlots)
+                    .allowsHitTesting(!isNominated && !isSaving && hasSelectableSlots)
                     .accessibilityRemoveTraits(isNominated ? .isButton : [])
                     .listRowBackground(PickemsColors.cardBackground)
                 }
@@ -147,6 +151,12 @@ struct GameBrowseView: View {
                     if loading, board.isEmpty {
                         ProgressView("Loading games…")
                             .tint(theme.accent)
+                    } else if !hasSelectableSlots, resolvedReplacingEventId == nil {
+                        ContentUnavailableView(
+                            "Slate Full",
+                            systemImage: "checkmark.circle",
+                            description: Text("The league slate is full — no Selection slots left this week.")
+                        )
                     } else if filteredGames.isEmpty {
                         ContentUnavailableView(
                             "No Games Found",
@@ -157,7 +167,7 @@ struct GameBrowseView: View {
                 }
             }
             .background(PickemsColors.background)
-            .navigationTitle(selectionLimit == 1 ? "Select Game" : "Select Games")
+            .navigationTitle(navigationTitleText)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -168,7 +178,7 @@ struct GameBrowseView: View {
                     Button("Save") { save() }
                         .fontWeight(.semibold)
                         .foregroundStyle(theme.accent)
-                        .disabled(isSaving || selected.isEmpty)
+                        .disabled(isSaving || selected.isEmpty || !hasSelectableSlots)
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -235,7 +245,15 @@ struct GameBrowseView: View {
         .background(PickemsColors.background)
     }
 
+    private var navigationTitleText: String {
+        if !hasSelectableSlots { return "Select Games" }
+        return selectionLimit == 1 ? "Select Game" : "Select Games"
+    }
+
     private var selectionCaption: String {
+        if !hasSelectableSlots {
+            return "The league slate is full — no Selection slots left this week."
+        }
         if selectionLimit == 1 {
             return selected.isEmpty
                 ? "Pick a game, then Save."
@@ -245,7 +263,7 @@ struct GameBrowseView: View {
     }
 
     private func toggle(_ game: ESPNGame, isNominated: Bool) {
-        guard !isNominated, !isSaving else { return }
+        guard hasSelectableSlots, !isNominated, !isSaving else { return }
         if let idx = selected.firstIndex(where: { $0.espnEventId == game.espnEventId }) {
             selected.remove(at: idx)
             PickemsHaptics.selection()
