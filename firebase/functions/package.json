@@ -2,7 +2,7 @@
   "name": "pickems-functions",
   "description": "Pickems Cloud Functions — slate lock, scoring, push, season close",
   "engines": {
-    "node": "20"
+    "node": "24"
   },
   "main": "lib/index.js",
   "scripts": {
@@ -15,12 +15,12 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "firebase-admin": "^12.7.0",
-    "firebase-functions": "^6.1.0",
+    "firebase-admin": "^14.5.0",
+    "firebase-functions": "^7.4.0",
     "node-fetch": "^2.7.0"
   },
   "devDependencies": {
-    "@types/node": "^20.17.0",
+    "@types/node": "^24.0.0",
     "@types/node-fetch": "^2.6.11",
     "typescript": "^5.6.3",
     "vitest": "^2.1.9"

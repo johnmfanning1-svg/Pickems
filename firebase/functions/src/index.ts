@@ -1,4 +1,12 @@
-import * as admin from "firebase-admin";
+import { initializeApp } from "firebase-admin/app";
+import {
+  FieldValue,
+  Timestamp,
+  getFirestore,
+  type DocumentReference,
+  type QueryDocumentSnapshot,
+  type QuerySnapshot,
+} from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onDocumentUpdated, onDocumentCreated } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions";
@@ -36,8 +44,8 @@ import {
 } from "./pickLock";
 import { shouldRefreshLiveStandings } from "./liveStandings";
 
-admin.initializeApp();
-const db = admin.firestore();
+initializeApp();
+const db = getFirestore();
 
 // Public /support form — inbox address lives in env / adminConfig, not HTML.
 export { submitSupport } from "./support";
@@ -146,7 +154,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
       const groupId = groupDoc.id;
       const weekId = weekDoc.id;
       const weekNum = week.weekNumber ?? "";
-      const deadline = week.selectionDeadline as admin.firestore.Timestamp | undefined;
+      const deadline = week.selectionDeadline as Timestamp | undefined;
       const payload = { groupId, weekId };
 
       if (!deadline && !week.selectionDeadlineNudgeSent) {
@@ -198,8 +206,8 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
         await materializeNominations(groupId, weekId);
         const gamesSnap = await weekDoc.ref.collection("games").get();
         const kickoffs = gamesSnap.docs
-          .map((d) => d.data().kickoff as admin.firestore.Timestamp | undefined)
-          .filter((ts): ts is admin.firestore.Timestamp => !!ts)
+          .map((d) => d.data().kickoff as Timestamp | undefined)
+          .filter((ts): ts is Timestamp => !!ts)
           .map((ts) => ts.toMillis());
         const earliest = kickoffs.length ? Math.min(...kickoffs) : undefined;
 
@@ -236,7 +244,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
 });
 
 async function membersMissingSelections(
-  weekRef: admin.firestore.DocumentReference,
+  weekRef: DocumentReference,
   memberIds: string[],
   selectionsPerMember: number | undefined
 ): Promise<string[]> {
@@ -266,7 +274,7 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
 
     for (const weekDoc of weeks.docs) {
       const week = weekDoc.data();
-      const deadline = week.pickDeadline as admin.firestore.Timestamp | undefined;
+      const deadline = week.pickDeadline as Timestamp | undefined;
       if (!deadline) continue;
 
       const msUntil = deadline.toMillis() - nowMs;
@@ -350,9 +358,9 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
   const now = Date.now();
   const groups = await db.collection("groups").get();
   const activeWeeksByGroup: Array<{
-    groupDoc: admin.firestore.QueryDocumentSnapshot;
+    groupDoc: QueryDocumentSnapshot;
     memberIds: string[];
-    weeks: admin.firestore.QuerySnapshot;
+    weeks: QuerySnapshot;
   }> = [];
   const weekNumbers = new Set<number>();
 
@@ -405,14 +413,14 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
         );
       }
       if (!rolling) {
-        const deadline = week.pickDeadline as admin.firestore.Timestamp | undefined;
+        const deadline = week.pickDeadline as Timestamp | undefined;
         fullLockMs = deadline ? deadline.toMillis() : fullLockMs;
       }
 
       if (week.status === "picking" && fullLockMs != null && fullLockMs <= now) {
         await weekDoc.ref.update({
           status: "locked",
-          lockedAt: admin.firestore.FieldValue.serverTimestamp(),
+          lockedAt: FieldValue.serverTimestamp(),
         });
         await sendToUsers(
           memberIds,
@@ -592,7 +600,7 @@ async function refreshLiveStandings(
       groupId,
       weekNumber,
       entries: ranked,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
   for (const entry of ranked) {
@@ -690,12 +698,12 @@ async function scoreWeek(
       groupId,
       weekNumber,
       entries: ranked,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     tx.update(weekRef, {
       status: "scored",
       awards,
-      scoredAt: admin.firestore.FieldValue.serverTimestamp(),
+      scoredAt: FieldValue.serverTimestamp(),
     });
   });
 
@@ -748,7 +756,7 @@ export const autoCloseSeasons = onSchedule("0 12 15 1 *", async () => {
       championDisplayName: champion?.displayName ?? null,
       finalStandings,
       weekCount: weeks.size,
-      closedAt: admin.firestore.FieldValue.serverTimestamp(),
+      closedAt: FieldValue.serverTimestamp(),
     });
 
     for (const member of members) {
@@ -767,7 +775,7 @@ export const autoCloseSeasons = onSchedule("0 12 15 1 *", async () => {
         seasonsPlayed: (career.seasonsPlayed ?? 0) + 1,
         bestFinish:
           career.bestFinish == null ? finish : Math.min(career.bestFinish as number, finish),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
       batch.update(groupDoc.ref.collection("members").doc(member.id), {
         seasonWins: 0,
@@ -813,7 +821,7 @@ export const syncPublicLeagueIndex = onDocumentUpdated("groups/{groupId}", async
       name: after.name,
       inviteCode: after.inviteCode,
       memberCount: (after.memberIds as string[] | undefined)?.length ?? 0,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
   } else if (before.isPublic === true && after.isPublic !== true) {
     await indexRef.delete();
@@ -831,6 +839,6 @@ export const onPublicLeagueCreated = onDocumentCreated("groups/{groupId}", async
       name: data.name,
       inviteCode: data.inviteCode,
       memberCount: (data.memberIds as string[] | undefined)?.length ?? 0,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
 });

@@ -1,11 +1,11 @@
-import * as admin from "firebase-admin";
+import { FieldValue, getFirestore, type Firestore } from "firebase-admin/firestore";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions";
 import { sendToUsers } from "./notifications";
 
-/** Lazy — `admin.initializeApp()` runs in index.ts after this module is loaded. */
-function db(): admin.firestore.Firestore {
-  return admin.firestore();
+/** Lazy — `initializeApp()` runs in index.ts after this module is loaded. */
+function db(): Firestore {
+  return getFirestore();
 }
 
 /** Push bodies stay short enough to read on a lock screen. */
@@ -102,7 +102,7 @@ export const onReportCreated = onDocumentCreated(
       const nextCount = ((snap.data()?.reportCount as number | undefined) ?? 0) + 1;
       const shouldHide = nextCount >= AUTO_HIDE_REPORT_THRESHOLD;
       const update: Record<string, unknown> = {
-        reportCount: admin.firestore.FieldValue.increment(1),
+        reportCount: FieldValue.increment(1),
       };
       if (shouldHide && snap.data()?.isDeleted !== true) {
         update.isDeleted = true;

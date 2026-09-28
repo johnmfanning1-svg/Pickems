@@ -1,4 +1,5 @@
-import * as admin from "firebase-admin";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
 import { logger } from "firebase-functions";
 import { shouldSendDeadlinePush, type DeadlinePushType, type MemberPushPrefFields } from "./deadlinePushPrefs";
 import { isUnregisteredFcmTokenError, resolvePushDelivery } from "./pushDelivery";
@@ -15,11 +16,10 @@ export async function sendToUser(
   member?: MemberPushPrefFields
 ): Promise<void> {
   try {
-    const snap = await admin.firestore().collection("users").doc(userId).get();
+    const snap = await getFirestore().collection("users").doc(userId).get();
     let memberPrefs = member;
     if (memberPrefs === undefined && extra.groupId) {
-      const memberSnap = await admin
-        .firestore()
+      const memberSnap = await getFirestore()
         .collection("groups")
         .doc(extra.groupId)
         .collection("members")
@@ -33,7 +33,7 @@ export async function sendToUser(
       return;
     }
 
-    await admin.messaging().send({
+    await getMessaging().send({
       token: decision.token,
       notification: { title, body },
       data: { type, ...extra },
@@ -53,8 +53,8 @@ export async function sendToUser(
     if (isUnregisteredFcmTokenError(err)) {
       logger.warn("clearing stale FCM token", { userId, type });
       try {
-        await admin.firestore().collection("users").doc(userId).update({
-          fcmToken: admin.firestore.FieldValue.delete(),
+        await getFirestore().collection("users").doc(userId).update({
+          fcmToken: FieldValue.delete(),
         });
       } catch (clearErr) {
         logger.error("failed to clear stale FCM token", {
@@ -77,8 +77,7 @@ export async function sendToUsers(
 ): Promise<void> {
   let membersById = new Map<string, MemberPushPrefFields>();
   if (extra.groupId) {
-    const membersSnap = await admin
-      .firestore()
+    const membersSnap = await getFirestore()
       .collection("groups")
       .doc(extra.groupId)
       .collection("members")

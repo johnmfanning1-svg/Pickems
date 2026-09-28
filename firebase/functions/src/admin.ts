@@ -1,4 +1,11 @@
-import * as admin from "firebase-admin";
+import { getAuth } from "firebase-admin/auth";
+import {
+  FieldValue,
+  Timestamp,
+  getFirestore,
+  type DocumentSnapshot,
+  type Firestore,
+} from "firebase-admin/firestore";
 import { onCall, CallableRequest, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { materializeNominations } from "./materialize";
@@ -27,9 +34,9 @@ import { isRollingLock } from "./pickLock";
  * `lockAndScoreWeeks` can never disagree.
  */
 
-/** Lazy — `admin.initializeApp()` runs in index.ts after this module is loaded. */
-function db(): admin.firestore.Firestore {
-  return admin.firestore();
+/** Lazy — `initializeApp()` runs in index.ts after this module is loaded. */
+function db(): Firestore {
+  return getFirestore();
 }
 
 const WEEK_STATUSES = ["selection", "picking", "locked", "scored"] as const;
@@ -65,7 +72,7 @@ function requireString(value: unknown, field: string): string {
 function auditable(value: unknown, depth = 0): unknown {
   if (value === undefined) return null;
   if (value === null) return null;
-  if (value instanceof admin.firestore.Timestamp) return value.toDate().toISOString();
+  if (value instanceof Timestamp) return value.toDate().toISOString();
   if (value instanceof Date) return value.toISOString();
   if (depth >= 6) return String(value);
   if (Array.isArray(value)) return value.slice(0, 200).map((v) => auditable(v, depth + 1));
@@ -98,7 +105,7 @@ async function writeAudit(
       targetPath,
       before: auditable(before),
       after: auditable(after),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     });
   logger.info(`admin action ${action}`, { actorUid: actor.uid, targetPath });
 }
@@ -106,7 +113,7 @@ async function writeAudit(
 async function requireWeek(
   groupId: string,
   weekId: string
-): Promise<admin.firestore.DocumentSnapshot> {
+): Promise<DocumentSnapshot> {
   const ref = db().collection("groups").doc(groupId).collection("weeks").doc(weekId);
   const snap = await ref.get();
   if (!snap.exists) {
@@ -128,8 +135,8 @@ export const setAdminRole = onCall(async (request) => {
   }
 
   const user = uid
-    ? await admin.auth().getUser(uid)
-    : await admin.auth().getUserByEmail(requireString(email, "email"));
+    ? await getAuth().getUser(uid)
+    : await getAuth().getUserByEmail(requireString(email, "email"));
 
   // Revoking your own claim locks you out of this very function.
   if (user.uid === actor.uid && grant === false) {
@@ -140,7 +147,7 @@ export const setAdminRole = onCall(async (request) => {
   }
 
   const before = user.customClaims?.admin === true;
-  await admin.auth().setCustomUserClaims(user.uid, {
+  await getAuth().setCustomUserClaims(user.uid, {
     ...(user.customClaims ?? {}),
     admin: grant,
   });
@@ -183,11 +190,11 @@ export const adminSetWeekStatus = onCall(async (request) => {
       if (Number.isNaN(parsed.getTime())) {
         throw new HttpsError("invalid-argument", "`pickDeadline` must be an ISO-8601 date string.");
       }
-      patch.pickDeadline = admin.firestore.Timestamp.fromDate(parsed);
+      patch.pickDeadline = Timestamp.fromDate(parsed);
     }
   }
   if (status === "locked" && before.lockedAt == null) {
-    patch.lockedAt = admin.firestore.FieldValue.serverTimestamp();
+    patch.lockedAt = FieldValue.serverTimestamp();
   }
   // A forced re-open should be able to fire the 24h / 1h reminders again.
   if (status === "picking") {
@@ -283,7 +290,7 @@ export const adminUpsertPick = onCall(async (request) => {
     isLocked,
     confidenceGameId: data.confidenceGameId ?? before?.confidenceGameId ?? null,
     submittedAt: isLocked
-      ? before?.submittedAt ?? admin.firestore.FieldValue.serverTimestamp()
+      ? before?.submittedAt ?? FieldValue.serverTimestamp()
       : null,
   };
   await pickRef.set(payload, { merge: true });
@@ -296,7 +303,7 @@ export const adminUpsertPick = onCall(async (request) => {
       displayName,
       isLocked,
       submittedAt: isLocked
-        ? before?.submittedAt ?? admin.firestore.FieldValue.serverTimestamp()
+        ? before?.submittedAt ?? FieldValue.serverTimestamp()
         : null,
     },
     { merge: true }
@@ -331,7 +338,7 @@ export const adminRemoveMember = onCall(async (request) => {
   const weeks = await groupRef.collection("weeks").get();
 
   const batch = db().batch();
-  batch.update(groupRef, { memberIds: admin.firestore.FieldValue.arrayRemove(userId) });
+  batch.update(groupRef, { memberIds: FieldValue.arrayRemove(userId) });
   batch.delete(groupRef.collection("members").doc(userId));
   batch.delete(groupRef.collection("career").doc(userId));
   for (const week of weeks.docs) {
@@ -622,12 +629,12 @@ export const adminRescoreWeek = onCall(async (request) => {
     groupId,
     weekNumber: week.weekNumber ?? null,
     entries: ranked,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
   batch.update(weekSnap.ref, {
     status: "scored",
     awards,
-    scoredAt: admin.firestore.FieldValue.serverTimestamp(),
+    scoredAt: FieldValue.serverTimestamp(),
   });
   await batch.commit();
 
