@@ -1,4 +1,4 @@
-import * as admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
 
 export interface MaterializeResult {
   /** Game docs written for the first time. */
@@ -27,7 +27,7 @@ export async function materializeNominations(
   weekId: string,
   options: { force?: boolean } = {}
 ): Promise<MaterializeResult> {
-  const db = admin.firestore();
+  const db = getFirestore();
   const weekRef = db.collection("groups").doc(groupId).collection("weeks").doc(weekId);
   const noms = await weekRef.collection("nominations").get();
   const games = await weekRef.collection("games").get();

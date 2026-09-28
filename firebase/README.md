@@ -9,7 +9,7 @@ firebase/
   firestore.rules          # single-owner security rules
   firestore.indexes.json   # declaratively managed composite indexes — see below
   storage.rules
-  functions/               # Cloud Functions (Node 20, TypeScript)
+  functions/               # Cloud Functions (Node 24, TypeScript)
   admin/                   # web admin portal (Lane J) — dist/ is the hosting root
   admin-tools/             # local-only privileged scripts
   tests/                   # Firestore rules unit tests (release gate G0)

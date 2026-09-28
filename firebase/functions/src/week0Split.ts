@@ -1,4 +1,10 @@
-import * as admin from "firebase-admin";
+import {
+  FieldValue,
+  Timestamp,
+  getFirestore,
+  type DocumentData,
+  type Firestore,
+} from "firebase-admin/firestore";
 import { fetchScoreboard, resolveSpreadTeamId, type EspnEvent } from "./espn";
 import {
   WEEK_ONE_ID,
@@ -25,14 +31,14 @@ export interface Week0SplitGroupResult {
   weekOnePickDeadline: string | null;
 }
 
-function db(): admin.firestore.Firestore {
-  return admin.firestore();
+function db(): Firestore {
+  return getFirestore();
 }
 
 function asDate(value: unknown): Date | null {
   if (!value) return null;
   if (value instanceof Date) return value;
-  if (value instanceof admin.firestore.Timestamp) return value.toDate();
+  if (value instanceof Timestamp) return value.toDate();
   if (typeof value === "string") {
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
@@ -97,7 +103,7 @@ function slatePayloadFromEspn(event: EspnEvent): Record<string, unknown> | null 
     awayTeamLogoURL: away.team.logo ?? null,
     spread: rawSpread,
     spreadTeamId,
-    kickoff: admin.firestore.Timestamp.fromDate(kickoff),
+    kickoff: Timestamp.fromDate(kickoff),
     status: "scheduled",
     homeScore: null,
     awayScore: null,
@@ -221,7 +227,7 @@ export async function migrateGroupWeek0Split(options: {
       selectionsPerMember: w1Data.selectionsPerMember ?? 3,
       nominationCount: nomsToMove.length,
       slateSource: WEEK_ZERO_SLATE_SOURCE,
-      lockedAt: w1Data.lockedAt ?? admin.firestore.FieldValue.serverTimestamp(),
+      lockedAt: w1Data.lockedAt ?? FieldValue.serverTimestamp(),
       ...lockSnapshotFromGames(
         weekZeroEvents.map((event) => ({
           id: event.id,
@@ -232,7 +238,7 @@ export async function migrateGroupWeek0Split(options: {
     };
     batch.set(w0Ref, w0Payload, { merge: true });
 
-    const w1GameByEvent = new Map<string, admin.firestore.DocumentData>();
+    const w1GameByEvent = new Map<string, DocumentData>();
     for (const doc of w1Games.docs) {
       const eventId = (doc.data().espnEventId as string | undefined) ?? doc.id;
       w1GameByEvent.set(eventId, doc.data());
@@ -297,8 +303,8 @@ export async function migrateGroupWeek0Split(options: {
     };
     if (remainingW1Games.length === 0 && (w1Data.status === "picking" || w1Data.status === "locked")) {
       w1Updates.status = "selection";
-      w1Updates.pickDeadline = admin.firestore.FieldValue.delete();
-      w1Updates.lockedAt = admin.firestore.FieldValue.delete();
+      w1Updates.pickDeadline = FieldValue.delete();
+      w1Updates.lockedAt = FieldValue.delete();
     } else if (remainingW1Games.length > 0 && (w1Data.status === "picking" || w1Data.status === "locked")) {
       Object.assign(
         w1Updates,
