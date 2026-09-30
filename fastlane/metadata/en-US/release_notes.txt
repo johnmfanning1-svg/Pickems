@@ -1,8 +1,8 @@
-What's new in 3.5.2
+What's new in 3.5.8
 
-• New league type: Straight Up — pick outright winners, no spread
-• ATS leagues are unchanged
-• Save every remaining Selection in one pass
-• Rank weekly ties by dragging
+• Latest main: slate size stays in sync for late joiners
+• Rolling weeks refresh live standings; a stale week shows 0–0
+• A new league starts at 0–0 instead of another league's record
+• Clearer message when a server refresh can't be reached
 
-Thanks for playing with us.
+Thanks for helping us UAT this build.

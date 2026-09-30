@@ -701,10 +701,12 @@ final class GroupService {
             )
             try await groupRef.collection("members").document(commissionerId)
                 .setData(try memberDocumentForCreate(member))
-            selectedGroup = group
+            // Put the new league in `groups` before adopting so the membership
+            // listener cannot bounce selection back to the previous league.
             if !groups.contains(where: { $0.id == group.id }) {
-                groups.append(group)
+                groups.insert(group, at: 0)
             }
+            adoptSelectedGroup(group)
             await syncCurrentWeekFromESPN(groupId: group.id)
             AppEvents.track(.onboardingCreateSucceeded, metadata: [
                 "uid": AppEvents.shortUID(commissionerId),
@@ -1004,10 +1006,12 @@ final class GroupService {
 
         groups.removeAll { $0.id == groupId }
         if selectedGroup?.id == groupId {
-            selectedGroup = groups.first
-            if let next = selectedGroup {
+            if let next = groups.first {
+                adoptSelectedGroup(next)
                 await syncCurrentWeekFromESPN(groupId: next.id)
             } else {
+                selectedGroup = nil
+                resetRosterForGroupChange()
                 clearWeekObservationIfNeeded()
                 seasonArchives = []
                 careerRecords = []
@@ -1051,13 +1055,15 @@ final class GroupService {
 
         groups.removeAll { $0.id == groupId }
         if selectedGroup?.id == groupId {
-            selectedGroup = groups.first
-            if selectedGroup == nil {
+            if let next = groups.first {
+                adoptSelectedGroup(next)
+                await syncCurrentWeekFromESPN(groupId: next.id)
+            } else {
+                selectedGroup = nil
+                resetRosterForGroupChange()
                 clearWeekObservationIfNeeded()
                 seasonArchives = []
                 careerRecords = []
-            } else if let next = selectedGroup {
-                await syncCurrentWeekFromESPN(groupId: next.id)
             }
         }
     }
@@ -1717,8 +1723,16 @@ final class GroupService {
                         ], recordNonFatal: false)
                         return
                     }
-                    guard let snapshot, snapshot.exists else { return }
-                    self.standings = try? snapshot.data(as: GroupStandings.self)
+                    guard let snapshot, snapshot.exists else {
+                        self.standings = nil
+                        return
+                    }
+                    let decoded = try? snapshot.data(as: GroupStandings.self)
+                    if let decoded, !decoded.belongs(to: groupId) {
+                        self.standings = nil
+                        return
+                    }
+                    self.standings = decoded
                 }
             }
     }
@@ -1759,7 +1773,8 @@ final class GroupService {
         do {
             let snap = try await groupRef.collection("standings").document("current").getDocument()
             if snap.exists {
-                standings = try? snap.data(as: GroupStandings.self)
+                let decoded = try? snap.data(as: GroupStandings.self)
+                standings = decoded?.belongs(to: groupId) == true ? decoded : nil
             }
         } catch {
             AppLog.error(AppLog.firestore, "display standings fetch failed", error: error, metadata: [
@@ -1858,8 +1873,13 @@ final class GroupService {
                 let standingsSnap = try await db.collection("groups").document(groupId)
                     .collection("standings").document("current")
                     .getDocument(source: .server)
-                if standingsSnap.exists, selectedGroup?.id == groupId {
-                    standings = try? standingsSnap.data(as: GroupStandings.self)
+                if selectedGroup?.id == groupId {
+                    if standingsSnap.exists {
+                        let decoded = try? standingsSnap.data(as: GroupStandings.self)
+                        standings = decoded?.belongs(to: groupId) == true ? decoded : nil
+                    } else {
+                        standings = nil
+                    }
                 }
             } catch {
                 if UserFacingError.isServerSourceUnavailable(error) {
@@ -1870,8 +1890,13 @@ final class GroupService {
                         let standingsSnap = try await db.collection("groups").document(groupId)
                             .collection("standings").document("current")
                             .getDocument()
-                        if standingsSnap.exists, selectedGroup?.id == groupId {
-                            standings = try? standingsSnap.data(as: GroupStandings.self)
+                        if selectedGroup?.id == groupId {
+                            if standingsSnap.exists {
+                                let decoded = try? standingsSnap.data(as: GroupStandings.self)
+                                standings = decoded?.belongs(to: groupId) == true ? decoded : nil
+                            } else {
+                                standings = nil
+                            }
                         }
                     } catch {
                         AppLog.error(AppLog.firestore, "standings refresh failed", error: error, metadata: [
