@@ -163,6 +163,14 @@ Marketing version comes from the repo unchanged (`MARKETING_VERSION` in `project
 
 Why `10000+` and not the Mac `XYZ` convention (§2): App Store Connect already has builds up to at least `3507`, and `minimumBuild` compares build numbers as integers, so a low CI build like `401` would be rejected as a duplicate/lower build or trip the force-update gate. CI builds therefore live above every `XYZ` build. Keep that in mind before raising `minimumBuild` to a CI build number: any later Mac-archived build using the `XYZ` convention would then be below the gate. Re-running a failed run reuses the same `run_number`, so if that attempt already uploaded, start a new run instead of re-running.
 
+### Marketing version must be open in App Store Connect
+
+The workflow uploads whatever `MARKETING_VERSION` the chosen ref has. App Store Connect rejects it if that version is not above the last **approved** App Store version, or if its train is closed (errors 90062 / 90186 / 90478). On 2026-09-30 `main` was still at `3.5.2` while `3.5.6` was approved and `3.5.7` was on TestFlight from an unmerged branch, so the first validation run signed and exported fine but the upload was rejected. Run it from a ref whose marketing version is above the approved App Store version (bump it the usual way, §2, and commit), not from a stale `main`.
+
+### Signing certificates
+
+Each run is a fresh runner, so `xcodebuild archive` creates a new **Apple Development: Created via API** certificate for the development-signed archive; the export then re-signs with **Cloud Managed Apple Distribution** and App Store profiles for `FannypackInc.Pickems` and `FannypackInc.Pickems.widget`. Revoke old "Created via API" development certificates in Certificates, Identifiers & Profiles from time to time so the team doesn't hit Apple's certificate limit.
+
 ### How to trigger
 
 - **Manually:** GitHub → Actions → **TestFlight** → **Run workflow**, pick the branch, optionally set `build_number`, and optionally untick `upload` for a sign-and-export dry run. CLI: `gh workflow run testflight.yml --ref main` (add `-f build_number=10050` or `-f upload=false`).
