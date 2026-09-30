@@ -132,3 +132,49 @@ xcodebuild test -scheme Pickems \
   -destination 'platform=iOS Simulator,name=iPhone 17' \
   -only-testing:PickemsTests
 ```
+
+---
+
+## Automated via GitHub Actions
+
+Workflow: [`.github/workflows/testflight.yml`](../.github/workflows/testflight.yml). It archives the **Pickems** scheme (Pickems + embedded PickemsWidget), signs with Xcode cloud-managed signing, exports an `.ipa`, and uploads it to TestFlight with `xcrun altool`. It does **not** submit for App Review, touch `appConfig/live.minimumBuild`, or commit anything back to the repo.
+
+### Required secrets
+
+Repository → Settings → Secrets and variables → Actions:
+
+| Secret | Value |
+|--|--|
+| `ASC_KEY_ID` | App Store Connect API key ID |
+| `ASC_ISSUER_ID` | Issuer ID (UUID shown above the key list in App Store Connect → Users and Access → Integrations) |
+| `ASC_KEY_P8` | Full contents of `AuthKey_<KEY_ID>.p8`, raw PEM (`-----BEGIN PRIVATE KEY-----` …). Base64 of the file also works. |
+
+The key must have the **Admin** role. Cloud-managed signing (`-allowProvisioningUpdates` with `-authenticationKeyPath/-authenticationKeyID/-authenticationKeyIssuerID`) creates or fetches signing certificates and provisioning profiles for the app, widget, and watch bundle IDs, and Apple only allows that with an Admin key. With an App Manager or Developer key, archive/export fails with a signing or permission error. No certificates or profiles are stored as secrets.
+
+The key file is written to `~/.appstoreconnect/private_keys/` on the runner only for the job and deleted in an `always()` step at the end, along with a temporary signing keychain. Key ID and issuer ID are scrubbed from the log files that are kept as artifacts.
+
+### Build number
+
+Marketing version comes from the repo unchanged (`MARKETING_VERSION` in `project.pbxproj`). The build number is set on the runner only, identically on Pickems, PickemsWidget, and PickemsWatch (Debug + Release; test targets stay at `1`):
+
+- Default: `TESTFLIGHT_BUILD_BASE + github.run_number`, where the optional repository **variable** `TESTFLIGHT_BUILD_BASE` defaults to `10000` (first run = `10001`).
+- Manual override: the `build_number` input on **Run workflow**.
+- The job fails if the result is not a plain integer greater than the repo's current `CURRENT_PROJECT_VERSION`. It must be a plain integer because `ForceUpdatePolicy` parses `CFBundleVersion` with `Int()`.
+
+Why `10000+` and not the Mac `XYZ` convention (§2): App Store Connect already has builds up to at least `3507`, and `minimumBuild` compares build numbers as integers, so a low CI build like `401` would be rejected as a duplicate/lower build or trip the force-update gate. CI builds therefore live above every `XYZ` build. Keep that in mind before raising `minimumBuild` to a CI build number: any later Mac-archived build using the `XYZ` convention would then be below the gate. Re-running a failed run reuses the same `run_number`, so if that attempt already uploaded, start a new run instead of re-running.
+
+### How to trigger
+
+- **Manually:** GitHub → Actions → **TestFlight** → **Run workflow**, pick the branch, optionally set `build_number`, and optionally untick `upload` for a sign-and-export dry run. CLI: `gh workflow run testflight.yml --ref main` (add `-f build_number=10050` or `-f upload=false`).
+- **Tag:** push a tag like `v3.5.8` (`git tag v3.5.8 && git push origin v3.5.8`). The tag is only a trigger; the marketing version still comes from `project.pbxproj`, and the job warns if they differ.
+- It does **not** run on pushes to `main` or on pull requests.
+
+Artifacts per run: the signed `.ipa` plus a dSYMs zip (30 days) and the resolve/archive/export/upload logs (14 days). TestFlight notes (`release_notes.txt`) are **not** pushed by this workflow; set What to Test in App Store Connect if needed.
+
+### Runner and cost
+
+Runs on `macos-26` with Xcode 26.6 selected via `xcode-select` (the project's iOS 26.5 deployment target needs the iOS 26.5 SDK). This repo is currently **public**, so GitHub-hosted macOS minutes are free. If the repo is ever made private, macOS minutes bill at **10x** the Linux rate against the plan's included minutes; one archive + upload is roughly 15–25 minutes.
+
+### Watch target
+
+The Pickems scheme does not embed PickemsWatch today (the `Embed Watch Content` phase exists but is not attached to the Pickems target; see [WIDGETS_WATCH.md](WIDGETS_WATCH.md)). The workflow still bumps its build number so all three stay in lockstep. If the watch app is embedded later, cloud signing will also need to provision `FannypackInc.Pickems.watchkitapp`, and the job's version check already inspects `Pickems.app/Watch/*.app`.

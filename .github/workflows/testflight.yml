@@ -1,0 +1,370 @@
+name: TestFlight
+
+# Builds the Pickems iOS app (Pickems + embedded PickemsWidget), signs it with
+# Xcode cloud-managed signing, and uploads it to TestFlight.
+#
+# REQUIRES an App Store Connect API key with the **Admin** role. Cloud-managed
+# signing (xcodebuild -allowProvisioningUpdates + -authenticationKey*) only
+# works with an Admin key; an App Manager / Developer key can upload but cannot
+# create signing certificates or provisioning profiles, so archive/export fails.
+#
+# Repository secrets (Settings -> Secrets and variables -> Actions):
+#   ASC_KEY_ID      App Store Connect API key ID (for example ABC123DEFG)
+#   ASC_ISSUER_ID   App Store Connect issuer ID (UUID)
+#   ASC_KEY_P8      Contents of AuthKey_<KEY_ID>.p8 (raw PEM text or base64)
+# Optional repository variable:
+#   TESTFLIGHT_BUILD_BASE  Build number = base + run number (default 10000)
+#
+# Triggers: manual (Actions -> TestFlight -> Run workflow) or pushing a tag
+# like v3.5.8. It never runs on ordinary pushes to main or on pull requests.
+# Nothing is committed back: the build-number bump exists only on the runner.
+# It never submits for App Review.
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: "Build number override (integer). Leave blank for TESTFLIGHT_BUILD_BASE + run number."
+        required: false
+        default: ""
+      upload:
+        description: "Upload to TestFlight (untick to archive, sign and export only)"
+        type: boolean
+        required: false
+        default: true
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+env:
+  XCODE_APP: /Applications/Xcode_26.6.app
+  SCHEME: Pickems
+  PROJECT: Pickems.xcodeproj
+  TEAM_ID: 22A943P8SJ
+  DEFAULT_BUILD_BASE: "10000"
+
+jobs:
+  testflight:
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26.6 (iOS 26.5 SDK, needed for the 26.5 deployment target)
+        run: |
+          set -euo pipefail
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+
+      - name: Compute version and build number
+        id: version
+        env:
+          BUILD_OVERRIDE: ${{ github.event.inputs.build_number }}
+          BUILD_BASE_VAR: ${{ vars.TESTFLIGHT_BUILD_BASE }}
+          RUN_NUMBER: ${{ github.run_number }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          pbx="$PROJECT/project.pbxproj"
+
+          # Shipping targets (Pickems, PickemsWidget, PickemsWatch; Debug + Release)
+          # share one build number. Test targets stay at 1 and are left alone.
+          shipping_builds=$(grep -Eo 'CURRENT_PROJECT_VERSION = [0-9]+;' "$pbx" | grep -Ev '= 1;$' | sort -u)
+          if [ "$(printf '%s\n' "$shipping_builds" | wc -l | tr -d ' ')" != "1" ]; then
+            echo "::error::Expected one shared shipping CURRENT_PROJECT_VERSION, found: $shipping_builds"
+            exit 1
+          fi
+          repo_build=$(printf '%s' "$shipping_builds" | grep -Eo '[0-9]+')
+          marketing=$(grep -Eo 'MARKETING_VERSION = [0-9.]+;' "$pbx" | grep -v '= 1.0;' | sort -u | grep -Eo '[0-9][0-9.]*[0-9]')
+          if [ "$(printf '%s\n' "$marketing" | wc -l | tr -d ' ')" != "1" ]; then
+            echo "::error::Expected one shared shipping MARKETING_VERSION, found: $marketing"
+            exit 1
+          fi
+
+          if [ -n "${BUILD_OVERRIDE}" ]; then
+            build="${BUILD_OVERRIDE}"
+          else
+            base="${BUILD_BASE_VAR:-$DEFAULT_BUILD_BASE}"
+            if ! [[ "$base" =~ ^[0-9]+$ ]]; then
+              echo "::error::TESTFLIGHT_BUILD_BASE must be an integer (got '$base')"
+              exit 1
+            fi
+            build=$(( base + RUN_NUMBER ))
+          fi
+          # ForceUpdatePolicy parses CFBundleVersion with Int(), so it must be a plain integer.
+          if ! [[ "$build" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Build number must be a positive integer (got '$build')"
+            exit 1
+          fi
+          if [ "$build" -le "$repo_build" ]; then
+            echo "::error::Build $build is not above the repo's shipping build $repo_build"
+            exit 1
+          fi
+
+          if [ "$REF_TYPE" = "tag" ] && [ "$REF_NAME" != "v$marketing" ]; then
+            echo "::warning::Tag $REF_NAME does not match MARKETING_VERSION $marketing; building $marketing anyway."
+          fi
+
+          {
+            echo "marketing=$marketing"
+            echo "build=$build"
+            echo "repo_build=$repo_build"
+          } >> "$GITHUB_OUTPUT"
+          echo "Marketing version $marketing, repo build $repo_build, CI build $build"
+
+      - name: Set build number on Pickems, PickemsWidget and PickemsWatch (runner only)
+        env:
+          REPO_BUILD: ${{ steps.version.outputs.repo_build }}
+          NEW_BUILD: ${{ steps.version.outputs.build }}
+        run: |
+          set -euo pipefail
+          pbx="$PROJECT/project.pbxproj"
+          before=$(grep -c "CURRENT_PROJECT_VERSION = ${REPO_BUILD};" "$pbx" || true)
+          if [ "$before" != "6" ]; then
+            echo "::error::Expected 6 CURRENT_PROJECT_VERSION = ${REPO_BUILD} entries (3 targets x Debug/Release), found $before"
+            exit 1
+          fi
+          sed -i '' "s/CURRENT_PROJECT_VERSION = ${REPO_BUILD};/CURRENT_PROJECT_VERSION = ${NEW_BUILD};/g" "$pbx"
+          after=$(grep -c "CURRENT_PROJECT_VERSION = ${NEW_BUILD};" "$pbx" || true)
+          if [ "$after" != "6" ]; then
+            echo "::error::Build number replacement failed ($after of 6 entries updated)"
+            exit 1
+          fi
+          grep -n 'CURRENT_PROJECT_VERSION' "$pbx"
+
+      - name: Install App Store Connect API key
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ASC_KEY_ID}" ] || [ -z "${ASC_ISSUER_ID}" ] || [ -z "${ASC_KEY_P8}" ]; then
+            echo "::error::Missing one of the ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 repository secrets."
+            exit 1
+          fi
+          # altool looks for the key in ~/.appstoreconnect/private_keys/AuthKey_<ID>.p8;
+          # xcodebuild gets the same path via -authenticationKeyPath.
+          key_dir="$HOME/.appstoreconnect/private_keys"
+          key_path="$key_dir/AuthKey_${ASC_KEY_ID}.p8"
+          mkdir -p "$key_dir"
+          chmod 700 "$key_dir"
+          umask 077
+          if printf '%s' "$ASC_KEY_P8" | grep -q -- '-----BEGIN PRIVATE KEY-----'; then
+            # Raw PEM. Also tolerate a single-line value with literal \n escapes.
+            printf '%s\n' "$ASC_KEY_P8" | perl -pe 's/\\n/\n/g' > "$key_path"
+          else
+            printf '%s' "$ASC_KEY_P8" | tr -d ' \r\n' | base64 --decode > "$key_path"
+          fi
+          if ! grep -q -- '-----BEGIN PRIVATE KEY-----' "$key_path" || ! grep -q -- '-----END PRIVATE KEY-----' "$key_path"; then
+            rm -f "$key_path"
+            echo "::error::ASC_KEY_P8 is neither a PEM .p8 nor base64 of one."
+            exit 1
+          fi
+          echo "ASC_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+          echo "API key installed."
+
+      - name: Create temporary keychain for cloud-managed signing
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/pickems-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          echo "::add-mask::$keychain_password"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          existing=()
+          while IFS= read -r kc; do
+            kc="${kc//\"/}"
+            kc="${kc#"${kc%%[![:space:]]*}"}"
+            if [ -n "$kc" ]; then existing+=("$kc"); fi
+          done < <(security list-keychains -d user)
+          security list-keychains -d user -s "$keychain" "${existing[@]}"
+          security default-keychain -d user -s "$keychain"
+          echo "SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+      - name: Resolve Swift packages
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/logs"
+          xcodebuild -resolvePackageDependencies \
+            -project "$PROJECT" -scheme "$SCHEME" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            2>&1 | tee "$RUNNER_TEMP/logs/resolve-packages.log" | tail -n 40
+
+      - name: Archive (Release)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Pickems.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            > "$RUNNER_TEMP/logs/archive.log" 2>&1 || {
+              echo "::error::xcodebuild archive failed. Last 150 log lines:"
+              tail -n 150 "$RUNNER_TEMP/logs/archive.log"
+              exit 1
+            }
+          tail -n 20 "$RUNNER_TEMP/logs/archive.log"
+
+      - name: Verify archived versions
+        env:
+          MARKETING: ${{ steps.version.outputs.marketing }}
+          NEW_BUILD: ${{ steps.version.outputs.build }}
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/Pickems.xcarchive/Products/Applications/Pickems.app"
+          status=0
+          for plist in "$app/Info.plist" "$app"/PlugIns/*.appex/Info.plist "$app"/Watch/*.app/Info.plist; do
+            [ -f "$plist" ] || continue
+            id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")
+            short=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")
+            build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")
+            echo "$id $short ($build)"
+            if [ "$short" != "$MARKETING" ] || [ "$build" != "$NEW_BUILD" ]; then
+              echo "::error::$id is $short ($build), expected $MARKETING ($NEW_BUILD)"
+              status=1
+            fi
+          done
+          exit $status
+
+      - name: Export signed IPA (app-store-connect, cloud-managed signing)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          # Same options as the Mac SOP (method app-store-connect, team 22A943P8SJ,
+          # automatic signing) but written to disk so the IPA can be kept as an artifact.
+          opts="$RUNNER_TEMP/ExportOptions-CI.plist"
+          cp fastlane/ExportOptions-AppStore.plist "$opts"
+          plutil -replace destination -string export "$opts"
+          plutil -p "$opts"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Pickems.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$opts" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            > "$RUNNER_TEMP/logs/export.log" 2>&1 || {
+              echo "::error::xcodebuild -exportArchive failed. Last 150 log lines:"
+              tail -n 150 "$RUNNER_TEMP/logs/export.log"
+              exit 1
+            }
+          tail -n 20 "$RUNNER_TEMP/logs/export.log"
+          ls -la "$RUNNER_TEMP/export"
+          ipa=$(find "$RUNNER_TEMP/export" -maxdepth 1 -name '*.ipa' | head -n 1)
+          if [ -z "$ipa" ]; then
+            echo "::error::Export produced no .ipa"
+            exit 1
+          fi
+          echo "IPA_PATH=$ipa" >> "$GITHUB_ENV"
+
+      - name: Upload to TestFlight
+        if: github.event_name == 'push' || github.event.inputs.upload != 'false'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          # altool finds the key at ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8
+          if ! xcrun altool --upload-app --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$ASC_KEY_ID" \
+            --apiIssuer "$ASC_ISSUER_ID" \
+            --output-format normal \
+            > "$RUNNER_TEMP/logs/upload.log" 2>&1; then
+            echo "::error::altool upload failed:"
+            cat "$RUNNER_TEMP/logs/upload.log"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/logs/upload.log"
+
+      - name: Job summary
+        if: always()
+        env:
+          MARKETING: ${{ steps.version.outputs.marketing }}
+          NEW_BUILD: ${{ steps.version.outputs.build }}
+          UPLOAD: ${{ github.event_name == 'push' || github.event.inputs.upload != 'false' }}
+        run: |
+          {
+            echo "### Pickems ${MARKETING:-?} (${NEW_BUILD:-?})"
+            echo ""
+            echo "- Ref: \`${GITHUB_REF_NAME}\` @ \`${GITHUB_SHA::7}\`"
+            echo "- Upload requested: ${UPLOAD}"
+            echo "- Not submitted for App Review. TestFlight processing usually takes a few minutes."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prepare artifacts (redact key identifiers from logs)
+        if: always()
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -uo pipefail
+          mkdir -p "$RUNNER_TEMP/logs"
+          # Logs uploaded as artifacts are not masked by GitHub, so scrub IDs here.
+          for f in "$RUNNER_TEMP"/logs/*.log; do
+            [ -f "$f" ] || continue
+            [ -n "${ASC_KEY_ID}" ] && sed -i '' "s/${ASC_KEY_ID}/[ASC_KEY_ID]/g" "$f"
+            [ -n "${ASC_ISSUER_ID}" ] && sed -i '' "s/${ASC_ISSUER_ID}/[ASC_ISSUER_ID]/g" "$f"
+          done
+          if [ -d "$RUNNER_TEMP/Pickems.xcarchive/dSYMs" ]; then
+            (cd "$RUNNER_TEMP/Pickems.xcarchive" && zip -qr "$RUNNER_TEMP/Pickems-dSYMs.zip" dSYMs)
+          fi
+          true
+
+      - name: Upload IPA artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pickems-${{ steps.version.outputs.marketing }}-${{ steps.version.outputs.build }}-ipa
+          path: |
+            ${{ runner.temp }}/export/*.ipa
+            ${{ runner.temp }}/Pickems-dSYMs.zip
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pickems-${{ steps.version.outputs.build }}-build-logs
+          path: |
+            ${{ runner.temp }}/logs/
+            ${{ runner.temp }}/export/*.plist
+            ${{ runner.temp }}/export/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Remove API key and temporary keychain
+        if: always()
+        run: |
+          rm -rf "$HOME/.appstoreconnect/private_keys"
+          if [ -n "${SIGNING_KEYCHAIN:-}" ]; then
+            security default-keychain -d user -s login.keychain-db || true
+            security delete-keychain "$SIGNING_KEYCHAIN" || true
+          fi
+          echo "Cleaned up signing material."
