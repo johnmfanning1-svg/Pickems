@@ -35,6 +35,10 @@ on:
   push:
     tags:
       - "v*"
+    # TEMPORARY: registers the workflow for one validation run from this PR
+    # branch (workflow_dispatch 404s until a workflow exists on main). Remove before merge.
+    branches:
+      - ci/testflight-actions
 
 permissions:
   contents: read
