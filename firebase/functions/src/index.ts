@@ -41,6 +41,7 @@ import {
   effectiveWeekLockMillis,
   lastKickoffMillis,
   revealLockedGames,
+  selectionWeekReadyToOpen,
 } from "./pickLock";
 import { shouldRefreshLiveStandings } from "./liveStandings";
 
@@ -152,15 +153,18 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
 
     for (const weekDoc of weeks.docs) {
       const week = weekDoc.data();
-      if (week.selectionMode !== "member") continue;
+      if (week.selectionMode !== "member" && week.selectionMode !== "commissioner") continue;
 
       const groupId = groupDoc.id;
       const weekId = weekDoc.id;
       const weekNum = week.weekNumber ?? "";
       const deadline = week.selectionDeadline as Timestamp | undefined;
       const payload = { groupId, weekId };
+      const deadlineMs = deadline ? deadline.toMillis() : null;
+      const deadlinePassed = deadlineMs != null && deadlineMs <= nowMs;
+      const isMemberWeek = week.selectionMode !== "commissioner";
 
-      if (!deadline && !week.selectionDeadlineNudgeSent) {
+      if (isMemberWeek && !deadline && !week.selectionDeadlineNudgeSent) {
         await sendToUser(
           commissionerId,
           "Set Selection deadline",
@@ -169,10 +173,9 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
           payload
         );
         await weekDoc.ref.update({ selectionDeadlineNudgeSent: true });
-        continue;
       }
 
-      if (deadline && deadline.toMillis() > nowMs) {
+      if (isMemberWeek && deadline && deadline.toMillis() > nowMs) {
         const msUntil = deadline.toMillis() - nowMs;
         const in24hWindow = msUntil >= 23 * MS_PER_HOUR && msUntil <= 25 * MS_PER_HOUR;
         const in1hWindow = msUntil >= 50 * MS_PER_MIN && msUntil <= 70 * MS_PER_MIN;
@@ -198,49 +201,73 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
               : { selectionReminder24hSent: true }
           );
         }
+      }
+
+      const nominationCounts: Record<string, number> = {};
+      if (isMemberWeek) {
+        const noms = await weekDoc.ref.collection("nominations").get();
+        for (const doc of noms.docs) {
+          const uid = doc.data().submittedBy as string | undefined;
+          if (!uid) continue;
+          nominationCounts[uid] = (nominationCounts[uid] ?? 0) + 1;
+        }
+      }
+      const members = memberIds.filter((id) => id.length > 0);
+      const perMember = Math.max(Number(week.selectionsPerMember) || 1, 1);
+      const allSelectionsIn =
+        isMemberWeek &&
+        members.length > 0 &&
+        members.every((id) => (nominationCounts[id] ?? 0) >= perMember);
+      const slateSize = Number(week.slateSize) || 0;
+      const nominationCount = Number(week.nominationCount) || 0;
+      const commissionerSlateFull =
+        !isMemberWeek && slateSize > 0 && nominationCount >= slateSize;
+      if (!deadlinePassed && !allSelectionsIn && !commissionerSlateFull) continue;
+
+      await materializeNominations(groupId, weekId);
+      const gamesSnap = await weekDoc.ref.collection("games").get();
+      const games = gamesSnap.docs.map((doc) => ({ id: doc.id, kickoff: doc.data().kickoff }));
+      const gameCount = games.filter((game) => {
+        const kickoff = game.kickoff as Timestamp | undefined;
+        return !!kickoff;
+      }).length;
+      const ready = selectionWeekReadyToOpen({
+        nowMs,
+        selectionDeadlineMs: deadlineMs,
+        selectionMode: week.selectionMode,
+        memberIds,
+        nominationCounts,
+        selectionsPerMember: week.selectionsPerMember,
+        gameCount,
+        slateSize: week.slateSize,
+      });
+
+      if (ready) {
+        const snapshot = lockSnapshotFromGames(games, groupDoc.data().rules?.pickDeadline);
+        await weekDoc.ref.update({
+          status: "picking",
+          selectionDeadlinePassedNotified: true,
+          ...snapshot,
+        });
+        await sendToUsers(
+          memberIds,
+          "Pickems are open",
+          `Week ${weekNum}: make your Pickems. They lock at kickoff.`,
+          "pickems_open",
+          payload
+        );
         continue;
       }
 
-      if (
-        deadline &&
-        deadline.toMillis() <= nowMs &&
-        !week.selectionDeadlinePassedNotified
-      ) {
-        await materializeNominations(groupId, weekId);
-        const gamesSnap = await weekDoc.ref.collection("games").get();
-        const kickoffs = gamesSnap.docs
-          .map((d) => d.data().kickoff as Timestamp | undefined)
-          .filter((ts): ts is Timestamp => !!ts)
-          .map((ts) => ts.toMillis());
-        const earliest = kickoffs.length ? Math.min(...kickoffs) : undefined;
-
-        if (earliest != null) {
-          const snapshot = lockSnapshotFromGames(
-            gamesSnap.docs.map((doc) => ({ id: doc.id, kickoff: doc.data().kickoff })),
-            groupDoc.data().rules?.pickDeadline
-          );
-          await weekDoc.ref.update({
-            status: "picking",
-            selectionDeadlinePassedNotified: true,
-            ...snapshot,
-          });
-          await sendToUsers(
-            memberIds,
-            "Pickems are open",
-            `Week ${weekNum}: the Selection deadline passed. Make your Pickems.`,
-            "pickems_open",
-            payload
-          );
-        } else {
-          await sendToUser(
-            commissionerId,
-            "Selection deadline passed",
-            `Week ${weekNum}: fill remaining games or open with fewer.`,
-            "selection_deadline_passed",
-            payload
-          );
-          await weekDoc.ref.update({ selectionDeadlinePassedNotified: true });
-        }
+      if (deadlinePassed && isMemberWeek && !week.selectionDeadlinePassedNotified) {
+        await sendToUser(
+          commissionerId,
+          "Selection deadline passed",
+          `Week ${weekNum}: fill remaining games or open with fewer.`,
+          "selection_deadline_passed",
+          payload
+        );
+        await weekDoc.ref.update({ selectionDeadlinePassedNotified: true });
       }
     }
   }

@@ -47,6 +47,8 @@ final class AppState {
         presentedSheet = nil
     }
 
+    /// Waits out a Selection deadline that is already inside the next day.
+    var selectionOpenWatch: Task<Void, Never>?
     /// Bumps on each `onAuthStateReady` so overlapping login callbacks cannot finish out of order.
     private var authReadyGeneration = 0
     private var authReadyTask: Task<Void, Never>?
@@ -61,6 +63,10 @@ final class AppState {
         liveConfig.start()
         notificationService.start()
         appTheme.sync(from: authService.currentUser)
+        pickService.onSlateChanged = { [weak self] in
+            guard let self else { return }
+            Task { await self.openPickemsIfSelectionClosed() }
+        }
     }
 
     func bootstrapSession() async {

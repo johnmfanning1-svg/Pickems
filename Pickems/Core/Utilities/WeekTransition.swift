@@ -109,9 +109,22 @@ enum WeekTransition {
         }
     }
 
-    /// Completing Selections never opens Pickems. Only the Selection deadline
-    /// (Cloud Function) or commissioner lock-early (`lockEarlyUpdates`) flips status.
-    static var opensPickingWhenSlateFills: Bool { false }
+    /// A full slate opens Pickems. A passed Selection deadline does too.
+    /// Either way the Pickems lock is first kickoff, or each game on rolling lock.
+    static var opensPickingWhenSlateFills: Bool { true }
+
+    /// Move `.selection` → `.picking` once every Selection is in, or the Selection
+    /// deadline has passed. The Selection deadline is not the Pickems lock.
+    static func shouldOpenPickems(
+        _ week: WeekSummary,
+        slateIsComplete: Bool,
+        now: Date = Date()
+    ) -> Bool {
+        guard week.status == .selection, !week.skipsSelection else { return false }
+        if opensPickingWhenSlateFills, slateIsComplete { return true }
+        if let deadline = week.selectionDeadline, now >= deadline { return true }
+        return false
+    }
 
     /// Commissioner can add, replace, or remove any member's Selections while
     /// the week is still in `.selection` (including after the member deadline).
@@ -175,8 +188,12 @@ enum WeekTransition {
     /// True when no remaining games can be edited (rolling: last kickoff / remaining freeze).
     static func arePicksFullyLocked(_ week: WeekSummary, now: Date = Date()) -> Bool {
         switch week.status {
-        case .locked, .scored, .selection:
+        case .locked, .scored:
             return true
+        case .selection:
+            // Selections closing is not a Pickems lock. Lock is kickoff-based
+            // after the week is `.picking`.
+            return false
         case .picking:
             if week.isRollingLock {
                 if let remaining = week.remainingLockAt, now >= remaining { return true }

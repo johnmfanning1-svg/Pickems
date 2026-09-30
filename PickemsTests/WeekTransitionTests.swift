@@ -89,8 +89,21 @@ struct WeekTransitionTests {
         #expect(!WeekTransition.pickemsShouldShowLeagueBoard(week(status: .selection)))
     }
 
-    @Test func fillingSlateDoesNotAutoOpenPicking() {
-        #expect(!WeekTransition.opensPickingWhenSlateFills)
+    @Test func fillingSlateOpensPicking() {
+        #expect(WeekTransition.opensPickingWhenSlateFills)
+        let future = Date().addingTimeInterval(7 * 24 * 3600)
+        let openWeek = week(status: .selection, selectionDeadline: future)
+        #expect(WeekTransition.shouldOpenPickems(openWeek, slateIsComplete: true))
+        #expect(!WeekTransition.shouldOpenPickems(openWeek, slateIsComplete: false))
+    }
+
+    @Test func passedSelectionDeadlineOpensPickemsWithoutLockingThem() {
+        let past = Date().addingTimeInterval(-60)
+        let waiting = week(status: .selection, selectionDeadline: past)
+        #expect(WeekTransition.shouldOpenPickems(waiting, slateIsComplete: false))
+        #expect(!WeekTransition.arePicksFullyLocked(waiting))
+        #expect(!WeekTransition.arePickemsOpen(waiting))
+        #expect(!WeekTransition.arePicksEditable(waiting))
     }
 
     @Test func remakeSelectionsAllowedDuringSelectionBeforeDeadline() {

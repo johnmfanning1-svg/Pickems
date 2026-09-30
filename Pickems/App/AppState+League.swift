@@ -42,6 +42,37 @@ extension AppState {
         await groupService.syncCurrentWeekFromESPN(groupId: group.id)
         guard let week = groupService.currentWeek else { return }
         pickService.observeWeek(groupId: group.id, weekId: week.id, userId: userId)
+        scheduleSelectionOpen()
+    }
+
+    /// Opens Pickems once Selections are complete or the Selection deadline has passed.
+    /// The Pickems lock written with that open is first kickoff, or per-game on rolling lock.
+    func scheduleSelectionOpen() {
+        selectionOpenWatch?.cancel()
+        selectionOpenWatch = Task { [weak self] in
+            guard let self else { return }
+            await self.openPickemsIfSelectionClosed()
+            guard let deadline = self.groupService.currentWeek?.selectionDeadline else { return }
+            let delay = deadline.timeIntervalSinceNow
+            guard delay > 0, delay < 24 * 60 * 60 else { return }
+            try? await Task.sleep(nanoseconds: UInt64((delay + 1) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await self.openPickemsIfSelectionClosed()
+        }
+    }
+
+    func openPickemsIfSelectionClosed() async {
+        guard let group = groupService.selectedGroup,
+              let week = groupService.currentWeek,
+              week.status == .selection,
+              !week.skipsSelection else { return }
+        guard pickService.observedWeekId == week.id else { return }
+        await pickService.openPickemsIfReady(
+            groupId: group.id,
+            week: week,
+            rules: group.rules,
+            memberIds: group.memberIds
+        )
     }
 
     /// Pin Selections, Pickems, and commissioner week-admin to the same week.

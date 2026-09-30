@@ -1,8 +1,8 @@
-What's new in 3.5.8
+What's new in 3.5.9
 
-• Latest main: slate size stays in sync for late joiners
-• Rolling weeks refresh live standings; a stale week shows 0–0
+• Pickems lock at the first kickoff, or game by game on rolling lock, once Selections are in
 • A new league starts at 0–0 instead of another league's record
-• Clearer message when a server refresh can't be reached
+• Late joiners keep the right slate size
+• Rolling weeks refresh live standings
 
-Thanks for helping us UAT this build.
+Thanks for playing with us.

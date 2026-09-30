@@ -8,6 +8,7 @@ import {
   gameIsLocked,
   lastKickoffMillis,
   revealedPicksForGame,
+  selectionWeekReadyToOpen,
 } from "./pickLock";
 
 describe("pickLock helpers", () => {
@@ -103,5 +104,65 @@ describe("pickLock helpers", () => {
         weekLockAt: 4_000,
       })
     ).toBe(4_000);
+  });
+
+  it("opens pickems after the selection deadline when a game has a kickoff", () => {
+    expect(
+      selectionWeekReadyToOpen({
+        nowMs: 2_000,
+        selectionDeadlineMs: 1_000,
+        selectionMode: "member",
+        memberIds: ["a", "b"],
+        nominationCounts: { a: 1 },
+        selectionsPerMember: 1,
+        gameCount: 1,
+        slateSize: 2,
+      })
+    ).toBe(true);
+  });
+
+  it("opens pickems when every selection is in before the deadline", () => {
+    expect(
+      selectionWeekReadyToOpen({
+        nowMs: 1_000,
+        selectionDeadlineMs: 5_000,
+        selectionMode: "member",
+        memberIds: ["a", "b"],
+        nominationCounts: { a: 1, b: 1 },
+        selectionsPerMember: 1,
+        gameCount: 2,
+        slateSize: 2,
+      })
+    ).toBe(true);
+  });
+
+  it("does not treat a passed selection deadline as ready when no game has a kickoff", () => {
+    expect(
+      selectionWeekReadyToOpen({
+        nowMs: 2_000,
+        selectionDeadlineMs: 1_000,
+        selectionMode: "member",
+        memberIds: ["a"],
+        nominationCounts: { a: 1 },
+        selectionsPerMember: 1,
+        gameCount: 0,
+        slateSize: 1,
+      })
+    ).toBe(false);
+  });
+
+  it("keeps pickems closed while selections are still open", () => {
+    expect(
+      selectionWeekReadyToOpen({
+        nowMs: 1_000,
+        selectionDeadlineMs: 5_000,
+        selectionMode: "member",
+        memberIds: ["a", "b"],
+        nominationCounts: { a: 1 },
+        selectionsPerMember: 1,
+        gameCount: 1,
+        slateSize: 2,
+      })
+    ).toBe(false);
   });
 });

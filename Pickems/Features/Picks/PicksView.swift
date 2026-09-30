@@ -284,17 +284,12 @@ struct PicksView: View {
                 pickemsGames(for: week)
             } else {
                 ContextualTipBanner(
-                    icon: "lock.fill",
-                    message: "Pickems open when every Selection is in or the Selection deadline passes. Your commissioner can lock early."
+                    icon: "hourglass",
+                    message: week.isSelectionDeadlinePassed
+                        ? "Selections are locked. Pickems lock at the first kickoff, or at each kickoff if this league uses rolling lock."
+                        : "Pickems open when every Selection is in or the Selection deadline passes. They lock at kickoff, not at the Selection deadline."
                 )
                 .padding(.horizontal)
-                if picksMatchWeek(week) {
-                    pickingPhase(week: week)
-                        .disabled(true)
-                        .opacity(0.45)
-                        .accessibilityElement(children: .contain)
-                        .accessibilityLabel("Pickems locked until Selections are complete")
-                }
             }
         }
     }

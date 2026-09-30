@@ -47,6 +47,12 @@ final class PickService {
     /// Invalidates in-flight `savePickDraft` local mirrors after a later clear/set.
     @ObservationIgnored
     private var userPickWriteGeneration = 0
+    /// Week id currently being moved from Selection to Pickems.
+    @ObservationIgnored
+    private var openingPickemsWeekId: String?
+    /// Fired after nominations or slate games change so a full slate can open Pickems.
+    @ObservationIgnored
+    var onSlateChanged: (() -> Void)?
 
     func observeWeek(groupId: String, weekId: String, userId: String) {
         if observedGroupId == groupId, observedWeekId == weekId, observedUserId == userId,
@@ -87,6 +93,7 @@ final class PickService {
                         return
                     }
                     self.nominations = snapshot?.documents.compactMap { try? $0.data(as: Nomination.self) } ?? []
+                    self.onSlateChanged?()
                 }
             }
 
@@ -110,6 +117,7 @@ final class PickService {
                             SlateGame.fromDocument(id: doc.documentID, data: doc.data())
                         } ?? []
                     )
+                    self.onSlateChanged?()
                 }
             }
 
@@ -645,8 +653,6 @@ final class PickService {
             let savedIds = Set(saved.map(\.id))
             nominations.removeAll { savedIds.contains($0.id) || savedIds.contains($0.espnEventId) }
             nominations.append(contentsOf: saved)
-            // Completing Selections does not open Pickems. Stay in `.selection` so
-            // members can clear and remake until the deadline or commissioner lock-early.
             let countSnap = try await weekRef.nominations.getDocuments(source: .server)
             try await weekRef.updateData([
                 FirestoreField.nominationCount: countSnap.count
@@ -1152,6 +1158,71 @@ final class PickService {
             nominationCount: nominations.count,
             lockSlate: true
         )
+    }
+
+    /// Opens Pickems when every Selection is in or the Selection deadline has passed.
+    /// The lock snapshot is first kickoff, or per-game kickoff on rolling lock.
+    /// Does not stamp `lockedAt` — that early lock is commissioner-only.
+    func openPickemsIfReady(
+        groupId: String,
+        week: WeekSummary,
+        rules: GroupRules,
+        memberIds: [String],
+        now: Date = Date()
+    ) async {
+        let uniqueCount = Set(
+            nominations.map(\.espnEventId) + slateGames.map(\.espnEventId)
+        ).count
+        var byUser: [String: Int] = [:]
+        for nomination in nominations {
+            byUser[nomination.submittedBy, default: 0] += 1
+        }
+        let slateIsComplete = ScoringEngine.isMemberNominationRoundComplete(
+            nominationsByUser: byUser,
+            memberIds: memberIds,
+            selectionsPerMember: max(week.selectionsPerMember, rules.selectionsPerMember),
+            uniqueNominationCount: max(uniqueCount, slateGames.count),
+            slateSize: max(week.slateSize, rules.expectedSlateSize(memberCount: max(memberIds.count, 1)))
+        )
+        let commissionerFull = week.selectionMode == .commissioner
+            && max(uniqueCount, slateGames.count) >= max(week.slateSize, 1)
+        guard WeekTransition.shouldOpenPickems(
+            week,
+            slateIsComplete: week.selectionMode == .commissioner ? commissionerFull : slateIsComplete,
+            now: now
+        ) else { return }
+        guard openingPickemsWeekId != week.id else { return }
+        openingPickemsWeekId = week.id
+        defer { openingPickemsWeekId = nil }
+
+        do {
+            try await materializeNominationsIfNeeded(groupId: groupId, weekId: week.id)
+            let games = await slateLockGames(
+                groupId: groupId,
+                weekId: week.id,
+                fallback: nominations.map { ($0.espnEventId, $0.kickoff) } + slateGames.map { ($0.id, $0.kickoff) }
+            )
+            guard !games.isEmpty else { return }
+
+            let snapshot = try await db.week(groupId: groupId, weekId: week.id).getDocument()
+            let status = snapshot.data()?["status"] as? String
+            guard status == WeekStatus.selection.rawValue else { return }
+
+            try await transitionToPicking(
+                groupId: groupId,
+                weekId: week.id,
+                rules: rules,
+                games: games,
+                nominationCount: max(nominations.count, week.nominationCount),
+                lockSlate: false
+            )
+        } catch {
+            AppLog.notice(AppLog.picks, "openPickemsIfReady failed", metadata: [
+                "groupId": groupId,
+                "weekId": week.id,
+                "error": error.localizedDescription
+            ])
+        }
     }
 
     private func slateLockGames(

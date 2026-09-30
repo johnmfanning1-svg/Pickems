@@ -66,6 +66,11 @@ enum WorkspaceDeadlineDisplay {
             return PickDeadlineCalculator.nextLockDate(week: week, games: games, now: now)
                 ?? week.pickDeadline
         }
-        return week.pickDeadline
+        if let stored = week.pickDeadline {
+            return stored
+        }
+        // Before the week snapshots a lock, show the deadline that will apply:
+        // first kickoff. Rolling advances to the next game only after Pickems open.
+        return games.map(\.kickoff).min()
     }
 }

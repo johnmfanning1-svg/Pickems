@@ -54,6 +54,36 @@ export function lockSnapshotFromGames(
   return fields;
 }
 
+/**
+ * A passed Selection deadline is not a Pickems lock. Open Pickems when every
+ * Selection is in, or the Selection deadline has passed, and at least one game
+ * has a kickoff. The caller stamps first kickoff (or per-game kickoffs on rolling).
+ */
+export function selectionWeekReadyToOpen(input: {
+  nowMs: number;
+  selectionDeadlineMs: number | null;
+  selectionMode: unknown;
+  memberIds: string[];
+  nominationCounts: Record<string, number>;
+  selectionsPerMember: unknown;
+  gameCount: number;
+  slateSize: unknown;
+}): boolean {
+  if (input.gameCount <= 0) return false;
+  const deadlinePassed =
+    input.selectionDeadlineMs != null && input.selectionDeadlineMs <= input.nowMs;
+  if (input.selectionMode === "commissioner") {
+    const target = Math.max(Number(input.slateSize) || 1, 1);
+    return input.gameCount >= target || deadlinePassed;
+  }
+  const perMember = Math.max(Number(input.selectionsPerMember) || 1, 1);
+  const members = input.memberIds.filter((id) => id.length > 0);
+  const allIn =
+    members.length > 0 &&
+    members.every((id) => (input.nominationCounts[id] ?? 0) >= perMember);
+  return allIn || deadlinePassed;
+}
+
 export function effectiveWeekLockMillis(week: {
   pickLockMode?: unknown;
   weekLockAt?: unknown;

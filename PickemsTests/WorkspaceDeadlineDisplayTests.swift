@@ -96,6 +96,26 @@ struct WorkspaceDeadlineDisplayTests {
         #expect(!member.hasContent)
     }
 
+    @Test func selectionWithoutSnapshotShowsFirstKickoff() {
+        let first = now.addingTimeInterval(3 * 3600)
+        let last = now.addingTimeInterval(30 * 3600)
+        let week = week(
+            status: .selection,
+            selectionDeadline: now.addingTimeInterval(-60)
+        )
+        let games = [game(id: "thu", kickoff: first), game(id: "sun", kickoff: last)]
+        let snapshot = WorkspaceDeadlineDisplay.snapshot(
+            kind: .pickems,
+            week: week,
+            isCommissioner: false,
+            games: games,
+            now: now
+        )
+        #expect(snapshot.pickemsDeadline == first)
+        #expect(!snapshot.isRolling)
+        #expect(!PickDeadlineCalculator.isPast(snapshot.pickemsDeadline, now: now))
+    }
+
     @Test func rollingSelectionUsesFirstKickoffNotLast() {
         let first = now.addingTimeInterval(3600)
         let last = now.addingTimeInterval(48 * 3600)
