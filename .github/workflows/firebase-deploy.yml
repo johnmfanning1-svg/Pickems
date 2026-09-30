@@ -36,6 +36,8 @@ jobs:
       - name: Unit-test Cloud Functions
         run: |
           npm ci --prefix firebase/functions
+          # vitest does not type-check; tsc is what the deploy's predeploy build runs.
+          npm run build --prefix firebase/functions
           npm test --prefix firebase/functions
 
       - name: Unit-test Firestore rules (G0)
