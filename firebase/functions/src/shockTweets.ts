@@ -1,4 +1,4 @@
-import * as admin from "firebase-admin";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -387,7 +387,7 @@ export async function loadLeagueGameSamples(
   nowMs: number,
   config: ShockTweetConfig = SHOCK_TWEET_CONFIG
 ): Promise<LeagueGameSample[]> {
-  const firestore = admin.firestore();
+  const firestore = getFirestore();
   const groups = await firestore.collection("groups").get();
   const seasonFloor = easternYmd(new Date(nowMs)).year - 1;
   const samples: LeagueGameSample[] = [];
@@ -468,7 +468,7 @@ export const runDetectShockTweets = onCall(async (request) => {
 });
 
 function firestoreShockTweetStore(): ShockTweetStore {
-  const collection = () => admin.firestore().collection("shockTweets");
+  const collection = () => getFirestore().collection("shockTweets");
   return {
     async get(id) {
       const snap = await collection().doc(id).get();
@@ -509,8 +509,8 @@ function draftToFirestore(draft: ShockTweetDraft): Record<string, unknown> {
     shockReason: draft.shockReason,
     draftTweet: draft.draftTweet,
     status: draft.status,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   };
   if (draft.espnEventId) payload.espnEventId = draft.espnEventId;
   if (draft.skipReason) payload.skipReason = draft.skipReason;
