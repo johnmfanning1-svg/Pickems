@@ -1,0 +1,64 @@
+name: iOS Unit Tests
+
+# Compiles the Pickems iOS app and runs PickemsTests on a GitHub-hosted
+# macOS runner. Does not archive, upload to TestFlight, or deploy Firebase.
+on:
+  push:
+    branches:
+      - main
+      - cursor/verify-sunday-ios-e65f
+    paths:
+      - "Pickems/**"
+      - "PickemsTests/**"
+      - "PickemsWidget/**"
+      - "PickemsWatch/**"
+      - "Pickems.xcodeproj/**"
+      - ".github/workflows/ios-unit-tests.yml"
+  pull_request:
+    paths:
+      - "Pickems/**"
+      - "PickemsTests/**"
+      - "PickemsWidget/**"
+      - "PickemsWatch/**"
+      - "Pickems.xcodeproj/**"
+      - ".github/workflows/ios-unit-tests.yml"
+
+concurrency:
+  group: ios-unit-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode with the iOS 26.5 SDK
+        run: |
+          set -euo pipefail
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+          xcrun simctl list devices available | grep -E "iPhone 17 "
+
+      - name: Run PickemsTests
+        run: |
+          set -euo pipefail
+          xcodebuild test \
+            -project Pickems.xcodeproj \
+            -scheme Pickems \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
+            -only-testing:PickemsTests \
+            -resultBundlePath "${{ runner.temp }}/PickemsTests.xcresult" \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PickemsTests-xcresult
+          path: ${{ runner.temp }}/PickemsTests.xcresult
+          if-no-files-found: ignore
