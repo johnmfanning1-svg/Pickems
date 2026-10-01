@@ -42,6 +42,9 @@ import {
   lastKickoffMillis,
   revealLockedGames,
   selectionWeekReadyToOpen,
+  pickemsOpenSkipReason,
+  firstKickoffMillis,
+  type PickemsOpenSkipReason,
 } from "./pickLock";
 import { shouldRefreshLiveStandings } from "./liveStandings";
 
@@ -204,8 +207,9 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
       }
 
       const nominationCounts: Record<string, number> = {};
+      const noms = await weekDoc.ref.collection("nominations").get();
+      const nominationKickoffs = noms.docs.map((doc) => ({ kickoff: doc.data().kickoff }));
       if (isMemberWeek) {
-        const noms = await weekDoc.ref.collection("nominations").get();
         for (const doc of noms.docs) {
           const uid = doc.data().submittedBy as string | undefined;
           if (!uid) continue;
@@ -224,9 +228,41 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
         !isMemberWeek && slateSize > 0 && nominationCount >= slateSize;
       if (!deadlinePassed && !allSelectionsIn && !commissionerSlateFull) continue;
 
-      await materializeNominations(groupId, weekId);
+      // Never open a week whose slate has already kicked off. Check the
+      // existing games, or the nominations if there are none, before
+      // materializing so a stale week gets no writes at all.
+      const trigger = deadlinePassed ? "selection_deadline" : "slate_complete";
+      const existingGames = await weekDoc.ref.collection("games").get();
+      const preSource = existingGames.empty ? "nominations" : "games";
+      const preKickoffs = existingGames.empty
+        ? nominationKickoffs
+        : existingGames.docs.map((doc) => ({ kickoff: doc.data().kickoff }));
+      const preSkip = pickemsOpenSkipReason(preKickoffs, nowMs);
+      if (preSkip) {
+        logStaleOpenSkip(groupId, weekId, preSkip, {
+          source: preSource,
+          trigger,
+          firstKickoffMs: firstKickoffMillis(preKickoffs),
+          nowMs,
+        });
+      }
+      // A started slate is left alone entirely. With no kickoffs there is
+      // nothing to open, but the commissioner still gets the deadline notice.
+      if (preSkip === "first_kickoff_passed") continue;
+
+      if (!preSkip) await materializeNominations(groupId, weekId);
       const gamesSnap = await weekDoc.ref.collection("games").get();
       const games = gamesSnap.docs.map((doc) => ({ id: doc.id, kickoff: doc.data().kickoff }));
+      const postSkip = preSkip ?? pickemsOpenSkipReason(games, nowMs);
+      if (postSkip && !preSkip) {
+        logStaleOpenSkip(groupId, weekId, postSkip, {
+          source: "games",
+          trigger,
+          firstKickoffMs: firstKickoffMillis(games),
+          nowMs,
+        });
+      }
+      if (postSkip === "first_kickoff_passed") continue;
       const gameCount = games.filter((game) => {
         const kickoff = game.kickoff as Timestamp | undefined;
         return !!kickoff;
@@ -242,7 +278,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
         slateSize: week.slateSize,
       });
 
-      if (ready) {
+      if (ready && !postSkip) {
         const snapshot = lockSnapshotFromGames(games, groupDoc.data().rules?.pickDeadline);
         await weekDoc.ref.update({
           status: "picking",
@@ -272,6 +308,29 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
     }
   }
 });
+
+function logStaleOpenSkip(
+  groupId: string,
+  weekId: string,
+  reason: PickemsOpenSkipReason,
+  detail: {
+    source: "games" | "nominations";
+    trigger: "selection_deadline" | "slate_complete";
+    firstKickoffMs: number | null;
+    nowMs: number;
+  }
+): void {
+  logger.info("selectionDeadlineJobs: skipped opening Pickems", {
+    groupId,
+    weekId,
+    reason,
+    source: detail.source,
+    trigger: detail.trigger,
+    firstKickoff:
+      detail.firstKickoffMs == null ? null : new Date(detail.firstKickoffMs).toISOString(),
+    now: new Date(detail.nowMs).toISOString(),
+  });
+}
 
 async function membersMissingSelections(
   weekRef: DocumentReference,

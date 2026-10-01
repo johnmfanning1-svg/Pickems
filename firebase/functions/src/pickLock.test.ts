@@ -9,6 +9,8 @@ import {
   lastKickoffMillis,
   revealedPicksForGame,
   selectionWeekReadyToOpen,
+  firstKickoffMillis,
+  pickemsOpenSkipReason,
 } from "./pickLock";
 
 describe("pickLock helpers", () => {
@@ -164,5 +166,67 @@ describe("pickLock helpers", () => {
         slateSize: 2,
       })
     ).toBe(false);
+  });
+});
+
+describe("pickemsOpenSkipReason (never open a started slate)", () => {
+  const now = Date.parse("2026-09-30T20:37:00Z");
+  const hour = 60 * 60 * 1000;
+
+  it("skips a stale week whose kickoffs are all in the past", () => {
+    // Shape of the 2026-09-30 incident: Selections all in, no Selection
+    // deadline, slate kicked off Sep 2026 weeks earlier.
+    const games = [
+      { kickoff: Timestamp.fromDate(new Date("2026-09-12T16:00:00Z")) },
+      { kickoff: Timestamp.fromDate(new Date("2026-09-12T19:30:00Z")) },
+    ];
+    expect(
+      selectionWeekReadyToOpen({
+        nowMs: now,
+        selectionDeadlineMs: null,
+        selectionMode: "member",
+        memberIds: ["a"],
+        nominationCounts: { a: 3 },
+        selectionsPerMember: 3,
+        gameCount: games.length,
+        slateSize: 3,
+      })
+    ).toBe(true);
+    expect(pickemsOpenSkipReason(games, now)).toBe("first_kickoff_passed");
+  });
+
+  it("skips a week whose first kickoff is exactly now", () => {
+    expect(pickemsOpenSkipReason([{ kickoff: now }], now)).toBe("first_kickoff_passed");
+  });
+
+  it("opens a future week", () => {
+    const games = [
+      { kickoff: new Date(now + 2 * hour) },
+      { kickoff: Timestamp.fromMillis(now + 50 * hour) },
+    ];
+    expect(pickemsOpenSkipReason(games, now)).toBeNull();
+  });
+
+  it("decides a mixed slate by its first kickoff, so a started slate is skipped", () => {
+    const games = [
+      { kickoff: new Date(now + 48 * hour) },
+      { kickoff: new Date(now - 1 * hour) },
+      { kickoff: new Date(now + 3 * hour) },
+    ];
+    expect(firstKickoffMillis(games)).toBe(now - hour);
+    expect(pickemsOpenSkipReason(games, now)).toBe("first_kickoff_passed");
+  });
+
+  it("skips weeks with no games or no resolvable kickoff", () => {
+    expect(pickemsOpenSkipReason([], now)).toBe("no_kickoffs");
+    expect(pickemsOpenSkipReason([{ kickoff: undefined }, { kickoff: "soon" }], now)).toBe(
+      "no_kickoffs"
+    );
+  });
+
+  it("ignores unresolvable kickoffs when another game has one", () => {
+    expect(
+      pickemsOpenSkipReason([{ kickoff: null }, { kickoff: new Date(now + hour) }], now)
+    ).toBeNull();
   });
 });

@@ -126,6 +126,26 @@ enum WeekTransition {
         return false
     }
 
+    enum PickemsOpenSkipReason: String, Equatable {
+        case noKickoffs = "no_kickoffs"
+        case firstKickoffPassed = "first_kickoff_passed"
+    }
+
+    /// Never auto-open Pickems on a slate that has already started. Mirrors
+    /// `pickemsOpenSkipReason` in firebase/functions/src/pickLock.ts.
+    ///
+    /// A mixed slate (some games kicked off, some ahead) is decided by its
+    /// first kickoff, so the whole week is skipped: a firstKickoff week would
+    /// lock the moment it opened, and a rolling week would let members pick
+    /// started games with the score known. Returns nil when opening is allowed.
+    static func pickemsOpenSkipReason(
+        kickoffs: [Date],
+        now: Date = Date()
+    ) -> PickemsOpenSkipReason? {
+        guard let first = kickoffs.min() else { return .noKickoffs }
+        return first <= now ? .firstKickoffPassed : nil
+    }
+
     /// Commissioner can add, replace, or remove any member's Selections while
     /// the week is still in `.selection` (including after the member deadline).
     static func commissionerCanManageSelections(_ week: WeekSummary) -> Bool {

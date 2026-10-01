@@ -84,6 +84,38 @@ export function selectionWeekReadyToOpen(input: {
   return allIn || deadlinePassed;
 }
 
+/** Earliest resolvable kickoff across a week's games or nominations, or null. */
+export function firstKickoffMillis(games: Array<{ kickoff?: unknown }>): number | null {
+  const times = games
+    .map((game) => kickoffMillis(game.kickoff))
+    .filter((ms): ms is number => ms != null);
+  return times.length ? Math.min(...times) : null;
+}
+
+export type PickemsOpenSkipReason = "no_kickoffs" | "first_kickoff_passed";
+
+/**
+ * Never open Pickems on a week whose slate has already started.
+ *
+ * Decision for mixed slates (some games kicked off, some still ahead): the
+ * earliest kickoff decides, so the whole week is skipped. A firstKickoff week
+ * would lock the moment it opened, and on a rolling week anyone could still
+ * pick the started games with the score known, so a partial open is unfair in
+ * both modes. The week stays in selection for a commissioner to handle by hand.
+ *
+ * Returns null when opening is allowed, otherwise the skip reason. Weeks with
+ * no games or no resolvable kickoff are skipped too.
+ */
+export function pickemsOpenSkipReason(
+  games: Array<{ kickoff?: unknown }>,
+  nowMs: number
+): PickemsOpenSkipReason | null {
+  const first = firstKickoffMillis(games);
+  if (first == null) return "no_kickoffs";
+  if (first <= nowMs) return "first_kickoff_passed";
+  return null;
+}
+
 export function effectiveWeekLockMillis(week: {
   pickLockMode?: unknown;
   weekLockAt?: unknown;
