@@ -106,6 +106,29 @@ struct WeekTransitionTests {
         #expect(!WeekTransition.arePicksEditable(waiting))
     }
 
+    @Test func staleSlateNeverOpensPickems() {
+        let now = Date()
+        let kickoffs = [now.addingTimeInterval(-18 * 24 * 3600), now.addingTimeInterval(-17 * 24 * 3600)]
+        #expect(WeekTransition.pickemsOpenSkipReason(kickoffs: kickoffs, now: now) == .firstKickoffPassed)
+        #expect(WeekTransition.pickemsOpenSkipReason(kickoffs: [now], now: now) == .firstKickoffPassed)
+    }
+
+    @Test func futureSlateOpensPickems() {
+        let now = Date()
+        let kickoffs = [now.addingTimeInterval(2 * 3600), now.addingTimeInterval(50 * 3600)]
+        #expect(WeekTransition.pickemsOpenSkipReason(kickoffs: kickoffs, now: now) == nil)
+    }
+
+    @Test func mixedSlateIsDecidedByFirstKickoff() {
+        let now = Date()
+        let kickoffs = [now.addingTimeInterval(48 * 3600), now.addingTimeInterval(-3600), now.addingTimeInterval(3 * 3600)]
+        #expect(WeekTransition.pickemsOpenSkipReason(kickoffs: kickoffs, now: now) == .firstKickoffPassed)
+    }
+
+    @Test func slateWithoutKickoffsDoesNotOpen() {
+        #expect(WeekTransition.pickemsOpenSkipReason(kickoffs: [], now: Date()) == .noKickoffs)
+    }
+
     @Test func remakeSelectionsAllowedDuringSelectionBeforeDeadline() {
         let future = Date().addingTimeInterval(7 * 24 * 3600)
         #expect(WeekTransition.canRemakeSelections(week(status: .selection, selectionDeadline: future)))

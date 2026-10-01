@@ -1191,6 +1191,15 @@ final class PickService {
             slateIsComplete: week.selectionMode == .commissioner ? commissionerFull : slateIsComplete,
             now: now
         ) else { return }
+        // Never open a slate that has already kicked off. Check before
+        // materializing so a stale week gets no writes.
+        let localKickoffs = slateGames.isEmpty
+            ? nominations.map(\.kickoff)
+            : slateGames.map(\.kickoff)
+        if let reason = WeekTransition.pickemsOpenSkipReason(kickoffs: localKickoffs, now: now) {
+            logPickemsOpenSkip(groupId: groupId, weekId: week.id, reason: reason)
+            return
+        }
         guard openingPickemsWeekId != week.id else { return }
         openingPickemsWeekId = week.id
         defer { openingPickemsWeekId = nil }
@@ -1202,7 +1211,11 @@ final class PickService {
                 weekId: week.id,
                 fallback: nominations.map { ($0.espnEventId, $0.kickoff) } + slateGames.map { ($0.id, $0.kickoff) }
             )
-            guard !games.isEmpty else { return }
+            let gameKickoffs: [Date] = games.map { $0.kickoff }
+            if let reason = WeekTransition.pickemsOpenSkipReason(kickoffs: gameKickoffs, now: now) {
+                logPickemsOpenSkip(groupId: groupId, weekId: week.id, reason: reason)
+                return
+            }
 
             let snapshot = try await db.week(groupId: groupId, weekId: week.id).getDocument()
             let status = snapshot.data()?["status"] as? String
@@ -1223,6 +1236,18 @@ final class PickService {
                 "error": error.localizedDescription
             ])
         }
+    }
+
+    private func logPickemsOpenSkip(
+        groupId: String,
+        weekId: String,
+        reason: WeekTransition.PickemsOpenSkipReason
+    ) {
+        AppLog.info(AppLog.picks, "openPickemsIfReady skipped", metadata: [
+            "groupId": groupId,
+            "weekId": weekId,
+            "reason": reason.rawValue
+        ])
     }
 
     private func slateLockGames(
