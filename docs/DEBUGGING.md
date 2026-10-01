@@ -67,4 +67,4 @@ theme applied { team=AUB, accent_hex=#E87722, accent_contrast=… }
 
 Non-fatal errors are recorded with a `pickems_code` matching the `AppEvent` raw value (for example `auth.sign_in_failed`). Breadcrumbs mirror the same event stream.
 
-Enable Crashlytics in Firebase Console and ensure the Xcode target links **FirebaseCrashlytics** (already added to the Pickems target). Add the Crashlytics run script build phase for dSYM upload before shipping release builds.
+Enable Crashlytics in Firebase Console and ensure the Xcode target links **FirebaseCrashlytics** (already added to the Pickems target). The Pickems target runs `Crashlytics/run` after linking so Release/Archive dSYMs upload for symbolication. `ENABLE_USER_SCRIPT_SANDBOXING` is on; the phase lists `GoogleService-Info.plist` and the dSYM paths as inputs.
