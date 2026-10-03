@@ -26,6 +26,10 @@ struct CommissionerSettingsView: View {
     @State private var showSelectionDeadlineSheet = false
     @State private var showPickDeadlineSheet = false
     @State private var showAdminGameBrowse = false
+    @State private var isSwitchingToRolling = false
+    @State private var rollingPromptWeek: WeekSummary?
+    @State private var rollingStatus: String?
+    @State private var rollingError: String?
 
     @FocusState private var codeFieldFocused: Bool
 
@@ -114,12 +118,44 @@ struct CommissionerSettingsView: View {
                 }
 
                 Section {
-                    Picker("Lock mode", selection: lockModeBinding) {
-                        ForEach(DeadlinePolicy.lockModeCases) { mode in
-                            Text(mode.lockModeDisplayName).tag(mode)
+                    if liveGroup.rules.pickDeadline.isRolling {
+                        Picker("Lock mode", selection: lockModeBinding) {
+                            ForEach(DeadlinePolicy.lockModeCases) { mode in
+                                Text(mode.lockModeDisplayName).tag(mode)
+                            }
                         }
+                        .listRowBackground(PickemsColors.cardBackground)
+                    } else {
+                        LabeledContent("Lock mode", value: DeadlinePolicy.firstKickoff.lockModeDisplayName)
+                            .listRowBackground(PickemsColors.cardBackground)
+
+                        Button {
+                            beginRollingSwitch()
+                        } label: {
+                            if isSwitchingToRolling {
+                                HStack { ProgressView(); Text("Switching to rolling lock…") }
+                            } else {
+                                Label(RollingLockSwitch.buttonTitle, systemImage: "clock.arrow.circlepath")
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(theme.accent)
+                        .disabled(isSwitchingToRolling)
+                        .listRowBackground(PickemsColors.cardBackground)
                     }
-                    .listRowBackground(PickemsColors.cardBackground)
+
+                    if let rollingStatus {
+                        Text(rollingStatus)
+                            .font(.caption)
+                            .foregroundStyle(PickemsColors.textSecondary)
+                            .listRowBackground(PickemsColors.cardBackground)
+                    }
+                    if let rollingError {
+                        Text(rollingError)
+                            .font(.caption)
+                            .foregroundStyle(PickemsColors.warning)
+                            .listRowBackground(PickemsColors.cardBackground)
+                    }
 
                     if rules.pickDeadline != .rolling {
                         Toggle("Allow late Pickems", isOn: $rules.allowLatePicks)
@@ -214,6 +250,24 @@ struct CommissionerSettingsView: View {
                         .fontWeight(.semibold)
                         .disabled(isSaving)
                 }
+            }
+            .alert(
+                RollingLockSwitch.promptTitle,
+                isPresented: Binding(
+                    get: { rollingPromptWeek != nil },
+                    set: { if !$0 { rollingPromptWeek = nil } }
+                ),
+                presenting: rollingPromptWeek
+            ) { week in
+                Button(RollingLockSwitch.applyNowTitle) {
+                    performRollingSwitch(applyTo: week)
+                }
+                Button(RollingLockSwitch.nextWeekTitle) {
+                    performRollingSwitch(applyTo: nil)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text(RollingLockSwitch.promptMessage)
             }
             .alert(
                 "Close Season \(seasonYearToClose.pickemsYearString)?",
@@ -517,10 +571,62 @@ struct CommissionerSettingsView: View {
     }
 
     private var pickemsLockFooter: String {
+        if !liveGroup.rules.pickDeadline.isRolling {
+            return "The whole slate locks at the earliest kickoff. Switch to rolling lock to lock each game at its own kickoff instead. If a week is in progress, you choose whether it applies now or next week."
+        }
         if rules.pickDeadline == .rolling {
-            return "Each game locks at its own kickoff. Later games stay open, and those picks stay hidden until that kickoff. Applies when the next week opens."
+            return "Each game locks at its own kickoff. Later games stay open, and those picks stay hidden until that kickoff. Switching back to the entire slate applies when the next week opens."
         }
         return "The whole slate locks at the earliest kickoff. Applies when the next week opens."
+    }
+
+    /// Weeks to check for one in progress — the commissioner may be browsing another week.
+    private var rollingCandidateWeeks: [WeekSummary] {
+        let service = appState.groupService
+        return (service.currentWeek.map { [$0] } ?? []) + service.availableWeeks
+    }
+
+    private func beginRollingSwitch() {
+        rollingError = nil
+        rollingStatus = nil
+        let (phase, week) = RollingLockSwitch.leaguePhase(weeks: rollingCandidateWeeks)
+        switch phase {
+        case .inProgress:
+            rollingPromptWeek = week
+        case .allGamesStarted:
+            performRollingSwitch(applyTo: nil, note: RollingLockSwitch.allGamesStartedNote)
+        case .notInProgress:
+            performRollingSwitch(applyTo: nil)
+        }
+    }
+
+    /// `applyTo` nil only changes `rules.pickDeadline` (takes effect next week).
+    private func performRollingSwitch(applyTo week: WeekSummary?, note: String? = nil) {
+        rollingPromptWeek = nil
+        isSwitchingToRolling = true
+        Task {
+            defer { isSwitchingToRolling = false }
+            do {
+                let weekChanged = try await appState.groupService.switchToRollingLock(
+                    groupId: group.id,
+                    weekId: week?.id,
+                    applyToCurrentWeek: week != nil
+                )
+                // Keep the unsaved form in step so Save can't write first kickoff back.
+                rules.pickDeadline = .rolling
+                rules.allowLatePicks = false
+                rollingStatus = note ?? RollingLockSwitch.successMessage(
+                    appliedToWeek: weekChanged,
+                    weekNumber: week?.weekNumber,
+                    askedToApply: week != nil
+                )
+                PickemsHaptics.success()
+            } catch {
+                rollingError = UserFacingError.message(for: error, context: .write)
+                    ?? "Couldn't switch to rolling lock. Try again."
+                PickemsHaptics.warning()
+            }
+        }
     }
 
     private var lockModeBinding: Binding<DeadlinePolicy> {

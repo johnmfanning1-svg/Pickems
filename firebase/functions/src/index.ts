@@ -73,6 +73,9 @@ export { onMessageCreated, onReportCreated } from "./chat";
 // Shock tweet drafts. Admin SDK writes; does not post to X.
 export { detectShockTweets, runDetectShockTweets } from "./shockTweets";
 
+// Commissioner switch to rolling pick lock, optionally for the week in progress.
+export { setRollingLock } from "./rollingLock";
+
 /** When a week flips to picking, materialize nominations into games if needed. */
 export const onWeekStatusChange = onDocumentUpdated(
   "groups/{groupId}/weeks/{weekId}",
