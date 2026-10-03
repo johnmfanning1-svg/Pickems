@@ -1340,6 +1340,34 @@ final class GroupService {
         )
     }
 
+    /// Commissioner switch to rolling lock through the `setRollingLock` callable.
+    /// The server checks the caller, sets `rules.pickDeadline`, and — when
+    /// `applyToCurrentWeek` — moves that week to rolling in one transaction.
+    /// Returns true when the week itself was switched.
+    @discardableResult
+    func switchToRollingLock(
+        groupId: String,
+        weekId: String?,
+        applyToCurrentWeek: Bool
+    ) async throws -> Bool {
+        var payload: [String: Any] = [
+            "groupId": groupId,
+            "applyToCurrentWeek": applyToCurrentWeek,
+        ]
+        if applyToCurrentWeek, let weekId {
+            payload["weekId"] = weekId
+        }
+        let result = try await CloudFunctionsClient.call("setRollingLock", data: payload)
+
+        if selectedGroup?.id == groupId {
+            selectedGroup?.rules.pickDeadline = .rolling
+        }
+        if let idx = groups.firstIndex(where: { $0.id == groupId }) {
+            groups[idx].rules.pickDeadline = .rolling
+        }
+        return result["weekChanged"] as? Bool ?? false
+    }
+
     /// Member-mode weeks store a derived slate size (`members × Selections`). Rewrite it
     /// whenever membership or rules change so UI and nomination limits don't keep a
     /// stale smaller snapshot after a late joiner.
