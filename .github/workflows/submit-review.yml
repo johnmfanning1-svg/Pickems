@@ -1,0 +1,68 @@
+name: Submit for App Review
+
+# Submits an already-uploaded Pickems iOS build for App Store review.
+# Does not archive or upload. .github/workflows/testflight.yml stays upload-only.
+#
+# App: FannypackInc.Pickems, Apple id 6785697079, platform IOS.
+#
+# Repository secrets (same ones as TestFlight):
+#   ASC_KEY_ID      App Store Connect API key ID
+#   ASC_ISSUER_ID   App Store Connect issuer ID (UUID)
+#   ASC_KEY_P8      Contents of AuthKey_<KEY_ID>.p8 (raw PEM text or base64)
+#
+# Trigger: manual only (Actions -> Submit for App Review -> Run workflow).
+# dry_run defaults to true: the build is attached and What's New is saved,
+# and the job stops before creating a review submission.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Marketing version already uploaded (for example 3.6.1)"
+        required: true
+        type: string
+      build:
+        description: "Build number already uploaded (for example 10007)"
+        required: true
+        type: string
+      whats_new:
+        description: "What's New text applied to every localization"
+        required: true
+        type: string
+      dry_run:
+        description: "Stop before creating a review submission (untick to submit for review)"
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: submit-review
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install App Store Connect client dependencies
+        run: python -m pip install --disable-pip-version-check PyJWT cryptography requests
+
+      - name: Submit for App Review
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_VERSION: ${{ inputs.version }}
+          ASC_BUILD: ${{ inputs.build }}
+          WHATS_NEW: ${{ inputs.whats_new }}
+          ASC_DRY_RUN: ${{ inputs.dry_run }}
+        run: python3 scripts/asc_submit_review.py

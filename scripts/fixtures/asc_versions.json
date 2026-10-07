@@ -1,0 +1,70 @@
+{
+  "data": [
+    {
+      "type": "appStoreVersions",
+      "id": "live-358",
+      "attributes": {
+        "platform": "IOS",
+        "versionString": "3.5.8",
+        "appStoreState": "READY_FOR_SALE",
+        "releaseType": "AFTER_APPROVAL",
+        "createdDate": "2026-09-01T00:00:00Z"
+      }
+    },
+    {
+      "type": "appStoreVersions",
+      "id": "older-live",
+      "attributes": {
+        "platform": "IOS",
+        "versionString": "3.5.0",
+        "appStoreState": "READY_FOR_SALE",
+        "releaseType": "MANUAL",
+        "createdDate": "2026-08-01T00:00:00Z"
+      }
+    },
+    {
+      "type": "appStoreVersions",
+      "id": "mac-live",
+      "attributes": {
+        "platform": "MAC_OS",
+        "versionString": "9.0.0",
+        "appStoreState": "READY_FOR_SALE",
+        "releaseType": "MANUAL",
+        "createdDate": "2026-09-15T00:00:00Z"
+      }
+    },
+    {
+      "type": "appStoreVersions",
+      "id": "draft-361",
+      "attributes": {
+        "platform": "IOS",
+        "versionString": "3.6.1",
+        "appStoreState": "PREPARE_FOR_SUBMISSION",
+        "releaseType": "MANUAL",
+        "createdDate": "2026-10-01T00:00:00Z"
+      }
+    },
+    {
+      "type": "appStoreVersions",
+      "id": "waiting-360",
+      "attributes": {
+        "platform": "IOS",
+        "versionString": "3.6.0",
+        "appStoreState": "WAITING_FOR_REVIEW",
+        "releaseType": "AFTER_APPROVAL",
+        "createdDate": "2026-09-20T00:00:00Z"
+      }
+    },
+    {
+      "type": "appStoreVersions",
+      "id": "rejected-340",
+      "attributes": {
+        "platform": "IOS",
+        "versionString": "3.4.0",
+        "appStoreState": "REJECTED",
+        "releaseType": "AFTER_APPROVAL",
+        "createdDate": "2026-07-01T00:00:00Z"
+      }
+    }
+  ]
+}
