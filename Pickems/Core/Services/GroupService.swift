@@ -482,17 +482,25 @@ final class GroupService {
         deadline: Date,
         setByUserId: String
     ) async throws {
+        let setAt = Date()
         let updates: [String: Any] = [
             "selectionDeadline": Timestamp(date: deadline),
-            "selectionDeadlineSetAt": Timestamp(date: Date()),
+            "selectionDeadlineSetAt": Timestamp(date: setAt),
             "selectionDeadlineSetBy": setByUserId,
         ]
         try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
         if var week = currentWeek, week.id == weekId {
             week.selectionDeadline = deadline
-            week.selectionDeadlineSetAt = Date()
+            week.selectionDeadlineSetAt = setAt
             week.selectionDeadlineSetBy = setByUserId
             currentWeek = week
+        }
+        // Chip switches reseed `currentWeek` from `availableWeeks`. Mirror the
+        // write so leaving and coming back does not restore a pre-deadline copy.
+        if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
+            availableWeeks[idx].selectionDeadline = deadline
+            availableWeeks[idx].selectionDeadlineSetAt = setAt
+            availableWeeks[idx].selectionDeadlineSetBy = setByUserId
         }
     }
 

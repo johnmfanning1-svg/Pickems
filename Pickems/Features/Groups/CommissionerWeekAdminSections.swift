@@ -96,13 +96,7 @@ struct CommissionerWeekAdminSections: View {
                     .listRowBackground(PickemsColors.cardBackground)
 
                 if week.status == .selection, !week.skipsSelection {
-                    if week.selectionDeadline == nil {
-                        Button("Set Selection Deadline") { showSelectionDeadlineSheet = true }
-                            .listRowBackground(PickemsColors.cardBackground)
-                    } else {
-                        Button("Edit Selection Deadline") { showSelectionDeadlineSheet = true }
-                            .listRowBackground(PickemsColors.cardBackground)
-                    }
+                    selectionDeadlineRow(week)
 
                     let target = appState.groupService.selectedGroup?.rules.expectedSlateSize(
                         memberCount: max(appState.groupService.selectedGroup?.memberCount ?? 1, 1)
@@ -223,22 +217,100 @@ struct CommissionerWeekAdminSections: View {
         return "\(count) tied at \(wins) win\(wins == 1 ? "" : "s")"
     }
 
+    /// Rolling weeks only. Non-rolling weeks use `pickemsDeadlineRow`.
     private func rollingPickDeadlineButtonTitle(_ week: WeekSummary) -> String {
-        let fullyLocked = WeekTransition.arePicksFullyLocked(week)
-        if week.isRollingLock {
-            return fullyLocked ? "Lock remaining / Reopen" : "Lock remaining games"
+        if WeekTransition.arePicksFullyLocked(week) {
+            return "Lock remaining / Reopen"
         }
-        return fullyLocked ? "Extend / Unlock Deadline" : "Set Pickems Deadline"
+        return "Lock remaining games"
+    }
+
+    @ViewBuilder
+    private func selectionDeadlineRow(_ week: WeekSummary) -> some View {
+        if let summary = CommissionerAdminSummary.deadlineValue(week.selectionDeadline) {
+            CommissionerAdminRow(
+                title: "Selection Deadline",
+                systemImage: "clock",
+                summary: summary,
+                hint: "Opens the Selection deadline editor."
+            ) {
+                showSelectionDeadlineSheet = true
+            }
+        } else if promptsToSetSelectionDeadline(week) {
+            setSelectionDeadlineButton
+        }
+    }
+
+    private func promptsToSetSelectionDeadline(_ week: WeekSummary) -> Bool {
+        WorkspaceDeadlineDisplay.commissionerPrompt(
+            kind: .selections,
+            week: week,
+            isCommissioner: true
+        ) == .selections
+    }
+
+    private var setSelectionDeadlineButton: some View {
+        Button("Set Selection Deadline") {
+            showSelectionDeadlineSheet = true
+        }
+        .listRowBackground(PickemsColors.cardBackground)
+    }
+
+    @ViewBuilder
+    private func pickemsDeadlineRow(_ week: WeekSummary) -> some View {
+        if week.status == .locked {
+            reopenPickemsButton
+        } else if week.isRollingLock {
+            rollingPickemsDeadlineButton(week)
+        } else if let summary = pickemsDeadlineSummary(week) {
+            pickemsDeadlineAdminRow(summary)
+        } else {
+            setPickemsDeadlineButton
+        }
+    }
+
+    private func pickemsDeadlineSummary(_ week: WeekSummary) -> String? {
+        let locked = WeekTransition.arePicksFullyLocked(week)
+        return CommissionerAdminSummary.deadlineValue(week.pickDeadline, locked: locked)
+    }
+
+    private func pickemsDeadlineAdminRow(_ summary: String) -> some View {
+        CommissionerAdminRow(
+            title: "Pickems Deadline",
+            systemImage: "lock",
+            summary: summary,
+            hint: "Opens the Pickems deadline editor to change, extend, or unlock it."
+        ) {
+            showPickDeadlineSheet = true
+        }
+    }
+
+    private var reopenPickemsButton: some View {
+        Button("Reopen Pickems") {
+            showPickDeadlineSheet = true
+        }
+        .listRowBackground(PickemsColors.cardBackground)
+    }
+
+    private func rollingPickemsDeadlineButton(_ week: WeekSummary) -> some View {
+        Button(rollingPickDeadlineButtonTitle(week)) {
+            showPickDeadlineSheet = true
+        }
+        .listRowBackground(PickemsColors.cardBackground)
+    }
+
+    private var setPickemsDeadlineButton: some View {
+        Button("Set Pickems Deadline") {
+            showPickDeadlineSheet = true
+        }
+        .listRowBackground(PickemsColors.cardBackground)
     }
 
     @ViewBuilder
     private var pickemsAdminSection: some View {
         if let week, WeekTransition.arePickemsOpen(week) {
             Section {
-                    Button(week.status == .locked ? "Reopen Pickems" : rollingPickDeadlineButtonTitle(week)) {
-                    showPickDeadlineSheet = true
-                }
-                .listRowBackground(PickemsColors.cardBackground)
+                pickemsDeadlineRow(week)
 
                 if let groupId = appState.groupService.selectedGroup?.id {
                     let pickemsById = Dictionary(

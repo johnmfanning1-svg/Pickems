@@ -24,4 +24,15 @@ enum CommissionerAdminSummary {
     static func members(count: Int) -> String {
         "\(max(count, 0))"
     }
+
+    /// Row summary for a deadline that is already set. Nil means prompt mode
+    /// ("Set Selection Deadline" / "Set Pickems Deadline") instead of a value row.
+    static func deadlineValue(_ date: Date?, locked: Bool = false) -> String? {
+        guard let date else { return nil }
+        let label = PickDeadlineCalculator.lockTimeLabel(for: date)
+        if locked {
+            return "Locked · \(label)"
+        }
+        return label
+    }
 }
