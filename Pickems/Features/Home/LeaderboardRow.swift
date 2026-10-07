@@ -91,18 +91,33 @@ struct LeaderboardRow: View {
     }
 
     private var accessibilityLabel: String {
-        let record = showWeekly
-            ? "\(entry.weeklyWins) wins, \(entry.weeklyLosses) losses this week"
-            : "\(entry.seasonWins) wins, \(entry.seasonLosses) losses this season"
+        let record = recordAccessibilityPhrase
         let tied = entry.isTied ? ", tied for rank" : ""
         let role = isCommissioner ? ", commissioner" : ""
-        let secondary: String
-        if entry.rank <= 1 || leaderWins == nil {
-            secondary = "batting average \(secondaryCaption)"
-        } else {
-            let back = (leaderWins ?? recordWins) - recordWins
-            secondary = back == 0 ? "Even" : "\(back) games back"
+        return "Rank \(entry.rank), \(entry.displayName)\(role), \(record), \(accessibilitySecondary)\(tied)"
+    }
+
+    private var recordAccessibilityPhrase: String {
+        if showWeekly {
+            return "\(entry.weeklyWins) wins, \(entry.weeklyLosses) losses this week"
         }
-        return "Rank \(entry.rank), \(entry.displayName)\(role), \(record), \(secondary)\(tied)"
+        return "\(entry.seasonWins) wins, \(entry.seasonLosses) losses this season"
+    }
+
+    private var accessibilitySecondary: String {
+        if recordWins + recordLosses == 0 {
+            return spokenGamesBack
+        }
+        if entry.rank <= 1 || leaderWins == nil {
+            return "batting average \(secondaryCaption)"
+        }
+        return spokenGamesBack
+    }
+
+    private var spokenGamesBack: String {
+        guard let leaderWins, entry.rank > 1 else { return "Even" }
+        let back = leaderWins - recordWins
+        if back == 0 { return "Even" }
+        return "\(back) games back"
     }
 }
