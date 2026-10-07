@@ -15,10 +15,11 @@ struct LeaguePickemsBoard: View {
     /// Head-to-head: stretch the two pick columns across the remaining width.
     var fillsAvailableWidth: Bool = false
     var pickMode: PickMode = .ats
+    /// Screen root presents the fullscreen chart. Nil hides the expand control.
+    var onExpand: (() -> Void)? = nil
 
     @Environment(\.themePalette) private var theme
     @AppStorage("leaguePickems.chartIsDense") private var isDense = true
-    @State private var isExpanded = false
 
     private var gameColumnWidth: CGFloat {
         switch (isDense, isExpandedLayout) {
@@ -66,19 +67,21 @@ struct LeaguePickemsBoard: View {
             chartFootnote
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .fullScreenCover(isPresented: $isExpanded) {
-            LeaguePickemsExpandedBoard(
-                members: members,
-                games: games,
-                picksByUserId: picksByUserId,
-                liveCards: liveCards,
-                teamRanks: teamRanks,
-                currentUserId: currentUserId,
-                hiddenGameIds: hiddenGameIds,
-                fillsAvailableWidth: fillsAvailableWidth,
-                pickMode: pickMode
-            )
+    }
+
+    private func expandChartButton(_ expand: @escaping () -> Void) -> some View {
+        Button {
+            expand()
+        } label: {
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(theme.accent)
+                .padding(8)
+                .background(PickemsColors.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
+        .accessibilityLabel("Expand chart")
+        .accessibilityHint("Opens a landscape fullscreen view of the league Pickems chart")
     }
 
     private var colorKey: some View {
@@ -89,19 +92,8 @@ struct LeaguePickemsBoard: View {
                     .foregroundStyle(PickemsColors.textSecondary)
                 Spacer(minLength: 8)
                 densityPicker
-                if allowsExpand {
-                    Button {
-                        isExpanded = true
-                    } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(theme.accent)
-                            .padding(8)
-                            .background(PickemsColors.cardBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
-                    .accessibilityLabel("Expand chart")
-                    .accessibilityHint("Opens a landscape fullscreen view of the league Pickems chart")
+                if allowsExpand, let onExpand {
+                    expandChartButton(onExpand)
                 }
             }
             ViewThatFits(in: .horizontal) {

@@ -57,6 +57,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check SwiftUI presentation placement
+        run: python3 scripts/check-presentations.py Pickems
+
       - name: Select Xcode 26.6 (iOS 26.5 SDK, needed for the 26.5 deployment target)
         run: |
           set -euo pipefail

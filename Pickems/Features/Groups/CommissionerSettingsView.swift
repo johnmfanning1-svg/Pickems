@@ -18,10 +18,9 @@ struct CommissionerSettingsView: View {
     @State private var customCode = ""
     @State private var isUpdatingCode = false
     @State private var identityError: String?
-    @State private var showMembersSheet = false
-    @State private var showSelectionDeadlineSheet = false
-    @State private var showPickDeadlineSheet = false
-    @State private var showAdminGameBrowse = false
+    @State private var route: CommissionerSheet?
+    @State private var showReopenSelectionsConfirm = false
+    @State private var scoringSwitch: CommissionerScoringSwitch
     @State private var isSwitchingToRolling = false
     @State private var rollingPromptWeek: WeekSummary?
     @State private var rollingStatus: String?
@@ -35,6 +34,7 @@ struct CommissionerSettingsView: View {
         _isPublic = State(initialValue: group.isPublic)
         _commissionerOnlyInvites = State(initialValue: group.commissionerOnlyInvites == true)
         _groupName = State(initialValue: group.name)
+        _scoringSwitch = State(initialValue: CommissionerScoringSwitch())
     }
 
     private var liveGroup: PickemGroup {
@@ -74,13 +74,12 @@ struct CommissionerSettingsView: View {
     private var settingsForm: some View {
         Form {
             CommissionerWeekAdminSections(
-                showSelectionDeadlineSheet: $showSelectionDeadlineSheet,
-                showPickDeadlineSheet: $showPickDeadlineSheet,
-                showAdminGameBrowse: $showAdminGameBrowse
+                present: { (r: CommissionerSheet) in route = r },
+                showReopenSelectionsConfirm: $showReopenSelectionsConfirm
             )
             leagueIdentitySection
             membersRowSection
-            CommissionerScoringSection(groupId: group.id, rules: $rules)
+            CommissionerScoringSection(groupId: group.id, rules: $rules, model: scoringSwitch)
             slateConfigurationSection
             pickemsLockSection
             tiesSection
@@ -319,9 +318,10 @@ struct CommissionerSettingsView: View {
         "Close Season \(seasonYearToClose.pickemsYearString)?"
     }
 
-    /// Rolling-lock prompt + Close Season confirm.
+    /// League-type prompt, Reopen Selections, rolling-lock prompt, Close Season confirm.
+    /// All sit on the settings root, outside the Form.
     private var settingsFormWithSeasonAlerts: some View {
-        settingsForm
+        settingsFormWithPromptAlerts
             .alert(
                 RollingLockSwitch.promptTitle,
                 isPresented: rollingPromptPresented,
@@ -345,23 +345,92 @@ struct CommissionerSettingsView: View {
             }
     }
 
+    private var settingsFormWithPromptAlerts: some View {
+        settingsForm
+            .modifier(scoringPromptAlert)
+            .alert("Reopen Selections?", isPresented: $showReopenSelectionsConfirm) {
+                Button("Reopen Selections") {
+                    appState.picksViewModel.reopenSelections(appState: appState)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Members can add and remove Selections again. Pickems close until you open the week.")
+            }
+    }
+
+    private var scoringPromptAlert: CommissionerScoringPromptAlert {
+        CommissionerScoringPromptAlert(
+            model: scoringSwitch,
+            groupId: group.id,
+            rules: $rules,
+            appState: appState
+        )
+    }
+
     // MARK: - Sheets
 
     private var settingsFormWithSheets: some View {
         settingsFormWithSeasonAlerts
-            .sheet(isPresented: $showSelectionDeadlineSheet) {
-                selectionDeadlineSheet
-            }
-            .sheet(isPresented: $showPickDeadlineSheet) {
-                pickDeadlineSheet
-            }
-            .sheet(isPresented: $showAdminGameBrowse) {
-                adminGameBrowseSheet
-            }
-            .sheet(isPresented: $showMembersSheet) {
-                membersSheet
+            .sheet(item: $route) { (r: CommissionerSheet) in
+                routeContent(r)
             }
             .task { await openPendingDeadlineEditor() }
+            .task { await loadCommissionerWeekContext() }
+    }
+
+    @ViewBuilder
+    private func routeContent(_ r: CommissionerSheet) -> some View {
+        switch r {
+        case .selectionDeadline:
+            selectionDeadlineSheet
+        case .pickDeadline:
+            pickDeadlineSheet
+        case .adminGameBrowse:
+            adminGameBrowseSheet
+        case .members:
+            membersSheet
+        case .selections:
+            selectionsAdminSheet
+        case .slate:
+            slateAdminSheet
+        case .rankTies(let draft):
+            rankTiesSheet(draft)
+        }
+    }
+
+    private var selectionsAdminSheet: some View {
+        CommissionerSelectionsAdminSheet()
+            .pickemsEnvironment(appState)
+    }
+
+    private var slateAdminSheet: some View {
+        CommissionerSlateSheet()
+            .pickemsEnvironment(appState)
+    }
+
+    private func rankTiesSheet(_ draft: TieRankDraft) -> some View {
+        CommissionerRankTiesSheet(
+            weekLabel: appState.groupService.currentWeek?.displayLabel ?? "This week",
+            entries: draft.entries
+        ) { (orderedIds: [String]) in
+            guard let groupId = appState.groupService.selectedGroup?.id,
+                  let weekId = appState.groupService.currentWeek?.id else {
+                throw GroupService.GroupError.groupNotFound
+            }
+            try await appState.groupService.resolveTieGroup(
+                groupId: groupId,
+                weekId: weekId,
+                orderedUserIds: orderedIds
+            )
+        }
+        .pickemsEnvironment(appState)
+    }
+
+    private func loadCommissionerWeekContext() async {
+        if let groupId = appState.groupService.selectedGroup?.id {
+            await appState.groupService.loadAvailableWeeks(groupId: groupId)
+        }
+        await appState.picksViewModel.ensureTeamRanks(appState: appState)
     }
 
     /// Countdown prompt tap or Selection-deadline push: open the matching editor
@@ -379,9 +448,9 @@ struct CommissionerSettingsView: View {
         try? await Task.sleep(nanoseconds: 400_000_000)
         switch target.kind {
         case .selections:
-            showSelectionDeadlineSheet = true
+            route = .selectionDeadline
         case .pickems:
-            showPickDeadlineSheet = true
+            route = .pickDeadline
         }
     }
 
@@ -408,7 +477,7 @@ struct CommissionerSettingsView: View {
                 )
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Close") { showPickDeadlineSheet = false }
+                        Button("Close") { route = nil }
                     }
                 }
             }
@@ -455,7 +524,7 @@ struct CommissionerSettingsView: View {
             commissionerId: liveGroup.commissionerId
         ) {
             // Transfer or delete: these settings no longer apply.
-            showMembersSheet = false
+            route = nil
             dismiss()
         }
         .pickemsEnvironment(appState)
@@ -557,7 +626,7 @@ struct CommissionerSettingsView: View {
                 summary: CommissionerAdminSummary.members(count: appState.groupService.members.count),
                 hint: "Remove members, transfer commissioner, or delete the league."
             ) {
-                showMembersSheet = true
+                route = .members
             }
         } header: {
             Text("Members & Ownership")

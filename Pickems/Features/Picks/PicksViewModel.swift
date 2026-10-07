@@ -11,7 +11,6 @@ final class PicksViewModel {
     var teamRanks: TeamRankLookup = .empty
     var showConfirmSubmit = false
     var showConfirmNominations = false
-    var spreadEditGame: SlateGame?
     var selectionBrowseIntent: SelectionBrowseIntent = .own
 
     enum SelectionBrowseIntent: Equatable {
@@ -37,7 +36,6 @@ final class PicksViewModel {
         stopLiveRefresh()
         showConfirmSubmit = false
         showConfirmNominations = false
-        spreadEditGame = nil
         selectionBrowseIntent = .own
         espnGames = []
         livePickCards = [:]

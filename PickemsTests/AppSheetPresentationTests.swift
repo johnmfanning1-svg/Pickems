@@ -62,6 +62,51 @@ struct AppSheetPresentationTests {
         #expect(ids == ["e1", "e2", "e3"])
     }
 
+    @Test func commissionerSheetIdentitiesAreStableAndUnique() {
+        let routes: [CommissionerSheet] = [
+            .selectionDeadline,
+            .pickDeadline,
+            .adminGameBrowse,
+            .members,
+            .selections,
+            .slate
+        ]
+        let ids = routes.map(\.id)
+        #expect(Set(ids).count == ids.count)
+        #expect(CommissionerSheet.selectionDeadline.id == "selectionDeadline")
+        #expect(CommissionerSheet.pickDeadline.id == CommissionerSheet.pickDeadline.id)
+        #expect(CommissionerSheet.selections.id != CommissionerSheet.slate.id)
+
+        let amy = StandingEntry(
+            id: "a",
+            displayName: "Amy",
+            avatarColorHex: "#111111",
+            weeklyWins: 1,
+            weeklyLosses: 0,
+            seasonWins: 1,
+            seasonLosses: 0,
+            rank: 1,
+            isTied: true
+        )
+        let bo = StandingEntry(
+            id: "b",
+            displayName: "Bo",
+            avatarColorHex: "#222222",
+            weeklyWins: 1,
+            weeklyLosses: 0,
+            seasonWins: 1,
+            seasonLosses: 0,
+            rank: 1,
+            isTied: true
+        )
+        let forward = CommissionerSheet.rankTies(TieRankDraft(entries: [amy, bo]))
+        let reversed = CommissionerSheet.rankTies(TieRankDraft(entries: [bo, amy]))
+        #expect(forward.id == reversed.id)
+        #expect(forward.id == "rankTies.a|b")
+        #expect(forward.id != CommissionerSheet.slate.id)
+        #expect(!ids.contains(forward.id))
+    }
+
     @Test func replaceRemovesTheGameBeingSwapped() {
         let ids = GameBrowseTakenIds.make(
             nominationEventIds: ["e1", "e2"],

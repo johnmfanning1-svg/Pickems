@@ -113,6 +113,14 @@ struct WorkspaceDeadlineDisplayTests {
         #expect(!snapshot.isPromptingCommissioner(for: .pickems))
     }
 
+    @Test func pickemsPromptIsNilWhenNonRollingDeadlineIsSet() {
+        let set = week(status: .picking, pickDeadline: now.addingTimeInterval(3600))
+        #expect(!set.isRollingLock)
+        #expect(WorkspaceDeadlineDisplay.commissionerPrompt(kind: .pickems, week: set, isCommissioner: true) == nil)
+        let snapshot = WorkspaceDeadlineDisplay.snapshot(kind: .pickems, week: set, isCommissioner: true, games: [], now: now)
+        #expect(!snapshot.showSetPickemsDeadlinePrompt)
+    }
+
     @Test func weekZeroNeverPromptsForSelectionDeadline() {
         let weekZero = week(status: .selection, weekNumber: 0, slateSource: CFBWeekCalendar.weekZeroSlateSource)
         #expect(WorkspaceDeadlineDisplay.commissionerPrompt(kind: .selections, week: weekZero, isCommissioner: true) == nil)

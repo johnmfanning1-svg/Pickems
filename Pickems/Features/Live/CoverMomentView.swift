@@ -94,12 +94,15 @@ final class CoverMomentPresenter {
                 recordText = "Pick settled"
                 rankText = ""
             }
-            appState.present(.coverMoment(
-                gameLabel: label,
-                resultTitle: resultTitle,
-                recordText: recordText,
-                rankText: rankText
-            ))
+            appState.present(
+                .coverMoment(
+                    gameLabel: label,
+                    resultTitle: resultTitle,
+                    recordText: recordText,
+                    rankText: rankText
+                ),
+                policy: .ifIdle
+            )
             break
         }
     }

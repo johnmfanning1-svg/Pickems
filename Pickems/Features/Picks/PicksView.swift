@@ -16,12 +16,35 @@ struct PicksView: View {
 
     private var viewModel: PicksViewModel { appState.picksViewModel }
 
+    /// PicksView is mounted on both tabs. Scope each confirm to this copy so the
+    /// other tab's presenter does not dismiss it.
+    private var submitConfirmPresented: Binding<Bool> {
+        Binding<Bool>(
+            get: { kind == .pickems && viewModel.showConfirmSubmit },
+            set: { (isPresented: Bool) in
+                if !isPresented {
+                    viewModel.showConfirmSubmit = false
+                }
+            }
+        )
+    }
+
+    private var nominationsConfirmPresented: Binding<Bool> {
+        Binding<Bool>(
+            get: { kind == .selections && viewModel.showConfirmNominations },
+            set: { (isPresented: Bool) in
+                if !isPresented {
+                    viewModel.showConfirmNominations = false
+                }
+            }
+        )
+    }
+
     private var showsGroupPicker: Bool {
         appState.groupService.groups.count > 1
     }
 
     var body: some View {
-        @Bindable var viewModel = appState.picksViewModel
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
@@ -69,7 +92,7 @@ struct PicksView: View {
             .pickemsRefreshable(isRefreshing: $isRefreshing) {
                 await reloadPicks()
             }
-            .alert("Submit your Pickems?", isPresented: $viewModel.showConfirmSubmit) {
+            .alert("Submit your Pickems?", isPresented: submitConfirmPresented) {
                 Button("Submit Pickems") {
                     if let week = appState.groupService.currentWeek {
                         viewModel.submitPicks(week: week, appState: appState)
@@ -81,7 +104,7 @@ struct PicksView: View {
                     ? "You can still edit until each game kicks off."
                     : "You can still edit your Pickems until the lock time shown on this week.")
             }
-            .alert("Submit your Selections?", isPresented: $viewModel.showConfirmNominations) {
+            .alert("Submit your Selections?", isPresented: nominationsConfirmPresented) {
                 Button("Submit Selections") {
                     viewModel.submitNominations(appState: appState)
                 }

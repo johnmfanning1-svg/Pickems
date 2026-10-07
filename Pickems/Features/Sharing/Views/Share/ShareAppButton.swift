@@ -5,21 +5,45 @@ struct ShareAppButton: View {
     var label: String = "Invite Friends"
 
     @EnvironmentObject private var xAuthService: XAuthService
+    @Environment(\.helpPresenter) private var helpPresenter
     @State private var showShareSheet = false
 
     var body: some View {
+        if helpPresenter == nil {
+            shareButton
+                .sheet(isPresented: $showShareSheet) { // presentation-ok: fallback when no screen presenter
+                    fallbackSheet
+                }
+        } else {
+            shareButton
+        }
+    }
+
+    private var shareButton: some View {
         Button {
-            showShareSheet = true
+            presentApp()
         } label: {
             Label(label, systemImage: "person.2.fill")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
-        .sheet(isPresented: $showShareSheet) {
-            ShareAppSheet(leagueName: leagueName)
-                .environmentObject(xAuthService)
+    }
+
+    private func presentApp() {
+        let modal = ScreenModal.shareApp(leagueName: leagueName, xAuthService, id: UUID())
+        PickemsPresentation.afterTap {
+            if let helpPresenter {
+                helpPresenter.modal = modal
+            } else {
+                showShareSheet = true
+            }
         }
+    }
+
+    private var fallbackSheet: some View {
+        ShareAppSheet(leagueName: leagueName)
+            .environmentObject(xAuthService)
     }
 }
 
