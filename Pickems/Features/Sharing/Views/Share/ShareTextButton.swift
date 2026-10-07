@@ -9,6 +9,7 @@ struct ShareTextButton: View {
 
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
+    @Environment(\.helpPresenter) private var helpPresenter
     @State private var showMessageComposer = false
     @State private var showActivitySheet = false
     @State private var sentToChat = false
@@ -35,30 +36,26 @@ struct ShareTextButton: View {
     }
 
     var body: some View {
+        if helpPresenter == nil {
+            shareControls
+                .sheet(isPresented: $showMessageComposer) { // presentation-ok: fallback when no screen presenter
+                    MessageComposeView(body: text)
+                }
+                .sheet(isPresented: $showActivitySheet) { // presentation-ok: fallback when no screen presenter
+                    ActivityView(items: [text])
+                }
+        } else {
+            shareControls
+        }
+    }
+
+    private var shareControls: some View {
         VStack(spacing: 12) {
             if showsLeagueChat {
                 leagueChatButton
             }
-
-            if showsLeagueChat {
-                textMessageButton
-                    .buttonStyle(.bordered)
-                    .tint(theme.accent)
-            } else {
-                textMessageButton
-                    .buttonStyle(.borderedProminent)
-                    .tint(theme.accent)
-            }
-
-            Button {
-                showActivitySheet = true
-            } label: {
-                Label("Share to…", systemImage: "square.and.arrow.up")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .tint(theme.accent)
+            styledTextMessageButton
+            shareToButton
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
@@ -69,12 +66,31 @@ struct ShareTextButton: View {
             sentToChat = false
             chatError = nil
         }
-        .sheet(isPresented: $showMessageComposer) {
-            MessageComposeView(body: text)
+    }
+
+    @ViewBuilder
+    private var styledTextMessageButton: some View {
+        if showsLeagueChat {
+            textMessageButton
+                .buttonStyle(.bordered)
+                .tint(theme.accent)
+        } else {
+            textMessageButton
+                .buttonStyle(.borderedProminent)
+                .tint(theme.accent)
         }
-        .sheet(isPresented: $showActivitySheet) {
-            ActivityView(items: [text])
+    }
+
+    private var shareToButton: some View {
+        Button {
+            presentActivity()
+        } label: {
+            Label("Share to…", systemImage: "square.and.arrow.up")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
         }
+        .buttonStyle(.bordered)
+        .tint(theme.accent)
     }
 
     private var leagueChatButton: some View {
@@ -158,9 +174,33 @@ struct ShareTextButton: View {
     private func sendText() {
         PickemsHaptics.selection()
         if MessageShareService.canSendText {
-            showMessageComposer = true
+            presentMessage()
         } else {
             MessageShareService.openSMSFallback(body: text)
+        }
+    }
+
+    private func presentMessage() {
+        let body = text
+        let modal = ScreenModal.messageCompose(body: body, id: UUID())
+        PickemsPresentation.afterTap {
+            if let helpPresenter {
+                helpPresenter.modal = modal
+            } else {
+                showMessageComposer = true
+            }
+        }
+    }
+
+    private func presentActivity() {
+        let items: [Any] = [text]
+        let modal = ScreenModal.activity(items: items, id: UUID())
+        PickemsPresentation.afterTap {
+            if let helpPresenter {
+                helpPresenter.modal = modal
+            } else {
+                showActivitySheet = true
+            }
         }
     }
 }

@@ -11,6 +11,7 @@ struct SeasonPickHistoryView: View {
     @State private var isLoadingWeeks = true
     @State private var isLoadingBoard = false
     @State private var loadError: String?
+    @State private var showExpandedBoard = false
 
     private var selectedWeek: WeekSummary? {
         weeks.first { $0.id == selectedWeekId } ?? boardWeek
@@ -90,6 +91,30 @@ struct SeasonPickHistoryView: View {
         .task(id: selectedWeekId) {
             await loadBoard()
         }
+        .fullScreenCover(isPresented: $showExpandedBoard) {
+            expandedHistoryBoard
+        }
+    }
+
+    @ViewBuilder
+    private var expandedHistoryBoard: some View {
+        if let week = selectedWeek {
+            LeaguePickemsExpandedBoard(
+                members: appState.groupService.members,
+                games: displayGames,
+                picksByUserId: picksByUserId,
+                liveCards: historyLiveCards,
+                teamRanks: appState.picksViewModel.teamRanks,
+                currentUserId: appState.currentUserId,
+                hiddenGameIds: hiddenGameIds(for: week),
+                pickMode: appState.pickMode(for: week)
+            )
+        }
+    }
+
+    private var historyLiveCards: [String: ESPNLiveGameCard] {
+        guard isViewingLiveWeek else { return [:] }
+        return appState.picksViewModel.livePickCards
     }
 
     private var weekSelector: some View {
@@ -183,11 +208,12 @@ struct SeasonPickHistoryView: View {
                     members: appState.groupService.members,
                     games: displayGames,
                     picksByUserId: picksByUserId,
-                    liveCards: isViewingLiveWeek ? appState.picksViewModel.livePickCards : [:],
+                    liveCards: historyLiveCards,
                     teamRanks: appState.picksViewModel.teamRanks,
                     currentUserId: appState.currentUserId,
                     hiddenGameIds: hiddenGameIds(for: week),
-                    pickMode: appState.pickMode(for: week)
+                    pickMode: appState.pickMode(for: week),
+                    onExpand: { showExpandedBoard = true }
                 )
                 .padding(.horizontal)
             } else if WeekTransition.pickemsShouldShowLeagueBoard(week) {

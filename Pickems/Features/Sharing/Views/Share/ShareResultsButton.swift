@@ -4,11 +4,23 @@ struct ShareResultsButton: View {
     let source: ShareSource
     @EnvironmentObject private var xAuthService: XAuthService
     @Environment(\.themePalette) private var theme
+    @Environment(\.helpPresenter) private var helpPresenter
     @State private var showShareSheet = false
 
     var body: some View {
+        if helpPresenter == nil {
+            shareButton
+                .sheet(isPresented: $showShareSheet) { // presentation-ok: fallback when no screen presenter
+                    fallbackSheet
+                }
+        } else {
+            shareButton
+        }
+    }
+
+    private var shareButton: some View {
         Button {
-            showShareSheet = true
+            presentResults()
         } label: {
             Label(source.ctaTitle, systemImage: "square.and.arrow.up")
                 .font(.headline)
@@ -18,11 +30,23 @@ struct ShareResultsButton: View {
         .tint(theme.accent)
         .accessibilityLabel("Share results")
         .accessibilityValue(source.ctaTitle)
-        .sheet(isPresented: $showShareSheet) {
-            ShareResultsSheet(source: source)
-                .environmentObject(xAuthService)
-                .environment(\.themePalette, theme)
+    }
+
+    private func presentResults() {
+        let modal = ScreenModal.shareResults(source, xAuthService, id: UUID())
+        PickemsPresentation.afterTap {
+            if let helpPresenter {
+                helpPresenter.modal = modal
+            } else {
+                showShareSheet = true
+            }
         }
+    }
+
+    private var fallbackSheet: some View {
+        ShareResultsSheet(source: source)
+            .environmentObject(xAuthService)
+            .environment(\.themePalette, theme)
     }
 }
 

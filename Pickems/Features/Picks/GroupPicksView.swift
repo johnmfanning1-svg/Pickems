@@ -11,6 +11,7 @@ struct GroupPicksView: View {
     @State private var isRefreshingOwnPick = false
     @State private var ownPickLoadAttempted = false
     @State private var isRefreshing = false
+    @State private var showExpandedBoard = false
 
     private var members: [GroupMember] {
         appState.groupService.members
@@ -151,6 +152,22 @@ struct GroupPicksView: View {
             await appState.refreshLeagueData()
             await refreshAllPicks()
         })
+        .fullScreenCover(isPresented: $showExpandedBoard) {
+            expandedPickemsBoard
+        }
+    }
+
+    private var expandedPickemsBoard: some View {
+        LeaguePickemsExpandedBoard(
+            members: sortedMembers,
+            games: slateGames.sortedByKickoff,
+            picksByUserId: picksByUserId,
+            liveCards: appState.picksViewModel.livePickCards,
+            teamRanks: appState.picksViewModel.teamRanks,
+            currentUserId: currentUserId,
+            hiddenGameIds: hiddenGameIds,
+            pickMode: appState.selectedPickMode
+        )
     }
 
     private var innerList: some View {
@@ -173,7 +190,8 @@ struct GroupPicksView: View {
                     teamRanks: appState.picksViewModel.teamRanks,
                     currentUserId: currentUserId,
                     hiddenGameIds: hiddenGameIds,
-                    pickMode: appState.selectedPickMode
+                    pickMode: appState.selectedPickMode,
+                    onExpand: { showExpandedBoard = true }
                 )
             } else {
                 ForEach(sortedMembers) { member in

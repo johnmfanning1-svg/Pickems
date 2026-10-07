@@ -77,12 +77,23 @@ struct CommissionerOnlyInviteNotice: View {
 struct InviteShareButton: View {
     let group: PickemGroup
     @Environment(\.themePalette) private var theme
+    @Environment(\.helpPresenter) private var helpPresenter
     @State private var showShareSheet = false
 
     var body: some View {
+        if helpPresenter == nil {
+            inviteButton
+                .sheet(isPresented: $showShareSheet) { // presentation-ok: fallback when no screen presenter
+                    fallbackShareSheet
+                }
+        } else {
+            inviteButton
+        }
+    }
+
+    private var inviteButton: some View {
         Button {
-            PickemsHaptics.lightImpact()
-            showShareSheet = true
+            presentInvite()
         } label: {
             Label("Invite Friends", systemImage: "square.and.arrow.up")
                 .font(.subheadline.weight(.semibold))
@@ -95,10 +106,24 @@ struct InviteShareButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Invite Friends")
         .accessibilityHint("Share invite code \(group.inviteCode) for \(group.name)")
-        .sheet(isPresented: $showShareSheet) {
-            ShareSheet(items: shareItems)
-                .presentationDetents([.medium, .large])
+    }
+
+    private func presentInvite() {
+        PickemsHaptics.lightImpact()
+        let items = shareItems
+        let modal = ScreenModal.shareSheet(items: items, id: UUID())
+        PickemsPresentation.afterTap {
+            if let helpPresenter {
+                helpPresenter.modal = modal
+            } else {
+                showShareSheet = true
+            }
         }
+    }
+
+    private var fallbackShareSheet: some View {
+        ShareSheet(items: shareItems)
+            .presentationDetents([.medium, .large])
     }
 
     private var shareItems: [Any] {

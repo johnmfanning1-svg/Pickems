@@ -97,7 +97,7 @@ struct HelpInfoButton: View {
     var body: some View {
         if helpPresenter == nil, presentedTopic == nil {
             helpButton
-                .sheet(isPresented: $showHelp) {
+                .sheet(isPresented: $showHelp) { // presentation-ok: fallback when no screen presenter
                     HelpDetailView(topic: topic)
                         .environment(\.themePalette, theme)
                         .pickemsSheetChrome()
