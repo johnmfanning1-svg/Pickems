@@ -6,9 +6,9 @@ import Foundation
 /// share one `isPresented` flag (Selections + Pickems both wrapped `PicksView`).
 /// Route tab CTAs through this enum instead of local `.sheet(isPresented:)`.
 ///
-/// Nested sheets that must stay on top of an already-presented sheet (deadline
-/// editors, admin game browse inside Commissioner Settings) stay local — assigning
-/// a new `AppSheet` here would replace Settings.
+/// Nested sheets that stay on top of an already-presented sheet go through that
+/// screen's single route enum (for example `CommissionerSheet`), never on rows
+/// or Sections. Assigning a new `AppSheet` here would replace Settings.
 enum AppSheet: Identifiable, Equatable {
     case gameBrowse
     case joinGroup

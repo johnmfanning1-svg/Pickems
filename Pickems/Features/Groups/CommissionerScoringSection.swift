@@ -1,20 +1,10 @@
 import SwiftUI
 
-/// Commissioner Settings → Scoring. The one place league type (Against the Spread /
-/// Straight Up) is changed. Writes go through `setLeaguePickMode` immediately (not
-/// on Save), like Switch to Rolling Lock, so the current week is handled correctly.
-struct CommissionerScoringSection: View {
-    @Environment(AppState.self) private var appState
-
-    let groupId: String
-    /// The form's unsaved rules. Kept in step so Save can't write the old type back.
-    @Binding var rules: GroupRules
-
-    @State private var isSwitching = false
-    @State private var prompt: PickModePrompt?
-    @State private var status: String?
-    @State private var error: String?
-
+/// Switching state for Commissioner Settings → Scoring. The alert lives on the
+/// settings root (`CommissionerScoringPromptAlert`), not on the Form section.
+@MainActor
+@Observable
+final class CommissionerScoringSwitch {
     /// Pending change that needs the commissioner to confirm.
     struct PickModePrompt: Identifiable, Equatable {
         enum Kind: Equatable {
@@ -30,6 +20,179 @@ struct CommissionerScoringSection: View {
         var id: String { "\(newMode.rawValue).\(weekId)" }
     }
 
+    var isSwitching = false
+    var prompt: PickModePrompt?
+    var status: String?
+    var error: String?
+
+    var promptPresented: Binding<Bool> {
+        Binding<Bool>(
+            get: { self.prompt != nil },
+            set: { (isPresented: Bool) in
+                if !isPresented { self.prompt = nil }
+            }
+        )
+    }
+
+    var promptTitle: String {
+        guard let prompt else { return "" }
+        switch prompt.kind {
+        case .ask:
+            return LeaguePickModeSwitch.askTitle(newMode: prompt.newMode)
+        case .nextWeekOnly:
+            return LeaguePickModeSwitch.nextWeekOnlyTitle(newMode: prompt.newMode)
+        }
+    }
+
+    func promptMessage(_ prompt: PickModePrompt) -> String {
+        switch prompt.kind {
+        case .ask:
+            return LeaguePickModeSwitch.askMessage(newMode: prompt.newMode, currentMode: prompt.currentWeekMode)
+        case .nextWeekOnly(let weekScored):
+            return LeaguePickModeSwitch.nextWeekOnlyMessage(
+                newMode: prompt.newMode,
+                currentMode: prompt.currentWeekMode,
+                weekScored: weekScored
+            )
+        }
+    }
+
+    func beginSwitch(
+        to newMode: PickMode,
+        leagueMode: PickMode,
+        week: WeekSummary?,
+        selectionsMade: Int,
+        groupId: String,
+        rules: Binding<GroupRules>,
+        appState: AppState
+    ) {
+        guard newMode != leagueMode, !isSwitching else { return }
+        status = nil
+        error = nil
+        let currentWeekMode: PickMode = week?.resolvedPickMode(leagueMode: leagueMode) ?? leagueMode
+        let phase = LeaguePickModeSwitch.phase(week: week, selectionsMade: selectionsMade)
+        switch LeaguePickModeSwitch.decision(for: phase) {
+        case .applyNow(let weekId):
+            performSwitch(
+                newMode,
+                weekId: weekId,
+                applyToCurrentWeek: true,
+                currentWeekMode: currentWeekMode,
+                groupId: groupId,
+                rules: rules,
+                appState: appState
+            )
+        case .ask(let weekId):
+            prompt = PickModePrompt(newMode: newMode, currentWeekMode: currentWeekMode, weekId: weekId, kind: .ask)
+        case .nextWeekOnly(let weekId):
+            let scored: Bool = week?.status == .scored
+            prompt = PickModePrompt(
+                newMode: newMode,
+                currentWeekMode: currentWeekMode,
+                weekId: weekId,
+                kind: .nextWeekOnly(weekScored: scored)
+            )
+        }
+    }
+
+    func performSwitch(
+        _ newMode: PickMode,
+        weekId: String?,
+        applyToCurrentWeek: Bool,
+        currentWeekMode: PickMode,
+        groupId: String,
+        rules: Binding<GroupRules>,
+        appState: AppState
+    ) {
+        prompt = nil
+        isSwitching = true
+        Task {
+            defer { isSwitching = false }
+            do {
+                let applied: Bool = try await appState.groupService.setLeaguePickMode(
+                    groupId: groupId,
+                    pickMode: newMode,
+                    weekId: weekId,
+                    applyToCurrentWeek: applyToCurrentWeek
+                )
+                rules.wrappedValue.pickMode = newMode
+                status = LeaguePickModeSwitch.successMessage(
+                    newMode: newMode,
+                    appliedToCurrentWeek: applied,
+                    hadCurrentWeek: weekId != nil,
+                    currentMode: currentWeekMode
+                )
+                PickemsHaptics.success()
+            } catch {
+                self.error = UserFacingError.message(for: error, context: .write)
+                    ?? "Couldn't change the league type. Try again."
+                PickemsHaptics.warning()
+            }
+        }
+    }
+}
+
+/// Attaches the league-type confirm to the settings screen root, outside the Form.
+struct CommissionerScoringPromptAlert: ViewModifier {
+    var model: CommissionerScoringSwitch
+    let groupId: String
+    @Binding var rules: GroupRules
+    var appState: AppState
+
+    func body(content: Content) -> some View {
+        @Bindable var model = model
+        content.alert(
+            model.promptTitle,
+            isPresented: model.promptPresented,
+            presenting: model.prompt
+        ) { (prompt: CommissionerScoringSwitch.PickModePrompt) in
+            promptActions(prompt)
+        } message: { (prompt: CommissionerScoringSwitch.PickModePrompt) in
+            Text(model.promptMessage(prompt))
+        }
+    }
+
+    @ViewBuilder
+    private func promptActions(_ prompt: CommissionerScoringSwitch.PickModePrompt) -> some View {
+        if prompt.kind == .ask {
+            Button(LeaguePickModeSwitch.applyNowTitle) {
+                model.performSwitch(
+                    prompt.newMode,
+                    weekId: prompt.weekId,
+                    applyToCurrentWeek: true,
+                    currentWeekMode: prompt.currentWeekMode,
+                    groupId: groupId,
+                    rules: $rules,
+                    appState: appState
+                )
+            }
+        }
+        Button(LeaguePickModeSwitch.nextWeekTitle) {
+            model.performSwitch(
+                prompt.newMode,
+                weekId: prompt.weekId,
+                applyToCurrentWeek: false,
+                currentWeekMode: prompt.currentWeekMode,
+                groupId: groupId,
+                rules: $rules,
+                appState: appState
+            )
+        }
+        Button("Cancel", role: .cancel) {}
+    }
+}
+
+/// Commissioner Settings → Scoring. The one place league type (Against the Spread /
+/// Straight Up) is changed. Writes go through `setLeaguePickMode` immediately (not
+/// on Save), like Switch to Rolling Lock, so the current week is handled correctly.
+struct CommissionerScoringSection: View {
+    @Environment(AppState.self) private var appState
+
+    let groupId: String
+    /// The form's unsaved rules. Kept in step so Save can't write the old type back.
+    @Binding var rules: GroupRules
+    var model: CommissionerScoringSwitch
+
     var body: some View {
         Section {
             leagueTypePicker
@@ -39,11 +202,6 @@ struct CommissionerScoringSection: View {
             Text("Scoring")
         } footer: {
             Text(LeaguePickModeSwitch.footer)
-        }
-        .alert(promptTitle, isPresented: promptPresented, presenting: prompt) { (prompt: PickModePrompt) in
-            promptActions(prompt)
-        } message: { (prompt: PickModePrompt) in
-            Text(promptMessage(prompt))
         }
     }
 
@@ -80,7 +238,17 @@ struct CommissionerScoringSection: View {
     private var leagueTypeBinding: Binding<PickMode> {
         Binding<PickMode>(
             get: { leagueMode },
-            set: { (newMode: PickMode) in beginSwitch(to: newMode) }
+            set: { (newMode: PickMode) in
+                model.beginSwitch(
+                    to: newMode,
+                    leagueMode: leagueMode,
+                    week: leagueWeek,
+                    selectionsMade: selectionsMade,
+                    groupId: groupId,
+                    rules: $rules,
+                    appState: appState
+                )
+            }
         )
     }
 
@@ -90,7 +258,7 @@ struct CommissionerScoringSection: View {
                 Text(mode.displayName).tag(mode)
             }
         }
-        .disabled(isSwitching)
+        .disabled(model.isSwitching)
         .listRowBackground(PickemsColors.cardBackground)
     }
 
@@ -108,17 +276,16 @@ struct CommissionerScoringSection: View {
 
     @ViewBuilder
     private var feedbackRows: some View {
-        if isSwitching {
-            HStack { ProgressView(); Text("Changing league type…") }
-                .listRowBackground(PickemsColors.cardBackground)
+        if model.isSwitching {
+            switchingRow
         }
-        if let status {
+        if let status = model.status {
             Text(status)
                 .font(.caption)
                 .foregroundStyle(PickemsColors.textSecondary)
                 .listRowBackground(PickemsColors.cardBackground)
         }
-        if let error {
+        if let error = model.error {
             Text(error)
                 .font(.caption)
                 .foregroundStyle(PickemsColors.warning)
@@ -126,101 +293,11 @@ struct CommissionerScoringSection: View {
         }
     }
 
-    // MARK: - Prompt
-
-    private var promptPresented: Binding<Bool> {
-        Binding<Bool>(
-            get: { prompt != nil },
-            set: { (isPresented: Bool) in if !isPresented { prompt = nil } }
-        )
-    }
-
-    private var promptTitle: String {
-        guard let prompt else { return "" }
-        switch prompt.kind {
-        case .ask:
-            return LeaguePickModeSwitch.askTitle(newMode: prompt.newMode)
-        case .nextWeekOnly:
-            return LeaguePickModeSwitch.nextWeekOnlyTitle(newMode: prompt.newMode)
+    private var switchingRow: some View {
+        HStack {
+            ProgressView()
+            Text("Changing league type…")
         }
-    }
-
-    private func promptMessage(_ prompt: PickModePrompt) -> String {
-        switch prompt.kind {
-        case .ask:
-            return LeaguePickModeSwitch.askMessage(newMode: prompt.newMode, currentMode: prompt.currentWeekMode)
-        case .nextWeekOnly(let weekScored):
-            return LeaguePickModeSwitch.nextWeekOnlyMessage(
-                newMode: prompt.newMode,
-                currentMode: prompt.currentWeekMode,
-                weekScored: weekScored
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func promptActions(_ prompt: PickModePrompt) -> some View {
-        if prompt.kind == .ask {
-            Button(LeaguePickModeSwitch.applyNowTitle) {
-                performSwitch(prompt.newMode, weekId: prompt.weekId, applyToCurrentWeek: true, currentWeekMode: prompt.currentWeekMode)
-            }
-        }
-        Button(LeaguePickModeSwitch.nextWeekTitle) {
-            performSwitch(prompt.newMode, weekId: prompt.weekId, applyToCurrentWeek: false, currentWeekMode: prompt.currentWeekMode)
-        }
-        Button("Cancel", role: .cancel) {}
-    }
-
-    // MARK: - Actions
-
-    private func beginSwitch(to newMode: PickMode) {
-        guard newMode != leagueMode, !isSwitching else { return }
-        status = nil
-        error = nil
-        let week: WeekSummary? = leagueWeek
-        let currentWeekMode: PickMode = week?.resolvedPickMode(leagueMode: leagueMode) ?? leagueMode
-        let phase = LeaguePickModeSwitch.phase(week: week, selectionsMade: selectionsMade)
-        switch LeaguePickModeSwitch.decision(for: phase) {
-        case .applyNow(let weekId):
-            performSwitch(newMode, weekId: weekId, applyToCurrentWeek: true, currentWeekMode: currentWeekMode)
-        case .ask(let weekId):
-            prompt = PickModePrompt(newMode: newMode, currentWeekMode: currentWeekMode, weekId: weekId, kind: .ask)
-        case .nextWeekOnly(let weekId):
-            let scored: Bool = week?.status == .scored
-            prompt = PickModePrompt(
-                newMode: newMode,
-                currentWeekMode: currentWeekMode,
-                weekId: weekId,
-                kind: .nextWeekOnly(weekScored: scored)
-            )
-        }
-    }
-
-    private func performSwitch(_ newMode: PickMode, weekId: String?, applyToCurrentWeek: Bool, currentWeekMode: PickMode) {
-        prompt = nil
-        isSwitching = true
-        Task {
-            defer { isSwitching = false }
-            do {
-                let applied: Bool = try await appState.groupService.setLeaguePickMode(
-                    groupId: groupId,
-                    pickMode: newMode,
-                    weekId: weekId,
-                    applyToCurrentWeek: applyToCurrentWeek
-                )
-                rules.pickMode = newMode
-                status = LeaguePickModeSwitch.successMessage(
-                    newMode: newMode,
-                    appliedToCurrentWeek: applied,
-                    hadCurrentWeek: weekId != nil,
-                    currentMode: currentWeekMode
-                )
-                PickemsHaptics.success()
-            } catch {
-                self.error = UserFacingError.message(for: error, context: .write)
-                    ?? "Couldn't change the league type. Try again."
-                PickemsHaptics.warning()
-            }
-        }
+        .listRowBackground(PickemsColors.cardBackground)
     }
 }

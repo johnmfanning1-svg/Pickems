@@ -5,20 +5,8 @@ struct CommissionerWeekAdminSections: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
 
-    @Binding var showSelectionDeadlineSheet: Bool
-    @Binding var showPickDeadlineSheet: Bool
-    @Binding var showAdminGameBrowse: Bool
-    @State private var showReopenSelectionsConfirm = false
-    @State private var rankDraft: TieRankDraft?
-    @State private var manageSheet: ManageSheet?
-
-    /// Selections and Slate open as sheets from rows in This Week.
-    enum ManageSheet: String, Identifiable {
-        case selections
-        case slate
-
-        var id: String { rawValue }
-    }
+    let present: (CommissionerSheet) -> Void
+    @Binding var showReopenSelectionsConfirm: Bool
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var week: WeekSummary? { appState.groupService.currentWeek }
@@ -31,32 +19,6 @@ struct CommissionerWeekAdminSections: View {
 
     var body: some View {
         weekStatusSection
-            .task {
-                if let groupId = appState.groupService.selectedGroup?.id {
-                    await appState.groupService.loadAvailableWeeks(groupId: groupId)
-                }
-                await picksVM.ensureTeamRanks(appState: appState)
-            }
-            .sheet(item: $rankDraft) { draft in
-                CommissionerRankTiesSheet(
-                    weekLabel: week?.displayLabel ?? "This week",
-                    entries: draft.entries
-                ) { orderedIds in
-                    guard let groupId = appState.groupService.selectedGroup?.id,
-                          let weekId = week?.id else {
-                        throw GroupService.GroupError.groupNotFound
-                    }
-                    try await appState.groupService.resolveTieGroup(
-                        groupId: groupId,
-                        weekId: weekId,
-                        orderedUserIds: orderedIds
-                    )
-                }
-                .pickemsEnvironment(appState)
-            }
-            .sheet(item: $manageSheet) { (sheet: ManageSheet) in
-                manageSheetContent(sheet)
-            }
         pickemsAdminSection
         tiesSection
     }
@@ -105,7 +67,7 @@ struct CommissionerWeekAdminSections: View {
                         if uniqueGames < target {
                             Button("Fill Remaining Games") {
                                 appState.picksViewModel.selectionBrowseIntent = .own
-                                showAdminGameBrowse = true
+                                present(.adminGameBrowse)
                             }
                             .listRowBackground(PickemsColors.cardBackground)
                         }
@@ -138,14 +100,6 @@ struct CommissionerWeekAdminSections: View {
             Text("This Week")
         } footer: {
             Text("Deadlines, slate, Pickems, and ties for the week you pick. Switching here also switches Selections and Pickems.")
-        }
-        .alert("Reopen Selections?", isPresented: $showReopenSelectionsConfirm) {
-            Button("Reopen Selections") {
-                picksVM.reopenSelections(appState: appState)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Members can add and remove Selections again. Pickems close until you open the week.")
         }
     }
 
@@ -180,7 +134,7 @@ struct CommissionerWeekAdminSections: View {
                 ),
                 hint: "Opens each member's Selections to change them."
             ) {
-                manageSheet = .selections
+                present(.selections)
             }
         }
         if canShowSlate(week) {
@@ -190,20 +144,8 @@ struct CommissionerWeekAdminSections: View {
                 summary: CommissionerAdminSummary.slate(gameCount: appState.pickService.displaySlateGames.count),
                 hint: "Opens the slate to edit spreads or remove a Selection."
             ) {
-                manageSheet = .slate
+                present(.slate)
             }
-        }
-    }
-
-    @ViewBuilder
-    private func manageSheetContent(_ sheet: ManageSheet) -> some View {
-        switch sheet {
-        case .selections:
-            CommissionerSelectionsAdminSheet()
-                .pickemsEnvironment(appState)
-        case .slate:
-            CommissionerSlateSheet()
-                .pickemsEnvironment(appState)
         }
     }
 
@@ -234,7 +176,7 @@ struct CommissionerWeekAdminSections: View {
                 summary: summary,
                 hint: "Opens the Selection deadline editor."
             ) {
-                showSelectionDeadlineSheet = true
+                present(.selectionDeadline)
             }
         } else if promptsToSetSelectionDeadline(week) {
             setSelectionDeadlineButton
@@ -251,7 +193,7 @@ struct CommissionerWeekAdminSections: View {
 
     private var setSelectionDeadlineButton: some View {
         Button("Set Selection Deadline") {
-            showSelectionDeadlineSheet = true
+            present(.selectionDeadline)
         }
         .listRowBackground(PickemsColors.cardBackground)
     }
@@ -281,27 +223,27 @@ struct CommissionerWeekAdminSections: View {
             summary: summary,
             hint: "Opens the Pickems deadline editor to change, extend, or unlock it."
         ) {
-            showPickDeadlineSheet = true
+            present(.pickDeadline)
         }
     }
 
     private var reopenPickemsButton: some View {
         Button("Reopen Pickems") {
-            showPickDeadlineSheet = true
+            present(.pickDeadline)
         }
         .listRowBackground(PickemsColors.cardBackground)
     }
 
     private func rollingPickemsDeadlineButton(_ week: WeekSummary) -> some View {
         Button(rollingPickDeadlineButtonTitle(week)) {
-            showPickDeadlineSheet = true
+            present(.pickDeadline)
         }
         .listRowBackground(PickemsColors.cardBackground)
     }
 
     private var setPickemsDeadlineButton: some View {
         Button("Set Pickems Deadline") {
-            showPickDeadlineSheet = true
+            present(.pickDeadline)
         }
         .listRowBackground(PickemsColors.cardBackground)
     }
@@ -368,7 +310,7 @@ struct CommissionerWeekAdminSections: View {
                 Section {
                     ForEach(groups, id: \.tieGroupId) { group in
                         Button {
-                            rankDraft = TieRankDraft(entries: group)
+                            present(.rankTies(TieRankDraft(entries: group)))
                         } label: {
                             HStack(alignment: .center, spacing: 12) {
                                 VStack(alignment: .leading, spacing: 4) {

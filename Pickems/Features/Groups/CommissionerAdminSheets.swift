@@ -146,23 +146,17 @@ struct CommissionerSelectionsAdminSheet: View {
 /// Was the inline "This Week's Slate" section, plus the spread editor sheet.
 struct CommissionerSlateSheet: View {
     @Environment(AppState.self) private var appState
+    @State private var spreadEditGame: SlateGame?
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var week: WeekSummary? { appState.groupService.currentWeek }
     private var showsSpreads: Bool { appState.selectedPickMode.showsSpreads }
 
-    private var spreadEditGameBinding: Binding<SlateGame?> {
-        Binding<SlateGame?>(
-            get: { appState.picksViewModel.spreadEditGame },
-            set: { (game: SlateGame?) in appState.picksViewModel.spreadEditGame = game }
-        )
-    }
-
     var body: some View {
         CommissionerAdminSheetChrome(title: "Slate") {
             slateSection
         }
-        .sheet(item: spreadEditGameBinding) { (game: SlateGame) in
+        .sheet(item: $spreadEditGame) { (game: SlateGame) in
             spreadEditorSheet(for: game)
         }
     }
@@ -201,7 +195,7 @@ struct CommissionerSlateSheet: View {
             }
             HStack {
                 if showsSpreads {
-                    Button("Edit Spread") { picksVM.spreadEditGame = game }
+                    Button("Edit Spread") { spreadEditGame = game }
                 }
                 if !week.skipsSelection {
                     Spacer()
