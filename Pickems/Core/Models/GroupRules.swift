@@ -67,7 +67,7 @@ enum TieBreakerPolicy: String, Codable, CaseIterable, Identifiable {
 
 /// How Pickems are graded. Stored on `groups/{id}.rules.pickMode`.
 /// Missing on existing leagues → `.ats` so ATS scoring stays unchanged.
-/// ATS leagues may also set `weeks/{id}.pickMode` to `.straightUp` for one week.
+/// `weeks/{id}.pickMode`, when set, wins for that week (see `WeekSummary.resolvedPickMode`).
 enum PickMode: String, Codable, CaseIterable, Identifiable {
     case ats
     case straightUp
@@ -108,9 +108,9 @@ enum PickMode: String, Codable, CaseIterable, Identifiable {
     var createFooter: String {
         switch self {
         case .ats:
-            return "Pick which team covers the point spread. League type is set at create and cannot be changed mid-season."
+            return "Pick which team covers the point spread. You can change league type later in Commissioner Settings → Scoring."
         case .straightUp:
-            return "Pick the outright winner. Spreads are hidden, and a game tie is a push. League type is set at create and cannot be changed mid-season."
+            return "Pick the outright winner. Spreads are hidden, and a game tie is a push. You can change league type later in Commissioner Settings → Scoring."
         }
     }
 

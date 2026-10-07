@@ -80,6 +80,8 @@ struct GroupsView: View {
         guard pending else { return }
         if appState.isCommissioner, appState.groupService.selectedGroup != nil {
             appState.present(.commissionerSettings)
+        } else {
+            appState.pendingDeadlineEditor = nil
         }
         appState.pendingCommissionerSettings = false
     }

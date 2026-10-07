@@ -3,6 +3,8 @@ import SwiftUI
 /// Prominent live countdown for this week’s Selection and Pickems deadlines.
 struct WeekDeadlineHeader: View {
     let snapshot: WorkspaceDeadlineSnapshot
+    /// Commissioner tap on a row that is prompting for a deadline. Nil keeps every row static.
+    var onSetDeadline: ((WorkspaceDeadlineKind) -> Void)? = nil
     @Environment(\.themePalette) private var theme
 
     var body: some View {
@@ -27,7 +29,7 @@ struct WeekDeadlineHeader: View {
                     now: now
                 )
             } else if snapshot.showSetSelectionDeadlinePrompt {
-                setSelectionPrompt
+                promptTapTarget(.selections) { setSelectionPrompt }
             }
 
             if snapshot.selectionDeadline != nil || snapshot.showSetSelectionDeadlinePrompt,
@@ -36,17 +38,7 @@ struct WeekDeadlineHeader: View {
             }
 
             if let deadline = snapshot.pickemsDeadline {
-                DeadlineHeroRow(
-                    eyebrow: snapshot.isRolling ? "Pickems · next lock" : "Pickems",
-                    deadline: deadline,
-                    openTitle: snapshot.isRolling
-                        ? "Next lock \(PickDeadlineCalculator.lockTimeLabel(for: deadline))"
-                        : "Lock \(PickDeadlineCalculator.lockTimeLabel(for: deadline))",
-                    lockedTitle: "Pickems locked",
-                    help: PickemsHelp.pickDeadline,
-                    now: now,
-                    rollingDetail: rollingDetail
-                )
+                promptTapTarget(.pickems) { pickemsRow(deadline: deadline, now: now) }
             }
         }
         .padding(16)
@@ -57,6 +49,55 @@ struct WeekDeadlineHeader: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(accentColor(now: now).opacity(0.28), lineWidth: 1)
         )
+    }
+
+    private func isTappable(_ kind: WorkspaceDeadlineKind) -> Bool {
+        onSetDeadline != nil && snapshot.isPromptingCommissioner(for: kind)
+    }
+
+    /// Wraps a row in a button only while it prompts the commissioner.
+    @ViewBuilder
+    private func promptTapTarget<Content: View>(
+        _ kind: WorkspaceDeadlineKind,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        if isTappable(kind), let onSetDeadline {
+            Button {
+                PickemsHaptics.selection()
+                onSetDeadline(kind)
+            } label: {
+                content()
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(kind == .selections
+                ? "Opens the Selection deadline editor."
+                : "Opens the Pickems deadline editor.")
+        } else {
+            content()
+        }
+    }
+
+    private func pickemsRow(deadline: Date, now: Date) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            DeadlineHeroRow(
+                eyebrow: snapshot.isRolling ? "Pickems · next lock" : "Pickems",
+                deadline: deadline,
+                openTitle: snapshot.isRolling
+                    ? "Next lock \(PickDeadlineCalculator.lockTimeLabel(for: deadline))"
+                    : "Lock \(PickDeadlineCalculator.lockTimeLabel(for: deadline))",
+                lockedTitle: "Pickems locked",
+                help: PickemsHelp.pickDeadline,
+                now: now,
+                rollingDetail: rollingDetail
+            )
+            if isTappable(.pickems) {
+                Text("No Pickems deadline set yet. Tap to set one.")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     private var rollingDetail: String? {
@@ -80,7 +121,9 @@ struct WeekDeadlineHeader: View {
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(PickemsColors.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Members need a due time so they finish before kickoff. Set it in Commissioner Settings.")
+                Text(isTappable(.selections)
+                    ? "Members need a due time so they finish before kickoff. Tap to set it."
+                    : "Members need a due time so they finish before kickoff. Set it in Commissioner Settings.")
                     .font(.caption)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -88,10 +131,19 @@ struct WeekDeadlineHeader: View {
 
             Spacer(minLength: 0)
 
-            HelpInfoButton(topic: PickemsHelp.selectionDeadline, size: .subheadline)
+            if isTappable(.selections) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .accessibilityHidden(true)
+            } else {
+                HelpInfoButton(topic: PickemsHelp.selectionDeadline, size: .subheadline)
+            }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Selections, set a Selection deadline in Commissioner Settings")
+        .accessibilityLabel(isTappable(.selections)
+            ? "Selections, set a Selection deadline"
+            : "Selections, set a Selection deadline in Commissioner Settings")
     }
 
     private func accentColor(now: Date) -> Color {

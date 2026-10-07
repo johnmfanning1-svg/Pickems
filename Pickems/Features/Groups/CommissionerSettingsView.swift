@@ -18,11 +18,7 @@ struct CommissionerSettingsView: View {
     @State private var customCode = ""
     @State private var isUpdatingCode = false
     @State private var identityError: String?
-    @State private var memberToRemove: GroupMember?
-    @State private var memberActionError: String?
-    @State private var memberToPromote: GroupMember?
-    @State private var showDeleteLeagueConfirm = false
-    @State private var isWorkingMembers = false
+    @State private var showMembersSheet = false
     @State private var showSelectionDeadlineSheet = false
     @State private var showPickDeadlineSheet = false
     @State private var showAdminGameBrowse = false
@@ -45,12 +41,6 @@ struct CommissionerSettingsView: View {
         appState.groupService.selectedGroup?.id == group.id
             ? (appState.groupService.selectedGroup ?? group)
             : group
-    }
-
-    private var otherMembers: [GroupMember] {
-        appState.groupService.members
-            .filter { $0.id != liveGroup.commissionerId }
-            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 
     private var seasonYearToClose: Int {
@@ -89,8 +79,8 @@ struct CommissionerSettingsView: View {
                 showAdminGameBrowse: $showAdminGameBrowse
             )
             leagueIdentitySection
-            membersSection
-            scoringSection
+            membersRowSection
+            CommissionerScoringSection(groupId: group.id, rules: $rules)
             slateConfigurationSection
             pickemsLockSection
             tiesSection
@@ -113,17 +103,6 @@ struct CommissionerSettingsView: View {
             Button("Save") { save() }
                 .fontWeight(.semibold)
                 .disabled(isSaving)
-        }
-    }
-
-    private var scoringSection: some View {
-        Section {
-            LabeledContent("League type", value: rules.pickMode.displayName)
-                .listRowBackground(PickemsColors.cardBackground)
-        } header: {
-            Text("Scoring")
-        } footer: {
-            Text("ATS grades the cover. Straight Up grades the outright winner (a tie is a push). League type is set at create. In an ATS league, use This Week to score a future week — or the current week before lock — Straight Up.")
         }
     }
 
@@ -336,28 +315,6 @@ struct CommissionerSettingsView: View {
         )
     }
 
-    private var memberToRemovePresented: Binding<Bool> {
-        Binding<Bool>(
-            get: { memberToRemove != nil },
-            set: { (isPresented: Bool) in if !isPresented { memberToRemove = nil } }
-        )
-    }
-
-    private var memberToPromotePresented: Binding<Bool> {
-        Binding<Bool>(
-            get: { memberToPromote != nil },
-            set: { (isPresented: Bool) in if !isPresented { memberToPromote = nil } }
-        )
-    }
-
-    private var removeMemberAlertTitle: String {
-        "Remove \(memberToRemove?.displayName ?? "member")?"
-    }
-
-    private var promoteMemberAlertTitle: String {
-        "Make \(memberToPromote?.displayName ?? "member") the commissioner?"
-    }
-
     private var closeSeasonAlertTitle: String {
         "Close Season \(seasonYearToClose.pickemsYearString)?"
     }
@@ -388,46 +345,10 @@ struct CommissionerSettingsView: View {
             }
     }
 
-    /// Remove member, transfer commissioner and delete league confirms.
-    private var settingsFormWithAlerts: some View {
-        settingsFormWithSeasonAlerts
-            .alert(removeMemberAlertTitle, isPresented: memberToRemovePresented) {
-                Button("Remove Member", role: .destructive) {
-                    if let member = memberToRemove { removeMember(member) }
-                    memberToRemove = nil
-                }
-                Button("Cancel", role: .cancel) { memberToRemove = nil }
-            } message: {
-                Text("They lose access to this league’s picks and standings. They can rejoin with the invite code.")
-            }
-            .alert(promoteMemberAlertTitle, isPresented: memberToPromotePresented) {
-                Button("Transfer Commissioner", role: .destructive) {
-                    if let member = memberToPromote { transferCommissioner(to: member) }
-                    memberToPromote = nil
-                }
-                Button("Cancel", role: .cancel) { memberToPromote = nil }
-            } message: {
-                Text("You become a regular member. Only one commissioner is allowed at a time.")
-            }
-            .alert("Delete this league permanently?", isPresented: $showDeleteLeagueConfirm) {
-                Button("Delete League", role: .destructive) { deleteLeague() }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This permanently deletes the league, invite code, members, picks, standings, and season history for everyone. This cannot be undone.")
-            }
-    }
-
     // MARK: - Sheets
 
-    private var spreadEditGameBinding: Binding<SlateGame?> {
-        Binding<SlateGame?>(
-            get: { appState.picksViewModel.spreadEditGame },
-            set: { appState.picksViewModel.spreadEditGame = $0 }
-        )
-    }
-
     private var settingsFormWithSheets: some View {
-        settingsFormWithAlerts
+        settingsFormWithSeasonAlerts
             .sheet(isPresented: $showSelectionDeadlineSheet) {
                 selectionDeadlineSheet
             }
@@ -437,9 +358,31 @@ struct CommissionerSettingsView: View {
             .sheet(isPresented: $showAdminGameBrowse) {
                 adminGameBrowseSheet
             }
-            .sheet(item: spreadEditGameBinding) { (game: SlateGame) in
-                spreadEditorSheet(for: game)
+            .sheet(isPresented: $showMembersSheet) {
+                membersSheet
             }
+            .task { await openPendingDeadlineEditor() }
+    }
+
+    /// Countdown prompt tap or Selection-deadline push: open the matching editor
+    /// for this league (and the tapped week) once settings are on screen.
+    private func openPendingDeadlineEditor() async {
+        guard let target = appState.pendingDeadlineEditor else { return }
+        appState.pendingDeadlineEditor = nil
+        guard target.matches(groupId: group.id) else { return }
+        let service = appState.groupService
+        if let weekId = target.weekId, service.currentWeek?.id != weekId,
+           let week = service.availableWeeks.first(where: { $0.id == weekId }) {
+            appState.selectObservedWeek(week)
+        }
+        // Let the settings sheet finish presenting before stacking the editor.
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        switch target.kind {
+        case .selections:
+            showSelectionDeadlineSheet = true
+        case .pickems:
+            showPickDeadlineSheet = true
+        }
     }
 
     private var selectionDeadlineSheet: some View {
@@ -506,14 +449,14 @@ struct CommissionerSettingsView: View {
         .pickemsEnvironment(appState)
     }
 
-    private func spreadEditorSheet(for game: SlateGame) -> some View {
-        SpreadEditorSheet(game: game) { spread, spreadTeamId in
-            appState.picksViewModel.updateSpread(
-                game,
-                spread: spread,
-                spreadTeamId: spreadTeamId,
-                appState: appState
-            )
+    private var membersSheet: some View {
+        CommissionerMembersSheet(
+            groupId: group.id,
+            commissionerId: liveGroup.commissionerId
+        ) {
+            // Transfer or delete: these settings no longer apply.
+            showMembersSheet = false
+            dismiss()
         }
         .pickemsEnvironment(appState)
     }
@@ -605,86 +548,21 @@ struct CommissionerSettingsView: View {
         }
     }
 
-    @ViewBuilder
-    private var membersSection: some View {
+    /// Members list, transfer and delete live in `CommissionerMembersSheet`.
+    private var membersRowSection: some View {
         Section {
-            if otherMembers.isEmpty {
-                Text("No other members yet. Share your invite code to grow the league.")
-                    .font(.caption)
-                    .foregroundStyle(PickemsColors.textSecondary)
-                    .listRowBackground(PickemsColors.cardBackground)
-            } else {
-                ForEach(otherMembers) { member in
-                    HStack(spacing: 12) {
-                        InitialsAvatar(
-                            initials: member.initials,
-                            colorHex: member.avatarColorHex,
-                            imageURL: member.avatarImageURL,
-                            size: 36
-                        )
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(member.displayName)
-                                .foregroundStyle(PickemsColors.textPrimary)
-                            Text("\(member.seasonWins)-\(member.seasonLosses) this season")
-                                .font(.caption)
-                                .foregroundStyle(PickemsColors.textSecondary)
-                        }
-                        Spacer()
-                        Button {
-                            memberToPromote = member
-                        } label: {
-                            Image(systemName: "gavel")
-                                .foregroundStyle(theme.accent)
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Make \(member.displayName) commissioner")
-                        .disabled(isWorkingMembers)
-
-                        Button(role: .destructive) {
-                            memberToRemove = member
-                        } label: {
-                            Image(systemName: "person.badge.minus")
-                                .foregroundStyle(PickemsColors.warning)
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Remove \(member.displayName)")
-                        .disabled(isWorkingMembers)
-                    }
-                    .listRowBackground(PickemsColors.cardBackground)
-                }
-
-                Menu {
-                    ForEach(otherMembers) { member in
-                        Button(member.displayName) {
-                            memberToPromote = member
-                        }
-                    }
-                } label: {
-                    Label("Transfer Commissioner…", systemImage: "gavel")
-                        .foregroundStyle(theme.accent)
-                }
-                .listRowBackground(PickemsColors.cardBackground)
-                .disabled(isWorkingMembers)
-            }
-
-            Button(role: .destructive) {
-                showDeleteLeagueConfirm = true
-            } label: {
-                Label("Delete League", systemImage: "trash")
-            }
-            .listRowBackground(PickemsColors.cardBackground)
-            .disabled(isWorkingMembers)
-
-            if let memberActionError {
-                Text(memberActionError)
-                    .font(.caption)
-                    .foregroundStyle(PickemsColors.warning)
-                    .listRowBackground(PickemsColors.cardBackground)
+            CommissionerAdminRow(
+                title: "Members",
+                systemImage: "person.3",
+                summary: CommissionerAdminSummary.members(count: appState.groupService.members.count),
+                hint: "Remove members, transfer commissioner, or delete the league."
+            ) {
+                showMembersSheet = true
             }
         } header: {
             Text("Members & Ownership")
         } footer: {
-            Text("Remove members, transfer commissioner (one at a time), or delete the entire league. Deleting erases all picks and standings.")
+            Text("Remove members, transfer commissioner (one at a time), or delete the entire league.")
         }
     }
 
@@ -836,56 +714,6 @@ struct CommissionerSettingsView: View {
                 PickemsHaptics.warning()
             }
             isUpdatingCode = false
-        }
-    }
-
-    private func removeMember(_ member: GroupMember) {
-        memberActionError = nil
-        isWorkingMembers = true
-        Task {
-            defer { isWorkingMembers = false }
-            do {
-                try await appState.groupService.removeMember(groupId: group.id, userId: member.id)
-                PickemsHaptics.success()
-            } catch {
-                memberActionError = UserFacingError.message(for: error, context: .write)
-                    ?? error.localizedDescription
-                PickemsHaptics.warning()
-            }
-        }
-    }
-
-    private func transferCommissioner(to member: GroupMember) {
-        memberActionError = nil
-        isWorkingMembers = true
-        Task {
-            defer { isWorkingMembers = false }
-            do {
-                try await appState.groupService.transferCommissioner(groupId: group.id, toUserId: member.id)
-                PickemsHaptics.success()
-                dismiss()
-            } catch {
-                memberActionError = UserFacingError.message(for: error, context: .write)
-                    ?? error.localizedDescription
-                PickemsHaptics.warning()
-            }
-        }
-    }
-
-    private func deleteLeague() {
-        memberActionError = nil
-        isWorkingMembers = true
-        Task {
-            defer { isWorkingMembers = false }
-            do {
-                try await appState.groupService.deleteGroup(groupId: group.id)
-                PickemsHaptics.success()
-                dismiss()
-            } catch {
-                memberActionError = UserFacingError.message(for: error, context: .write)
-                    ?? error.localizedDescription
-                PickemsHaptics.warning()
-            }
         }
     }
 

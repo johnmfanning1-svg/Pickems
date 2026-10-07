@@ -49,8 +49,13 @@ describe("resolveWeekPickMode", () => {
     expect(resolveWeekPickMode("straightUp", "ats")).toBe("straightUp");
   });
 
-  it("does not let a Straight Up league fall back to ATS for one week", () => {
-    expect(resolveWeekPickMode("ats", "straightUp")).toBe("straightUp");
+  it("keeps a pinned ATS week in a league that switched to Straight Up", () => {
+    expect(resolveWeekPickMode("ats", "straightUp")).toBe("ats");
+  });
+
+  it("ignores unknown stored values", () => {
+    expect(resolveWeekPickMode("spread", "straightUp")).toBe("straightUp");
+    expect(resolveWeekPickMode(null, "ats")).toBe("ats");
   });
 });
 

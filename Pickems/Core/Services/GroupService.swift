@@ -584,7 +584,9 @@ final class GroupService {
         }
     }
 
-    /// ATS commissioner sets (or clears) a per-week Straight Up override.
+    /// Sets (or clears) one week's scoring mode directly. Commissioner Settings now
+    /// changes league type through `setLeaguePickMode`, which also covers the current
+    /// week; this stays for single-week repairs.
     func setWeekPickMode(
         groupId: String,
         weekId: String,
@@ -1367,6 +1369,42 @@ final class GroupService {
         }
         let weekChanged: Bool? = result["weekChanged"] as? Bool
         return weekChanged ?? false
+    }
+
+    /// Commissioner change of league type through the `setLeaguePickMode` callable.
+    /// The server sets `rules.pickMode`, sets or pins the current week, pins old weeks,
+    /// and clears overrides on later Selection weeks in one transaction.
+    /// Returns true when the change includes the current week.
+    @discardableResult
+    func setLeaguePickMode(
+        groupId: String,
+        pickMode: PickMode,
+        weekId: String?,
+        applyToCurrentWeek: Bool
+    ) async throws -> Bool {
+        var payload: [String: Any] = [
+            "groupId": groupId,
+            "pickMode": pickMode.rawValue,
+            "applyToCurrentWeek": applyToCurrentWeek,
+        ]
+        if let weekId {
+            payload["weekId"] = weekId
+        }
+        let result: [String: Any] = try await CloudFunctionsClient.call("setLeaguePickMode", data: payload)
+
+        if selectedGroup?.id == groupId {
+            selectedGroup?.rules.pickMode = pickMode
+        }
+        if let idx = groups.firstIndex(where: { $0.id == groupId }) {
+            groups[idx].rules.pickMode = pickMode
+        }
+        let weekModes: [String: Any] = (result["weekModes"] as? [String: Any]) ?? [:]
+        for (id, value) in weekModes {
+            let mode: PickMode? = (value as? String).flatMap { PickMode(rawValue: $0) }
+            applyPickModeLocally(weekId: id, pickMode: mode)
+        }
+        let applied: Bool? = result["currentWeekApplied"] as? Bool
+        return applied ?? false
     }
 
     /// Member-mode weeks store a derived slate size (`members × Selections`). Rewrite it

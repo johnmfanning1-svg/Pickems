@@ -52,11 +52,10 @@ export function resolvePickMode(rules?: Partial<GroupRules> | null): PickMode {
   return rules?.pickMode === "straightUp" ? "straightUp" : "ats";
 }
 
-/** Week override on ATS leagues. Straight Up leagues stay Straight Up. */
+/** A week's stored mode wins (pinned by `setLeaguePickMode` or a per-week change); otherwise the league's. */
 export function resolveWeekPickMode(weekPickMode?: PickMode | null, leagueRules?: Partial<GroupRules> | null): PickMode {
-  const league = resolvePickMode(leagueRules);
-  if (league === "straightUp") return "straightUp";
-  return weekPickMode === "straightUp" ? "straightUp" : league;
+  if (weekPickMode === "straightUp" || weekPickMode === "ats") return weekPickMode;
+  return resolvePickMode(leagueRules);
 }
 
 export interface GroupDoc {

@@ -696,7 +696,7 @@ struct GroupRulesTests {
         #expect(week.resolvedPickMode(leagueMode: .straightUp) == .straightUp)
     }
 
-    @Test func weekStraightUpOverrideDoesNotDowngradeStraightUpLeagues() {
+    @Test func weekModeWinsOverLeagueMode() {
         var week = WeekSummary(
             id: "2026-W4",
             seasonYear: 2026,
@@ -709,7 +709,8 @@ struct GroupRulesTests {
             pickMode: .straightUp
         )
         #expect(week.resolvedPickMode(leagueMode: .ats) == .straightUp)
+        // A week pinned ATS keeps ATS after the league switches to Straight Up.
         week.pickMode = .ats
-        #expect(week.resolvedPickMode(leagueMode: .straightUp) == .straightUp)
+        #expect(week.resolvedPickMode(leagueMode: .straightUp) == .ats)
     }
 }

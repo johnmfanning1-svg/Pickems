@@ -174,7 +174,7 @@ service cloud.firestore {
             && resource.data.status == 'selection')
         // This week's commissioner Override ranking among equal records.
         || changed.hasOnly(['tieBreakOrder'])
-        // ATS commissioner per-week Straight Up override. Locked/scored weeks stay frozen.
+        // Commissioner per-week scoring mode. Locked/scored weeks stay frozen.
         || (changed.hasOnly(['pickMode'])
             && resource.data.status in ['selection', 'picking']);
     }
@@ -366,7 +366,9 @@ service cloud.firestore {
       allow update: if isCommissioner(groupId) || isJoiningGroup(groupId) || isLeavingGroup();
       // Commissioners write nested `rules` including `pickMode` (`ats` | `straightUp`).
       // Missing pickMode is treated as ats by iOS and Cloud Functions.
-      // Per-week Straight Up overrides live on `weeks/{id}.pickMode`.
+      // Per-week modes live on `weeks/{id}.pickMode` and win over the league value.
+      // League type changes go through the `setLeaguePickMode` callable, which also
+      // pins the old mode on locked/scored weeks (not writable by clients here).
       allow delete: if isCommissioner(groupId);
 
       match /members/{memberId} {

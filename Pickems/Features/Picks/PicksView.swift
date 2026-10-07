@@ -433,7 +433,16 @@ struct PicksView: View {
                 week: week,
                 isCommissioner: appState.isCommissioner,
                 games: games
-            )
+            ),
+            onSetDeadline: { (deadline: WorkspaceDeadlineKind) in
+                appState.openCommissionerDeadlineEditor(
+                    CommissionerDeadlineTarget(
+                        kind: deadline,
+                        groupId: appState.groupService.selectedGroup?.id,
+                        weekId: week.id
+                    )
+                )
+            }
         )
     }
 
