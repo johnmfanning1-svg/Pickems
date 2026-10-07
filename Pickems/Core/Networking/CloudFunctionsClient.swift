@@ -43,7 +43,7 @@ enum CloudFunctionsClient {
         request.httpBody = try JSONSerialization.data(withJSONObject: ["data": data])
 
         let (body, response) = try await URLSession.shared.data(for: request)
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let statusCode: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
         return try parse(body: body, statusCode: statusCode)
     }
 
@@ -51,10 +51,12 @@ enum CloudFunctionsClient {
     static func parse(body: Data, statusCode: Int) throws -> [String: Any] {
         let json = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
         if let error = json?["error"] as? [String: Any] {
-            let status = error["status"] as? String ?? "UNKNOWN"
-            let raw = (error["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let status: String = (error["status"] as? String) ?? "UNKNOWN"
+            let rawMessage: String = (error["message"] as? String) ?? ""
+            let raw: String = rawMessage.trimmingCharacters(in: .whitespacesAndNewlines)
             // Callables send "INTERNAL" for unexpected server errors — not useful copy.
-            let message = raw.isEmpty || raw == status ? "Something went wrong. Please try again." : raw
+            let isUseless: Bool = raw.isEmpty || raw == status
+            let message: String = isUseless ? "Something went wrong. Please try again." : raw
             throw CallableError(status: status, message: message)
         }
         guard (200..<300).contains(statusCode) else {
@@ -66,6 +68,7 @@ enum CloudFunctionsClient {
             }
             throw CallableError(status: "INTERNAL", message: "Something went wrong. Please try again.")
         }
-        return json?["result"] as? [String: Any] ?? [:]
+        let result: [String: Any]? = json?["result"] as? [String: Any]
+        return result ?? [:]
     }
 }

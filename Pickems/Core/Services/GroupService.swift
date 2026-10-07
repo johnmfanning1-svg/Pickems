@@ -1365,7 +1365,8 @@ final class GroupService {
         if let idx = groups.firstIndex(where: { $0.id == groupId }) {
             groups[idx].rules.pickDeadline = .rolling
         }
-        return result["weekChanged"] as? Bool ?? false
+        let weekChanged: Bool? = result["weekChanged"] as? Bool
+        return weekChanged ?? false
     }
 
     /// Member-mode weeks store a derived slate size (`members × Selections`). Rewrite it

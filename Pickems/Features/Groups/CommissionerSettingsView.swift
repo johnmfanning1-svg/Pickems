@@ -70,195 +70,306 @@ struct CommissionerSettingsView: View {
         return "Private leagues stay off Discover. Turn on Only commissioner can invite to hide Invite Friends for members — they will be asked to contact you instead. You still share the code from Invite Friends on the Leagues tab."
     }
 
+    // `body` is split into small pieces on purpose: as one expression (every section,
+    // alert and sheet inline) it hit "unable to type-check this expression in
+    // reasonable time" in Release archives after the rolling-lock section landed.
     var body: some View {
         NavigationStack {
-            Form {
-                CommissionerWeekAdminSections(
-                    showSelectionDeadlineSheet: $showSelectionDeadlineSheet,
-                    showPickDeadlineSheet: $showPickDeadlineSheet,
-                    showAdminGameBrowse: $showAdminGameBrowse
+            settingsFormWithSheets
+        }
+    }
+
+    // MARK: - Form
+
+    private var settingsForm: some View {
+        Form {
+            CommissionerWeekAdminSections(
+                showSelectionDeadlineSheet: $showSelectionDeadlineSheet,
+                showPickDeadlineSheet: $showPickDeadlineSheet,
+                showAdminGameBrowse: $showAdminGameBrowse
+            )
+            leagueIdentitySection
+            membersSection
+            scoringSection
+            slateConfigurationSection
+            pickemsLockSection
+            tiesSection
+            visibilitySection
+            dynastySection
+        }
+        .scrollContentBackground(.hidden)
+        .pickemsScreenBackground()
+        .navigationTitle("Commissioner Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { settingsToolbar }
+    }
+
+    @ToolbarContentBuilder
+    private var settingsToolbar: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button("Cancel") { dismiss() }
+        }
+        ToolbarItem(placement: .confirmationAction) {
+            Button("Save") { save() }
+                .fontWeight(.semibold)
+                .disabled(isSaving)
+        }
+    }
+
+    private var scoringSection: some View {
+        Section {
+            LabeledContent("League type", value: rules.pickMode.displayName)
+                .listRowBackground(PickemsColors.cardBackground)
+        } header: {
+            Text("Scoring")
+        } footer: {
+            Text("ATS grades the cover. Straight Up grades the outright winner (a tie is a push). League type is set at create. In an ATS league, use This Week to score a future week — or the current week before lock — Straight Up.")
+        }
+    }
+
+    private var slateConfigurationFooter: String {
+        rules.selectionMode == .member
+            ? "Each member selects this many games. Weekly game target = members × Selections. You’ll set a Selection deadline each week."
+            : "You choose every game for the group each week."
+    }
+
+    private var slateConfigurationSection: some View {
+        Section {
+            Picker("Who selects games", selection: $rules.selectionMode) {
+                ForEach(SelectionMode.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .listRowBackground(PickemsColors.cardBackground)
+
+            if rules.selectionMode == .member {
+                Stepper(
+                    "Selections per member: \(rules.selectionsPerMember)",
+                    value: $rules.selectionsPerMember,
+                    in: 1...10
                 )
-                leagueIdentitySection
-                membersSection
-
-                Section {
-                    LabeledContent("League type", value: rules.pickMode.displayName)
-                        .listRowBackground(PickemsColors.cardBackground)
-                } header: {
-                    Text("Scoring")
-                } footer: {
-                    Text("ATS grades the cover. Straight Up grades the outright winner (a tie is a push). League type is set at create. In an ATS league, use This Week to score a future week — or the current week before lock — Straight Up.")
-                }
-
-                Section {
-                    Picker("Who selects games", selection: $rules.selectionMode) {
-                        ForEach(SelectionMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
+                .listRowBackground(PickemsColors.cardBackground)
+            } else {
+                Stepper("Games per week: \(rules.slateSize)", value: $rules.slateSize, in: 1...20)
                     .listRowBackground(PickemsColors.cardBackground)
+            }
+        } header: {
+            sectionHeader("Slate Configuration", help: PickemsHelp.commissionerSettings)
+        } footer: {
+            Text(slateConfigurationFooter)
+        }
+    }
 
-                    if rules.selectionMode == .member {
-                        Stepper(
-                            "Selections per member: \(rules.selectionsPerMember)",
-                            value: $rules.selectionsPerMember,
-                            in: 1...10
-                        )
-                        .listRowBackground(PickemsColors.cardBackground)
-                    } else {
-                        Stepper("Games per week: \(rules.slateSize)", value: $rules.slateSize, in: 1...20)
-                            .listRowBackground(PickemsColors.cardBackground)
-                    }
-                } header: {
-                    sectionHeader("Slate Configuration", help: PickemsHelp.commissionerSettings)
-                } footer: {
-                    Text(rules.selectionMode == .member
-                        ? "Each member selects this many games. Weekly game target = members × Selections. You’ll set a Selection deadline each week."
-                        : "You choose every game for the group each week.")
-                }
+    // MARK: - Pickems Lock
 
-                Section {
-                    if liveGroup.rules.pickDeadline.isRolling {
-                        Picker("Lock mode", selection: lockModeBinding) {
-                            ForEach(DeadlinePolicy.lockModeCases) { mode in
-                                Text(mode.lockModeDisplayName).tag(mode)
-                            }
-                        }
-                        .listRowBackground(PickemsColors.cardBackground)
-                    } else {
-                        LabeledContent("Lock mode", value: DeadlinePolicy.firstKickoff.lockModeDisplayName)
-                            .listRowBackground(PickemsColors.cardBackground)
+    private var pickemsLockSection: some View {
+        Section {
+            lockModeRows
+            rollingFeedbackRows
+            latePickRows
+        } header: {
+            sectionHeader("Pickems Lock", help: PickemsHelp.pickDeadline)
+        } footer: {
+            Text(pickemsLockFooter)
+        }
+    }
 
-                        Button {
-                            beginRollingSwitch()
-                        } label: {
-                            if isSwitchingToRolling {
-                                HStack { ProgressView(); Text("Switching to rolling lock…") }
-                            } else {
-                                Label(RollingLockSwitch.buttonTitle, systemImage: "clock.arrow.circlepath")
-                            }
-                        }
-                        .buttonStyle(.borderless)
-                        .foregroundStyle(theme.accent)
-                        .disabled(isSwitchingToRolling)
-                        .listRowBackground(PickemsColors.cardBackground)
-                    }
-
-                    if let rollingStatus {
-                        Text(rollingStatus)
-                            .font(.caption)
-                            .foregroundStyle(PickemsColors.textSecondary)
-                            .listRowBackground(PickemsColors.cardBackground)
-                    }
-                    if let rollingError {
-                        Text(rollingError)
-                            .font(.caption)
-                            .foregroundStyle(PickemsColors.warning)
-                            .listRowBackground(PickemsColors.cardBackground)
-                    }
-
-                    if rules.pickDeadline != .rolling {
-                        Toggle("Allow late Pickems", isOn: $rules.allowLatePicks)
-                            .listRowBackground(PickemsColors.cardBackground)
-                        if rules.allowLatePicks {
-                            Stepper(
-                                "Late penalty: \(rules.latePickPenaltyWins) win(s)",
-                                value: $rules.latePickPenaltyWins,
-                                in: 1...3
-                            )
-                            .listRowBackground(PickemsColors.cardBackground)
-                        }
-                    }
-                } header: {
-                    sectionHeader("Pickems Lock", help: PickemsHelp.pickDeadline)
-                } footer: {
-                    Text(pickemsLockFooter)
-                }
-
-                Section {
-                    Picker("Tie breaker", selection: $rules.tieBreaker) {
-                        ForEach(TieBreakerPolicy.allCases) { policy in
-                            Text(policy.displayName).tag(policy)
-                        }
-                    }
-                    .listRowBackground(PickemsColors.cardBackground)
-
-                    Toggle("Confidence pick (2x one game)", isOn: $rules.allowConfidencePick)
-                        .listRowBackground(PickemsColors.cardBackground)
-                } header: {
-                    sectionHeader("Ties", help: PickemsHelp.tieBreaker)
-                } footer: {
-                    Text("Commissioner Override lets you rank equal records after this week is scored. Head-to-Head uses this week’s slate automatically.")
-                }
-
-                Section {
-                    Toggle("List in Discover", isOn: $isPublic)
-                        .listRowBackground(PickemsColors.cardBackground)
-                    if !isPublic {
-                        Toggle("Only commissioner can invite", isOn: $commissionerOnlyInvites)
-                            .listRowBackground(PickemsColors.cardBackground)
-                    }
-                } header: {
-                    Text("Visibility")
-                } footer: {
-                    Text(visibilityFooter)
-                }
-
-                Section {
-                    if seasonAlreadyClosed {
-                        LabeledContent("Season \(seasonYearToClose.pickemsYearString)", value: "Archived")
-                            .listRowBackground(PickemsColors.cardBackground)
-                    } else {
-                        Button(role: .destructive) {
-                            showCloseSeasonConfirm = true
-                        } label: {
-                            if appState.groupService.isClosingSeason {
-                                HStack {
-                                    ProgressView()
-                                    Text("Closing Season \(seasonYearToClose.pickemsYearString)…")
-                                }
-                            } else {
-                                Label("Close Season \(seasonYearToClose.pickemsYearString)", systemImage: "trophy.fill")
-                            }
-                        }
-                        .disabled(appState.groupService.isClosingSeason)
-                        .listRowBackground(PickemsColors.cardBackground)
-                    }
-
-                    if let closeSeasonError {
-                        Text(closeSeasonError)
-                            .font(.caption)
-                            .foregroundStyle(theme.accent)
-                            .listRowBackground(PickemsColors.cardBackground)
-                    }
-                } header: {
-                    Text("Dynasty")
-                } footer: {
-                    Text("Archives final standings and resets season W–L. Auto-close also runs mid-January via Cloud Functions.")
+    /// Rolling leagues keep the Lock mode picker; first-kickoff leagues get the
+    /// Switch to Rolling Lock action (the server-side `setRollingLock` callable).
+    @ViewBuilder
+    private var lockModeRows: some View {
+        if liveGroup.rules.pickDeadline.isRolling {
+            Picker("Lock mode", selection: lockModeBinding) {
+                ForEach(DeadlinePolicy.lockModeCases) { (mode: DeadlinePolicy) in
+                    Text(mode.lockModeDisplayName).tag(mode)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .pickemsScreenBackground()
-            .navigationTitle("Commissioner Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .fontWeight(.semibold)
-                        .disabled(isSaving)
+            .listRowBackground(PickemsColors.cardBackground)
+        } else {
+            LabeledContent("Lock mode", value: DeadlinePolicy.firstKickoff.lockModeDisplayName)
+                .listRowBackground(PickemsColors.cardBackground)
+
+            switchToRollingButton
+        }
+    }
+
+    private var switchToRollingButton: some View {
+        Button {
+            beginRollingSwitch()
+        } label: {
+            switchToRollingLabel
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(theme.accent)
+        .disabled(isSwitchingToRolling)
+        .listRowBackground(PickemsColors.cardBackground)
+    }
+
+    @ViewBuilder
+    private var switchToRollingLabel: some View {
+        if isSwitchingToRolling {
+            HStack { ProgressView(); Text("Switching to rolling lock…") }
+        } else {
+            Label(RollingLockSwitch.buttonTitle, systemImage: "clock.arrow.circlepath")
+        }
+    }
+
+    @ViewBuilder
+    private var rollingFeedbackRows: some View {
+        if let rollingStatus {
+            Text(rollingStatus)
+                .font(.caption)
+                .foregroundStyle(PickemsColors.textSecondary)
+                .listRowBackground(PickemsColors.cardBackground)
+        }
+        if let rollingError {
+            Text(rollingError)
+                .font(.caption)
+                .foregroundStyle(PickemsColors.warning)
+                .listRowBackground(PickemsColors.cardBackground)
+        }
+    }
+
+    @ViewBuilder
+    private var latePickRows: some View {
+        if rules.pickDeadline != .rolling {
+            Toggle("Allow late Pickems", isOn: $rules.allowLatePicks)
+                .listRowBackground(PickemsColors.cardBackground)
+            if rules.allowLatePicks {
+                Stepper(
+                    "Late penalty: \(rules.latePickPenaltyWins) win(s)",
+                    value: $rules.latePickPenaltyWins,
+                    in: 1...3
+                )
+                .listRowBackground(PickemsColors.cardBackground)
+            }
+        }
+    }
+
+    // MARK: - Ties / Visibility / Dynasty
+
+    private var tiesSection: some View {
+        Section {
+            Picker("Tie breaker", selection: $rules.tieBreaker) {
+                ForEach(TieBreakerPolicy.allCases) { policy in
+                    Text(policy.displayName).tag(policy)
                 }
             }
+            .listRowBackground(PickemsColors.cardBackground)
+
+            Toggle("Confidence pick (2x one game)", isOn: $rules.allowConfidencePick)
+                .listRowBackground(PickemsColors.cardBackground)
+        } header: {
+            sectionHeader("Ties", help: PickemsHelp.tieBreaker)
+        } footer: {
+            Text("Commissioner Override lets you rank equal records after this week is scored. Head-to-Head uses this week’s slate automatically.")
+        }
+    }
+
+    private var visibilitySection: some View {
+        Section {
+            Toggle("List in Discover", isOn: $isPublic)
+                .listRowBackground(PickemsColors.cardBackground)
+            if !isPublic {
+                Toggle("Only commissioner can invite", isOn: $commissionerOnlyInvites)
+                    .listRowBackground(PickemsColors.cardBackground)
+            }
+        } header: {
+            Text("Visibility")
+        } footer: {
+            Text(visibilityFooter)
+        }
+    }
+
+    private var dynastySection: some View {
+        Section {
+            closeSeasonRow
+
+            if let closeSeasonError {
+                Text(closeSeasonError)
+                    .font(.caption)
+                    .foregroundStyle(theme.accent)
+                    .listRowBackground(PickemsColors.cardBackground)
+            }
+        } header: {
+            Text("Dynasty")
+        } footer: {
+            Text("Archives final standings and resets season W–L. Auto-close also runs mid-January via Cloud Functions.")
+        }
+    }
+
+    @ViewBuilder
+    private var closeSeasonRow: some View {
+        if seasonAlreadyClosed {
+            LabeledContent("Season \(seasonYearToClose.pickemsYearString)", value: "Archived")
+                .listRowBackground(PickemsColors.cardBackground)
+        } else {
+            Button(role: .destructive) {
+                showCloseSeasonConfirm = true
+            } label: {
+                closeSeasonButtonLabel
+            }
+            .disabled(appState.groupService.isClosingSeason)
+            .listRowBackground(PickemsColors.cardBackground)
+        }
+    }
+
+    @ViewBuilder
+    private var closeSeasonButtonLabel: some View {
+        let yearString: String = seasonYearToClose.pickemsYearString
+        if appState.groupService.isClosingSeason {
+            HStack {
+                ProgressView()
+                Text("Closing Season \(yearString)…")
+            }
+        } else {
+            Label("Close Season \(yearString)", systemImage: "trophy.fill")
+        }
+    }
+
+    // MARK: - Alerts
+
+    private var rollingPromptPresented: Binding<Bool> {
+        Binding<Bool>(
+            get: { rollingPromptWeek != nil },
+            set: { (isPresented: Bool) in if !isPresented { rollingPromptWeek = nil } }
+        )
+    }
+
+    private var memberToRemovePresented: Binding<Bool> {
+        Binding<Bool>(
+            get: { memberToRemove != nil },
+            set: { (isPresented: Bool) in if !isPresented { memberToRemove = nil } }
+        )
+    }
+
+    private var memberToPromotePresented: Binding<Bool> {
+        Binding<Bool>(
+            get: { memberToPromote != nil },
+            set: { (isPresented: Bool) in if !isPresented { memberToPromote = nil } }
+        )
+    }
+
+    private var removeMemberAlertTitle: String {
+        "Remove \(memberToRemove?.displayName ?? "member")?"
+    }
+
+    private var promoteMemberAlertTitle: String {
+        "Make \(memberToPromote?.displayName ?? "member") the commissioner?"
+    }
+
+    private var closeSeasonAlertTitle: String {
+        "Close Season \(seasonYearToClose.pickemsYearString)?"
+    }
+
+    /// Rolling-lock prompt + Close Season confirm.
+    private var settingsFormWithSeasonAlerts: some View {
+        settingsForm
             .alert(
                 RollingLockSwitch.promptTitle,
-                isPresented: Binding(
-                    get: { rollingPromptWeek != nil },
-                    set: { if !$0 { rollingPromptWeek = nil } }
-                ),
+                isPresented: rollingPromptPresented,
                 presenting: rollingPromptWeek
-            ) { week in
+            ) { (week: WeekSummary) in
                 Button(RollingLockSwitch.applyNowTitle) {
                     performRollingSwitch(applyTo: week)
                 }
@@ -266,25 +377,21 @@ struct CommissionerSettingsView: View {
                     performRollingSwitch(applyTo: nil)
                 }
                 Button("Cancel", role: .cancel) {}
-            } message: { _ in
+            } message: { (_: WeekSummary) in
                 Text(RollingLockSwitch.promptMessage)
             }
-            .alert(
-                "Close Season \(seasonYearToClose.pickemsYearString)?",
-                isPresented: $showCloseSeasonConfirm
-            ) {
+            .alert(closeSeasonAlertTitle, isPresented: $showCloseSeasonConfirm) {
                 Button("Close Season", role: .destructive) { closeSeason() }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This archives \(seasonYearToClose.pickemsYearString) standings and resets everyone’s season record. This cannot be undone.")
             }
-            .alert(
-                "Remove \(memberToRemove?.displayName ?? "member")?",
-                isPresented: Binding(
-                    get: { memberToRemove != nil },
-                    set: { if !$0 { memberToRemove = nil } }
-                )
-            ) {
+    }
+
+    /// Remove member, transfer commissioner and delete league confirms.
+    private var settingsFormWithAlerts: some View {
+        settingsFormWithSeasonAlerts
+            .alert(removeMemberAlertTitle, isPresented: memberToRemovePresented) {
                 Button("Remove Member", role: .destructive) {
                     if let member = memberToRemove { removeMember(member) }
                     memberToRemove = nil
@@ -293,13 +400,7 @@ struct CommissionerSettingsView: View {
             } message: {
                 Text("They lose access to this league’s picks and standings. They can rejoin with the invite code.")
             }
-            .alert(
-                "Make \(memberToPromote?.displayName ?? "member") the commissioner?",
-                isPresented: Binding(
-                    get: { memberToPromote != nil },
-                    set: { if !$0 { memberToPromote = nil } }
-                )
-            ) {
+            .alert(promoteMemberAlertTitle, isPresented: memberToPromotePresented) {
                 Button("Transfer Commissioner", role: .destructive) {
                     if let member = memberToPromote { transferCommissioner(to: member) }
                     memberToPromote = nil
@@ -308,85 +409,113 @@ struct CommissionerSettingsView: View {
             } message: {
                 Text("You become a regular member. Only one commissioner is allowed at a time.")
             }
-            .alert(
-                "Delete this league permanently?",
-                isPresented: $showDeleteLeagueConfirm
-            ) {
+            .alert("Delete this league permanently?", isPresented: $showDeleteLeagueConfirm) {
                 Button("Delete League", role: .destructive) { deleteLeague() }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This permanently deletes the league, invite code, members, picks, standings, and season history for everyone. This cannot be undone.")
             }
+    }
+
+    // MARK: - Sheets
+
+    private var spreadEditGameBinding: Binding<SlateGame?> {
+        Binding<SlateGame?>(
+            get: { appState.picksViewModel.spreadEditGame },
+            set: { appState.picksViewModel.spreadEditGame = $0 }
+        )
+    }
+
+    private var settingsFormWithSheets: some View {
+        settingsFormWithAlerts
             .sheet(isPresented: $showSelectionDeadlineSheet) {
-                SelectionDeadlineSheet(
-                    weekLabel: appState.groupService.currentWeek?.displayLabel ?? "This week",
-                    initialDeadline: appState.groupService.currentWeek?.selectionDeadline
-                ) { deadline in
-                    appState.picksViewModel.setSelectionDeadline(deadline, appState: appState)
-                }
-                .pickemsEnvironment(appState)
+                selectionDeadlineSheet
             }
             .sheet(isPresented: $showPickDeadlineSheet) {
-                if let week = appState.groupService.currentWeek {
-                    PickDeadlineEditorSheet(
-                        weekLabel: week.displayLabel,
-                        weekStatus: week.status,
-                        initialDeadline: week.isRollingLock
-                            ? (week.remainingLockAt ?? week.effectiveWeekLockAt ?? week.pickDeadline)
-                            : week.pickDeadline,
-                        isPastDeadline: WeekTransition.arePicksFullyLocked(week),
-                        isRollingLock: week.isRollingLock,
-                        onLockRemainingNow: {
-                            appState.picksViewModel.lockRemainingGamesNow(appState: appState)
-                        }
-                    ) { deadline, reopen, unlock in
-                        appState.picksViewModel.setPickDeadline(
-                            deadline,
-                            reopenWeek: reopen,
-                            unlockMemberPicks: unlock,
-                            appState: appState
-                        )
-                    }
-                    .pickemsEnvironment(appState)
-                } else {
-                    NavigationStack {
-                        ContentUnavailableView(
-                            "No Active Week",
-                            systemImage: "calendar",
-                            description: Text("Open Commissioner Settings again after a week is selected.")
-                        )
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Close") { showPickDeadlineSheet = false }
-                            }
-                        }
-                    }
-                    .pickemsEnvironment(appState)
-                }
+                pickDeadlineSheet
             }
             .sheet(isPresented: $showAdminGameBrowse) {
-                GameBrowseView(
-                    seedGames: appState.picksViewModel.espnGames
-                ) { games in
-                    try await appState.picksViewModel.saveBrowseSelections(games, appState: appState)
-                }
-                .pickemsEnvironment(appState)
+                adminGameBrowseSheet
             }
-            .sheet(item: Binding(
-                get: { appState.picksViewModel.spreadEditGame },
-                set: { appState.picksViewModel.spreadEditGame = $0 }
-            )) { game in
-                SpreadEditorSheet(game: game) { spread, spreadTeamId in
-                    appState.picksViewModel.updateSpread(
-                        game,
-                        spread: spread,
-                        spreadTeamId: spreadTeamId,
-                        appState: appState
-                    )
-                }
-                .pickemsEnvironment(appState)
+            .sheet(item: spreadEditGameBinding) { (game: SlateGame) in
+                spreadEditorSheet(for: game)
             }
+    }
+
+    private var selectionDeadlineSheet: some View {
+        SelectionDeadlineSheet(
+            weekLabel: appState.groupService.currentWeek?.displayLabel ?? "This week",
+            initialDeadline: appState.groupService.currentWeek?.selectionDeadline
+        ) { deadline in
+            appState.picksViewModel.setSelectionDeadline(deadline, appState: appState)
         }
+        .pickemsEnvironment(appState)
+    }
+
+    @ViewBuilder
+    private var pickDeadlineSheet: some View {
+        if let week = appState.groupService.currentWeek {
+            pickDeadlineEditor(for: week)
+        } else {
+            NavigationStack {
+                ContentUnavailableView(
+                    "No Active Week",
+                    systemImage: "calendar",
+                    description: Text("Open Commissioner Settings again after a week is selected.")
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close") { showPickDeadlineSheet = false }
+                    }
+                }
+            }
+            .pickemsEnvironment(appState)
+        }
+    }
+
+    private func pickDeadlineEditor(for week: WeekSummary) -> some View {
+        let initialDeadline: Date? = week.isRollingLock
+            ? (week.remainingLockAt ?? week.effectiveWeekLockAt ?? week.pickDeadline)
+            : week.pickDeadline
+        return PickDeadlineEditorSheet(
+            weekLabel: week.displayLabel,
+            weekStatus: week.status,
+            initialDeadline: initialDeadline,
+            isPastDeadline: WeekTransition.arePicksFullyLocked(week),
+            isRollingLock: week.isRollingLock,
+            onLockRemainingNow: {
+                appState.picksViewModel.lockRemainingGamesNow(appState: appState)
+            }
+        ) { deadline, reopen, unlock in
+            appState.picksViewModel.setPickDeadline(
+                deadline,
+                reopenWeek: reopen,
+                unlockMemberPicks: unlock,
+                appState: appState
+            )
+        }
+        .pickemsEnvironment(appState)
+    }
+
+    private var adminGameBrowseSheet: some View {
+        GameBrowseView(
+            seedGames: appState.picksViewModel.espnGames
+        ) { games in
+            try await appState.picksViewModel.saveBrowseSelections(games, appState: appState)
+        }
+        .pickemsEnvironment(appState)
+    }
+
+    private func spreadEditorSheet(for game: SlateGame) -> some View {
+        SpreadEditorSheet(game: game) { spread, spreadTeamId in
+            appState.picksViewModel.updateSpread(
+                game,
+                spread: spread,
+                spreadTeamId: spreadTeamId,
+                appState: appState
+            )
+        }
+        .pickemsEnvironment(appState)
     }
 
     private var leagueIdentitySection: some View {
@@ -583,7 +712,12 @@ struct CommissionerSettingsView: View {
     /// Weeks to check for one in progress — the commissioner may be browsing another week.
     private var rollingCandidateWeeks: [WeekSummary] {
         let service = appState.groupService
-        return (service.currentWeek.map { [$0] } ?? []) + service.availableWeeks
+        var weeks: [WeekSummary] = []
+        if let current = service.currentWeek {
+            weeks.append(current)
+        }
+        weeks.append(contentsOf: service.availableWeeks)
+        return weeks
     }
 
     private func beginRollingSwitch() {
@@ -615,11 +749,12 @@ struct CommissionerSettingsView: View {
                 // Keep the unsaved form in step so Save can't write first kickoff back.
                 rules.pickDeadline = .rolling
                 rules.allowLatePicks = false
-                rollingStatus = note ?? RollingLockSwitch.successMessage(
+                let successMessage: String = RollingLockSwitch.successMessage(
                     appliedToWeek: weekChanged,
                     weekNumber: week?.weekNumber,
                     askedToApply: week != nil
                 )
+                rollingStatus = note ?? successMessage
                 PickemsHaptics.success()
             } catch {
                 rollingError = UserFacingError.message(for: error, context: .write)
