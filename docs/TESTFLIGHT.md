@@ -179,6 +179,16 @@ Each run is a fresh runner, so `xcodebuild archive` creates a new **Apple Develo
 
 Artifacts per run: the signed `.ipa` plus a dSYMs zip (30 days) and the resolve/archive/export/upload logs (14 days). TestFlight notes (`release_notes.txt`) are **not** pushed by this workflow; set What to Test in App Store Connect if needed.
 
+### Submit an uploaded build for App Review
+
+That step is a separate workflow, [`.github/workflows/submit-review.yml`](../.github/workflows/submit-review.yml). This TestFlight workflow stays upload-only. The review workflow finds the build already in App Store Connect, waits until `processingState` is `VALID`, attaches it to the iOS version, and sets What's New. `dry_run` defaults to true, which stops before creating a review submission. It uses the same `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_P8` secrets. `whats_new` is passed to the script as an environment variable.
+
+```bash
+gh workflow run submit-review.yml --ref main -f version=3.6.1 -f build=10007 -f dry_run=true -f whats_new="..."
+```
+
+Set `-f dry_run=false` only when submitting for App Review. See [APP_STORE.md](APP_STORE.md).
+
 ### Runner and cost
 
 Runs on `macos-26` with Xcode 26.6 selected via `xcode-select` (the project's iOS 26.5 deployment target needs the iOS 26.5 SDK). This repo is currently **public**, so GitHub-hosted macOS minutes are free. If the repo is ever made private, macOS minutes bill at **10x** the Linux rate against the plan's included minutes; one archive + upload is roughly 15–25 minutes.
