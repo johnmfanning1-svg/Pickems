@@ -75,6 +75,7 @@ export { detectShockTweets, runDetectShockTweets } from "./shockTweets";
 
 // Commissioner switch to rolling pick lock, optionally for the week in progress.
 export { setRollingLock } from "./rollingLock";
+export { setLeaguePickMode } from "./leaguePickMode";
 
 /** When a week flips to picking, materialize nominations into games if needed. */
 export const onWeekStatusChange = onDocumentUpdated(

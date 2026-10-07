@@ -96,6 +96,57 @@ struct WorkspaceDeadlineDisplayTests {
         #expect(!member.hasContent)
     }
 
+    // MARK: Commissioner prompt (tap opens the deadline editor)
+
+    @Test func selectionPromptIsCommissionerOnlyOnSelectionsTab() {
+        let open = week(status: .selection)
+        #expect(WorkspaceDeadlineDisplay.commissionerPrompt(kind: .selections, week: open, isCommissioner: true) == .selections)
+        #expect(WorkspaceDeadlineDisplay.commissionerPrompt(kind: .selections, week: open, isCommissioner: false) == nil)
+        #expect(WorkspaceDeadlineDisplay.commissionerPrompt(kind: .pickems, week: open, isCommissioner: true) == nil)
+    }
+
+    @Test func selectionPromptStopsOnceDeadlineIsSet() {
+        let set = week(status: .selection, selectionDeadline: now.addingTimeInterval(3600))
+        let snapshot = WorkspaceDeadlineDisplay.snapshot(kind: .selections, week: set, isCommissioner: true, games: [], now: now)
+        #expect(WorkspaceDeadlineDisplay.commissionerPrompt(kind: .selections, week: set, isCommissioner: true) == nil)
+        #expect(!snapshot.isPromptingCommissioner(for: .selections))
+        #expect(!snapshot.isPromptingCommissioner(for: .pickems))
+    }
+
+    @Test func weekZeroNeverPromptsForSelectionDeadline() {
+        let weekZero = week(status: .selection, weekNumber: 0, slateSource: CFBWeekCalendar.weekZeroSlateSource)
+        #expect(WorkspaceDeadlineDisplay.commissionerPrompt(kind: .selections, week: weekZero, isCommissioner: true) == nil)
+    }
+
+    @Test func pickemsPromptWhenOpenWithoutStoredLock() {
+        let games = [game(id: "thu", kickoff: now.addingTimeInterval(3600))]
+        let openNoLock = week(status: .picking)
+        let snapshot = WorkspaceDeadlineDisplay.snapshot(kind: .pickems, week: openNoLock, isCommissioner: true, games: games, now: now)
+        #expect(snapshot.isPromptingCommissioner(for: .pickems))
+        #expect(!snapshot.isPromptingCommissioner(for: .selections))
+
+        let member = WorkspaceDeadlineDisplay.snapshot(kind: .pickems, week: openNoLock, isCommissioner: false, games: games, now: now)
+        #expect(!member.isPromptingCommissioner(for: .pickems))
+    }
+
+    @Test func pickemsCountdownIsStaticOnceLockIsSetOrRolling() {
+        let games = [game(id: "thu", kickoff: now.addingTimeInterval(3600))]
+        let stored = week(status: .picking, pickDeadline: now.addingTimeInterval(3600))
+        let rolling = week(status: .picking, pickLockMode: .rolling)
+        let locked = week(status: .locked)
+        for candidate in [stored, rolling, locked] {
+            let snapshot = WorkspaceDeadlineDisplay.snapshot(kind: .pickems, week: candidate, isCommissioner: true, games: games, now: now)
+            #expect(!snapshot.isPromptingCommissioner(for: .pickems))
+        }
+    }
+
+    @Test func deadlineTargetMatchesOnlyItsLeague() {
+        let target = CommissionerDeadlineTarget(kind: .pickems, groupId: "g1", weekId: "2026-W5")
+        #expect(target.matches(groupId: "g1"))
+        #expect(!target.matches(groupId: "g2"))
+        #expect(CommissionerDeadlineTarget(kind: .selections, groupId: nil, weekId: nil).matches(groupId: "g2"))
+    }
+
     @Test func selectionWithoutSnapshotShowsFirstKickoff() {
         let first = now.addingTimeInterval(3 * 3600)
         let last = now.addingTimeInterval(30 * 3600)

@@ -15,7 +15,7 @@ extension AppState {
         pickMode(for: groupService.currentWeek)
     }
 
-    /// League type, with an optional per-week Straight Up override on ATS leagues.
+    /// The week's stored scoring mode, else the league type (`WeekSummary.resolvedPickMode`).
     func pickMode(for week: WeekSummary?) -> PickMode {
         let league = groupService.selectedGroup?.rules.pickMode ?? .ats
         return week?.resolvedPickMode(leagueMode: league) ?? league

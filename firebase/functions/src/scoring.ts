@@ -39,11 +39,19 @@ export function resolvePickMode(value: unknown): PickMode {
   return value === "straightUp" ? "straightUp" : "ats";
 }
 
-/** Week override on ATS leagues. Straight Up leagues stay Straight Up. */
+/** True for a stored week/league value that names a scoring mode. */
+export function isPickMode(value: unknown): value is PickMode {
+  return value === "ats" || value === "straightUp";
+}
+
+/**
+ * A week's stored `pickMode` wins; a week without one inherits the league.
+ * Commissioners change league type from Commissioner Settings
+ * (`setLeaguePickMode`), which pins the old mode on weeks that must keep it
+ * (locked/scored weeks, and the current week when the change starts next week).
+ */
 export function resolveWeekPickMode(weekPickMode: unknown, leaguePickMode: unknown): PickMode {
-  const league = resolvePickMode(leaguePickMode);
-  if (league === "straightUp") return "straightUp";
-  return resolvePickMode(weekPickMode ?? league);
+  return isPickMode(weekPickMode) ? weekPickMode : resolvePickMode(leaguePickMode);
 }
 
 /** Keep scoring on `groups.memberIds` so leftover member docs cannot stay on the board. */

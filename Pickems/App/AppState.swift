@@ -30,6 +30,9 @@ final class AppState {
     var presentedSheet: AppSheet?
     /// Set by selection-deadline push; Leagues tab opens Commissioner Settings.
     var pendingCommissionerSettings = false
+    /// Deadline editor Commissioner Settings should open once it appears
+    /// (countdown prompt tap or `set_selection_deadline` push).
+    var pendingDeadlineEditor: CommissionerDeadlineTarget?
     /// League to select when a push/deep link includes `groupId`.
     var pendingDeepLinkGroupId: String?
     /// Set when Firebase failed to boot; RootView can show a non-crash error screen.
@@ -45,6 +48,16 @@ final class AppState {
 
     func dismissSheet() {
         presentedSheet = nil
+    }
+
+    /// Opens Commissioner Settings straight into the Selection or Pickems deadline
+    /// editor for `target`. Only for the commissioner of the selected league;
+    /// anyone else gets nothing (the prompt rows are commissioner-only anyway).
+    func openCommissionerDeadlineEditor(_ target: CommissionerDeadlineTarget) {
+        guard isCommissioner, let groupId = groupService.selectedGroup?.id,
+              target.matches(groupId: groupId) else { return }
+        pendingDeadlineEditor = target
+        present(.commissionerSettings)
     }
 
     /// Waits out a Selection deadline that is already inside the next day.
@@ -217,6 +230,7 @@ final class AppState {
             selectedTab = .leagues
         case .openSelectionDeadline(let groupId):
             selectDeepLinkGroup(groupId)
+            pendingDeadlineEditor = CommissionerDeadlineTarget(kind: .selections, groupId: groupId, weekId: nil)
             pendingCommissionerSettings = true
             selectedTab = .leagues
         }
@@ -235,6 +249,7 @@ final class AppState {
 
     func resetSession() {
         presentedSheet = nil
+        pendingDeadlineEditor = nil
         groupService.resetSession()
         pickService.resetSession()
         picksViewModel.resetForSession()

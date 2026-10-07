@@ -5,8 +5,9 @@ struct GroupPicksView: View {
     var forceNominatingDisplay: Bool = false
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
-    /// Collapse-by-exception keeps sections default-open without seeding from async data.
-    @State private var collapsedUserIds: Set<String> = []
+    /// Taps recorded against the default, so no seeding from async data.
+    /// Default: collapsed on the Selections tab during Selections, open elsewhere.
+    @State private var expansion = MemberSectionExpansion()
     @State private var isRefreshingOwnPick = false
     @State private var ownPickLoadAttempted = false
     @State private var isRefreshing = false
@@ -21,6 +22,13 @@ struct GroupPicksView: View {
 
     private var commissionerId: String? {
         appState.groupService.selectedGroup?.commissionerId
+    }
+
+    private var sectionsStartCollapsed: Bool {
+        MemberSectionExpansion.startsCollapsed(
+            forceNominatingDisplay: forceNominatingDisplay,
+            weekStatus: week?.status
+        )
     }
 
     /// Building the slate (nominations / commissioner adds) — not spread-picking yet.
@@ -246,7 +254,7 @@ struct GroupPicksView: View {
 
     @ViewBuilder
     private func memberSection(_ member: GroupMember) -> some View {
-        let isCollapsed = collapsedUserIds.contains(member.id)
+        let isCollapsed = expansion.isCollapsed(member.id, defaultCollapsed: sectionsStartCollapsed)
         let pick = picksByUserId[member.id]
         let done = isDone(member.id)
         let total = expectedTotal(for: member.id)
@@ -257,11 +265,7 @@ struct GroupPicksView: View {
         VStack(spacing: 0) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    if isCollapsed {
-                        collapsedUserIds.remove(member.id)
-                    } else {
-                        collapsedUserIds.insert(member.id)
-                    }
+                    expansion.toggle(member.id, defaultCollapsed: sectionsStartCollapsed)
                 }
             } label: {
                 HStack(spacing: 10) {
