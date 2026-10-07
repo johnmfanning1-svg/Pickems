@@ -7,6 +7,9 @@ struct GroupsView: View {
     @State private var showLeaveConfirm = false
     @State private var leagueActionError: String?
     @State private var isRefreshing = false
+    /// Lives on the tab, not `LeaderboardView`. Week snapshots replace `currentWeek`
+    /// and can drop the leaderboard for a frame; `@State` there would snap back to This Week.
+    @State private var leaderboardManual = LeaderboardScope.ManualChoice()
 
     var body: some View {
         NavigationStack {
@@ -25,7 +28,7 @@ struct GroupsView: View {
                         if let group = appState.groupService.selectedGroup {
                             totalsHero(group)
 
-                            LeaderboardView()
+                            LeaderboardView(scope: leaderboardScopeBinding)
 
                             thisWeekCard(group)
 
@@ -70,10 +73,48 @@ struct GroupsView: View {
             .onChange(of: appState.pendingCommissionerSettings) { _, pending in
                 presentPendingCommissionerSettings(pending)
             }
+            .onChange(of: appState.groupService.selectedGroup?.id) { (previous: String?, next: String?) in
+                adoptLeaderboardLeagueChange(from: previous, to: next)
+            }
             .onAppear {
                 presentPendingCommissionerSettings(appState.pendingCommissionerSettings)
             }
         }
+    }
+
+    /// Derived so the first paint, a league chip, and a week-status change all
+    /// use `defaultScope` unless the member already moved the picker on this league.
+    private var leaderboardScope: LeaderboardScope.Scope {
+        LeaderboardScope.resolvedScope(
+            week: appState.groupService.currentWeek,
+            leagueId: appState.groupService.selectedGroup?.id,
+            manual: leaderboardManual
+        )
+    }
+
+    private var leaderboardScopeBinding: Binding<LeaderboardScope.Scope> {
+        Binding(
+            get: { leaderboardScope },
+            set: { (newScope: LeaderboardScope.Scope) in
+                recordManualLeaderboardScope(newScope)
+            }
+        )
+    }
+
+    private func recordManualLeaderboardScope(_ newScope: LeaderboardScope.Scope) {
+        guard newScope != leaderboardScope else { return }
+        leaderboardManual = LeaderboardScope.ManualChoice(
+            leagueId: appState.groupService.selectedGroup?.id,
+            scope: newScope
+        )
+    }
+
+    private func adoptLeaderboardLeagueChange(from previous: String?, to next: String?) {
+        leaderboardManual = LeaderboardScope.ManualChoice.afterLeagueChange(
+            from: previous,
+            to: next,
+            current: leaderboardManual
+        )
     }
 
     private func presentPendingCommissionerSettings(_ pending: Bool) {
@@ -639,12 +680,27 @@ struct GroupChip: View {
     }
 }
 
+private struct LeaderboardScopePicker: View {
+    @Binding var scope: LeaderboardScope.Scope
+
+    var body: some View {
+        Picker("Standings", selection: $scope) {
+            Text("This Week").tag(LeaderboardScope.Scope.thisWeek)
+            Text("Season").tag(LeaderboardScope.Scope.season)
+        }
+        .pickerStyle(.segmented)
+        .accessibilityLabel("Standings period")
+    }
+}
+
 struct LeaderboardView: View {
     static let previewLimit = 10
 
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
-    @State private var showWeekly = true
+    @Binding var scope: LeaderboardScope.Scope
+
+    private var showWeekly: Bool { scope.showsWeeklyRecord }
 
     private var allEntries: [StandingEntry] {
         appState.rankedStandings(weekly: showWeekly)
@@ -672,78 +728,73 @@ struct LeaderboardView: View {
         return showWeekly ? first.weeklyWins : first.seasonWins
     }
 
+    private var standingsSubtitle: String {
+        if showWeekly {
+            return "This week's Pickem record"
+        }
+        return "Season standings"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            PickemsSectionHeader(
-                title: "Leaderboard",
-                subtitle: showWeekly ? "This week's Pickem record" : "Season standings",
-                help: PickemsHelp.leaderboard(for: appState.selectedPickMode)
-            )
-
-            Picker("Standings", selection: $showWeekly) {
-                Text("This Week").tag(true)
-                Text("Season").tag(false)
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .accessibilityLabel("Standings period")
-
+            leaderboardHeader
+            LeaderboardScopePicker(scope: $scope)
+                .padding(.horizontal)
             if showsFullRanking {
                 fullRankingLink
             }
-
-            if allEntries.isEmpty {
-                EmptyStateView(
-                    icon: "chart.bar.fill",
-                    title: "No Standings Yet",
-                    message: "Invite members to see an interim ranking by join order.",
-                    help: PickemsHelp.leaderboard(for: appState.selectedPickMode)
-                )
-            } else {
-                ForEach(previewEntries) { entry in
-                    LeaderboardStandingRow(
-                        entry: entry,
-                        showWeekly: showWeekly,
-                        isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
-                        canCompare: entry.id != appState.currentUserId,
-                        leaderWins: leaderWins
-                    )
-                }
-            }
+            standingsBody
         }
         .task(id: appState.groupService.currentWeek?.id) {
-            guard let group = appState.groupService.selectedGroup,
-                  let week = appState.groupService.currentWeek else { return }
-            await appState.pickService.loadAllPicks(groupId: group.id, weekId: week.id)
+            await loadWeekPicks()
         }
+    }
+
+    private var leaderboardHeader: some View {
+        PickemsSectionHeader(
+            title: "Leaderboard",
+            subtitle: standingsSubtitle,
+            help: PickemsHelp.leaderboard(for: appState.selectedPickMode)
+        )
+    }
+
+    @ViewBuilder
+    private var standingsBody: some View {
+        if allEntries.isEmpty {
+            EmptyStateView(
+                icon: "chart.bar.fill",
+                title: "No Standings Yet",
+                message: "Invite members to see an interim ranking by join order.",
+                help: PickemsHelp.leaderboard(for: appState.selectedPickMode)
+            )
+        } else {
+            standingsRows
+        }
+    }
+
+    private var standingsRows: some View {
+        ForEach(previewEntries) { (entry: StandingEntry) in
+            LeaderboardStandingRow(
+                entry: entry,
+                showWeekly: showWeekly,
+                isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
+                canCompare: entry.id != appState.currentUserId,
+                leaderWins: leaderWins
+            )
+        }
+    }
+
+    private func loadWeekPicks() async {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek else { return }
+        await appState.pickService.loadAllPicks(groupId: group.id, weekId: week.id)
     }
 
     private var fullRankingLink: some View {
         NavigationLink {
-            FullLeaderboardView(showWeekly: $showWeekly)
+            FullLeaderboardView(scope: $scope)
         } label: {
-            PickemsCard {
-                HStack(spacing: 12) {
-                    Image(systemName: "list.number")
-                        .font(.title3)
-                        .foregroundStyle(theme.accent)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Full ranking")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(theme.accent)
-                        Text("All \(rosterCount) members")
-                            .font(.caption)
-                            .foregroundStyle(PickemsColors.textSecondary)
-                    }
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(PickemsColors.textSecondary)
-                        .accessibilityHidden(true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            fullRankingLabel
         }
         .buttonStyle(.plain)
         .padding(.horizontal)
@@ -751,11 +802,38 @@ struct LeaderboardView: View {
         .accessibilityHint("See every member in this league")
         .accessibilityValue("\(rosterCount) members")
     }
+
+    private var fullRankingLabel: some View {
+        PickemsCard {
+            HStack(spacing: 12) {
+                Image(systemName: "list.number")
+                    .font(.title3)
+                    .foregroundStyle(theme.accent)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Full ranking")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(theme.accent)
+                    Text("All \(rosterCount) members")
+                        .font(.caption)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .accessibilityHidden(true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
 }
 
 struct FullLeaderboardView: View {
     @Environment(AppState.self) private var appState
-    @Binding var showWeekly: Bool
+    @Binding var scope: LeaderboardScope.Scope
+
+    private var showWeekly: Bool { scope.showsWeeklyRecord }
 
     private var entries: [StandingEntry] {
         appState.rankedStandings(weekly: showWeekly)
@@ -770,33 +848,35 @@ struct FullLeaderboardView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Picker("Standings", selection: $showWeekly) {
-                    Text("This Week").tag(true)
-                    Text("Season").tag(false)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.top, 8)
-                .accessibilityLabel("Standings period")
-
-                ForEach(entries) { entry in
-                    LeaderboardStandingRow(
-                        entry: entry,
-                        showWeekly: showWeekly,
-                        isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
-                        canCompare: entry.id != appState.currentUserId,
-                        leaderWins: leaderWins
-                    )
-                }
-            }
-            .padding(.vertical, 8)
+            fullRankingList
         }
         .pickemsScreenBackground()
         .navigationTitle("Full Ranking")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             HelpToolbarItem(topic: PickemsHelp.leaderboard(for: appState.selectedPickMode))
+        }
+    }
+
+    private var fullRankingList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            LeaderboardScopePicker(scope: $scope)
+                .padding(.horizontal)
+                .padding(.top, 8)
+            fullRankingRows
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var fullRankingRows: some View {
+        ForEach(entries) { (entry: StandingEntry) in
+            LeaderboardStandingRow(
+                entry: entry,
+                showWeekly: showWeekly,
+                isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
+                canCompare: entry.id != appState.currentUserId,
+                leaderWins: leaderWins
+            )
         }
     }
 }

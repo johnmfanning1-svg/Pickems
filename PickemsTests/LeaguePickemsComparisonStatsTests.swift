@@ -74,6 +74,27 @@ struct LeaguePickemsComparisonStatsTests {
         )
     }
 
+    @Test func leaderboardCaptionUsesEvenWhenNoGamesAreDecided() {
+        #expect(
+            StandingsGap.leaderboardCaption(rank: 1, wins: 0, losses: 0, leaderWins: 0) == "Even"
+        )
+        #expect(
+            StandingsGap.leaderboardCaption(rank: 1, wins: nil, losses: nil, leaderWins: nil) == "Even"
+        )
+        #expect(
+            StandingsGap.leaderboardCaption(rank: 2, wins: 0, losses: 0, leaderWins: nil) == "Even"
+        )
+        #expect(
+            StandingsGap.leaderboardCaption(rank: 2, wins: 0, losses: 0, leaderWins: 0) == "Even"
+        )
+        #expect(
+            StandingsGap.leaderboardCaption(rank: 4, wins: 0, losses: nil, leaderWins: 0) == "Even"
+        )
+        #expect(
+            StandingsGap.leaderboardCaption(rank: 4, wins: 0, losses: 0, leaderWins: 3) == "-3 GB"
+        )
+    }
+
     @Test func leaderboardCaptionShowsGamesBackAfterFirst() {
         #expect(
             StandingsGap.leaderboardCaption(rank: 2, wins: 7, losses: 12, leaderWins: 12)
