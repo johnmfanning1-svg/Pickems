@@ -22,7 +22,7 @@ import {
   arrayRemove,
   increment,
 } from "firebase/firestore";
-import { afterAll, afterEach, beforeAll, describe, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -680,7 +680,15 @@ describe("audit hardening (inviteCodes, member fields, pick delete, group create
 });
 
 describe("commissioner nomination management", () => {
-  function nomination(submittedBy, id = "nom1") {
+  function futureKickoff() {
+    return new Date(Date.now() + 3 * 60 * 60 * 1000);
+  }
+
+  function pastKickoff() {
+    return new Date(Date.now() - 60 * 1000);
+  }
+
+  function nomination(submittedBy, id = "nom1", kickoff = futureKickoff()) {
     return {
       id,
       submittedBy,
@@ -692,7 +700,7 @@ describe("commissioner nomination management", () => {
       homeTeamName: "Alabama",
       awayTeamId: "61",
       awayTeamName: "Georgia",
-      kickoff: new Date(),
+      kickoff,
       createdAt: new Date(),
     };
   }
@@ -755,9 +763,89 @@ describe("commissioner nomination management", () => {
     });
     const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
     await assertSucceeds(
-      updateDoc(doc(commishDb, ...path), { espnEventId: "401000002", spread: 7 })
+      updateDoc(doc(commishDb, ...path), {
+        espnEventId: "401000002",
+        spread: 7,
+        kickoff: futureKickoff(),
+      })
     );
     await assertSucceeds(deleteDoc(doc(commishDb, ...path)));
+  });
+
+  it("lets a member create a selection that has not kicked off", async () => {
+    await putWeekInSelection();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertSucceeds(
+      setDoc(
+        doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "open-game"),
+        nomination(MEMBER, "open-game", futureKickoff())
+      )
+    );
+  });
+
+  it("lets a super admin repair a selection whose kickoff is already past", async () => {
+    await putWeekInSelection();
+    const adminDb = adminCtx().firestore();
+    await assertSucceeds(
+      setDoc(
+        doc(adminDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "repair"),
+        nomination(MEMBER, "repair", pastKickoff())
+      )
+    );
+  });
+
+  it("rejects creating a selection whose kickoff is already past", async () => {
+    await putWeekInSelection();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertFails(
+      setDoc(
+        doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "played"),
+        nomination(MEMBER, "played", pastKickoff())
+      )
+    );
+    await assertFails(
+      setDoc(
+        doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "played-by-commish"),
+        nomination(MEMBER, "played-by-commish", pastKickoff())
+      )
+    );
+  });
+
+  it("rejects a selection create with no kickoff", async () => {
+    await putWeekInSelection();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const data = nomination(MEMBER, "missing-kickoff");
+    delete data.kickoff;
+    await assertFails(
+      setDoc(
+        doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "missing-kickoff"),
+        data
+      )
+    );
+  });
+
+  it("leaves an already-saved past-kickoff selection in place", async () => {
+    await putWeekInSelection();
+    const path = ["groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "already-played"];
+    const saved = nomination(MEMBER, "already-played", pastKickoff());
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), ...path), saved);
+    });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const snap = await assertSucceeds(getDoc(doc(memberDb, ...path)));
+    expect(snap.exists()).toBe(true);
+    expect(snap.data().espnEventId).toBe(saved.espnEventId);
+    await assertSucceeds(updateDoc(doc(memberDb, ...path), { spread: 10 }));
+    await assertFails(
+      updateDoc(doc(memberDb, ...path), {
+        espnEventId: "401000099",
+        kickoff: pastKickoff(),
+      })
+    );
+    const after = await assertSucceeds(getDoc(doc(memberDb, ...path)));
+    expect(after.data().espnEventId).toBe(saved.espnEventId);
+    expect(after.data().spread).toBe(10);
   });
 });
 
