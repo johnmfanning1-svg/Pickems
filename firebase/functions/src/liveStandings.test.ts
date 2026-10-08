@@ -31,6 +31,19 @@ describe("shouldRefreshLiveStandings", () => {
     expect(shouldRefreshLiveStandings({ ...base, standingsWeekNumber: undefined })).toBe(true);
   });
 
+  it("still refreshes a stale board on a self-heal pass with no new final", () => {
+    // The board updates. Lead alerts stay off because this pass did not
+    // finalize a game, so the caller hands refresh an empty changedGameIds.
+    expect(
+      shouldRefreshLiveStandings({
+        ...base,
+        weekStatus: "picking",
+        anyFinalizedThisPass: false,
+        standingsWeekNumber: 3,
+      })
+    ).toBe(true);
+  });
+
   it("does not rewrite every pass once standings match this week", () => {
     expect(shouldRefreshLiveStandings(base)).toBe(false);
   });

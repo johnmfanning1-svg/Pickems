@@ -1153,3 +1153,27 @@ describe("P0: invite join, season record, lock snapshot", () => {
     await assertFails(updateDoc(pick, { picks: { game1: "home" }, isLocked: false }));
   });
 });
+
+describe("lead alert dedupe", () => {
+  it("denies every client read and write of leadAlerts", async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID, "leadAlerts", MEMBER),
+        { lastWins: 1, lastSentAt: new Date(), count: 1 }
+      );
+    });
+    const contexts = [
+      testEnv.authenticatedContext(MEMBER),
+      testEnv.authenticatedContext(COMMISH),
+      adminCtx(),
+      testEnv.unauthenticatedContext(),
+    ];
+    for (const ctx of contexts) {
+      const ref = doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID, "leadAlerts", MEMBER);
+      await assertFails(getDoc(ref));
+      await assertFails(setDoc(ref, { lastWins: 9, count: 2 }));
+      await assertFails(updateDoc(ref, { count: 3 }));
+    }
+  });
+});

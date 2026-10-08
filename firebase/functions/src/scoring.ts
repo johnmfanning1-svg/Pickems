@@ -13,6 +13,9 @@ export interface SlateGameDoc {
   homeScore?: number | null;
   awayScore?: number | null;
   winnerTeamId?: string | null;
+  kickoff?: unknown;
+  /** Stamped in the same write that first moves this game to `final`. */
+  finalNotifiedAt?: unknown;
 }
 
 export interface MemberDoc {

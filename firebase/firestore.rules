@@ -491,6 +491,13 @@ service cloud.firestore {
           allow delete: if isCommissioner(groupId)
             || (isSignedIn() && request.auth.uid == userId);
         }
+
+        // Lead-alert dedupe. lockAndScoreWeeks writes these with the Admin SDK
+        // (which bypasses rules) before sending "You took the lead". Clients
+        // must not read or forge a claim.
+        match /leadAlerts/{userId} {
+          allow read, write: if false;
+        }
       }
 
       match /standings/{standingId} {

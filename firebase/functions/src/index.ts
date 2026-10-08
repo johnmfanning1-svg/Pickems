@@ -44,9 +44,11 @@ import {
   selectionWeekReadyToOpen,
   pickemsOpenSkipReason,
   firstKickoffMillis,
+  gameIsLocked,
   type PickemsOpenSkipReason,
 } from "./pickLock";
 import { shouldRefreshLiveStandings } from "./liveStandings";
+import { shouldClaimLeadAlert, shouldNotifyGameFinal, tookTheLeadRecipients } from "./leadAlert";
 
 initializeApp();
 const db = getFirestore();
@@ -525,6 +527,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
       }
 
       let anyFinalizedThisPass = false;
+      const changedGameIds = new Set<string>();
       const updatedGames: SlateGameDoc[] = [];
       for (const gameDoc of gamesSnap.docs) {
         const game = { id: gameDoc.id, ...gameDoc.data() } as unknown as SlateGameDoc;
@@ -541,7 +544,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
 
         const prevStatus = game.status;
         const nextStatus = nextGameStatus(game.status, parsed);
-        const patch: Partial<SlateGameDoc> = { status: nextStatus };
+        const patch: Record<string, unknown> = { status: nextStatus };
         if (parsed.homeScore != null) patch.homeScore = parsed.homeScore;
         if (parsed.awayScore != null) patch.awayScore = parsed.awayScore;
         if (
@@ -552,10 +555,35 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
           patch.winnerTeamId = coveredTeamId(game, parsed.homeScore, parsed.awayScore, pickMode);
         }
         if (slateGameNeedsWrite(game, nextStatus, parsed)) {
-          await gameDoc.ref.update(patch);
-          if (prevStatus !== "final" && nextStatus === "final") {
-            anyFinalizedThisPass = true;
-            await notifyGameFinal(groupId, weekId, { ...game, ...patch } as SlateGameDoc, pickMode);
+          const transitioningToFinal = prevStatus !== "final" && nextStatus === "final";
+          let notifyFinal = false;
+          if (transitioningToFinal) {
+            notifyFinal = await db.runTransaction(async (tx) => {
+              const fresh = await tx.get(gameDoc.ref);
+              const claim = shouldNotifyGameFinal({
+                prevStatus: fresh.get("status") ?? prevStatus,
+                nextStatus,
+                finalNotifiedAt: fresh.get("finalNotifiedAt"),
+              });
+              const update: Record<string, unknown> = { ...patch };
+              if (claim) update.finalNotifiedAt = FieldValue.serverTimestamp();
+              tx.update(gameDoc.ref, update);
+              return claim;
+            });
+          } else {
+            await gameDoc.ref.update(patch);
+          }
+          changedGameIds.add(game.id);
+          if (transitioningToFinal) anyFinalizedThisPass = true;
+          if (notifyFinal) {
+            await notifyGameFinal(
+              groupId,
+              weekId,
+              { ...game, ...patch } as SlateGameDoc,
+              pickMode,
+              week,
+              now
+            );
           }
         }
         updatedGames.push({ ...game, ...patch } as SlateGameDoc);
@@ -582,7 +610,17 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
           standingsWeekNumber,
         });
         if (refresh) {
-          await refreshLiveStandings(groupId, weekId, week.weekNumber as number, updatedGames, pickMode);
+          // A self-heal rewrite (no game finalized this pass) still updates the
+          // board, but an empty changed set cannot take anyone into the lead.
+          await refreshLiveStandings(
+            groupId,
+            weekId,
+            week.weekNumber as number,
+            updatedGames,
+            pickMode,
+            anyFinalizedThisPass ? changedGameIds : new Set<string>(),
+            now
+          );
         }
       }
     }
@@ -593,8 +631,20 @@ async function notifyGameFinal(
   groupId: string,
   weekId: string,
   game: SlateGameDoc,
-  pickMode: PickMode
+  pickMode: PickMode,
+  week: {
+    pickLockMode?: unknown;
+    remainingLockAt?: unknown;
+    pickDeadline?: unknown;
+    gameKickoffs?: Record<string, unknown>;
+  },
+  nowMs: number
 ): Promise<void> {
+  if (!gameIsLocked(week, game.id, game.kickoff, nowMs)) {
+    logger.info("game_final", { groupId, weekId, gameId: game.id, decision: "skip_unlocked" });
+    return;
+  }
+
   const picksSnap = await db
     .collection("groups")
     .doc(groupId)
@@ -634,7 +684,9 @@ async function refreshLiveStandings(
   weekId: string,
   weekNumber: number,
   games: SlateGameDoc[],
-  pickMode: PickMode = "ats"
+  pickMode: PickMode = "ats",
+  changedGameIds: ReadonlySet<string> = new Set(),
+  nowMs: number = Date.now()
 ): Promise<void> {
   const [membersSnap, picksSnap, standingsSnap, groupSnap, weekSnap] = await Promise.all([
     db.collection("groups").doc(groupId).collection("members").get(),
@@ -644,9 +696,16 @@ async function refreshLiveStandings(
     db.collection("groups").doc(groupId).collection("weeks").doc(weekId).get(),
   ]);
 
-  const previousRanks = new Map<string, number>();
-  const prev = standingsSnap.data()?.entries as Array<{ id: string; rank: number }> | undefined;
-  prev?.forEach((e) => previousRanks.set(e.id, e.rank));
+  const standingsData = standingsSnap.data();
+  const storedEntries = standingsData?.entries;
+  const previous = standingsData
+    ? {
+        weekNumber: standingsData.weekNumber as unknown,
+        entries: Array.isArray(storedEntries)
+          ? (storedEntries as Array<{ id: string; weeklyWins: number }>)
+          : [],
+      }
+    : undefined;
 
   const members = membersOnRoster(
     membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc)),
@@ -696,17 +755,47 @@ async function refreshLiveStandings(
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-  for (const entry of ranked) {
-    const prevRank = previousRanks.get(entry.id);
-    if (prevRank != null && prevRank > 1 && entry.rank === 1) {
-      await sendToUser(
-        entry.id,
-        "You took the lead",
-        "You're #1 on the live board.",
-        "took_the_lead",
-        { groupId, weekId }
-      );
-    }
+  const weekData = weekSnap.data() ?? {};
+  const recipients = tookTheLeadRecipients({
+    weekNumber,
+    week: weekData,
+    current: ranked.map((entry) => ({ id: entry.id, weeklyWins: entry.weeklyWins })),
+    previous,
+    games,
+    changedGameIds,
+    nowMs,
+  });
+
+  for (const userId of recipients) {
+    const weeklyWins = ranked.find((entry) => entry.id === userId)?.weeklyWins ?? 0;
+    const alertRef = db
+      .collection("groups")
+      .doc(groupId)
+      .collection("weeks")
+      .doc(weekId)
+      .collection("leadAlerts")
+      .doc(userId);
+    const decision = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(alertRef);
+      const existing = snap.exists ? snap.data() : undefined;
+      if (!shouldClaimLeadAlert(existing, weeklyWins, nowMs)) return "skip" as const;
+      const priorCount = existing && typeof existing.count === "number" ? existing.count : 0;
+      tx.set(alertRef, {
+        lastWins: weeklyWins,
+        lastSentAt: FieldValue.serverTimestamp(),
+        count: priorCount + 1,
+      });
+      return "send" as const;
+    });
+    logger.info("took_the_lead", { groupId, weekId, userId, weeklyWins, decision });
+    if (decision !== "send") continue;
+    await sendToUser(
+      userId,
+      "You took the lead",
+      "You're #1 on the live board.",
+      "took_the_lead",
+      { groupId, weekId }
+    );
   }
 }
 
