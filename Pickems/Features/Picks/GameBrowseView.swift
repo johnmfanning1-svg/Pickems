@@ -26,6 +26,8 @@ struct GameBrowseView: View {
     @State private var selected: [ESPNGame] = []
     @State private var isSaving = false
     @State private var saveError: String?
+    /// Refreshed on a short timer so a game that kicks off while this sheet is open greys out.
+    @State private var now = Date()
 
     init(
         seedGames: [ESPNGame] = [],
@@ -125,25 +127,7 @@ struct GameBrowseView: View {
                 }
 
                 List(filteredGames) { game in
-                    let isNominated = nominatedEventIds.contains(game.espnEventId)
-                    let isDraftSelected = selectedEventIds.contains(game.espnEventId)
-                    let nominatorName = nominatorNamesByEventId[game.espnEventId]
-                    Button {
-                        toggle(game, isNominated: isNominated)
-                    } label: {
-                        GameBrowseRow(
-                            game: game,
-                            isFavoriteHighlight: isFavoriteGame(game),
-                            isNominated: isNominated,
-                            isDraftSelected: isDraftSelected,
-                            nominatorName: nominatorName
-                        )
-                    }
-                    .opacity(isNominated || !hasSelectableSlots ? 0.45 : 1)
-                    .disabled(isNominated || isSaving || !hasSelectableSlots)
-                    .allowsHitTesting(!isNominated && !isSaving && hasSelectableSlots)
-                    .accessibilityRemoveTraits(isNominated ? .isButton : [])
-                    .listRowBackground(PickemsColors.cardBackground)
+                    browseRow(game)
                 }
                 .scrollContentBackground(.hidden)
                 .contentMargins(.bottom, 88, for: .scrollContent)
@@ -185,8 +169,12 @@ struct GameBrowseView: View {
                 saveFooter
             }
             .task { await refreshBoard() }
+            .task { await trackKickoffClock() }
             .onChange(of: nominatedEventIds) { _, taken in
                 selected.removeAll { taken.contains($0.espnEventId) }
+            }
+            .onChange(of: now) { _, instant in
+                rejectDraftsThatKickedOff(at: instant)
             }
         }
         .interactiveDismissDisabled(loading || isSaving)
@@ -262,11 +250,58 @@ struct GameBrowseView: View {
         return "\(selected.count) of \(selectionLimit) selected. Save when you're done."
     }
 
+    private func browseRow(_ game: ESPNGame) -> some View {
+        let nominated = nominatedEventIds.contains(game.espnEventId)
+        return GameBrowsePickRow(
+            game: game,
+            isFavoriteHighlight: isFavoriteGame(game),
+            isNominated: nominated,
+            isDraftSelected: selectedEventIds.contains(game.espnEventId),
+            isKickedOff: SelectionKickoffGate.hasKickedOff(game, now: now),
+            nominatorName: nominatorNamesByEventId[game.espnEventId],
+            hasSelectableSlots: hasSelectableSlots,
+            isSaving: isSaving,
+            onTap: { toggle(game, isNominated: nominated) }
+        )
+    }
+
+    private func trackKickoffClock() async {
+        while !Task.isCancelled {
+            do {
+                try await Task.sleep(nanoseconds: 5_000_000_000)
+            } catch {
+                return
+            }
+            now = Date()
+        }
+    }
+
+    /// Drops draft picks that kicked off while the sheet was open and explains why.
+    private func rejectDraftsThatKickedOff(at instant: Date) {
+        let kicked = selected.filter { SelectionKickoffGate.hasKickedOff($0, now: instant) }
+        guard !kicked.isEmpty else { return }
+        let ids = Set(kicked.map(\.espnEventId))
+        selected.removeAll { ids.contains($0.espnEventId) }
+        saveError = SelectionKickoffGate.rejectionMessage(
+            matchups: kicked.map { SelectionKickoffGate.matchupLabel($0) }
+        )
+        PickemsHaptics.warning()
+    }
+
     private func toggle(_ game: ESPNGame, isNominated: Bool) {
         guard hasSelectableSlots, !isNominated, !isSaving else { return }
         if let idx = selected.firstIndex(where: { $0.espnEventId == game.espnEventId }) {
             selected.remove(at: idx)
             PickemsHaptics.selection()
+            return
+        }
+        let tappedAt = Date()
+        if SelectionKickoffGate.hasKickedOff(game, now: tappedAt) {
+            now = tappedAt
+            saveError = SelectionKickoffGate.rejectionMessage(
+                matchups: [SelectionKickoffGate.matchupLabel(game)]
+            )
+            PickemsHaptics.warning()
             return
         }
         if selected.count >= selectionLimit {
@@ -283,6 +318,12 @@ struct GameBrowseView: View {
 
     private func save() {
         guard !selected.isEmpty, !isSaving else { return }
+        let savedAt = Date()
+        if selected.contains(where: { SelectionKickoffGate.hasKickedOff($0, now: savedAt) }) {
+            rejectDraftsThatKickedOff(at: savedAt)
+            if now != savedAt { now = savedAt }
+            return
+        }
         saveError = nil
         isSaving = true
         let games = selected
@@ -420,37 +461,79 @@ struct GameBrowseView: View {
     }
 }
 
+private struct GameBrowsePickRow: View {
+    let game: ESPNGame
+    let isFavoriteHighlight: Bool
+    let isNominated: Bool
+    let isDraftSelected: Bool
+    let isKickedOff: Bool
+    let nominatorName: String?
+    let hasSelectableSlots: Bool
+    let isSaving: Bool
+    let onTap: () -> Void
+
+    private var isBlocked: Bool {
+        isNominated || isKickedOff || !hasSelectableSlots
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            GameBrowseRow(
+                game: game,
+                isFavoriteHighlight: isFavoriteHighlight,
+                isNominated: isNominated,
+                isDraftSelected: isDraftSelected,
+                isKickedOff: isKickedOff,
+                nominatorName: nominatorName
+            )
+        }
+        .opacity(isBlocked ? 0.45 : 1)
+        .disabled(isBlocked || isSaving)
+        .allowsHitTesting(!isBlocked && !isSaving)
+        .listRowBackground(PickemsColors.cardBackground)
+    }
+}
+
 struct GameBrowseRow: View {
     let game: ESPNGame
     var isFavoriteHighlight: Bool = false
     var isNominated: Bool = false
     var isDraftSelected: Bool = false
+    var isKickedOff: Bool = false
     var nominatorName: String? = nil
     @Environment(\.themePalette) private var theme
 
     var body: some View {
-        Group {
-            if isNominated {
-                rowContent
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(
-                        "\(game.awayTeamAbbreviation) \(game.isNeutralSite ? "versus" : "at") \(game.homeTeamAbbreviation), already selected by \(nominatorName ?? "another member")"
-                    )
-                    .accessibilityRemoveTraits(.isButton)
-            } else {
-                rowContent
-                    .accessibilityHint(
-                        isDraftSelected
-                            ? "Selected. Tap to remove."
-                            : "Tap to select. Save when you're done."
-                    )
-            }
+        if isNominated || isKickedOff {
+            inaccessibleRow
+        } else {
+            rowContent
+                .accessibilityHint(
+                    isDraftSelected
+                        ? "Selected. Tap to remove."
+                        : "Tap to select. Save when you're done."
+                )
         }
+    }
+
+    private var inaccessibleRow: some View {
+        rowContent
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(inaccessibleLabel)
+            .accessibilityRemoveTraits(.isButton)
+    }
+
+    private var inaccessibleLabel: String {
+        let matchup = "\(game.awayTeamAbbreviation) \(game.isNeutralSite ? "versus" : "at") \(game.homeTeamAbbreviation)"
+        if isNominated {
+            return "\(matchup), already selected by \(nominatorName ?? "another member")"
+        }
+        return "\(matchup), kicked off"
     }
 
     private var rowContent: some View {
         HStack(spacing: 12) {
-            if isDraftSelected {
+            if isDraftSelected && !isKickedOff {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(theme.accent)
                     .accessibilityHidden(true)
@@ -507,6 +590,8 @@ struct GameBrowseRow: View {
 
                 if isNominated {
                     StatusBadge(text: "Taken", color: PickemsColors.textSecondary)
+                } else if isKickedOff {
+                    StatusBadge(text: "Kicked off", color: PickemsColors.textSecondary)
                 } else if isDraftSelected {
                     StatusBadge(text: "Selected", color: theme.accent)
                 } else {
