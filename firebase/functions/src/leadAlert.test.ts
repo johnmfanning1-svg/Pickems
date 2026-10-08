@@ -42,7 +42,6 @@ function realLead(overrides: Partial<Parameters<typeof tookTheLeadRecipients>[0]
     },
     games: [finalGame()],
     changedGameIds: new Set(["G"]),
-    picksByUser: { U: { G: "55" }, V: { G: "99" } },
     nowMs: NOW,
     ...overrides,
   });
@@ -83,32 +82,32 @@ describe("tookTheLeadRecipients", () => {
         },
       ],
       changedGameIds: new Set(["401871051"]),
-      picksByUser: {
-        bbenson: {},
-        JBanda: {},
-        Fannypack: {},
-        Hayden: {},
-      },
       nowMs: NOW,
     });
     expect(recipients).toEqual([]);
   });
 
-  it("does not alert an all-zero tie on this week's board", () => {
+  it("does not alert this morning's all-zero tie, even on this week's board", () => {
+    // Core 4 OG W6 ended 0–0 for everyone. Compared with this week, after a
+    // locked final moved the board, so the cross-week guard is not the block.
+    // A tie at 0 is not a lead.
     expect(
       realLead({
         current: [
-          { id: "U", weeklyWins: 0 },
-          { id: "V", weeklyWins: 0 },
+          { id: "bbenson", weeklyWins: 0 },
+          { id: "JBanda", weeklyWins: 0 },
+          { id: "Fannypack", weeklyWins: 0 },
+          { id: "Hayden", weeklyWins: 0 },
         ],
         previous: {
           weekNumber: 6,
           entries: [
-            { id: "U", weeklyWins: 0 },
-            { id: "V", weeklyWins: 0 },
+            { id: "bbenson", weeklyWins: 1 },
+            { id: "JBanda", weeklyWins: 0 },
+            { id: "Fannypack", weeklyWins: 0 },
+            { id: "Hayden", weeklyWins: 0 },
           ],
         },
-        picksByUser: {},
       })
     ).toEqual([]);
   });
@@ -131,25 +130,46 @@ describe("tookTheLeadRecipients", () => {
     ).toEqual([]);
   });
 
-  it("alerts the member who moved strictly alone into first off a locked pick", () => {
+  it("alerts the member who is now strictly alone in first after a locked final", () => {
     expect(realLead()).toEqual(["U"]);
+  });
+
+  it("alerts when a rival drops and the leader's own score stays the same", () => {
+    const current = [
+      { id: "U", weeklyWins: 3 },
+      { id: "V", weeklyWins: 2 },
+    ];
+    expect(
+      realLead({
+        current,
+        previous: {
+          weekNumber: 6,
+          entries: [
+            { id: "U", weeklyWins: 3 },
+            { id: "V", weeklyWins: 4 },
+          ],
+        },
+      })
+    ).toEqual(["U"]);
+    expect(
+      realLead({
+        current,
+        previous: {
+          weekNumber: 6,
+          entries: [
+            { id: "U", weeklyWins: 3 },
+            { id: "V", weeklyWins: 3 },
+          ],
+        },
+      })
+    ).toEqual(["U"]);
   });
 
   it("does not alert on a self-heal pass that changed no games", () => {
     expect(realLead({ changedGameIds: new Set() })).toEqual([]);
   });
 
-  it("does not alert when the new leader did not pick the game that changed", () => {
-    expect(
-      realLead({
-        games: [finalGame("G"), finalGame("H")],
-        changedGameIds: new Set(["G"]),
-        picksByUser: { U: { H: "55" }, V: { G: "99" } },
-      })
-    ).toEqual([]);
-  });
-
-  it("does not alert when the changed game is not locked for picking", () => {
+  it("does not alert when an unlocked game goes final", () => {
     expect(
       realLead({
         week: {
@@ -209,12 +229,11 @@ describe("tookTheLeadRecipients", () => {
       realLead({
         current: [{ id: "U", weeklyWins: 1 }],
         previous: { weekNumber: 6, entries: [{ id: "U", weeklyWins: 0 }] },
-        picksByUser: { U: { G: "55" } },
       })
     ).toEqual(["U"]);
   });
 
-  it("does not alert off a future kickoff even when the week is otherwise locked", () => {
+  it("does not alert when a future game goes final", () => {
     const future = NOW + 60 * 60 * 1000;
     expect(
       realLead({

@@ -1,5 +1,5 @@
 import { gameIsLocked, kickoffMillis } from "./pickLock";
-import { pickedTeamId, toMillis } from "./scoring";
+import { toMillis } from "./scoring";
 
 /**
  * "You took the lead" is not "my rank number is 1".
@@ -7,8 +7,8 @@ import { pickedTeamId, toMillis } from "./scoring";
  * `rankEntries` gives every member of a tie rank 1, and the first member of
  * that tie has `isTied: false`, so rank cannot mean sole leader. An all-zero
  * board is everyone at rank 1. Compare this week's points with this week's
- * previous board, and only after a locked game the user actually picked goes
- * final and adds to their score.
+ * previous board. A locked game that goes final can hand someone the lead
+ * when a rival drops, even if the new leader's own score did not move.
  */
 export interface LeadAlertEntry {
   id: string;
@@ -47,26 +47,23 @@ export function tookTheLeadRecipients(input: {
   games: LeadAlertGame[];
   /** Games whose status or score changed THIS pass. */
   changedGameIds: ReadonlySet<string>;
-  /** userId -> picks map. */
-  picksByUser: Record<string, Record<string, string>>;
   nowMs: number;
 }): string[] {
-  const { weekNumber, week, current, previous, games, changedGameIds, picksByUser, nowMs } = input;
+  const { weekNumber, week, current, previous, games, changedGameIds, nowMs } = input;
   if (week.status !== "picking" && week.status !== "locked") return [];
   if (typeof weekNumber !== "number") return [];
   if (previous == null || previous.weekNumber !== weekNumber) return [];
+  if (!lockedFinalThisPass(games, changedGameIds, week, nowMs)) return [];
 
   const previousEntries = Array.isArray(previous.entries) ? previous.entries : [];
+  if (!boardChanged(current, previousEntries)) return [];
+
   const recipients: string[] = [];
   for (const entry of current) {
     if (typeof entry.weeklyWins !== "number" || !(entry.weeklyWins > 0)) continue;
     if (!strictlyAloneInFirst(current, entry.id, entry.weeklyWins)) continue;
     const prevWins = winsOf(previousEntries, entry.id);
     if (prevWins != null && strictlyAloneInFirst(previousEntries, entry.id, prevWins)) continue;
-    if (!(entry.weeklyWins > (prevWins ?? 0))) continue;
-    if (!gainedFromLockedFinalPick(entry.id, games, changedGameIds, picksByUser, week, nowMs)) {
-      continue;
-    }
     recipients.push(entry.id);
   }
   return recipients;
@@ -130,11 +127,10 @@ function winsOf(entries: readonly LeadAlertEntry[], userId: string): number | nu
   return entry.weeklyWins;
 }
 
-function gainedFromLockedFinalPick(
-  userId: string,
+/** A locked game with a past kickoff moved to final in this pass. */
+function lockedFinalThisPass(
   games: readonly LeadAlertGame[],
   changedGameIds: ReadonlySet<string>,
-  picksByUser: Record<string, Record<string, string>>,
   week: {
     pickLockMode?: unknown;
     pickDeadline?: unknown;
@@ -143,15 +139,31 @@ function gainedFromLockedFinalPick(
   },
   nowMs: number
 ): boolean {
-  const picks = picksByUser[userId] ?? {};
   for (const game of games) {
     if (!changedGameIds.has(game.id)) continue;
     if (game.status !== "final") continue;
-    if (pickedTeamId(picks, game.id) == null) continue;
     if (!gameIsLocked(week, game.id, game.kickoff, nowMs)) continue;
     const kickoff = kickoffMillis(game.kickoff);
     if (kickoff == null || kickoff > nowMs) continue;
     return true;
+  }
+  return false;
+}
+
+/** Win totals moved versus this week's previous board, including a rival dropping. */
+function boardChanged(
+  current: readonly LeadAlertEntry[],
+  previous: readonly LeadAlertEntry[]
+): boolean {
+  if (current.length !== previous.length) return true;
+  const previousWins = new Map<string, number>();
+  for (const entry of previous) {
+    if (typeof entry.weeklyWins === "number") previousWins.set(entry.id, entry.weeklyWins);
+  }
+  if (previousWins.size !== previous.length) return true;
+  for (const entry of current) {
+    if (!previousWins.has(entry.id)) return true;
+    if (previousWins.get(entry.id) !== entry.weeklyWins) return true;
   }
   return false;
 }

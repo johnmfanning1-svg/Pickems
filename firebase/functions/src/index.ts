@@ -707,16 +707,11 @@ async function refreshLiveStandings(
       }
     : undefined;
 
-  const picksByUser: Record<string, Record<string, string>> = {};
   const members = membersOnRoster(
     membersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MemberDoc)),
     groupSnap.data()?.memberIds as string[] | undefined
   );
-  const picks = picksSnap.docs.map((d) => {
-    const data = d.data() as PickDoc;
-    picksByUser[d.id] = data.picks ?? {};
-    return { ...data, userId: d.id };
-  });
+  const picks = picksSnap.docs.map((d) => ({ ...(d.data() as PickDoc), userId: d.id }));
   const rules = (groupSnap.data()?.rules ?? {}) as {
     allowLatePicks?: boolean;
     latePickPenaltyWins?: number;
@@ -768,7 +763,6 @@ async function refreshLiveStandings(
     previous,
     games,
     changedGameIds,
-    picksByUser,
     nowMs,
   });
 
