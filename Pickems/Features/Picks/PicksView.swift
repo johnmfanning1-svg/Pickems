@@ -281,17 +281,17 @@ struct PicksView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 24)
                     .accessibilityLabel("Loading this week's Selections")
-            } else if week.status == .selection {
-                selectionPhase(week: week)
-                GroupPicksView(embedded: true, forceNominatingDisplay: true)
-                    .padding(.top, 8)
-            } else {
+            } else if WeekTransition.showsSelectionsLockedBanner(week) {
                 ContextualTipBanner(
                     icon: "lock.fill",
                     message: "Selections are locked. Pickems are on the Pickems tab."
                 )
                 .padding(.horizontal)
                 GroupPicksView(embedded: true, forceNominatingDisplay: true)
+            } else {
+                selectionPhase(week: week)
+                GroupPicksView(embedded: true, forceNominatingDisplay: true)
+                    .padding(.top, 8)
             }
         case .pickems:
             if WeekTransition.arePickemsOpen(week) {
