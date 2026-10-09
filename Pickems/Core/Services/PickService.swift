@@ -578,6 +578,7 @@ final class PickService {
         guard !requested.isEmpty else {
             return SelectionBrowseSaveResult(savedEventIds: [], collidedEventIds: [], collidedLabels: [])
         }
+        try rejectKickedOffNominations(requested)
 
         let weekRef = db.week(groupId: groupId, weekId: weekId)
         // Prefer server week.slateSize so a stale client snapshot cannot falsely zero slots.
@@ -671,6 +672,16 @@ final class PickService {
         let away = nomination.awayTeamAbbreviation ?? nomination.awayTeamName
         let home = nomination.homeTeamAbbreviation ?? nomination.homeTeamName
         return "\(away) @ \(home)"
+    }
+
+    /// Nominations only store kickoff, not live status. In-progress games are
+    /// rejected in the picker; this stops a past kickoff from being written.
+    private func rejectKickedOffNominations(_ nominations: [Nomination]) throws {
+        let kickedOff = nominations.filter { SelectionKickoffGate.hasKickedOff(kickoff: $0.kickoff) }
+        guard !kickedOff.isEmpty else { return }
+        throw PickError.gameKickedOff(
+            SelectionKickoffGate.rejectionMessage(matchups: kickedOff.map { matchupLabel(for: $0) })
+        )
     }
 
     /// Creates `nominations/{espnEventId}` only if nobody else claimed it.
@@ -809,6 +820,12 @@ final class PickService {
             }
         }
 
+        if SelectionKickoffGate.hasKickedOff(game) {
+            throw PickError.gameKickedOff(
+                SelectionKickoffGate.rejectionMessage(matchups: [SelectionKickoffGate.matchupLabel(game)])
+            )
+        }
+
         let newEventId = game.espnEventId
         let weekRef = db.week(groupId: groupId, weekId: weekId)
         let nomsSnap = try await weekRef.nominations.getDocuments(source: .server)
@@ -902,6 +919,12 @@ final class PickService {
         }
         guard !requested.isEmpty else {
             return SelectionBrowseSaveResult(savedEventIds: [], collidedEventIds: [], collidedLabels: [])
+        }
+        let kickedOff = requested.filter { SelectionKickoffGate.hasKickedOff($0) }
+        if !kickedOff.isEmpty {
+            throw PickError.gameKickedOff(
+                SelectionKickoffGate.rejectionMessage(matchups: kickedOff.map { SelectionKickoffGate.matchupLabel($0) })
+            )
         }
 
         // Ensure member nominations are on the slate before commissioner fill.
@@ -1720,6 +1743,7 @@ final class PickService {
         var added: [SlateGame] = []
         for game in games {
             guard added.count < remaining else { break }
+            guard !SelectionKickoffGate.hasKickedOff(game) else { continue }
             guard !existingIds.contains(game.espnEventId) else { continue }
             guard !added.contains(where: { $0.espnEventId == game.espnEventId }) else { continue }
             try await gamesRef.document(game.id).setData(from: game)
@@ -1809,6 +1833,7 @@ final class PickService {
         case selectionClosed
         case pickemsNotOpen
         case slateGameNotFound
+        case gameKickedOff(String)
 
         var errorDescription: String? {
             switch self {
@@ -1822,6 +1847,7 @@ final class PickService {
             case .selectionClosed: return "Selections can't be changed after the Selection deadline."
             case .pickemsNotOpen: return "Pickems open when every Selection is in or the Selection deadline passes. Your commissioner can lock early."
             case .slateGameNotFound: return "Couldn't find that game to update the spread. Pull to refresh and try again."
+            case .gameKickedOff(let message): return message
             }
         }
     }

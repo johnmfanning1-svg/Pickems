@@ -173,6 +173,15 @@ enum WeekTransition {
         }
     }
 
+    /// Selections tab lock banner: "Selections are locked. Pickems are on the Pickems tab."
+    /// True once the week has left `.selection` — slate filled, Pickems opened,
+    /// commissioner lock, in progress, or scored. Week 0 has no Selection phase.
+    /// Deadline rows must use this so they cannot count down while the banner shows.
+    static func showsSelectionsLockedBanner(_ week: WeekSummary) -> Bool {
+        guard !week.skipsSelection else { return false }
+        return week.status != .selection
+    }
+
     /// Game G is frozen for member edits.
     static func isGameLocked(_ game: SlateGame, week: WeekSummary, now: Date = Date()) -> Bool {
         isGameLocked(gameId: game.id, kickoff: game.kickoff, week: week, now: now)

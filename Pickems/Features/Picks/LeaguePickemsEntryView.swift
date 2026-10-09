@@ -40,14 +40,9 @@ struct LeaguePickemsEntryView: View {
                                 ? "Each game's picks show here at that game's kickoff. Later games stay hidden."
                                 : "Everyone's Pickems show here after lock. Picks stay hidden until then."
                         )
-                    } else if let selectionDeadline = week.selectionDeadline {
-                        SelectionDeadlineBanner(deadline: selectionDeadline)
-                        EmptyStateView(
-                            icon: "lock.open",
-                            title: "Pickems lock after the slate is set",
-                            message: "Once Selections are in, you'll see a countdown to lock here.",
-                            help: PickemsHelp.leaguePickems(for: appState.selectedPickMode)
-                        )
+                    } else if let state = SelectionDeadlineDisplayResolver.resolve(week: week),
+                              week.selectionDeadline != nil {
+                        selectionDeadlineFallback(state)
                     } else {
                         EmptyStateView(
                             icon: "lock.open",
@@ -81,5 +76,31 @@ struct LeaguePickemsEntryView: View {
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal)
+    }
+
+    private func selectionDeadlineFallback(_ state: SelectionDeadlineDisplay) -> some View {
+        VStack(spacing: 16) {
+            SelectionDeadlineBanner(state: state)
+            selectionFallbackCaption(state)
+        }
+    }
+
+    private func selectionFallbackCaption(_ state: SelectionDeadlineDisplay) -> some View {
+        switch state {
+        case .locked:
+            EmptyStateView(
+                icon: "lock.fill",
+                title: "Selections are locked",
+                message: "The league chart opens after Pickems lock.",
+                help: PickemsHelp.leaguePickems(for: appState.selectedPickMode)
+            )
+        case .open, .needsDeadline:
+            EmptyStateView(
+                icon: "lock.open",
+                title: "Pickems lock after the slate is set",
+                message: "Once Selections are in, you'll see a countdown to lock here.",
+                help: PickemsHelp.leaguePickems(for: appState.selectedPickMode)
+            )
+        }
     }
 }

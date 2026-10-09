@@ -25,6 +25,8 @@ struct WorkspaceDeadlineDisplayTests {
             #expect(snapshot.selectionDeadline == selectionDue)
             #expect(snapshot.pickemsDeadline == pickLock)
             #expect(snapshot.hasContent)
+            #expect(snapshot.selectionState == .open(deadline: selectionDue))
+            #expect(snapshot.selectionState?.isCountingDown == true)
             #expect(!snapshot.showSetSelectionDeadlinePrompt)
         }
     }
@@ -241,6 +243,13 @@ struct WorkspaceDeadlineDisplayTests {
         #expect(snapshot.pickemsDeadline == pickLock)
         #expect(!snapshot.isRolling)
         #expect(snapshot.hasContent)
+        #expect(snapshot.selectionState?.isCountingDown == false)
+        if case .locked(let copy) = snapshot.selectionState {
+            #expect(copy.title == "Locked")
+            #expect(copy.detail == "Closed \(PickDeadlineCalculator.lockTimeLabel(for: selectionDue))")
+        } else {
+            Issue.record("scored week must show a static Selections lock")
+        }
     }
 
     private func week(
