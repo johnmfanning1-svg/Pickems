@@ -83,11 +83,14 @@ struct CommissionerWeekAdminSections: View {
                         .disabled(uniqueGames == 0)
                         .listRowBackground(PickemsColors.cardBackground)
                     }
-                } else if WeekTransition.canReopenSelections(week) {
-                    Button("Reopen Selections") {
-                        showReopenSelectionsConfirm = true
+                } else if !week.skipsSelection {
+                    closedSelectionDeadlineLabel(week)
+                    if WeekTransition.canReopenSelections(week) {
+                        Button("Reopen Selections") {
+                            showReopenSelectionsConfirm = true
+                        }
+                        .listRowBackground(PickemsColors.cardBackground)
                     }
-                    .listRowBackground(PickemsColors.cardBackground)
                 }
 
                 weekManageRows(week)
@@ -169,17 +172,41 @@ struct CommissionerWeekAdminSections: View {
 
     @ViewBuilder
     private func selectionDeadlineRow(_ week: WeekSummary) -> some View {
-        if let summary = CommissionerAdminSummary.deadlineValue(week.selectionDeadline) {
-            CommissionerAdminRow(
-                title: "Selection Deadline",
-                systemImage: "clock",
-                summary: summary,
-                hint: "Opens the Selection deadline editor."
-            ) {
-                present(.selectionDeadline)
+        switch SelectionDeadlineDisplayResolver.resolve(week: week) {
+        case .open:
+            if let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: week) {
+                selectionDeadlineEditor(summary: summary, systemImage: "clock")
             }
-        } else if promptsToSetSelectionDeadline(week) {
-            setSelectionDeadlineButton
+        case .locked:
+            if let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: week) {
+                selectionDeadlineEditor(summary: summary, systemImage: "lock")
+            }
+        case .needsDeadline:
+            if promptsToSetSelectionDeadline(week) {
+                setSelectionDeadlineButton
+            }
+        case nil:
+            EmptyView()
+        }
+    }
+
+    private func selectionDeadlineEditor(summary: String, systemImage: String) -> some View {
+        CommissionerAdminRow(
+            title: "Selection Deadline",
+            systemImage: systemImage,
+            summary: summary,
+            hint: "Opens the Selection deadline editor."
+        ) {
+            present(.selectionDeadline)
+        }
+    }
+
+    @ViewBuilder
+    private func closedSelectionDeadlineLabel(_ week: WeekSummary) -> some View {
+        if case .locked = SelectionDeadlineDisplayResolver.resolve(week: week),
+           let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: week) {
+            LabeledContent("Selection Deadline", value: summary)
+                .listRowBackground(PickemsColors.cardBackground)
         }
     }
 

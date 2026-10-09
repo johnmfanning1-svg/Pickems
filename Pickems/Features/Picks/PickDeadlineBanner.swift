@@ -47,21 +47,92 @@ struct PickDeadlineBanner: View {
 }
 
 /// Same visual language as `PickDeadlineBanner`, for the Selection deadline.
+/// Counts down only while Selections are still open.
 struct SelectionDeadlineBanner: View {
-    let deadline: Date
+    let state: SelectionDeadlineDisplay
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            DeadlineHeroCard(
-                eyebrow: "Selections",
-                deadline: deadline,
-                openTitle: "Due \(PickDeadlineCalculator.lockTimeLabel(for: deadline))",
-                lockedTitle: "Selections locked",
-                help: PickemsHelp.selectionDeadline,
-                now: context.date
-            )
+        switch state {
+        case .open(let deadline):
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                DeadlineHeroCard(
+                    eyebrow: "Selections",
+                    deadline: deadline,
+                    openTitle: "Due \(PickDeadlineCalculator.lockTimeLabel(for: deadline))",
+                    lockedTitle: "Locked",
+                    help: PickemsHelp.selectionDeadline,
+                    now: context.date
+                )
+            }
+            .padding(.horizontal)
+        case .locked(let copy):
+            SelectionLockedCard(copy: copy)
+                .padding(.horizontal)
+        case .needsDeadline:
+            EmptyView()
         }
-        .padding(.horizontal)
+    }
+}
+
+/// Static Selections lock. No clock icon and no timer.
+struct SelectionLockedRow: View {
+    let copy: SelectionLockCopy
+    @Environment(\.themePalette) private var theme
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "lock.fill")
+                .font(.title2)
+                .foregroundStyle(theme.accent)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Selections")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .textCase(.uppercase)
+                Text(copy.title)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let detail = copy.detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            HelpInfoButton(topic: PickemsHelp.selectionDeadline, size: .subheadline)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        if let detail = copy.detail {
+            return "Selections, \(copy.title), \(detail)"
+        }
+        return "Selections, \(copy.title)"
+    }
+}
+
+struct SelectionLockedCard: View {
+    let copy: SelectionLockCopy
+    @Environment(\.themePalette) private var theme
+
+    var body: some View {
+        SelectionLockedRow(copy: copy)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(PickemsColors.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(theme.accent.opacity(0.28), lineWidth: 1)
+            )
     }
 }
 

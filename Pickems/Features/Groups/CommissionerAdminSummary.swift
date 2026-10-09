@@ -35,4 +35,18 @@ enum CommissionerAdminSummary {
         }
         return label
     }
+
+    /// Selection deadline row. Nil while Selections are open and no deadline is set
+    /// (the screen shows "Set Selection Deadline" instead). Closed weeks use the
+    /// same static copy as the deadline card, never a countdown.
+    static func selectionDeadlineSummary(week: WeekSummary, now: Date = Date()) -> String? {
+        switch SelectionDeadlineDisplayResolver.resolve(week: week, now: now) {
+        case .open(let deadline):
+            return deadlineValue(deadline)
+        case .locked(let copy):
+            return copy.compact
+        case .needsDeadline, nil:
+            return nil
+        }
+    }
 }
