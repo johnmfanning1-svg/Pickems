@@ -58,6 +58,9 @@ struct NotificationSettingsSheet: View {
                             ForEach(NotificationPrefCategory.categories(in: group)) { category in
                                 prefToggle(category)
                             }
+                            if group == .games {
+                                spicyAlertsToggle
+                            }
                         } header: {
                             Text(group.title)
                         }
@@ -126,6 +129,17 @@ struct NotificationSettingsSheet: View {
             return "These switches apply only to \(group.name). Account defaults still apply to your other leagues."
         }
         return "Defaults for every league. Open a league here to override one without changing the others."
+    }
+
+    private var spicyAlertsToggle: some View {
+        SpicyAlertsToggle(
+            isOn: Binding(
+                get: { appState.authService.currentUser?.wantsSpicyAlerts ?? true },
+                set: { enabled in
+                    Task { await setSpicyAlerts(enabled) }
+                }
+            )
+        )
     }
 
     @ViewBuilder
@@ -243,6 +257,16 @@ struct NotificationSettingsSheet: View {
         }
     }
 
+    private func setSpicyAlerts(_ enabled: Bool) async {
+        errorMessage = nil
+        do {
+            try await appState.authService.updateSpicyAlerts(enabled)
+        } catch {
+            errorMessage = UserFacingError.message(for: error, context: .write)
+                ?? error.localizedDescription
+        }
+    }
+
     private func setPref(_ category: NotificationPrefCategory, enabled: Bool) async {
         errorMessage = nil
         if enabled {
@@ -284,5 +308,31 @@ struct NotificationSettingsSheet: View {
             errorMessage = UserFacingError.message(for: error, context: .write)
                 ?? error.localizedDescription
         }
+    }
+}
+
+/// Tone switch for game-final copy. Writes `users/{uid}.spicyAlerts`, not a delivery gate.
+private struct SpicyAlertsToggle: View {
+    @Environment(\.themePalette) private var theme
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Spicy alerts")
+                        .foregroundStyle(PickemsColors.textPrimary)
+                    Text("Roast-style messages when your picks hit or miss.")
+                        .font(.caption)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } icon: {
+                Image(systemName: "flame.fill")
+                    .foregroundStyle(theme.accent)
+            }
+        }
+        .listRowBackground(PickemsColors.cardBackground)
+        .accessibilityHint("Roast-style messages when your picks hit or miss.")
     }
 }

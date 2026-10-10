@@ -25,6 +25,10 @@ struct UserProfile: Codable, Identifiable, Equatable {
     var notifyChatMessages: Bool? = true
     /// Nil until the user sets it so legacy Selection-deadline opt-outs still suppress commissioner nudges.
     var notifyCommissionerDeadlines: Bool? = nil
+    /// Roast-style game-final copy. Nil matches the server default (on).
+    var spicyAlerts: Bool? = nil
+
+    var wantsSpicyAlerts: Bool { spicyAlerts ?? true }
 
     var wantsSelectionDeadlineAlerts: Bool { wants(.selectionDeadlines) }
     var wantsPickemsDeadlineAlerts: Bool { wants(.pickemsDeadlines) }

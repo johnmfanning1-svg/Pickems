@@ -3,6 +3,24 @@ import Testing
 @testable import Pickems
 
 struct NotificationPrefCategoryTests {
+    @Test func spicyAlertsDefaultOnUntilTurnedOff() {
+        let profile = UserProfile(
+            id: "u1",
+            displayName: "Alex",
+            avatarColorHex: "#DC2626",
+            avatarImageURL: nil,
+            createdAt: Date()
+        )
+        #expect(profile.spicyAlerts == nil)
+        #expect(profile.wantsSpicyAlerts)
+
+        var updated = profile
+        updated.spicyAlerts = false
+        #expect(!updated.wantsSpicyAlerts)
+        updated.spicyAlerts = true
+        #expect(updated.wantsSpicyAlerts)
+    }
+
     @Test func missingPrefsDefaultToOn() {
         let profile = UserProfile(
             id: "u1",
