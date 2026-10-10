@@ -77,6 +77,7 @@ extension AppState {
 
     /// Pin Selections, Pickems, and commissioner week-admin to the same week.
     func selectObservedWeek(_ week: WeekSummary) {
+        groupService.clearDeepLinkWeekHold()
         picksViewModel.stopLiveRefresh()
         picksViewModel.resetPendingWrite()
         picksViewModel.draftPicks = [:]

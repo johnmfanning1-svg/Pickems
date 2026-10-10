@@ -24,6 +24,8 @@ final class GroupService {
     var errorMessage: String?
     /// First `loadGroups` snapshot has arrived (even if empty). Gates onboarding vs main.
     var hasCompletedInitialGroupLoad = false
+    /// True while a notification tap is holding the Pickems week against the live-week snap.
+    var isHoldingDeepLinkWeek: Bool { deepLinkWeekHold != nil }
 
     /// Lazy so constructing `AppState` cannot touch Firestore before Firebase configure.
     @ObservationIgnored
@@ -50,6 +52,13 @@ final class GroupService {
     /// Deep-link league id waiting for `loadGroups` to finish.
     @ObservationIgnored
     private var pendingGroupId: String?
+    /// Week a notification asked for. Consumed by `selectGroup` or the next groups snapshot.
+    @ObservationIgnored
+    private var queuedDeepLink: (groupId: String, weekId: String)?
+    @ObservationIgnored
+    private var deepLinkWeekHold: String?
+    @ObservationIgnored
+    private var deepLinkWeekApplyInFlight = false
 
     func loadGroups(for userId: String) {
         groupListener?.remove()
@@ -117,7 +126,26 @@ final class GroupService {
                         let groupId = group.id
                         // Avoid re-entrant ESPN/week observe on every membership metadata tick.
                         let selectionChanged = previousSelectedId != groupId
-                        if selectionChanged || self.observedGroupId != groupId || self.currentWeek == nil {
+                        if let queued = self.queuedDeepLink, queued.groupId == groupId {
+                            self.queuedDeepLink = nil
+                            self.deepLinkWeekHold = queued.weekId
+                            self.deepLinkWeekApplyInFlight = true
+                            self.weekSelectionPinned = true
+                            await self.selectWeek(weekId: queued.weekId)
+                            self.deepLinkWeekApplyInFlight = false
+                            await self.reconcileSelectionWeekSnapshot(
+                                groupId: groupId,
+                                rules: group.rules,
+                                memberCount: group.memberCount
+                            )
+                            await self.loadAvailableWeeks(groupId: groupId)
+                        } else if self.deepLinkWeekApplyInFlight {
+                            await self.reconcileSelectionWeekSnapshot(
+                                groupId: groupId,
+                                rules: group.rules,
+                                memberCount: group.memberCount
+                            )
+                        } else if selectionChanged || self.observedGroupId != groupId || self.currentWeek == nil {
                             await self.syncCurrentWeekFromESPN(groupId: groupId)
                         } else {
                             // Late joiners: membership grew while already observing this week.
@@ -137,13 +165,28 @@ final class GroupService {
     }
 
     func selectGroup(_ group: PickemGroup) {
+        let queuedWeek = queuedDeepLink?.groupId == group.id ? queuedDeepLink?.weekId : nil
+        queuedDeepLink = nil
         pendingGroupId = nil
         adoptSelectedGroup(group)
-        weekSelectionPinned = false
+        if let queuedWeek {
+            deepLinkWeekHold = queuedWeek
+            deepLinkWeekApplyInFlight = true
+            weekSelectionPinned = true
+        } else {
+            deepLinkWeekHold = nil
+            deepLinkWeekApplyInFlight = false
+            weekSelectionPinned = false
+        }
         availableWeeks = []
         seasonDateRangeByWeekId = [:]
         Task {
-            await syncCurrentWeekFromESPN(groupId: group.id)
+            if let queuedWeek {
+                await selectWeek(weekId: queuedWeek)
+                deepLinkWeekApplyInFlight = false
+            } else {
+                await syncCurrentWeekFromESPN(groupId: group.id)
+            }
             await reconcileSelectionWeekSnapshot(
                 groupId: group.id,
                 rules: group.rules,
@@ -154,12 +197,23 @@ final class GroupService {
     }
 
     /// Select by id (push / deep link). If the league is not loaded yet, remember it.
-    func selectGroup(id: String) {
+    /// `weekId` pins that week instead of the calendar's current week.
+    func selectGroup(id: String, weekId: String? = nil) {
+        if let weekId {
+            queuedDeepLink = (groupId: id, weekId: weekId)
+        } else {
+            queuedDeepLink = nil
+            deepLinkWeekApplyInFlight = false
+        }
         if let group = groups.first(where: { $0.id == id }) {
             selectGroup(group)
         } else {
             pendingGroupId = id
         }
+    }
+
+    func clearDeepLinkWeekHold() {
+        deepLinkWeekHold = nil
     }
 
     /// True when `week` is after the calendar's current Pickems week (e.g. W1 during Week 0).
@@ -174,6 +228,7 @@ final class GroupService {
 
     /// Drop a pinned browse immediately so Selections/Pickems don't paint the old week for a frame.
     func unpinToActiveWeekLocally() {
+        if deepLinkWeekHold != nil { return }
         weekSelectionPinned = false
         guard let activeId = cfbWeek.map({ CFBWeekSync.weekId(for: $0) }) else { return }
         if let known = availableWeeks.first(where: { $0.id == activeId }), currentWeek?.id != known.id {
@@ -185,6 +240,7 @@ final class GroupService {
 
     /// Unpin any browsed week and re-attach to the calendar's current week.
     func jumpToActiveWeek() async {
+        if deepLinkWeekHold != nil { return }
         unpinToActiveWeekLocally()
         guard let groupId = selectedGroup?.id else { return }
         await syncCurrentWeekFromESPN(groupId: groupId)
@@ -259,6 +315,7 @@ final class GroupService {
     }
 
     func syncCurrentWeekFromESPN(groupId: String) async {
+        if deepLinkWeekApplyInFlight { return }
         let rules = selectedGroup?.rules ?? .default
         let weekInfo: CFBWeekInfo
         do {
@@ -1090,6 +1147,9 @@ final class GroupService {
         groups = []
         selectedGroup = nil
         pendingGroupId = nil
+        queuedDeepLink = nil
+        deepLinkWeekHold = nil
+        deepLinkWeekApplyInFlight = false
         seasonArchives = []
         careerRecords = []
         hasCompletedInitialGroupLoad = false

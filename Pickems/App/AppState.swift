@@ -35,6 +35,15 @@ final class AppState {
     var pendingDeadlineEditor: CommissionerDeadlineTarget?
     /// League to select when a push/deep link includes `groupId`.
     var pendingDeepLinkGroupId: String?
+    /// Game-final / no-pick / lead route waiting for the membership list (cold launch).
+    var pendingNotificationRoute: DeepLinkAction?
+    /// Game to scroll to and present after a game-final or single no-pick tap.
+    var focusedGameId: String?
+    /// Week that `focusedGameId` belongs to. The game sheet waits for this week to load.
+    var focusedWeekId: String?
+    /// Lead alert: force the Leagues leaderboard onto This Week for `requestedLeaderboardGroupId`.
+    var requestedLeaderboardThisWeek = false
+    var requestedLeaderboardGroupId: String?
     /// Set when Firebase failed to boot; RootView can show a non-crash error screen.
     var firebaseBootFailed = false
 
@@ -209,6 +218,14 @@ final class AppState {
 
     func handleDeepLink(_ action: DeepLinkAction) {
         AppLog.info(AppLog.session, "deep link", metadata: ["action": "\(action)"])
+        if let launch = NotificationLaunch.resolve(
+            action: action,
+            groupsLoaded: groupService.hasCompletedInitialGroupLoad,
+            memberGroupIds: groupService.groups.map(\.id)
+        ) {
+            applyNotificationLaunch(launch, action: action)
+            return
+        }
         switch action {
         case .joinGroup(let code):
             pendingInviteCode = code
@@ -233,7 +250,60 @@ final class AppState {
             pendingDeadlineEditor = CommissionerDeadlineTarget(kind: .selections, groupId: groupId, weekId: nil)
             pendingCommissionerSettings = true
             selectedTab = .leagues
+        case .openGame, .openWeekPickems, .openLeaderboard:
+            break
         }
+    }
+
+    /// Retry a tap that arrived before the membership list (app was killed).
+    func flushPendingNotificationRoute() {
+        guard let pending = pendingNotificationRoute else { return }
+        handleDeepLink(pending)
+    }
+
+    private func applyNotificationLaunch(_ launch: NotificationLaunch, action: DeepLinkAction) {
+        switch launch {
+        case .deferred:
+            pendingNotificationRoute = action
+        case .home:
+            pendingNotificationRoute = nil
+            clearNotificationFocus()
+            if case .gameDetail = presentedSheet {
+                presentedSheet = nil
+            }
+            selectedTab = .home
+        case .pickems(let groupId, let weekId, let gameId):
+            pendingNotificationRoute = nil
+            requestedLeaderboardThisWeek = false
+            requestedLeaderboardGroupId = nil
+            focusedWeekId = weekId
+            focusedGameId = gameId
+            groupService.selectGroup(id: groupId, weekId: weekId)
+            selectedTab = .pickems
+            if let gameId {
+                present(.gameDetail(gameId: gameId))
+            } else if case .gameDetail = presentedSheet {
+                presentedSheet = nil
+            }
+        case .leaderboard(let groupId, let weekId):
+            pendingNotificationRoute = nil
+            focusedGameId = nil
+            focusedWeekId = weekId
+            if case .gameDetail = presentedSheet {
+                presentedSheet = nil
+            }
+            requestedLeaderboardGroupId = groupId
+            requestedLeaderboardThisWeek = true
+            groupService.selectGroup(id: groupId, weekId: weekId)
+            selectedTab = .leagues
+        }
+    }
+
+    private func clearNotificationFocus() {
+        focusedGameId = nil
+        focusedWeekId = nil
+        requestedLeaderboardThisWeek = false
+        requestedLeaderboardGroupId = nil
     }
 
     private func selectDeepLinkGroup(_ groupId: String?) {
@@ -250,6 +320,11 @@ final class AppState {
     func resetSession() {
         presentedSheet = nil
         pendingDeadlineEditor = nil
+        pendingNotificationRoute = nil
+        focusedGameId = nil
+        focusedWeekId = nil
+        requestedLeaderboardThisWeek = false
+        requestedLeaderboardGroupId = nil
         groupService.resetSession()
         pickService.resetSession()
         picksViewModel.resetForSession()

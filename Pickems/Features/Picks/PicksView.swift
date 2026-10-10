@@ -83,6 +83,10 @@ struct PicksView: View {
                 }
                 .padding(.vertical)
             }
+            .modifier(FocusedGameScrollModifier(
+                gameId: appState.focusedGameId,
+                gamesSignature: "\(picksExpanded)-\(appState.pickService.slateGames.map(\.id).joined(separator: ","))"
+            ))
             .pickemsScreenBackground()
             .navigationTitle(kind == .selections ? "Selections" : "Pickems")
             .navigationBarTitleDisplayMode(.inline)
@@ -121,9 +125,12 @@ struct PicksView: View {
                 await reloadPicks()
             }
             .onChange(of: appState.groupService.currentWeek?.id) { _, newWeekId in
-                picksExpanded = false
+                picksExpanded = appState.focusedGameId != nil
                 reobservePicks(weekId: newWeekId)
                 viewModel.refreshNominationSubmissionState(appState: appState)
+            }
+            .onChange(of: appState.focusedGameId) { _, gameId in
+                if gameId != nil { picksExpanded = true }
             }
             .syncPicksDraftFromServer()
             .onChange(of: appState.selectedTab) { oldTab, tab in
@@ -220,6 +227,7 @@ struct PicksView: View {
 
     /// Unpin and re-observe on this turn so the next frame isn't the browsed week.
     private func snapToActiveWeek() {
+        guard !appState.groupService.isHoldingDeepLinkWeek else { return }
         viewModel.stopLiveRefresh()
         viewModel.resetPendingWrite()
         viewModel.draftPicks = [:]
@@ -554,6 +562,7 @@ struct PicksView: View {
                     viewModel.saveDraft(appState: appState)
                 }
                 .padding(.horizontal)
+                .id(focusedGameRowId(game.id))
             }
 
             if rolling, WeekTransition.pickemsShouldShowLeagueBoard(week) {
@@ -696,6 +705,7 @@ struct PicksView: View {
                             showsSpread: appState.selectedPickMode.showsSpreads,
                             onSelect: { _ in }
                         )
+                        .id(focusedGameRowId(game.id))
                     }
                 }
                 .padding(.top, 8)
