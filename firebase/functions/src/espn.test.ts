@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   parseCompetitorScore,
   parseEventScores,
+  parseLineScoreList,
   nextGameStatus,
   slateGameNeedsWrite,
   scoreboardURL,
@@ -73,6 +74,48 @@ describe("parseEventScores / nextGameStatus", () => {
       event({ homeScore: "28", awayScore: "17", completed: true, state: "post" })
     );
     expect(nextGameStatus("inProgress", parsed)).toBe("final");
+  });
+});
+
+describe("parseLineScoreList", () => {
+  it("reads ESPN value objects and drops a broken period", () => {
+    expect(parseLineScoreList([{ value: 7 }, { displayValue: "3" }, { value: 0 }])).toEqual([7, 3, 0]);
+    expect(parseLineScoreList([{ value: 7 }, { value: "nope" }])).toBeNull();
+    expect(parseLineScoreList([])).toBeNull();
+    expect(parseLineScoreList(undefined)).toBeNull();
+  });
+
+  it("attaches linescores without inventing them", () => {
+    const withPeriods = parseEventScores({
+      id: "401",
+      competitions: [
+        {
+          competitors: [
+            {
+              id: "h",
+              homeAway: "home",
+              score: "28",
+              linescores: [{ value: 7 }, { value: 14 }, { value: 7 }, { value: 0 }],
+              team: { id: "home", displayName: "Home", abbreviation: "HOM" },
+            },
+            {
+              id: "a",
+              homeAway: "away",
+              score: "17",
+              linescores: [{ value: 0 }, { value: 3 }, { value: 7 }, { value: 7 }],
+              team: { id: "away", displayName: "Away", abbreviation: "AWY" },
+            },
+          ],
+          status: { type: { completed: true, state: "post" } },
+        },
+      ],
+    });
+    expect(withPeriods?.homeLineScores).toEqual([7, 14, 7, 0]);
+    expect(withPeriods?.awayLineScores).toEqual([0, 3, 7, 7]);
+
+    const missing = parseEventScores(event({ homeScore: "28", awayScore: "17", completed: true, state: "post" }));
+    expect(missing?.homeLineScores).toBeNull();
+    expect(missing?.awayLineScores).toBeNull();
   });
 });
 
