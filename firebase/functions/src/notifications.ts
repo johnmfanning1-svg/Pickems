@@ -2,6 +2,7 @@ import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { logger } from "firebase-functions";
 import { shouldSendDeadlinePush, type DeadlinePushType, type MemberPushPrefFields } from "./deadlinePushPrefs";
+import { buildPushMessage, type PushPresentation } from "./pushAlert";
 import { isUnregisteredFcmTokenError, resolvePushDelivery } from "./pushDelivery";
 
 export type PushType = DeadlinePushType;
@@ -13,7 +14,8 @@ export async function sendToUser(
   body: string,
   type: PushType,
   extra: Record<string, string> = {},
-  member?: MemberPushPrefFields
+  member?: MemberPushPrefFields,
+  presentation?: PushPresentation
 ): Promise<void> {
   try {
     const snap = await getFirestore().collection("users").doc(userId).get();
@@ -33,22 +35,15 @@ export async function sendToUser(
       return;
     }
 
-    await getMessaging().send({
-      token: decision.token,
-      notification: { title, body },
-      data: { type, ...extra },
-      apns: {
-        headers: {
-          "apns-push-type": "alert",
-          "apns-priority": "10",
-        },
-        payload: {
-          aps: {
-            sound: "default",
-          },
-        },
-      },
-    });
+    await getMessaging().send(
+      buildPushMessage({
+        token: decision.token,
+        title,
+        body,
+        data: { ...extra, type: presentation?.payloadType ?? type },
+        presentation,
+      })
+    );
   } catch (err) {
     if (isUnregisteredFcmTokenError(err)) {
       logger.warn("clearing stale FCM token", { userId, type });

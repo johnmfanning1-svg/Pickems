@@ -1,3 +1,4 @@
+import { matchupFromGame } from "./pushAlert";
 import { stableHash, MAX_PUSH_BODY_LENGTH, MAX_PUSH_TITLE_LENGTH } from "./pushCopy";
 import { pickedTeamId } from "./scoring";
 
@@ -36,6 +37,10 @@ export interface NoPickGame {
   home: string;
   /** `AWAY n, HOME n`, or null when the final score is missing. */
   score: string | null;
+  awayScore?: number | null;
+  homeScore?: number | null;
+  /** ATS favorite tag (`OSU -7`). The sender drops it for Straight Up. */
+  spreadLabel?: string | null;
 }
 
 export interface NoPickPlan {
@@ -82,15 +87,23 @@ export function noPickGameFromSlate(game: {
   homeTeamName?: unknown;
   awayScore?: unknown;
   homeScore?: unknown;
+  spread?: unknown;
+  spreadTeamId?: unknown;
+  homeTeamId?: unknown;
+  awayTeamId?: unknown;
 }): NoPickGame {
   const away = teamTag(game.awayTeamAbbreviation, game.awayTeamName, "AWAY");
   const home = teamTag(game.homeTeamAbbreviation, game.homeTeamName, "HOME");
+  const matchup = matchupFromGame(game);
   return {
     id: game.id,
     locked: game.locked,
     away,
     home,
     score: scoreLabel(away, home, game.awayScore, game.homeScore),
+    awayScore: matchup.awayScore,
+    homeScore: matchup.homeScore,
+    spreadLabel: matchup.spreadLabel,
   };
 }
 
