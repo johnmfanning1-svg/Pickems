@@ -30,6 +30,13 @@ import {
 } from "./pushCopy";
 import { noPickGameFromSlate, notifiedNoPickGameIds, planNoPickPush, type NoPickGame } from "./noPickPush";
 import {
+  buildGameFinalPush,
+  buildLeadPush,
+  buildNoPickPush,
+  leagueDisplayName,
+  matchupFromGame,
+} from "./pushAlert";
+import {
   SlateGameDoc,
   MemberDoc,
   PickDoc,
@@ -486,6 +493,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
 
   for (const { groupDoc, memberIds, weeks: activeWeeks } of activeWeeksByGroup) {
     const groupId = groupDoc.id;
+    const leagueName = leagueDisplayName(groupDoc.data()?.name);
     const leaguePickMode = resolvePickMode(groupDoc.data()?.rules?.pickMode);
 
     for (const weekDoc of activeWeeks.docs) {
@@ -594,7 +602,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
           if (transitioningToFinal) anyFinalizedThisPass = true;
           if (notifyFinal) {
             const finalGame = { ...game, ...patch } as SlateGameDoc;
-            await notifyGameFinal(groupId, weekId, finalGame, pickMode, week, now);
+            await notifyGameFinal(groupId, weekId, finalGame, pickMode, week, now, leagueName);
             if (gameIsLocked(week, game.id, game.kickoff, now)) {
               noPickGames.push(
                 noPickGameFromSlate({
@@ -606,6 +614,10 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
                   homeTeamName: finalGame.homeTeamName,
                   awayScore: finalGame.awayScore,
                   homeScore: finalGame.homeScore,
+                  spread: finalGame.spread,
+                  spreadTeamId: finalGame.spreadTeamId,
+                  homeTeamId: finalGame.homeTeamId,
+                  awayTeamId: finalGame.awayTeamId,
                 })
               );
             }
@@ -615,7 +627,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
       }
 
       if (noPickGames.length > 0) {
-        await notifyMissedPicks(groupId, weekId, week.status, memberIds, noPickGames);
+        await notifyMissedPicks(groupId, weekId, week.status, memberIds, noPickGames, leagueName, pickMode);
       }
 
       const allFinal =
@@ -667,7 +679,8 @@ async function notifyGameFinal(
     pickDeadline?: unknown;
     gameKickoffs?: Record<string, unknown>;
   },
-  nowMs: number
+  nowMs: number,
+  leagueName: string
 ): Promise<void> {
   if (!gameIsLocked(week, game.id, game.kickoff, nowMs)) {
     logger.info("game_final", { groupId, weekId, gameId: game.id, decision: "skip_unlocked" });
@@ -726,6 +739,14 @@ async function notifyGameFinal(
         ...periods,
       };
       const copy = gameFinalPushCopy(copyInput);
+      const alert = buildGameFinalPush({
+        leagueName,
+        groupId,
+        weekId,
+        gameId: game.id,
+        pickMode,
+        matchup: matchupFromGame(game),
+      });
       logger.info("game_final", {
         groupId,
         weekId,
@@ -734,13 +755,17 @@ async function notifyGameFinal(
         result,
         spicy,
         scenario: classifyGameFinal(copyInput).scenario,
+        subtitle: alert.subtitle,
       });
-      await sendToUser(userId, copy.title, copy.body, "game_final", {
-        groupId,
-        weekId,
-        gameId: game.id,
-        result,
-      });
+      await sendToUser(
+        userId,
+        copy.title,
+        copy.body,
+        "game_final",
+        { ...alert.data, result },
+        undefined,
+        alert
+      );
       if (!spicy || !userSnap.exists) continue;
       await db.collection("users").doc(userId).set(
         {
@@ -772,7 +797,9 @@ async function notifyMissedPicks(
   weekId: string,
   weekStatus: unknown,
   memberIds: string[],
-  games: NoPickGame[]
+  games: NoPickGame[],
+  leagueName: string,
+  pickMode: PickMode
 ): Promise<void> {
   const groupRef = db.collection("groups").doc(groupId);
   const weekRef = groupRef.collection("weeks").doc(weekId);
@@ -840,6 +867,23 @@ async function notifyMissedPicks(
         logger.info("no_pick", { groupId, weekId, userId, decision: "already_sent" });
         continue;
       }
+      const alert = buildNoPickPush({
+        leagueName,
+        groupId,
+        weekId,
+        pickMode,
+        games: plan.gameIds.map((id) => {
+          const game = games.find((candidate) => candidate.id === id);
+          return {
+            id,
+            away: game?.away ?? "AWAY",
+            home: game?.home ?? "HOME",
+            awayScore: game?.awayScore,
+            homeScore: game?.homeScore,
+            spreadLabel: game?.spreadLabel,
+          };
+        }),
+      });
       logger.info("no_pick", {
         groupId,
         weekId,
@@ -847,15 +891,22 @@ async function notifyMissedPicks(
         decision: "send",
         gameIds: plan.gameIds,
         spicy: spicyAlerts,
+        subtitle: alert.subtitle,
       });
-      await sendToUser(userId, plan.title, plan.body, "game_final", {
-        groupId,
-        weekId,
-        gameId: plan.gameIds[0] ?? "",
-        gameIds: plan.gameIds.join(","),
-        result: "no_pick",
-        gameCount: String(plan.gameIds.length),
-      });
+      await sendToUser(
+        userId,
+        plan.title,
+        plan.body,
+        "game_final",
+        {
+          ...alert.data,
+          gameIds: plan.gameIds.join(","),
+          result: "no_pick",
+          gameCount: String(plan.gameIds.length),
+        },
+        undefined,
+        alert
+      );
     } catch (err) {
       logger.error("no_pick push failed", { groupId, weekId, userId, error: String(err) });
     }
@@ -972,12 +1023,20 @@ async function refreshLiveStandings(
     });
     logger.info("took_the_lead", { groupId, weekId, userId, weeklyWins, decision });
     if (decision !== "send") continue;
+    const alert = buildLeadPush({
+      leagueName: leagueDisplayName(groupSnap.data()?.name),
+      groupId,
+      weekId,
+      weekNumber,
+    });
     await sendToUser(
       userId,
       "You took the lead",
       "You're #1 on the live board.",
       "took_the_lead",
-      { groupId, weekId }
+      alert.data,
+      undefined,
+      alert
     );
   }
 }
