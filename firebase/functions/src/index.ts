@@ -28,6 +28,7 @@ import {
   resolveSpicyAlerts,
   spicyGameFinalKey,
 } from "./pushCopy";
+import { noPickGameFromSlate, notifiedNoPickGameIds, planNoPickPush, type NoPickGame } from "./noPickPush";
 import {
   SlateGameDoc,
   MemberDoc,
@@ -538,6 +539,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
       let anyFinalizedThisPass = false;
       const changedGameIds = new Set<string>();
       const updatedGames: SlateGameDoc[] = [];
+      const noPickGames: NoPickGame[] = [];
       for (const gameDoc of gamesSnap.docs) {
         const game = { id: gameDoc.id, ...gameDoc.data() } as unknown as SlateGameDoc;
         const event = eventById.get(game.espnEventId);
@@ -591,17 +593,29 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
           changedGameIds.add(game.id);
           if (transitioningToFinal) anyFinalizedThisPass = true;
           if (notifyFinal) {
-            await notifyGameFinal(
-              groupId,
-              weekId,
-              { ...game, ...patch } as SlateGameDoc,
-              pickMode,
-              week,
-              now
-            );
+            const finalGame = { ...game, ...patch } as SlateGameDoc;
+            await notifyGameFinal(groupId, weekId, finalGame, pickMode, week, now);
+            if (gameIsLocked(week, game.id, game.kickoff, now)) {
+              noPickGames.push(
+                noPickGameFromSlate({
+                  id: finalGame.id,
+                  locked: true,
+                  awayTeamAbbreviation: finalGame.awayTeamAbbreviation,
+                  homeTeamAbbreviation: finalGame.homeTeamAbbreviation,
+                  awayTeamName: finalGame.awayTeamName,
+                  homeTeamName: finalGame.homeTeamName,
+                  awayScore: finalGame.awayScore,
+                  homeScore: finalGame.homeScore,
+                })
+              );
+            }
           }
         }
         updatedGames.push({ ...game, ...patch } as SlateGameDoc);
+      }
+
+      if (noPickGames.length > 0) {
+        await notifyMissedPicks(groupId, weekId, week.status, memberIds, noPickGames);
       }
 
       const allFinal =
@@ -744,6 +758,106 @@ async function notifyGameFinal(
         userId,
         error: String(err),
       });
+    }
+  }
+}
+
+/**
+ * One combined push per member who left a locked, just-final game blank.
+ * Claim `noPickAlerts/{userId}` before send so a retry cannot double-fire.
+ * A member with game results off is not claimed; they simply miss this push.
+ */
+async function notifyMissedPicks(
+  groupId: string,
+  weekId: string,
+  weekStatus: unknown,
+  memberIds: string[],
+  games: NoPickGame[]
+): Promise<void> {
+  const groupRef = db.collection("groups").doc(groupId);
+  const weekRef = groupRef.collection("weeks").doc(weekId);
+  const [membersSnap, picksSnap] = await Promise.all([
+    groupRef.collection("members").get(),
+    weekRef.collection("picks").get(),
+  ]);
+  const members = membersOnRoster(
+    membersSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as MemberDoc)),
+    memberIds
+  );
+  const picksByDocId = new Map<string, Record<string, string>>();
+  const picksByUserField = new Map<string, Record<string, string>>();
+  for (const doc of picksSnap.docs) {
+    const data = doc.data() as PickDoc;
+    const picks = data.picks ?? {};
+    picksByDocId.set(doc.id, picks);
+    if (typeof data.userId === "string" && data.userId) picksByUserField.set(data.userId, picks);
+  }
+
+  for (const member of members) {
+    const userId = member.id;
+    if (!userId) continue;
+    try {
+      const [userSnap, memberSnap] = await Promise.all([
+        db.collection("users").doc(userId).get(),
+        groupRef.collection("members").doc(userId).get(),
+      ]);
+      const userData = userSnap.data();
+      const memberData = memberSnap.data();
+      const wantsGameFinals = shouldSendDeadlinePush(userData, "game_final", memberData);
+      const spicyAlerts = resolveSpicyAlerts(userData, memberData);
+      const picks = picksByDocId.get(userId) ?? picksByUserField.get(userId) ?? {};
+      const base = {
+        weekStatus,
+        games,
+        userId,
+        picks,
+        wantsGameFinals,
+        spicyAlerts,
+      };
+      if (!wantsGameFinals) {
+        if (planNoPickPush({ ...base, wantsGameFinals: true, alreadyNotifiedGameIds: [] })) {
+          logger.info("no_pick", { groupId, weekId, userId, decision: "pref_off" });
+        }
+        continue;
+      }
+      if (!planNoPickPush({ ...base, alreadyNotifiedGameIds: [] })) continue;
+
+      const alertRef = weekRef.collection("noPickAlerts").doc(userId);
+      const plan = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(alertRef);
+        const prior = notifiedNoPickGameIds(snap.data());
+        const fresh = planNoPickPush({ ...base, alreadyNotifiedGameIds: prior });
+        if (!fresh) return null;
+        const gameIds = [...new Set([...prior, ...fresh.gameIds])].sort();
+        tx.set(
+          alertRef,
+          { gameIds, updatedAt: FieldValue.serverTimestamp() },
+          { merge: true }
+        );
+        return fresh;
+      });
+      if (!plan) {
+        logger.info("no_pick", { groupId, weekId, userId, decision: "already_sent" });
+        continue;
+      }
+      logger.info("no_pick", {
+        groupId,
+        weekId,
+        userId,
+        decision: "send",
+        gameIds: plan.gameIds,
+        spicy: spicyAlerts,
+      });
+      await sendToUser(userId, plan.title, plan.body, "game_final", {
+        groupId,
+        weekId,
+        gameId: plan.gameIds[0] ?? "",
+        gameIds: plan.gameIds.join(","),
+        result: "no_pick",
+        gameCount: String(plan.gameIds.length),
+      });
+    } catch (err) {
+      logger.error("no_pick push failed", { groupId, weekId, userId, error: String(err) });
     }
   }
 }

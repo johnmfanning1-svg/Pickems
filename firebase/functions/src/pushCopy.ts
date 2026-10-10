@@ -113,41 +113,25 @@ export const LINE_POOLS: Record<GameFinalScenario, readonly PooledLine[]> = {
   blowout_loss: [
     { text: "Horrible pick." },
     { text: "{team} {missedBy} {margin}. The group chat is already typing." },
-    { text: "That wasn't a tough beat. That was a {margin}-point donation to {opp}." },
     { text: "{score}. You picked {team}. We're bringing this up at Thanksgiving." },
     { text: "You lost the argument with {opp} by {margin}." },
-    { text: "{team} never threatened the number. You stayed in anyway." },
     { text: "A {margin}-point miss. Were you watching a different sport?" },
     { text: "Off by {margin}. The spreadsheet is ashamed of you." },
     { text: "This bet was over early and so were you." },
-    { text: "Somewhere a {opp} fan is naming a drink after you." },
     { text: "You called {team} a lock. It was a lock. For {opp}." },
-    { text: "Blowout. No moral victory. We're not doing a speech." },
   ],
   bad_beat: [
-    { text: "{MissedBy} {margin}. The football gods hate you specifically." },
     { text: "{team} {missedBy} {margin}. Brutal." },
-    { text: "Short by {margin}. Not a strategy. A cry for help." },
-    { text: "So close your phone should have to apologize." },
-    { text: "{team} had it, and then the universe checked the ID." },
-    { text: "You finished {margin} short of getting to be unbearable." },
-    { text: "Heartbreaker. Also, and this matters, a skill issue." },
-    { text: "You were one stop from talking trash. Now you are the trash talk." },
     { text: "Short by {margin}. Hang the screenshot in the group chat." },
-    { text: "{team} did everything except the part where you win." },
-    { text: "Missed by the hook. The football gods hate you specifically.", when: "ats-hook" },
     { text: "Half a point. {opp} sends their regards and the receipt.", when: "ats-hook" },
   ],
   upset_loss: [
     { text: "What were you thinking?" },
     { text: "You took a {spread}-point favorite and they lost outright. Delete the app." },
-    { text: "{team} was laying {spread}. They lost. Read it again, slower." },
     { text: "A {spread}-point favorite. Outright. The group chat needs a minute." },
     { text: "{opp} just beat your {spread}-point lock. The spread was a suggestion." },
     { text: "You faded the dog. The dog ate the {spread} and your week." },
-    { text: "{team} was supposed to win by {spread}. They forgot the winning part." },
     { text: "Favorite by {spread}. Final {score}. Put the phone in the other room." },
-    { text: "That's not a bad beat. Your {spread}-point lock lost the actual game." },
     { text: "Vegas spotted everybody {spread} and {team} still found a way." },
     { text: "Big favorite. Straight-up loss. We're printing the shirts." },
     { text: "{opp} as a {spread}-point dog. You picked the other side. Incredible." },
@@ -158,12 +142,7 @@ export const LINE_POOLS: Record<GameFinalScenario, readonly PooledLine[]> = {
     { text: "You were winning, and then everyone remembered who you picked." },
     { text: "Blown lead. {team} looked at the clock and got generous." },
     { text: "Halftime was the peak. Then a cliff with your name on it." },
-    { text: "{team} led and still lost. That's a skill, just not a useful one." },
     { text: "The lead was right there. {team} handed it to {opp} with both hands." },
-    { text: "They were up and then chose chaos. You chose {team}." },
-    { text: "{score}. They led, and you still had to read this." },
-    { text: "Blown lead. The football gods love a plot twist when it's yours." },
-    { text: "{team} was in front. Past-you is furious with present-you." },
     { text: "Up late, lost anyway. Your pick has commitment issues." },
   ],
   plain_loss: [
@@ -171,7 +150,6 @@ export const LINE_POOLS: Record<GameFinalScenario, readonly PooledLine[]> = {
     { text: "What were you thinking?" },
     { text: "Horrible pick." },
     { text: "{team} didn't get it done. {score}. We'll allow one excuse." },
-    { text: "Tough beat if you're a liar. You just got it wrong." },
     { text: "{opp} gets the last word. The group chat already has the meme." },
     { text: "Not a blowout. Not a heartbreaker. Just a regular bad idea." },
     { text: "You picked {team}. The bet did not. Teamwork." },
@@ -243,17 +221,6 @@ export const LINE_POOLS: Record<GameFinalScenario, readonly PooledLine[]> = {
     { text: "{team} neither saved you nor buried you. A push." },
     { text: "No win, no loss, no bit. Incredible waste of adrenaline." },
     { text: "A push. The rare notification where you almost escape a roast." },
-    { text: "{team} and the result shook hands. Nobody's happy. Perfect." },
-    { text: "Push. You live to be confidently wrong another day." },
-    { text: "{score}. Dead even. The football gods called it a draw and left." },
-    { text: "Landed on the number. The universe refused to pick a side.", when: "ats" },
-    { text: "Exactly the number. Vegas looked at your pick and shrugged.", when: "ats" },
-    { text: "Right on the number. Not a win. Not a tragedy. A shrug.", when: "ats" },
-    { text: "Push. The number looked at you and kept walking.", when: "ats" },
-    { text: "Tie game. Nobody wins, which is honestly the funniest outcome.", when: "su" },
-    { text: "A tie. Your straight-up lock just shrugged at you.", when: "su" },
-    { text: "A tie. You will explain this to people who did not ask.", when: "su" },
-    { text: "Tie game. Tell the group you meant to do that.", when: "su" },
   ],
 };
 
@@ -415,15 +382,25 @@ function buildCopy(record: Record<string, unknown>): GameFinalCopy {
   }
 
   const facts = buildFacts(record, classified);
-  const rendered = applicableLines(classified.scenario, facts.pickMode, facts.hook)
-    .map((line) => fillLine(line.text, facts))
-    .filter((line): line is string => line != null);
-  const body = pickFromPool(
+  const previousBody = previous?.body ?? null;
+  const rendered = filledLines(classified.scenario, facts, facts.hook);
+  let body = pickFromPool(
     rendered.length > 0 ? rendered : [SCENARIO_FALLBACK[classified.scenario]],
     asString(record.userId),
     asString(record.gameId),
-    previous?.body ?? null
+    previousBody
   );
+  // A one-line hook pool cannot rotate. Step once to the non-hook lines, then the
+  // scenario fallback. Never spin.
+  if (previousBody && body === previousBody && facts.hook && rendered.length <= 1) {
+    const alternate = filledLines(classified.scenario, facts, false).filter((line) => line !== previousBody);
+    if (alternate.length > 0) {
+      body = pickFromPool(alternate, asString(record.userId), asString(record.gameId), previousBody);
+    } else {
+      const fallback = SCENARIO_FALLBACK[classified.scenario];
+      if (fallback !== previousBody) body = fallback;
+    }
+  }
   return { title: clipTitle(titleFor(classified)), body: clipBody(body) };
 }
 
@@ -644,13 +621,22 @@ function buildFacts(record: Record<string, unknown>, classified: GameFinalClassi
 }
 
 function applicableLines(scenario: GameFinalScenario, mode: PickMode, hook: boolean): PooledLine[] {
-  return LINE_POOLS[scenario].filter((line) => {
+  const pool = LINE_POOLS[scenario];
+  if (hook) {
+    const hooked = pool.filter(
+      (line) => line.when === "hook" || (line.when === "ats-hook" && mode === "ats")
+    );
+    if (hooked.length > 0) return hooked;
+  }
+  return pool.filter((line) => {
     if (line.when === "ats") return mode === "ats";
     if (line.when === "su") return mode === "straightUp";
-    if (line.when === "hook") return hook;
-    if (line.when === "ats-hook") return mode === "ats" && hook;
-    return true;
+    return line.when == null;
   });
+}
+
+function filledLines(scenario: GameFinalScenario, facts: Facts, hook: boolean): string[] {
+  return dedupe(applicableLines(scenario, facts.pickMode, hook).map((line) => fillLine(line.text, facts)));
 }
 
 function fillLine(template: string, facts: Facts): string | null {
@@ -683,6 +669,7 @@ function pickFromPool(lines: string[], userId: string, gameId: string, previousB
   const pool = dedupe(lines);
   if (pool.length === 0) return "Push.";
   const index = stableHash(`${userId}:${gameId}`) % pool.length;
+  // One step only. A single-line pool (the hook) returns that line; buildCopy falls back.
   if (previousBody && pool[index] === previousBody && pool.length > 1) {
     return pool[(index + 1) % pool.length];
   }
