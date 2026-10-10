@@ -396,13 +396,26 @@ describe("line pools", () => {
     spread: 45.5,
   });
 
-  it("keeps 8 to 12 distinct lock-screen lines for every scenario and mode", () => {
+  it("keeps a distinct lock-screen line for every trimmed pool", () => {
+    const expected: Record<GameFinalScenario, number> = {
+      blowout_loss: 8,
+      bad_beat: 2,
+      upset_loss: 9,
+      blown_lead: 7,
+      plain_loss: 11,
+      upset_win: 12,
+      backdoor_win: 12,
+      dominant_win: 12,
+      plain_win: 12,
+      push: 5,
+    };
     for (const scenario of SCENARIOS) {
       for (const pickMode of ["ats", "straightUp"] as const) {
         for (const hook of [false, true]) {
           const lines = renderScenarioLines(scenario, { ...longNames, pickMode }, { hook });
-          expect(lines.length, `${scenario} ${pickMode} hook=${hook}`).toBeGreaterThanOrEqual(8);
-          expect(lines.length, `${scenario} ${pickMode} hook=${hook}`).toBeLessThanOrEqual(12);
+          const size =
+            scenario === "bad_beat" && hook && pickMode === "ats" ? 1 : expected[scenario];
+          expect(lines.length, `${scenario} ${pickMode} hook=${hook}`).toBe(size);
           expect(new Set(lines).size, scenario).toBe(lines.length);
           for (const line of lines) {
             expect(line.length, line).toBeLessThanOrEqual(MAX_PUSH_BODY_LENGTH);
@@ -420,6 +433,7 @@ describe("line pools", () => {
     expect(losses).toContain("Hope you didn't put money on that.");
     expect(losses).toContain("What were you thinking?");
     expect(losses).toContain("Horrible pick.");
+    expect(losses).not.toContain("Tough beat if you're a liar. You just got it wrong.");
 
     expect(renderScenarioLines("upset_loss", game({ spread: 21 }))).toContain(
       "You took a 21-point favorite and they lost outright. Delete the app."
@@ -430,9 +444,15 @@ describe("line pools", () => {
     expect(renderScenarioLines("backdoor_win", game({ pickMode: "straightUp" }))).not.toContain(
       "Backdoor cover. You did nothing and still got paid."
     );
-    expect(renderScenarioLines("bad_beat", game({ spread: 6.5, homeScore: 27, awayScore: 21 }), { hook: true })).toContain(
-      "Missed by the hook. The football gods hate you specifically."
+    const hookLines = renderScenarioLines(
+      "bad_beat",
+      game({ spread: 6.5, homeScore: 27, awayScore: 21 }),
+      { hook: true }
     );
+    expect(hookLines).toEqual(["Half a point. Michigan sends their regards and the receipt."]);
+    expect(hookLines).not.toContain("Missed by the hook. The football gods hate you specifically.");
+    expect(renderScenarioLines("push", game())).toEqual(renderScenarioLines("push", game({ pickMode: "straightUp" })));
+    expect(renderScenarioLines("push", game())).toHaveLength(5);
   });
 
   it("keeps titles short", () => {
@@ -467,6 +487,27 @@ describe("deterministic selection", () => {
       previous: { key: "group-1:game-1", title: "Kept", body: "Stored roast." },
     });
     expect(retry).toEqual({ title: "Kept", body: "Stored roast." });
+  });
+
+  it("falls back once when the only hook line is the previous body", () => {
+    const hookLine = "Half a point. Michigan sends their regards and the receipt.";
+    const input = game({ spread: 6.5, homeScore: 27, awayScore: 21, gameId: "g-hook" });
+    const copy = gameFinalPushCopy({
+      ...input,
+      previous: { key: "group-1:other", title: "So close", body: hookLine },
+    });
+    expect(copy.title).toBe("So close");
+    expect(copy.body).not.toBe(hookLine);
+    expect([
+      "Ohio State missed by half a point. Brutal.",
+      "Short by half a point. Hang the screenshot in the group chat.",
+    ]).toContain(copy.body);
+
+    const again = gameFinalPushCopy({
+      ...input,
+      previous: { key: "group-1:other", title: "So close", body: hookLine },
+    });
+    expect(again).toEqual(copy);
   });
 
   it("does not let a stored roast replace plain copy", () => {
