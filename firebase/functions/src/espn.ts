@@ -4,6 +4,8 @@ export interface EspnCompetitor {
   id: string;
   homeAway: string;
   score?: string;
+  /** Points per period when the scoreboard includes them. Not always present. */
+  linescores?: unknown;
   team: {
     id: string;
     displayName: string;
@@ -37,6 +39,9 @@ export interface ParsedEventScores {
   awayTeamId: string;
   completed: boolean;
   inProgress: boolean;
+  /** Per-period points. Null when ESPN omitted linescores or any entry was unusable. */
+  homeLineScores?: number[] | null;
+  awayLineScores?: number[] | null;
 }
 
 const SCOREBOARD_BASE =
@@ -53,6 +58,37 @@ export function parseCompetitorScore(raw: string | undefined): number | null {
   if (raw == null || raw.trim() === "") return null;
   const value = Number(raw);
   return Number.isFinite(value) ? value : null;
+}
+
+/**
+ * ESPN linescores are points scored in each period (not a running total).
+ * One bad entry drops the list so halftime math cannot run on a hole.
+ */
+export function parseLineScoreList(raw: unknown): number[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const scores: number[] = [];
+  for (const item of raw) {
+    const value = lineScoreValue(item);
+    if (value == null || value < 0) return null;
+    scores.push(value);
+  }
+  return scores;
+}
+
+function lineScoreValue(item: unknown): number | null {
+  if (typeof item === "number" && Number.isFinite(item)) return item;
+  if (typeof item === "string" && item.trim() !== "") {
+    const parsed = Number(item);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (!item || typeof item !== "object") return null;
+  const record = item as { value?: unknown; displayValue?: unknown };
+  if (typeof record.value === "number" && Number.isFinite(record.value)) return record.value;
+  if (typeof record.displayValue === "string" && record.displayValue.trim() !== "") {
+    const parsed = Number(record.displayValue);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 export async function fetchScoreboard(options?: {
@@ -104,6 +140,8 @@ export function parseEventScores(event: EspnEvent): ParsedEventScores | null {
     awayTeamId: away.team.id,
     completed: competition.status?.type?.completed === true || state === "post",
     inProgress: state === "in",
+    homeLineScores: parseLineScoreList(home.linescores),
+    awayLineScores: parseLineScoreList(away.linescores),
   };
 }
 

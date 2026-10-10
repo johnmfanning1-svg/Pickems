@@ -19,6 +19,15 @@ import {
 } from "./espn";
 import { espnScoreboardWeek } from "./cfbWeekCalendar";
 import { sendToUser, sendToUsers } from "./notifications";
+import { shouldSendDeadlinePush } from "./deadlinePushPrefs";
+import {
+  classifyGameFinal,
+  gameFinalPushCopy,
+  periodInputFromGame,
+  readLastSpicyGameFinal,
+  resolveSpicyAlerts,
+  spicyGameFinalKey,
+} from "./pushCopy";
 import {
   SlateGameDoc,
   MemberDoc,
@@ -547,6 +556,12 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
         const patch: Record<string, unknown> = { status: nextStatus };
         if (parsed.homeScore != null) patch.homeScore = parsed.homeScore;
         if (parsed.awayScore != null) patch.awayScore = parsed.awayScore;
+        if (parsed.homeLineScores && parsed.homeLineScores.length > 0) {
+          patch.homeLineScores = parsed.homeLineScores;
+        }
+        if (parsed.awayLineScores && parsed.awayLineScores.length > 0) {
+          patch.awayLineScores = parsed.awayLineScores;
+        }
         if (
           nextStatus === "final" &&
           parsed.homeScore != null &&
@@ -654,28 +669,82 @@ async function notifyGameFinal(
     .get();
 
   const covered = game.winnerTeamId;
-  const label = `${game.awayTeamAbbreviation ?? "AWAY"} @ ${game.homeTeamAbbreviation ?? "HOME"}`;
+  const periods = periodInputFromGame(game);
 
   for (const pickDoc of picksSnap.docs) {
     const pick = pickDoc.data() as PickDoc;
     const chosen = pick.picks?.[game.id];
     if (!chosen) continue;
+    const userId = pick.userId || pickDoc.id;
     let result = "push";
     if (covered && covered === chosen) result = "covered";
     else if (covered) result = "missed";
-    await sendToUser(
-      pick.userId,
-      result === "covered"
-        ? pickMode === "straightUp"
-          ? "You won"
-          : "You covered"
-        : result === "missed"
-          ? "Tough beat"
-          : "Push",
-      `${label} is final.`,
-      "game_final",
-      { groupId, weekId, gameId: game.id, result }
-    );
+
+    try {
+      const [userSnap, memberSnap] = await Promise.all([
+        db.collection("users").doc(userId).get(),
+        db.collection("groups").doc(groupId).collection("members").doc(userId).get(),
+      ]);
+      const userData = userSnap.data();
+      const memberData = memberSnap.data();
+      if (!shouldSendDeadlinePush(userData, "game_final", memberData)) continue;
+
+      const spicy = resolveSpicyAlerts(userData, memberData);
+      const copyInput = {
+        userId,
+        gameId: game.id,
+        groupId,
+        pickMode,
+        spicyAlerts: spicy,
+        pickedTeamId: chosen,
+        homeTeamId: game.homeTeamId,
+        awayTeamId: game.awayTeamId,
+        homeTeamName: game.homeTeamName,
+        awayTeamName: game.awayTeamName,
+        homeTeamAbbreviation: game.homeTeamAbbreviation,
+        awayTeamAbbreviation: game.awayTeamAbbreviation,
+        homeScore: game.homeScore,
+        awayScore: game.awayScore,
+        spread: game.spread,
+        spreadTeamId: game.spreadTeamId,
+        winnerTeamId: covered,
+        previous: readLastSpicyGameFinal(userData),
+        ...periods,
+      };
+      const copy = gameFinalPushCopy(copyInput);
+      logger.info("game_final", {
+        groupId,
+        weekId,
+        gameId: game.id,
+        userId,
+        result,
+        spicy,
+        scenario: classifyGameFinal(copyInput).scenario,
+      });
+      await sendToUser(userId, copy.title, copy.body, "game_final", {
+        groupId,
+        weekId,
+        gameId: game.id,
+        result,
+      });
+      if (!spicy || !userSnap.exists) continue;
+      await db.collection("users").doc(userId).set(
+        {
+          lastSpicyGameFinalKey: spicyGameFinalKey(groupId, game.id),
+          lastSpicyGameFinalTitle: copy.title,
+          lastSpicyGameFinalBody: copy.body,
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      logger.error("game_final push failed", {
+        groupId,
+        weekId,
+        gameId: game.id,
+        userId,
+        error: String(err),
+      });
+    }
   }
 }
 
