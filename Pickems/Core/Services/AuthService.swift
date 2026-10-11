@@ -688,6 +688,25 @@ final class AuthService {
         UserDefaults.standard.set(true, forKey: Self.notificationOnboardingKey(for: userId))
     }
 
+    /// Account-wide tone for game-final copy. League member docs cannot store this field yet.
+    func updateSpicyAlerts(_ enabled: Bool) async throws {
+        guard let uid = currentUserId else { return }
+        let previous = currentUser?.spicyAlerts
+        if var profile = currentUser {
+            profile.spicyAlerts = enabled
+            currentUser = profile
+        }
+        do {
+            try await db.user(uid).updateData(["spicyAlerts": enabled])
+        } catch {
+            if var profile = currentUser {
+                profile.spicyAlerts = previous
+                currentUser = profile
+            }
+            throw error
+        }
+    }
+
     func updateNotificationPref(_ category: NotificationPrefCategory, enabled: Bool) async throws {
         guard let uid = currentUserId else { return }
         let previous = currentUser?.wants(category)
