@@ -21,6 +21,8 @@ enum AppSheet: Identifiable, Equatable {
     case deleteAccount
     case stayOnTime
     case coverMoment(gameLabel: String, resultTitle: String, recordText: String, rankText: String)
+    /// One slate game opened from a game-final or single no-pick notification.
+    case gameDetail(gameId: String)
 
     var id: String {
         switch self {
@@ -36,6 +38,8 @@ enum AppSheet: Identifiable, Equatable {
         case .stayOnTime: return "stayOnTime"
         case .coverMoment(let game, let result, _, _):
             return "coverMoment.\(game).\(result)"
+        case .gameDetail(let gameId):
+            return "gameDetail.\(gameId)"
         }
     }
 }

@@ -77,6 +77,8 @@ struct AppSheetHostModifier: ViewModifier {
                 rankText: rankText,
                 shareSource: appState.weeklyShareSource()
             )
+        case .gameDetail(let gameId):
+            GameDetailSheet(gameId: gameId)
         }
     }
 

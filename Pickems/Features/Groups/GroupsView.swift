@@ -73,11 +73,16 @@ struct GroupsView: View {
             .onChange(of: appState.pendingCommissionerSettings) { _, pending in
                 presentPendingCommissionerSettings(pending)
             }
+            .onChange(of: appState.requestedLeaderboardThisWeek) { _, _ in
+                applyRequestedLeaderboardScope()
+            }
             .onChange(of: appState.groupService.selectedGroup?.id) { (previous: String?, next: String?) in
                 adoptLeaderboardLeagueChange(from: previous, to: next)
+                applyRequestedLeaderboardScope()
             }
             .onAppear {
                 presentPendingCommissionerSettings(appState.pendingCommissionerSettings)
+                applyRequestedLeaderboardScope()
             }
         }
     }
@@ -115,6 +120,15 @@ struct GroupsView: View {
             to: next,
             current: leaderboardManual
         )
+    }
+
+    /// Lead-alert tap. Applied after a league change so the cleared choice does not win.
+    private func applyRequestedLeaderboardScope() {
+        guard appState.requestedLeaderboardThisWeek,
+              let groupId = appState.groupService.selectedGroup?.id,
+              groupId == appState.requestedLeaderboardGroupId else { return }
+        leaderboardManual = NotificationLaunch.leaderboardChoice(leagueId: groupId)
+        appState.requestedLeaderboardThisWeek = false
     }
 
     private func presentPendingCommissionerSettings(_ pending: Bool) {

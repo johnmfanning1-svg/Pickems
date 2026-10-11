@@ -44,6 +44,8 @@ final class PickService {
     private var observedGroupId: String?
     /// Week the live pick listeners are attached to. Views hide stale lists when this lags `currentWeek`.
     private(set) var observedWeekId: String?
+    /// True after the games listener has delivered a snapshot for `observedWeekId`.
+    private(set) var didLoadSlateGames = false
     /// Invalidates in-flight `savePickDraft` local mirrors after a later clear/set.
     @ObservationIgnored
     private var userPickWriteGeneration = 0
@@ -66,6 +68,7 @@ final class PickService {
         submissionsListener?.remove()
         nominations = []
         slateGames = []
+        didLoadSlateGames = false
         observedUserId = userId
         observedGroupId = groupId
         observedWeekId = weekId
@@ -117,6 +120,7 @@ final class PickService {
                             SlateGame.fromDocument(id: doc.documentID, data: doc.data())
                         } ?? []
                     )
+                    self.didLoadSlateGames = true
                     self.onSlateChanged?()
                 }
             }
@@ -215,6 +219,7 @@ final class PickService {
         submissionsListener = nil
         nominations = []
         slateGames = []
+        didLoadSlateGames = false
         observedUserId = nil
         observedGroupId = nil
         observedWeekId = nil

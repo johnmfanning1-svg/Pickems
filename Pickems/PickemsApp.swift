@@ -39,6 +39,12 @@ struct PickemsApp: App {
                             appState.handleDeepLink(action)
                         }
                     }
+                    .onChange(of: appState.groupService.hasCompletedInitialGroupLoad) { _, loaded in
+                        if loaded { appState.flushPendingNotificationRoute() }
+                    }
+                    .onChange(of: appState.groupService.groups.map(\.id)) { _, _ in
+                        appState.flushPendingNotificationRoute()
+                    }
                     .onChange(of: appState.authService.authStateDetermined) { _, determined in
                         #if DEBUG
                         guard !DevAuthBypass.isEnabled else { return }
