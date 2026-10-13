@@ -34,6 +34,11 @@ on:
         type: boolean
         required: false
         default: true
+      retarget_open_version:
+        description: "If an older version is still editable (for example a staged 3.6.1), rename it to this version instead of failing"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -65,4 +70,5 @@ jobs:
           ASC_BUILD: ${{ inputs.build }}
           WHATS_NEW: ${{ inputs.whats_new }}
           ASC_DRY_RUN: ${{ inputs.dry_run }}
+          ASC_RETARGET_OPEN_VERSION: ${{ inputs.retarget_open_version }}
         run: python3 scripts/asc_submit_review.py
