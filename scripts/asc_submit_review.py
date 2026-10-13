@@ -992,6 +992,30 @@ def run(client: AscClient, version: str, build_number: str, whats_new: str, dry_
     target = pick_reusable_version(versions, version)
     if target is None:
         blocker = blocking_version(versions, version)
+        retarget = os.environ.get("ASC_RETARGET_OPEN_VERSION", "false").strip().lower() == "true"
+        if (
+            blocker
+            and retarget
+            and _attrs(blocker).get("appStoreState") in EDITABLE_VERSION_STATES
+            and version_sort_key(_attrs(blocker).get("versionString") or "") < version_sort_key(version)
+        ):
+            old_string = _attrs(blocker).get("versionString")
+            _, body = client.request(
+                "PATCH",
+                f"/v1/appStoreVersions/{blocker['id']}",
+                json_body={
+                    "data": {
+                        "type": "appStoreVersions",
+                        "id": blocker["id"],
+                        "attributes": {"versionString": version},
+                    }
+                },
+            )
+            log(f"Retargeted open appStoreVersion {blocker['id']} from {old_string} to {version}.")
+            target = (body or {}).get("data") or blocker
+            target.setdefault("attributes", {})["versionString"] = version
+            blocker = None
+    if target is None:
         if blocker:
             raise AscFailure(
                 f"iOS version {_attrs(blocker).get('versionString')} id={blocker.get('id')} "
