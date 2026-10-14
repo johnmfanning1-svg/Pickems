@@ -11,6 +11,7 @@ import { useAction } from "@/hooks/useAction";
 import type { WithId } from "@/hooks/useFirestore";
 import { adminRescoreWeek, adminUpsertPick } from "@/lib/callables";
 import { favoriteSpreadLabel, formatTimestamp } from "@/lib/format";
+import { gameEffectivelyLocked } from "@/lib/gameLock";
 import { resolveWeekPickMode, type MemberDoc, type SlateGameDoc } from "@/lib/types";
 
 type PickDraft = Record<string, Record<string, string>>;
@@ -31,6 +32,18 @@ export function WeekPicksPage() {
   if (!groupId || !weekId) return <Banner tone="error" title="Missing group or week id" />;
   const groupName = group?.name ?? groupId;
   const showsSpreads = resolveWeekPickMode(week.data?.pickMode, group?.rules) !== "straightUp";
+  const weekLock = {
+    status: week.data?.status,
+    pickLockMode: week.data?.pickLockMode,
+    pickDeadline: week.data?.pickDeadline,
+    weekLockAt: week.data?.weekLockAt,
+    remainingLockAt: week.data?.remainingLockAt,
+    allowLatePicks: group?.rules?.allowLatePicks === true,
+  };
+
+  function gameLocked(game: WithId<SlateGameDoc>): boolean {
+    return gameEffectivelyLocked(weekLock, game);
+  }
 
   function currentPicks(userId: string): Record<string, string> {
     const stored = pickForUser(picks.data, userId)?.picks ?? {};
@@ -306,11 +319,13 @@ export function WeekPicksPage() {
                       {games.data.map((game) => {
                         const value = values[game.id] ?? "";
                         const result = outcome(game, value || undefined);
+                        const locked = gameLocked(game);
                         return (
                           <td key={game.id} className="border-b border-ink-700 px-2 py-2">
                             <Select
                               value={value}
-                              disabled={action.busy}
+                              disabled={action.busy || locked}
+                              title={locked ? "This game has kicked off, so the pick stays locked." : undefined}
                               className={`w-28 ${
                                 result === "win"
                                   ? "border-emerald-700 text-emerald-300"
@@ -331,7 +346,13 @@ export function WeekPicksPage() {
                       <td className="border-b border-ink-700 px-2 py-2">
                         <Select
                           value={confidenceDrafts[member.id] ?? existing?.confidenceGameId ?? ""}
-                          disabled={action.busy}
+                          disabled={
+                            action.busy ||
+                            games.data.some(
+                              (game) =>
+                                game.id === (existing?.confidenceGameId ?? "") && gameLocked(game),
+                            )
+                          }
                           className="w-32"
                           onChange={(event) =>
                             setConfidenceDrafts((previous) => ({
@@ -342,7 +363,7 @@ export function WeekPicksPage() {
                         >
                           <option value="">none</option>
                           {games.data.map((game) => (
-                            <option key={game.id} value={game.id}>
+                            <option key={game.id} value={game.id} disabled={gameLocked(game)}>
                               {game.awayTeamAbbreviation} @ {game.homeTeamAbbreviation}
                             </option>
                           ))}

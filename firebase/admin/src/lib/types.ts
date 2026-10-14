@@ -129,6 +129,12 @@ export interface SlateGameDoc {
   awayTeamLogoURL?: string | null;
   spread: number;
   spreadTeamId: string;
+  /** Graded snapshot. Absent on games locked before this field existed. */
+  lockedSpread?: number | null;
+  lockedSpreadTeamId?: string | null;
+  /** ESPN movement. Display only. */
+  liveSpread?: number | null;
+  liveSpreadTeamId?: string | null;
   kickoff?: Timestamp | null;
   status?: GameStatus;
   homeScore?: number | null;

@@ -55,3 +55,7 @@ deploys. `afterEach` clears the emulator, and each case reseeds its own fixtures
   requires a fresh invite-code ticket; members cannot delete-and-recreate a
   season record; members cannot rewrite a week's lock snapshot or mint an open
   picking week. Leaving the league still works without a ticket.
+- **Pick-write expression budget** — a 20-game save, a create before the mirror
+  exists, a `liveIds` lock, a tiebreaker edit, and a mid-week unlock plus a
+  pre-kickoff spread edit. `afterAll` fails the file if `firestore-debug.log`
+  gained a `1000 expressions` line during the run.

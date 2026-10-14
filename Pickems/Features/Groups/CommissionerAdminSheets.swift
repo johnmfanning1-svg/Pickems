@@ -190,11 +190,12 @@ struct CommissionerSlateSheet: View {
             if showsSpreads {
                 LockedSpreadLabel(
                     lockedText: game.favoriteSpreadDisplay,
-                    liveText: picksVM.livePickCards[game.espnEventId]?.liveSpreadLabel
+                    liveText: picksVM.livePickCards[game.espnEventId]?.liveSpreadLabel,
+                    isLocked: WeekTransition.isSpreadLocked(game, week: week)
                 )
             }
             HStack {
-                if showsSpreads {
+                if showsSpreads && !WeekTransition.isSpreadLocked(game, week: week) {
                     Button("Edit Spread") { spreadEditGame = game }
                 }
                 if !week.skipsSelection {
