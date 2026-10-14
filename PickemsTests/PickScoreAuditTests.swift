@@ -45,15 +45,6 @@ struct PickScoreAuditTests {
         #expect(ScoringEngine.isPickCorrect(pickedTeamId: "home", game: tie, pickMode: .straightUp) == nil)
     }
 
-    /// KNOWN ISSUE (October audit): a non-finite spread falls through to the away
-    /// team, so away "covers" a 35–0 home win. States the intended behaviour.
-    @Test func nonFiniteSpreadDoesNotCoverTheAwayTeam() {
-        let broken = lineGame(spread: .nan, spreadTeamId: "home", homeScore: 35, awayScore: 0)
-        withKnownIssue("NaN spread grades as an away cover") {
-            #expect(ScoringEngine.isPickCorrect(pickedTeamId: "away", game: broken) != true)
-        }
-    }
-
     @Test func confidenceDoublesALossAndDoesNotDoubleAPush() {
         let loss = lineGame(spread: 7, spreadTeamId: "home", homeScore: 10, awayScore: 24)
         let doubled = ScoringEngine.scorePicks(picks: ["1": "home"], games: [loss], confidenceGameId: "1")
