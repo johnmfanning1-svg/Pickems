@@ -447,6 +447,10 @@ struct GroupPicksView: View {
                                 Text(nominationMatchupLabel(nom))
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(PickemsColors.textPrimary)
+                                Text(nominationDetailLine(nom))
+                                    .font(.caption)
+                                    .foregroundStyle(PickemsColors.textSecondary)
+                                    .lineLimit(2)
                                 if appState.selectedPickMode.showsSpreads {
                                     LockedSpreadLabel(
                                         lockedText: nominationSpreadLabel(nom),
@@ -504,6 +508,25 @@ struct GroupPicksView: View {
             homeAbbreviation: home,
             homeRank: nom.homeTeamId.flatMap { ranks.rank(for: $0) }
         )
+    }
+
+    /// Kickoff (local), network, and records — or Live / Final once the game starts.
+    private func nominationDetailLine(_ nom: Nomination) -> String {
+        let card = appState.picksViewModel.livePickCards[nom.espnEventId]
+        let away = card?.awayTeamAbbreviation ?? nom.awayTeamAbbreviation ?? String(nom.awayTeamName.prefix(4)).uppercased()
+        let home = card?.homeTeamAbbreviation ?? nom.homeTeamAbbreviation ?? String(nom.homeTeamName.prefix(4)).uppercased()
+        return SelectionCardDetail.line(SelectionCardDetail.Input(
+            kickoff: card?.kickoff ?? nom.kickoff,
+            status: card?.status ?? .scheduled,
+            awayScore: card?.awayScore,
+            homeScore: card?.homeScore,
+            liveClock: card.map { ESPNLiveGameCard.strippingTrailingScore(from: $0.statusDetail) },
+            broadcastLabel: card?.broadcastLabel,
+            awayAbbreviation: away,
+            homeAbbreviation: home,
+            awayRecord: card?.awayRecord,
+            homeRecord: card?.homeRecord
+        ))
     }
 
     private func nominationSpreadLabel(_ nom: Nomination) -> String {

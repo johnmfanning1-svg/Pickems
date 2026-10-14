@@ -217,7 +217,9 @@ actor ESPNService {
                 isNeutralSite: game.isNeutralSite,
                 userPickTeamAbbreviation: pickAbbr,
                 pickResult: result,
-                liveSpreadLabel: hideSpread ? nil : Self.liveSpreadLabel(espnGame: game, isSlateGame: isSlate)
+                liveSpreadLabel: hideSpread ? nil : Self.liveSpreadLabel(espnGame: game, isSlateGame: isSlate),
+                homeRecord: game.homeRecord,
+                awayRecord: game.awayRecord
             )
         }
 
@@ -485,8 +487,19 @@ actor ESPNService {
                 period: competition.status?.period,
                 displayClock: competition.status?.displayClock,
                 isInProgress: status == .inProgress
-            )
+            ),
+            homeRecord: Self.overallRecord(home.records),
+            awayRecord: Self.overallRecord(away.records)
         )
+    }
+
+    /// ESPN lists overall first (`type: "total"`, `name: "overall"`), then home/road/conference.
+    nonisolated static func overallRecord(_ records: [ESPNScoreboardResponse.ESPNRecord]?) -> String? {
+        guard let records, !records.isEmpty else { return nil }
+        let overall = records.first { $0.type == "total" || $0.name?.lowercased() == "overall" } ?? records.first
+        guard let summary = overall?.summary?.trimmingCharacters(in: .whitespaces),
+              summary.range(of: #"^\d+-\d+(-\d+)?$"#, options: .regularExpression) != nil else { return nil }
+        return summary
     }
 
     private func parseSpread(from odds: ESPNScoreboardResponse.ESPNOdds?, homeId: String, awayId: String) -> Double? {
