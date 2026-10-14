@@ -6,6 +6,8 @@ import FirebaseFirestore
 @Observable
 final class PickService {
     var nominations: [Nomination] = []
+    /// Nominations this device has voted to veto (votes are anonymous and final).
+    var vetoVotedNominationIds: Set<String> = []
     var slateGames: [SlateGame] = []
     /// Games plus any nominations not already on the slate — used while `.selection`
     /// after Reopen, when commissioner-mode games may have been copied to noms.
@@ -799,6 +801,17 @@ final class PickService {
         userPickEpoch += 1
 
         clearNominationsSubmitted(groupId: groupId, weekId: weekId, userId: nomination.submittedBy)
+    }
+
+    /// Casts one anonymous, final veto vote. Firestore rules allow only one vote doc
+    /// per member per Selection, and only while Selections are open before kickoff.
+    func castVetoVote(groupId: String, weekId: String, nominationId: String, voterId: String) async throws {
+        let ref = db.collection("groups").document(groupId)
+            .collection("weeks").document(weekId)
+            .collection("nominations").document(nominationId)
+            .collection("vetoVotes").document(voterId)
+        try await ref.setData(["voterId": voterId, "createdAt": FieldValue.serverTimestamp()])
+        vetoVotedNominationIds.insert(nominationId)
     }
 
     /// Swap a Selection for another game, keeping the same member attribution.

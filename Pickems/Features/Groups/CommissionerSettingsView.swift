@@ -113,7 +113,7 @@ struct CommissionerSettingsView: View {
 
     private var slateConfigurationFooter: String {
         rules.selectionMode == .member
-            ? "Each member selects this many games. Weekly game target = members × Selections. You’ll set a Selection deadline each week."
+            ? "Each member selects this many games. Weekly game target = members × Selections. You’ll set a Selection deadline each week." + (rules.allowVeto ? " Vetoes: other members can vote out a Selection before Selections close and before kickoff; the selector then picks again." : "")
             : "You choose every game for the group each week."
     }
 
@@ -133,6 +133,7 @@ struct CommissionerSettingsView: View {
                     in: 1...10
                 )
                 .listRowBackground(PickemsColors.cardBackground)
+                vetoRows
             } else {
                 Stepper("Games per week: \(rules.slateSize)", value: $rules.slateSize, in: 1...20)
                     .listRowBackground(PickemsColors.cardBackground)
@@ -142,6 +143,33 @@ struct CommissionerSettingsView: View {
         } footer: {
             Text(slateConfigurationFooter)
         }
+    }
+
+    // MARK: - Veto
+
+    private var vetoMaxVotes: Int {
+        GroupRules.maxVetoVotesNeeded(memberCount: liveGroup.memberIds.count)
+    }
+
+    @ViewBuilder
+    private var vetoRows: some View {
+        Toggle("Allow Selection vetoes", isOn: $rules.allowVeto)
+            .listRowBackground(PickemsColors.cardBackground)
+        if rules.allowVeto {
+            Stepper(
+                "Votes to veto: \(min(rules.vetoVotesNeeded, vetoMaxVotes))",
+                value: vetoVotesBinding,
+                in: 1...vetoMaxVotes
+            )
+            .listRowBackground(PickemsColors.cardBackground)
+        }
+    }
+
+    private var vetoVotesBinding: Binding<Int> {
+        Binding(
+            get: { min(max(1, rules.vetoVotesNeeded), vetoMaxVotes) },
+            set: { rules.vetoVotesNeeded = min(max(1, $0), vetoMaxVotes) }
+        )
     }
 
     // MARK: - Pickems Lock

@@ -463,6 +463,9 @@ struct Nomination: Codable, Identifiable, Equatable {
     var awayTeamLogoURL: String?
     var kickoff: Date
     var createdAt: Date
+    /// Written by `onSelectionVetoVote` while a veto is short of the threshold.
+    var vetoVoteCount: Int? = nil
+    var vetoVotesNeeded: Int? = nil
 
     static func fromESPNGame(
         _ game: ESPNGame,

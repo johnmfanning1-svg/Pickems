@@ -152,6 +152,20 @@ struct GroupRules: Codable, Equatable {
     var latePickPenaltyWins: Int
     /// ATS (default) vs Straight Up. Existing docs without this field decode as `.ats`.
     var pickMode: PickMode
+    /// Members may vote to veto another member's Selection. Off by default.
+    var allowVeto: Bool
+    /// Votes that remove a Selection. Clamped to 1…(members − 1) at use.
+    var vetoVotesNeeded: Int
+
+    static let defaultVetoVotesNeeded = 2
+
+    /// Highest allowed votes-needed value (league size minus the selector).
+    static func maxVetoVotesNeeded(memberCount: Int) -> Int { max(1, memberCount - 1) }
+
+    /// Mirrors `vetoThreshold` in firebase/functions/src/veto.ts.
+    func vetoThreshold(memberCount: Int) -> Int {
+        min(max(1, vetoVotesNeeded), Self.maxVetoVotesNeeded(memberCount: memberCount))
+    }
 
     /// Expected unique games for a week under the active mode.
     /// Member mode is always `members × Selections per person`, never the unused
@@ -172,6 +186,7 @@ struct GroupRules: Codable, Equatable {
         case customDeadlineHour, customDeadlineMinute
         case allowConfidencePick, allowLatePicks, latePickPenaltyWins
         case pickMode
+        case allowVeto, vetoVotesNeeded
     }
 
     init(
@@ -185,7 +200,9 @@ struct GroupRules: Codable, Equatable {
         allowConfidencePick: Bool = false,
         allowLatePicks: Bool = false,
         latePickPenaltyWins: Int = 1,
-        pickMode: PickMode = .ats
+        pickMode: PickMode = .ats,
+        allowVeto: Bool = false,
+        vetoVotesNeeded: Int = GroupRules.defaultVetoVotesNeeded
     ) {
         self.selectionMode = selectionMode
         self.selectionsPerMember = selectionsPerMember
@@ -198,6 +215,8 @@ struct GroupRules: Codable, Equatable {
         self.allowLatePicks = allowLatePicks
         self.latePickPenaltyWins = latePickPenaltyWins
         self.pickMode = pickMode
+        self.allowVeto = allowVeto
+        self.vetoVotesNeeded = vetoVotesNeeded
     }
 
     init(from decoder: Decoder) throws {
@@ -213,6 +232,8 @@ struct GroupRules: Codable, Equatable {
         allowLatePicks = try container.decodeIfPresent(Bool.self, forKey: .allowLatePicks) ?? false
         latePickPenaltyWins = try container.decodeIfPresent(Int.self, forKey: .latePickPenaltyWins) ?? 1
         pickMode = try container.decodeIfPresent(PickMode.self, forKey: .pickMode) ?? .ats
+        allowVeto = try container.decodeIfPresent(Bool.self, forKey: .allowVeto) ?? false
+        vetoVotesNeeded = try container.decodeIfPresent(Int.self, forKey: .vetoVotesNeeded) ?? GroupRules.defaultVetoVotesNeeded
     }
 
     static let `default` = GroupRules(

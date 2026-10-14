@@ -1784,3 +1784,154 @@ describe("member writes to other people and league records", () => {
     );
   });
 });
+
+describe("selection veto votes", () => {
+  const NOM_ID = "nom-veto";
+  const EVENT_ID = "401000777";
+
+  async function seedVeto({
+    allowVeto = true,
+    status = "selection",
+    deadlineOffsetMs = 60 * 60 * 1000,
+    kickoffOffsetMs = 3 * 60 * 60 * 1000,
+  } = {}) {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await updateDoc(doc(db, "groups", GROUP_ID), {
+        rules: { selectionMode: "member", allowVeto, vetoVotesNeeded: 2 },
+      });
+      await updateDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID), {
+        status,
+        selectionDeadline: new Date(Date.now() + deadlineOffsetMs),
+      });
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", NOM_ID), {
+        id: NOM_ID,
+        submittedBy: MEMBER,
+        submitterName: MEMBER,
+        espnEventId: EVENT_ID,
+        homeTeamName: "Alabama",
+        awayTeamName: "Georgia",
+        kickoff: new Date(Date.now() + kickoffOffsetMs),
+        createdAt: new Date(),
+      });
+    });
+  }
+
+  function voteRef(uid, voterId = uid) {
+    const db = testEnv.authenticatedContext(uid).firestore();
+    return doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", NOM_ID, "vetoVotes", voterId);
+  }
+
+  const vote = (voterId) => ({ voterId, createdAt: serverTimestamp() });
+
+  it("lets another member vote once while Selections are open", async () => {
+    await seedVeto();
+    await assertSucceeds(setDoc(voteRef(OTHER_MEMBER), vote(OTHER_MEMBER)));
+    await assertSucceeds(getDoc(voteRef(OTHER_MEMBER)));
+    // A second write is an update: votes are final.
+    await assertFails(setDoc(voteRef(OTHER_MEMBER), vote(OTHER_MEMBER)));
+    await assertFails(deleteDoc(voteRef(OTHER_MEMBER)));
+  });
+
+  it("keeps votes anonymous", async () => {
+    await seedVeto();
+    await assertSucceeds(setDoc(voteRef(OTHER_MEMBER), vote(OTHER_MEMBER)));
+    await assertFails(getDoc(voteRef(COMMISH, OTHER_MEMBER)));
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertFails(
+      getDocs(collection(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", NOM_ID, "vetoVotes"))
+    );
+  });
+
+  it("blocks the selector, outsiders, and voting as someone else", async () => {
+    await seedVeto();
+    await assertFails(setDoc(voteRef(MEMBER), vote(MEMBER)));
+    await assertFails(setDoc(voteRef(OUTSIDER), vote(OUTSIDER)));
+    await assertFails(setDoc(voteRef(COMMISH, OTHER_MEMBER), vote(OTHER_MEMBER)));
+  });
+
+  it("rejects extra fields and client timestamps", async () => {
+    await seedVeto();
+    await assertFails(setDoc(voteRef(OTHER_MEMBER), { ...vote(OTHER_MEMBER), weight: 5 }));
+    await assertFails(setDoc(voteRef(OTHER_MEMBER), { voterId: OTHER_MEMBER, createdAt: new Date(0) }));
+  });
+
+  it("blocks votes when the setting is off", async () => {
+    await seedVeto({ allowVeto: false });
+    await assertFails(setDoc(voteRef(OTHER_MEMBER), vote(OTHER_MEMBER)));
+  });
+
+  it("blocks votes after Selections close, after the deadline, or after kickoff", async () => {
+    await seedVeto({ status: "picking" });
+    await assertFails(setDoc(voteRef(OTHER_MEMBER), vote(OTHER_MEMBER)));
+    await testEnv.clearFirestore();
+    await seedVeto({ deadlineOffsetMs: -60 * 1000 });
+    await assertFails(setDoc(voteRef(OTHER_MEMBER), vote(OTHER_MEMBER)));
+    await testEnv.clearFirestore();
+    await seedVeto({ kickoffOffsetMs: -60 * 1000 });
+    await assertFails(setDoc(voteRef(OTHER_MEMBER), vote(OTHER_MEMBER)));
+  });
+
+  it("blocks votes on a Selection that no longer exists", async () => {
+    await seedVeto();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await deleteDoc(doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", NOM_ID));
+    });
+    await assertFails(setDoc(voteRef(OTHER_MEMBER), vote(OTHER_MEMBER)));
+  });
+
+  it("stops members from editing the server vote count", async () => {
+    await seedVeto();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertFails(
+      updateDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", NOM_ID), { vetoVoteCount: 0 })
+    );
+  });
+
+  it("veto records are member-readable and server-only, and block members reselecting that game", async () => {
+    await seedVeto();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID, "vetoes", EVENT_ID), {
+        espnEventId: EVENT_ID,
+        submittedBy: MEMBER,
+      });
+    });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertSucceeds(getDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "vetoes", EVENT_ID)));
+    await assertFails(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "vetoes", "x"), { espnEventId: "x" })
+    );
+    const reselect = (submittedBy, id) => ({
+      id,
+      submittedBy,
+      submitterName: submittedBy,
+      espnEventId: EVENT_ID,
+      spread: 3.5,
+      spreadTeamId: "333",
+      homeTeamId: "333",
+      homeTeamName: "Alabama",
+      awayTeamId: "61",
+      awayTeamName: "Georgia",
+      kickoff: new Date(Date.now() + 3 * 60 * 60 * 1000),
+      createdAt: new Date(),
+    });
+    await assertFails(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "again"), reselect(MEMBER, "again"))
+    );
+    await assertSucceeds(
+      setDoc(
+        doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "override"),
+        reselect(MEMBER, "override")
+      )
+    );
+    // Other games are unaffected.
+    await assertSucceeds(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "other"), {
+        ...reselect(MEMBER, "other"),
+        espnEventId: "401000888",
+      })
+    );
+  });
+});

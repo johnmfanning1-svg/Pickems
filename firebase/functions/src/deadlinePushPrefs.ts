@@ -10,7 +10,8 @@ export type DeadlinePushType =
   | "game_final"
   | "took_the_lead"
   | "season_closed"
-  | "chat_message";
+  | "chat_message"
+  | "selection_veto";
 
 export type PushPrefFields = {
   notifySelectionDeadlines?: boolean;
@@ -40,6 +41,8 @@ const PREF_FOR_TYPE: Record<DeadlinePushType, keyof PushPrefFields> = {
   chat_message: "notifyChatMessages",
   set_selection_deadline: "notifyCommissionerDeadlines",
   selection_deadline_passed: "notifyCommissionerDeadlines",
+  // A veto is Selections news: same switch as Selection deadline alerts.
+  selection_veto: "notifySelectionDeadlines",
 };
 
 function storedBool(
