@@ -66,6 +66,9 @@ jobs:
           sudo xcode-select -s "$XCODE_APP"
           xcodebuild -version
 
+      - name: Run iOS unit tests (gate; failure blocks archive and upload)
+        run: scripts/ci-ios-tests.sh
+
       - name: Compute version and build number
         id: version
         env:
