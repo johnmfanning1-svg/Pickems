@@ -316,7 +316,19 @@ export function GroupWeeksPage() {
 
               {isExpanded ? (
                 <div className="mt-4 border-t border-ink-600 pt-4">
-                  <WeekSlateEditor groupId={groupId} weekId={week.id} showsSpreads={showsSpreads} />
+                  <WeekSlateEditor
+                    groupId={groupId}
+                    weekId={week.id}
+                    showsSpreads={showsSpreads}
+                    week={{
+                      status: week.status,
+                      pickLockMode: week.pickLockMode,
+                      pickDeadline: week.pickDeadline,
+                      weekLockAt: week.weekLockAt,
+                      remainingLockAt: week.remainingLockAt,
+                      allowLatePicks: group?.rules?.allowLatePicks === true,
+                    }}
+                  />
                 </div>
               ) : null}
             </Card>

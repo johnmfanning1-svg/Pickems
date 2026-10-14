@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import {
@@ -22,7 +22,7 @@ import {
   arrayRemove,
   increment,
 } from "firebase/firestore";
-import { afterAll, afterEach, beforeAll, describe, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -35,6 +35,8 @@ const OUTSIDER = "outsider";
 const ADMIN_UID = "superadmin";
 
 let testEnv;
+const rulesLogPath = resolve(here, "..", "firestore-debug.log");
+let rulesLogCursor = 0;
 
 /** Signed-in context with the super-admin custom claim. */
 function adminCtx() {
@@ -123,9 +125,19 @@ beforeAll(async () => {
       port: Number(process.env.FIRESTORE_EMULATOR_HOST?.split(":")[1] ?? 8080),
     },
   });
+  rulesLogCursor = existsSync(rulesLogPath) ? statSync(rulesLogPath).size : 0;
 });
 
 afterAll(async () => {
+  if (existsSync(rulesLogPath)) {
+    const fresh = readFileSync(rulesLogPath).subarray(rulesLogCursor).toString("utf8");
+    if (fresh.includes("1000 expressions")) {
+      throw new Error(
+        "Firestore rules hit the 1,000-expression evaluation limit. New emulator log tail:\n" +
+          fresh.slice(-2000)
+      );
+    }
+  }
   await testEnv?.cleanup();
 });
 
@@ -680,7 +692,15 @@ describe("audit hardening (inviteCodes, member fields, pick delete, group create
 });
 
 describe("commissioner nomination management", () => {
-  function nomination(submittedBy, id = "nom1") {
+  function futureKickoff() {
+    return new Date(Date.now() + 3 * 60 * 60 * 1000);
+  }
+
+  function pastKickoff() {
+    return new Date(Date.now() - 60 * 1000);
+  }
+
+  function nomination(submittedBy, id = "nom1", kickoff = futureKickoff()) {
     return {
       id,
       submittedBy,
@@ -692,7 +712,7 @@ describe("commissioner nomination management", () => {
       homeTeamName: "Alabama",
       awayTeamId: "61",
       awayTeamName: "Georgia",
-      kickoff: new Date(),
+      kickoff,
       createdAt: new Date(),
     };
   }
@@ -755,9 +775,89 @@ describe("commissioner nomination management", () => {
     });
     const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
     await assertSucceeds(
-      updateDoc(doc(commishDb, ...path), { espnEventId: "401000002", spread: 7 })
+      updateDoc(doc(commishDb, ...path), {
+        espnEventId: "401000002",
+        spread: 7,
+        kickoff: futureKickoff(),
+      })
     );
     await assertSucceeds(deleteDoc(doc(commishDb, ...path)));
+  });
+
+  it("lets a member create a selection that has not kicked off", async () => {
+    await putWeekInSelection();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertSucceeds(
+      setDoc(
+        doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "open-game"),
+        nomination(MEMBER, "open-game", futureKickoff())
+      )
+    );
+  });
+
+  it("lets a super admin repair a selection whose kickoff is already past", async () => {
+    await putWeekInSelection();
+    const adminDb = adminCtx().firestore();
+    await assertSucceeds(
+      setDoc(
+        doc(adminDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "repair"),
+        nomination(MEMBER, "repair", pastKickoff())
+      )
+    );
+  });
+
+  it("rejects creating a selection whose kickoff is already past", async () => {
+    await putWeekInSelection();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertFails(
+      setDoc(
+        doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "played"),
+        nomination(MEMBER, "played", pastKickoff())
+      )
+    );
+    await assertFails(
+      setDoc(
+        doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "played-by-commish"),
+        nomination(MEMBER, "played-by-commish", pastKickoff())
+      )
+    );
+  });
+
+  it("rejects a selection create with no kickoff", async () => {
+    await putWeekInSelection();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const data = nomination(MEMBER, "missing-kickoff");
+    delete data.kickoff;
+    await assertFails(
+      setDoc(
+        doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "missing-kickoff"),
+        data
+      )
+    );
+  });
+
+  it("leaves an already-saved past-kickoff selection in place", async () => {
+    await putWeekInSelection();
+    const path = ["groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "already-played"];
+    const saved = nomination(MEMBER, "already-played", pastKickoff());
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), ...path), saved);
+    });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const snap = await assertSucceeds(getDoc(doc(memberDb, ...path)));
+    expect(snap.exists()).toBe(true);
+    expect(snap.data().espnEventId).toBe(saved.espnEventId);
+    await assertSucceeds(updateDoc(doc(memberDb, ...path), { spread: 10 }));
+    await assertFails(
+      updateDoc(doc(memberDb, ...path), {
+        espnEventId: "401000099",
+        kickoff: pastKickoff(),
+      })
+    );
+    const after = await assertSucceeds(getDoc(doc(memberDb, ...path)));
+    expect(after.data().espnEventId).toBe(saved.espnEventId);
+    expect(after.data().spread).toBe(10);
   });
 });
 
@@ -807,6 +907,26 @@ describe("rolling pick lock", () => {
         displayName: MEMBER,
         picks: { game1: "home", game2: "away" },
         isLocked: false,
+      });
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "games", "game1"), {
+        id: "game1",
+        espnEventId: "game1",
+        homeTeamId: "home",
+        awayTeamId: "away",
+        spread: 3,
+        spreadTeamId: "home",
+        kickoff: past(),
+        status: "inProgress",
+      });
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "games", "game2"), {
+        id: "game2",
+        espnEventId: "game2",
+        homeTeamId: "home",
+        awayTeamId: "away",
+        spread: 7,
+        spreadTeamId: "home",
+        kickoff: future(),
+        status: "scheduled",
       });
       await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "revealedPicks", "game1"), {
         picks: { [MEMBER]: "home", [OTHER_MEMBER]: "away" },
@@ -1178,6 +1298,444 @@ describe("lead alert dedupe", () => {
   });
 });
 
+describe("league spread lock", () => {
+  const past = () => new Date(Date.now() - 60 * 1000);
+  const future = () => new Date(Date.now() + 60 * 60 * 1000);
+  const startedId = "started";
+  const upcomingId = "upcoming";
+
+  function game(id, kickoff, status, spread = 3.5) {
+    return {
+      id,
+      espnEventId: id,
+      homeTeamId: "333",
+      homeTeamName: "Alabama",
+      awayTeamId: "61",
+      awayTeamName: "Georgia",
+      spread,
+      spreadTeamId: "333",
+      kickoff,
+      status,
+    };
+  }
+
+  async function seedSlate({ weekStatus = "picking", deadline = future() } = {}) {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(
+        doc(db, "groups", GROUP_ID, "weeks", WEEK_ID),
+        {
+          status: weekStatus,
+          pickLockMode: "firstKickoff",
+          pickDeadline: deadline,
+          weekLockAt: deadline,
+          gameIds: [startedId, upcomingId],
+          gameKickoffs: {
+            [startedId]: past(),
+            [upcomingId]: future(),
+          },
+        },
+        { merge: true }
+      );
+      await setDoc(
+        doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "games", startedId),
+        game(startedId, past(), "inProgress", 7)
+      );
+      await setDoc(
+        doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "games", upcomingId),
+        game(upcomingId, future(), "scheduled", 3.5)
+      );
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", MEMBER), {
+        id: MEMBER,
+        userId: MEMBER,
+        displayName: MEMBER,
+        picks: { [startedId]: "333", [upcomingId]: "61" },
+        isLocked: false,
+      });
+    });
+  }
+
+  it("lets the commissioner edit a spread before kickoff and rejects everyone else", async () => {
+    await seedSlate();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const upcoming = doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", upcomingId);
+    await assertSucceeds(updateDoc(upcoming, { spread: 6.5, spreadTeamId: "61" }));
+    await assertFails(
+      updateDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", upcomingId), {
+        spread: 10,
+        spreadTeamId: "333",
+      })
+    );
+    await assertFails(updateDoc(upcoming, { spread: 6.5, homeTeamName: "Bama" }));
+  });
+
+  it("rejects a commissioner spread edit after kickoff or lock", async () => {
+    await seedSlate();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const started = doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", startedId);
+    await assertFails(updateDoc(started, { spread: 14, spreadTeamId: "61" }));
+    await assertFails(updateDoc(started, { lockedSpread: 2, lockedSpreadTeamId: "333" }));
+
+    await seedSlate({ weekStatus: "locked", deadline: past() });
+    const lockedUpcoming = doc(
+      testEnv.authenticatedContext(COMMISH).firestore(),
+      "groups",
+      GROUP_ID,
+      "weeks",
+      WEEK_ID,
+      "games",
+      upcomingId
+    );
+    await assertFails(updateDoc(lockedUpcoming, { spread: 1, spreadTeamId: "333" }));
+  });
+
+  it("still lets the live line move after the graded spread is frozen", async () => {
+    await seedSlate();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const started = doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", startedId);
+    await assertSucceeds(updateDoc(started, { liveSpread: 9.5, liveSpreadTeamId: "61" }));
+    await assertFails(updateDoc(started, { spread: 9.5, spreadTeamId: "61" }));
+    const saved = await getDoc(started);
+    if (saved.data()?.liveSpread !== 9.5 || saved.data()?.spread !== 7) {
+      throw new Error("live line did not move independently of the graded spread");
+    }
+  });
+
+  it("unlocks only games that have not kicked off", async () => {
+    await seedSlate({ weekStatus: "locked", deadline: past() });
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const week = doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID);
+    await assertFails(
+      updateDoc(doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", upcomingId), {
+        spread: 4,
+        spreadTeamId: "333",
+      })
+    );
+
+    await assertSucceeds(
+      updateDoc(week, {
+        status: "picking",
+        pickDeadline: future(),
+        lockedAt: deleteField(),
+      })
+    );
+
+    await assertSucceeds(
+      updateDoc(doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", upcomingId), {
+        spread: 4,
+        spreadTeamId: "61",
+        lockedSpread: deleteField(),
+        lockedSpreadTeamId: deleteField(),
+      })
+    );
+    await assertFails(
+      updateDoc(doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", startedId), {
+        spread: 2,
+        spreadTeamId: "333",
+      })
+    );
+
+    const pick = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", MEMBER);
+    await assertSucceeds(
+      updateDoc(pick, {
+        picks: { [startedId]: "333", [upcomingId]: "333" },
+        isLocked: false,
+      })
+    );
+    await assertFails(
+      updateDoc(pick, {
+        picks: { [startedId]: "61", [upcomingId]: "333" },
+        isLocked: false,
+      })
+    );
+    const saved = await getDoc(pick);
+    if (saved.data()?.picks?.[startedId] !== "333" || saved.data()?.picks?.[upcomingId] !== "333") {
+      throw new Error("mid-week unlock changed a started game or missed the upcoming game");
+    }
+  });
+
+  it("trusts the game lock mirror over a rewritten week kickoff snapshot", async () => {
+    await seedSlate({ weekStatus: "picking", deadline: future() });
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "gameLock", "current"), {
+        kickoffs: { [startedId]: past(), [upcomingId]: future() },
+        phases: { [startedId]: "in", [upcomingId]: "pre" },
+      });
+      await updateDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID), {
+        gameKickoffs: { [startedId]: future(), [upcomingId]: future() },
+        gamePhases: { [startedId]: "scheduled", [upcomingId]: "scheduled" },
+      });
+    });
+
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertFails(
+      setDoc(doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "gameLock", "current"), {
+        kickoffs: { [startedId]: future() },
+        phases: { [startedId]: "pre" },
+      })
+    );
+    await assertFails(
+      updateDoc(doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", startedId), {
+        spread: 1,
+        spreadTeamId: "333",
+        lockedSpread: 1,
+        lockedSpreadTeamId: "333",
+      })
+    );
+
+    const pick = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", MEMBER);
+    await assertSucceeds(
+      updateDoc(pick, {
+        picks: { [startedId]: "333", [upcomingId]: "333" },
+        isLocked: false,
+      })
+    );
+    await assertFails(
+      updateDoc(pick, {
+        picks: { [startedId]: "61", [upcomingId]: "333" },
+        isLocked: false,
+      })
+    );
+  });
+
+  it("rejects a spread edit when kickoff has passed even if status is still pre", async () => {
+    await seedSlate();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID, "games", startedId), {
+        status: "scheduled",
+        kickoff: past(),
+      });
+    });
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertFails(
+      updateDoc(doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", startedId), {
+        spread: 8,
+        spreadTeamId: "333",
+      })
+    );
+  });
+});
+
+describe("pick write expression budget", () => {
+  const SLATE = 20;
+  const past = () => new Date(Date.now() - 60 * 1000);
+  const future = () => new Date(Date.now() + 3 * 60 * 60 * 1000);
+  const gameId = (index) => `g${String(index).padStart(2, "0")}`;
+
+  function slateIds() {
+    return Array.from({ length: SLATE }, (_, index) => gameId(index));
+  }
+
+  async function seedFullWeek({
+    started = 0,
+    liveIds = [],
+    withMirror = true,
+    weekStatus = "picking",
+    deadline,
+    flattenSnapshot = false,
+  } = {}) {
+    await seed();
+    const ids = slateIds();
+    const kickoffs = {};
+    const phases = {};
+    const picks = {};
+    for (let index = 0; index < SLATE; index += 1) {
+      const id = ids[index];
+      const locked = index < started || liveIds.includes(id);
+      kickoffs[id] = index < started ? past() : future();
+      phases[id] = locked ? "in" : "pre";
+      picks[id] = "home";
+    }
+    const snapshotKickoffs = flattenSnapshot
+      ? Object.fromEntries(ids.map((id) => [id, future()]))
+      : kickoffs;
+    const snapshotPhases = flattenSnapshot
+      ? Object.fromEntries(ids.map((id) => [id, "scheduled"]))
+      : phases;
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(
+        doc(db, "groups", GROUP_ID, "weeks", WEEK_ID),
+        {
+          status: weekStatus,
+          pickLockMode: "firstKickoff",
+          pickDeadline: deadline ?? future(),
+          weekLockAt: deadline ?? future(),
+          gameIds: ids,
+          gameKickoffs: snapshotKickoffs,
+          gamePhases: snapshotPhases,
+        },
+        { merge: true }
+      );
+      if (withMirror) {
+        await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "gameLock", "current"), {
+          kickoffs,
+          phases,
+          liveIds,
+        });
+      }
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", MEMBER), {
+        id: MEMBER,
+        userId: MEMBER,
+        displayName: MEMBER,
+        picks,
+        isLocked: false,
+        confidenceGameId: ids[Math.min(started, SLATE - 1)],
+      });
+      for (const id of [ids[0], ids[SLATE - 1]]) {
+        const index = ids.indexOf(id);
+        await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "games", id), {
+          id,
+          espnEventId: id,
+          homeTeamId: "home",
+          awayTeamId: "away",
+          spread: 3.5,
+          spreadTeamId: "home",
+          kickoff: index < started ? past() : future(),
+          status: index < started ? "inProgress" : "scheduled",
+        });
+      }
+    });
+    return { ids, picks };
+  }
+
+  function flipped(picks, ids) {
+    const next = { ...picks };
+    for (const id of ids) next[id] = "away";
+    return next;
+  }
+
+  it("allows a full-slate save and rejects a started game without the expression cap", async () => {
+    const { ids, picks } = await seedFullWeek();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const pick = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", MEMBER);
+    await assertSucceeds(updateDoc(pick, { picks: flipped(picks, ids), isLocked: false }));
+
+    const started = await seedFullWeek({ started: 1, flattenSnapshot: true });
+    const lockedPick = doc(
+      testEnv.authenticatedContext(MEMBER).firestore(),
+      "groups",
+      GROUP_ID,
+      "weeks",
+      WEEK_ID,
+      "picks",
+      MEMBER
+    );
+    const openIds = started.ids.slice(1);
+    await assertSucceeds(
+      updateDoc(lockedPick, { picks: flipped(started.picks, openIds), isLocked: false })
+    );
+    await assertFails(
+      updateDoc(lockedPick, {
+        picks: flipped(started.picks, [started.ids[0]]),
+        isLocked: false,
+      })
+    );
+    await assertFails(
+      updateDoc(lockedPick, {
+        picks: flipped(started.picks, [started.ids[SLATE - 1], started.ids[0]]),
+        isLocked: false,
+      })
+    );
+  });
+
+  it("allows a 20-game create from the week snapshot when the mirror is not written yet", async () => {
+    const { ids } = await seedFullWeek({ withMirror: false });
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await deleteDoc(doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID, "picks", OTHER_MEMBER));
+    });
+    const memberDb = testEnv.authenticatedContext(OTHER_MEMBER).firestore();
+    const picks = Object.fromEntries(ids.map((id) => [id, "away"]));
+    await assertSucceeds(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", OTHER_MEMBER), {
+        id: OTHER_MEMBER,
+        userId: OTHER_MEMBER,
+        displayName: OTHER_MEMBER,
+        picks,
+        isLocked: false,
+      })
+    );
+  });
+
+  it("locks a game the mirror marks live even when its kickoff is still ahead", async () => {
+    const { ids, picks } = await seedFullWeek({ liveIds: [gameId(0)] });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const pick = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", MEMBER);
+    await assertSucceeds(
+      updateDoc(pick, { picks: flipped(picks, ids.slice(1)), isLocked: false })
+    );
+    await assertFails(updateDoc(pick, { picks: flipped(picks, [ids[0]]), isLocked: false }));
+  });
+
+  it("allows a tiebreaker move between open games and blocks one onto a started game", async () => {
+    const { ids, picks } = await seedFullWeek({ started: 1 });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const pick = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", MEMBER);
+    await assertSucceeds(updateDoc(pick, { confidenceGameId: ids[2], isLocked: false }));
+    await assertFails(updateDoc(pick, { confidenceGameId: ids[0], isLocked: false }));
+
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID, "picks", MEMBER), {
+        confidenceGameId: ids[0],
+      });
+    });
+    await assertFails(updateDoc(pick, { confidenceGameId: ids[3], isLocked: false }));
+    await assertSucceeds(
+      updateDoc(pick, {
+        confidenceGameId: ids[0],
+        picks: { ...picks, [ids[4]]: "away" },
+        isLocked: false,
+      })
+    );
+  });
+
+  it("reopens only unstarted games after a mid-week unlock and still allows a pre-kickoff spread edit", async () => {
+    const { ids, picks } = await seedFullWeek({
+      started: 4,
+      weekStatus: "locked",
+      deadline: past(),
+      flattenSnapshot: true,
+    });
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const week = doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID);
+    const upcoming = doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", ids[SLATE - 1]);
+    const startedGame = doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", ids[0]);
+
+    await assertFails(updateDoc(upcoming, { spread: 6, spreadTeamId: "away" }));
+    await assertSucceeds(
+      updateDoc(week, {
+        status: "picking",
+        pickDeadline: future(),
+        lockedAt: deleteField(),
+      })
+    );
+    await assertSucceeds(updateDoc(upcoming, { spread: 6.5, spreadTeamId: "away" }));
+    await assertFails(updateDoc(startedGame, { spread: 1, spreadTeamId: "home" }));
+    await assertFails(
+      updateDoc(upcoming, {
+        spread: 6.5,
+        spreadTeamId: "away",
+        lockedSpread: 6.5,
+        lockedSpreadTeamId: "away",
+      })
+    );
+
+    const pick = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "picks", MEMBER);
+    await assertSucceeds(
+      updateDoc(pick, { picks: flipped(picks, ids.slice(4)), isLocked: false })
+    );
+    await assertFails(
+      updateDoc(pick, { picks: flipped(picks, [ids[1]]), isLocked: false })
+    );
+  });
+});
+
 describe("member writes to other people and league records", () => {
   it("blocks a member from writing standings, seasons, career, or another member", async () => {
     await seed();
@@ -1211,14 +1769,17 @@ describe("member writes to other people and league records", () => {
     );
   });
 
-  it("lets the author clear isDeleted after a commissioner hide", async () => {
+  // KNOWN ISSUE (October audit): the rules let the author clear isDeleted after a
+  // commissioner hide. This states the intended behaviour; it.fails keeps CI green
+  // until the rule is fixed, then flips red so the marker gets removed.
+  it.fails("blocks the author from un-hiding a message the commissioner hid", async () => {
     await seed();
     const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
     await assertSucceeds(
       updateDoc(doc(commishDb, "groups", GROUP_ID, "messages", "msg1"), { isDeleted: true })
     );
     const authorDb = testEnv.authenticatedContext(MEMBER).firestore();
-    await assertSucceeds(
+    await assertFails(
       updateDoc(doc(authorDb, "groups", GROUP_ID, "messages", "msg1"), { isDeleted: false })
     );
   });

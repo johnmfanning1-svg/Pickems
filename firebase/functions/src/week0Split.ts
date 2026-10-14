@@ -17,6 +17,7 @@ import {
   submissionCoversSlate,
 } from "./cfbWeekCalendar";
 import { lockSnapshotFromGames } from "./pickLock";
+import { gameEffectivelyLocked } from "./spreadLock";
 
 export interface Week0SplitGroupResult {
   groupId: string;
@@ -66,6 +67,24 @@ function eventKickoff(event: EspnEvent): Date | null {
 function eventIsWeekZero(event: EspnEvent, kickoffFromDoc?: Date | null): boolean {
   const kickoff = kickoffFromDoc ?? eventKickoff(event);
   return kickoff != null && isWeekZeroKickoff(kickoff);
+}
+
+function withLockedSpreadIfStarted(
+  payload: Record<string, unknown>,
+  nowMs: number
+): Record<string, unknown> {
+  const locked = gameEffectivelyLocked(
+    { status: "picking" },
+    { id: String(payload.id ?? ""), kickoff: payload.kickoff, status: payload.status },
+    nowMs
+  );
+  if (!locked || payload.lockedSpread != null) return payload;
+  if (typeof payload.spread !== "number" || typeof payload.spreadTeamId !== "string") return payload;
+  return {
+    ...payload,
+    lockedSpread: Math.abs(payload.spread),
+    lockedSpreadTeamId: payload.spreadTeamId,
+  };
 }
 
 function slatePayloadFromEspn(event: EspnEvent): Record<string, unknown> | null {
@@ -256,7 +275,11 @@ export async function migrateGroupWeek0Split(options: {
           }
         : slatePayloadFromEspn(event);
       if (!payload) continue;
-      batch.set(w0Ref.collection("games").doc(event.id), payload, { merge: true });
+      batch.set(
+        w0Ref.collection("games").doc(event.id),
+        withLockedSpreadIfStarted(payload, Date.now()),
+        { merge: true }
+      );
     }
 
     for (const nom of nomsToMove) {

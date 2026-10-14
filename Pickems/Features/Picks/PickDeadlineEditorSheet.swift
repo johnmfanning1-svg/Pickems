@@ -6,40 +6,59 @@ struct PickDeadlineEditorSheet: View {
     @Environment(\.themePalette) private var theme
 
     let weekLabel: String
-    let weekStatus: WeekStatus
-    let initialDeadline: Date?
-    let isPastDeadline: Bool
-    var isRollingLock: Bool = false
-    var onSave: (_ deadline: Date, _ reopenWeek: Bool, _ unlockMemberPicks: Bool) -> Void
-    var onLockRemainingNow: (() -> Void)? = nil
+    var onSave: (
+        _ groupId: String,
+        _ weekId: String,
+        _ isRollingLock: Bool,
+        _ deadline: Date,
+        _ reopenWeek: Bool,
+        _ unlockMemberPicks: Bool
+    ) -> Void
+    var onLockRemainingNow: ((_ groupId: String, _ weekId: String) -> Void)? = nil
 
     @State private var deadline: Date
     @State private var unlockMemberPicks: Bool
+    /// Frozen when the sheet is first created. A later league switch must not retarget Save.
+    @State private var groupId: String
+    @State private var weekId: String
+    @State private var weekStatus: WeekStatus
+    @State private var isPastDeadline: Bool
+    @State private var isRollingLock: Bool
 
     private var needsReopen: Bool {
         weekStatus == .locked
     }
 
     init(
+        groupId: String,
+        weekId: String,
         weekLabel: String,
         weekStatus: WeekStatus,
         initialDeadline: Date?,
         isPastDeadline: Bool,
         isRollingLock: Bool = false,
-        onLockRemainingNow: (() -> Void)? = nil,
-        onSave: @escaping (_ deadline: Date, _ reopenWeek: Bool, _ unlockMemberPicks: Bool) -> Void
+        onLockRemainingNow: ((_ groupId: String, _ weekId: String) -> Void)? = nil,
+        onSave: @escaping (
+            _ groupId: String,
+            _ weekId: String,
+            _ isRollingLock: Bool,
+            _ deadline: Date,
+            _ reopenWeek: Bool,
+            _ unlockMemberPicks: Bool
+        ) -> Void
     ) {
         self.weekLabel = weekLabel
-        self.weekStatus = weekStatus
-        self.initialDeadline = initialDeadline
-        self.isPastDeadline = isPastDeadline
-        self.isRollingLock = isRollingLock
         self.onLockRemainingNow = onLockRemainingNow
         self.onSave = onSave
         let defaultDeadline = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
         let seed = initialDeadline.flatMap { $0 > Date() ? $0 : nil } ?? defaultDeadline
         _deadline = State(initialValue: seed)
         _unlockMemberPicks = State(initialValue: isPastDeadline || weekStatus == .locked)
+        _groupId = State(initialValue: groupId)
+        _weekId = State(initialValue: weekId)
+        _weekStatus = State(initialValue: weekStatus)
+        _isPastDeadline = State(initialValue: isPastDeadline)
+        _isRollingLock = State(initialValue: isRollingLock)
     }
 
     var body: some View {
@@ -56,7 +75,7 @@ struct PickDeadlineEditorSheet: View {
 
                     if isRollingLock, weekStatus == .picking, let onLockRemainingNow {
                         Button("Lock remaining now") {
-                            onLockRemainingNow()
+                            onLockRemainingNow(groupId, weekId)
                             dismiss()
                         }
                         .listRowBackground(PickemsColors.cardBackground)
@@ -86,7 +105,7 @@ struct PickDeadlineEditorSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(needsReopen ? "Reopen" : "Save") {
-                        onSave(deadline, needsReopen, unlockMemberPicks)
+                        onSave(groupId, weekId, isRollingLock, deadline, needsReopen, unlockMemberPicks)
                         dismiss()
                     }
                     .fontWeight(.semibold)

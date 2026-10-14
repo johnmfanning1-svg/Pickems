@@ -20,6 +20,12 @@ struct CommissionerSettingsView: View {
     @State private var identityError: String?
     @State private var route: CommissionerSheet?
     @State private var showReopenSelectionsConfirm = false
+    /// League and week frozen when Reopen Selections was tapped.
+    @State private var reopenSelectionsTarget: DeadlineEditCapture?
+    /// League and week frozen when the Selection deadline editor opened.
+    @State private var selectionDeadlineEdit: SelectionDeadlineEdit?
+    /// League and week frozen when the Pickems deadline editor opened.
+    @State private var pickDeadlineEdit: PickDeadlineEdit?
     @State private var scoringSwitch: CommissionerScoringSwitch
     @State private var isSwitchingToRolling = false
     @State private var rollingPromptWeek: WeekSummary?
@@ -74,8 +80,8 @@ struct CommissionerSettingsView: View {
     private var settingsForm: some View {
         Form {
             CommissionerWeekAdminSections(
-                present: { (r: CommissionerSheet) in route = r },
-                showReopenSelectionsConfirm: $showReopenSelectionsConfirm
+                present: { (r: CommissionerSheet) in presentCommissionerSheet(r) },
+                requestReopenSelections: { presentReopenSelectionsConfirm() }
             )
             leagueIdentitySection
             membersRowSection
@@ -350,7 +356,16 @@ struct CommissionerSettingsView: View {
             .modifier(scoringPromptAlert)
             .alert("Reopen Selections?", isPresented: $showReopenSelectionsConfirm) {
                 Button("Reopen Selections") {
-                    appState.picksViewModel.reopenSelections(appState: appState)
+                    guard let target = reopenSelectionsTarget else { return }
+                    let write = target.writeTarget(
+                        selectedGroupId: appState.groupService.selectedGroup?.id,
+                        selectedWeekId: appState.groupService.currentWeek?.id
+                    )
+                    appState.picksViewModel.reopenSelections(
+                        groupId: write.groupId,
+                        weekId: write.weekId,
+                        appState: appState
+                    )
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -382,9 +397,17 @@ struct CommissionerSettingsView: View {
     private func routeContent(_ r: CommissionerSheet) -> some View {
         switch r {
         case .selectionDeadline:
-            selectionDeadlineSheet
+            if let selectionDeadlineEdit {
+                selectionDeadlineSheet(selectionDeadlineEdit)
+            } else {
+                missingDeadlineTarget
+            }
         case .pickDeadline:
-            pickDeadlineSheet
+            if let pickDeadlineEdit {
+                pickDeadlineSheet(pickDeadlineEdit)
+            } else {
+                missingDeadlineTarget
+            }
         case .adminGameBrowse:
             adminGameBrowseSheet
         case .members:
@@ -435,76 +458,202 @@ struct CommissionerSettingsView: View {
 
     /// Countdown prompt tap or Selection-deadline push: open the matching editor
     /// for this league (and the tapped week) once settings are on screen.
+    /// The write target is frozen here, before the present delay, so a league
+    /// switch during that delay cannot retarget the save.
     private func openPendingDeadlineEditor() async {
         guard let target = appState.pendingDeadlineEditor else { return }
         appState.pendingDeadlineEditor = nil
         guard target.matches(groupId: group.id) else { return }
+        let groupId = group.id
         let service = appState.groupService
-        if let weekId = target.weekId, service.currentWeek?.id != weekId,
+        if let weekId = target.weekId,
+           service.selectedGroup?.id == groupId,
+           service.currentWeek?.id != weekId,
+           service.availableWeeksBelong(to: groupId),
            let week = service.availableWeeks.first(where: { $0.id == weekId }) {
             appState.selectObservedWeek(week)
         }
+        let weekId = target.weekId ?? service.currentWeek?.id
+        guard let weekId else { return }
         // Let the settings sheet finish presenting before stacking the editor.
         try? await Task.sleep(nanoseconds: 400_000_000)
+        guard !Task.isCancelled else { return }
+        let week = displayedWeek(groupId: groupId, weekId: weekId)
         switch target.kind {
         case .selections:
+            selectionDeadlineEdit = SelectionDeadlineEdit(
+                capture: deadlineCapture(groupId: groupId, weekId: weekId, week: week),
+                initialDeadline: week?.selectionDeadline
+            )
             route = .selectionDeadline
         case .pickems:
+            guard let week else { return }
+            pickDeadlineEdit = makePickDeadlineEdit(groupId: groupId, week: week)
             route = .pickDeadline
         }
     }
 
-    private var selectionDeadlineSheet: some View {
+    private func presentCommissionerSheet(_ sheet: CommissionerSheet) {
+        switch sheet {
+        case .selectionDeadline:
+            guard let edit = makeSelectionDeadlineEdit() else { return }
+            selectionDeadlineEdit = edit
+        case .pickDeadline:
+            guard let edit = makePickDeadlineEdit() else { return }
+            pickDeadlineEdit = edit
+        default:
+            break
+        }
+        route = sheet
+    }
+
+    private func presentReopenSelectionsConfirm() {
+        guard appState.groupService.selectedGroup?.id == group.id,
+              let week = appState.groupService.currentWeek,
+              WeekTransition.canReopenSelections(week) else { return }
+        reopenSelectionsTarget = DeadlineEditCapture(
+            groupId: group.id,
+            weekId: week.id,
+            weekLabel: week.displayLabel,
+            isRollingLock: week.isRollingLock
+        )
+        showReopenSelectionsConfirm = true
+    }
+
+    /// Week fields for display only. Nil when the on-screen league is no longer `groupId`,
+    /// so a switch cannot supply another league's deadline as the editor seed.
+    private func displayedWeek(groupId: String, weekId: String) -> WeekSummary? {
+        let service = appState.groupService
+        guard service.selectedGroup?.id == groupId else { return nil }
+        if service.currentWeek?.id == weekId {
+            return service.currentWeek
+        }
+        guard service.availableWeeksBelong(to: groupId) else { return nil }
+        return service.availableWeeks.first { $0.id == weekId }
+    }
+
+    private func makeSelectionDeadlineEdit() -> SelectionDeadlineEdit? {
+        guard appState.groupService.selectedGroup?.id == group.id,
+              let week = appState.groupService.currentWeek else { return nil }
+        return SelectionDeadlineEdit(
+            capture: deadlineCapture(groupId: group.id, weekId: week.id, week: week),
+            initialDeadline: week.selectionDeadline
+        )
+    }
+
+    private func makePickDeadlineEdit() -> PickDeadlineEdit? {
+        guard appState.groupService.selectedGroup?.id == group.id,
+              let week = appState.groupService.currentWeek else { return nil }
+        return makePickDeadlineEdit(groupId: group.id, week: week)
+    }
+
+    private func makePickDeadlineEdit(groupId: String, week: WeekSummary) -> PickDeadlineEdit {
+        let initialDeadline: Date? = week.isRollingLock
+            ? (week.remainingLockAt ?? week.effectiveWeekLockAt ?? week.pickDeadline)
+            : week.pickDeadline
+        return PickDeadlineEdit(
+            capture: deadlineCapture(groupId: groupId, weekId: week.id, week: week),
+            weekStatus: week.status,
+            initialDeadline: initialDeadline,
+            isPastDeadline: WeekTransition.arePicksFullyLocked(week)
+        )
+    }
+
+    private func deadlineCapture(groupId: String, weekId: String, week: WeekSummary?) -> DeadlineEditCapture {
+        DeadlineEditCapture(
+            groupId: groupId,
+            weekId: weekId,
+            weekLabel: week?.displayLabel ?? "This week",
+            isRollingLock: week?.isRollingLock ?? false
+        )
+    }
+
+    private func selectionDeadlineSheet(_ edit: SelectionDeadlineEdit) -> some View {
         SelectionDeadlineSheet(
-            weekLabel: appState.groupService.currentWeek?.displayLabel ?? "This week",
-            initialDeadline: appState.groupService.currentWeek?.selectionDeadline
-        ) { deadline in
-            appState.picksViewModel.setSelectionDeadline(deadline, appState: appState)
+            groupId: edit.capture.groupId,
+            weekId: edit.capture.weekId,
+            weekLabel: edit.capture.weekLabel,
+            initialDeadline: edit.initialDeadline
+        ) { groupId, weekId, deadline in
+            let write = DeadlineEditCapture(
+                groupId: groupId,
+                weekId: weekId,
+                weekLabel: edit.capture.weekLabel,
+                isRollingLock: edit.capture.isRollingLock
+            ).writeTarget(
+                selectedGroupId: appState.groupService.selectedGroup?.id,
+                selectedWeekId: appState.groupService.currentWeek?.id
+            )
+            appState.picksViewModel.setSelectionDeadline(
+                deadline,
+                groupId: write.groupId,
+                weekId: write.weekId,
+                appState: appState
+            )
         }
         .pickemsEnvironment(appState)
     }
 
-    @ViewBuilder
-    private var pickDeadlineSheet: some View {
-        if let week = appState.groupService.currentWeek {
-            pickDeadlineEditor(for: week)
-        } else {
-            NavigationStack {
-                ContentUnavailableView(
-                    "No Active Week",
-                    systemImage: "calendar",
-                    description: Text("Open Commissioner Settings again after a week is selected.")
+    private func pickDeadlineSheet(_ edit: PickDeadlineEdit) -> some View {
+        PickDeadlineEditorSheet(
+            groupId: edit.capture.groupId,
+            weekId: edit.capture.weekId,
+            weekLabel: edit.capture.weekLabel,
+            weekStatus: edit.weekStatus,
+            initialDeadline: edit.initialDeadline,
+            isPastDeadline: edit.isPastDeadline,
+            isRollingLock: edit.capture.isRollingLock,
+            onLockRemainingNow: { groupId, weekId in
+                let write = DeadlineEditCapture(
+                    groupId: groupId,
+                    weekId: weekId,
+                    weekLabel: edit.capture.weekLabel,
+                    isRollingLock: true
+                ).writeTarget(
+                    selectedGroupId: appState.groupService.selectedGroup?.id,
+                    selectedWeekId: appState.groupService.currentWeek?.id
                 )
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Close") { route = nil }
-                    }
-                }
+                appState.picksViewModel.lockRemainingGamesNow(
+                    groupId: write.groupId,
+                    weekId: write.weekId,
+                    appState: appState
+                )
             }
-            .pickemsEnvironment(appState)
-        }
-    }
-
-    private func pickDeadlineEditor(for week: WeekSummary) -> some View {
-        let initialDeadline: Date? = week.isRollingLock
-            ? (week.remainingLockAt ?? week.effectiveWeekLockAt ?? week.pickDeadline)
-            : week.pickDeadline
-        return PickDeadlineEditorSheet(
-            weekLabel: week.displayLabel,
-            weekStatus: week.status,
-            initialDeadline: initialDeadline,
-            isPastDeadline: WeekTransition.arePicksFullyLocked(week),
-            isRollingLock: week.isRollingLock,
-            onLockRemainingNow: {
-                appState.picksViewModel.lockRemainingGamesNow(appState: appState)
-            }
-        ) { deadline, reopen, unlock in
+        ) { groupId, weekId, isRollingLock, deadline, reopen, unlock in
+            let write = DeadlineEditCapture(
+                groupId: groupId,
+                weekId: weekId,
+                weekLabel: edit.capture.weekLabel,
+                isRollingLock: isRollingLock
+            ).writeTarget(
+                selectedGroupId: appState.groupService.selectedGroup?.id,
+                selectedWeekId: appState.groupService.currentWeek?.id
+            )
             appState.picksViewModel.setPickDeadline(
                 deadline,
+                groupId: write.groupId,
+                weekId: write.weekId,
+                isRollingLock: isRollingLock,
                 reopenWeek: reopen,
                 unlockMemberPicks: unlock,
                 appState: appState
             )
+        }
+        .pickemsEnvironment(appState)
+    }
+
+    private var missingDeadlineTarget: some View {
+        NavigationStack {
+            ContentUnavailableView(
+                "No Active Week",
+                systemImage: "calendar",
+                description: Text("Open Commissioner Settings again after a week is selected.")
+            )
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { route = nil }
+                }
+            }
         }
         .pickemsEnvironment(appState)
     }

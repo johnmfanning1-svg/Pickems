@@ -13,6 +13,7 @@ import { logger } from "firebase-functions";
 import {
   fetchScoreboard,
   parseEventScores,
+  liveSpreadFromEvent,
   nextGameStatus,
   slateGameNeedsWrite,
   type EspnEvent,
@@ -62,9 +63,18 @@ import {
   pickemsOpenSkipReason,
   firstKickoffMillis,
   gameIsLocked,
+  kickoffMillis,
   type PickemsOpenSkipReason,
 } from "./pickLock";
 import { shouldRefreshLiveStandings } from "./liveStandings";
+import {
+  canonicalPhase,
+  phaseLockedGameIds,
+  gameEffectivelyLocked,
+  gradingLine,
+  lockedSpreadPatch,
+  oddsRefreshPatch,
+} from "./spreadLock";
 import { shouldClaimLeadAlert, shouldNotifyGameFinal, tookTheLeadRecipients } from "./leadAlert";
 
 initializeApp();
@@ -548,21 +558,64 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
       const changedGameIds = new Set<string>();
       const updatedGames: SlateGameDoc[] = [];
       const noPickGames: NoPickGame[] = [];
+      const lockKickoffs: Record<string, Timestamp> = {};
+      const lockPhases: Record<string, string> = {};
+      const weekForLock = {
+        ...week,
+        allowLatePicks: groupDoc.data()?.rules?.allowLatePicks === true,
+      };
       for (const gameDoc of gamesSnap.docs) {
         const game = { id: gameDoc.id, ...gameDoc.data() } as unknown as SlateGameDoc;
         const event = eventById.get(game.espnEventId);
-        if (!event) {
-          updatedGames.push(game);
-          continue;
+        const parsed = event ? parseEventScores(event) : null;
+        const nextStatus = parsed ? nextGameStatus(game.status, parsed) : game.status;
+        const locked = gameEffectivelyLocked(
+          weekForLock,
+          { id: game.id, kickoff: game.kickoff, status: nextStatus },
+          now
+        );
+        const freeze = lockedSpreadPatch(game, locked);
+        const graded: SlateGameDoc = { ...game, status: nextStatus };
+        if (freeze?.op === "set") {
+          graded.lockedSpread = freeze.lockedSpread;
+          graded.lockedSpreadTeamId = freeze.lockedSpreadTeamId;
+        } else if (freeze?.op === "clear") {
+          graded.lockedSpread = undefined;
+          graded.lockedSpreadTeamId = undefined;
         }
-        const parsed = parseEventScores(event);
+        const livePatch = oddsRefreshPatch(
+          game,
+          event ? liveSpreadFromEvent(event, game.homeTeamId, game.awayTeamId) : null
+        );
+        if (livePatch) {
+          graded.liveSpread = livePatch.liveSpread;
+          graded.liveSpreadTeamId = livePatch.liveSpreadTeamId;
+        }
+        const kickoffMs = kickoffMillis(game.kickoff);
+        if (kickoffMs != null) lockKickoffs[game.id] = Timestamp.fromMillis(kickoffMs);
+        lockPhases[game.id] = canonicalPhase(nextStatus);
+
         if (!parsed) {
-          updatedGames.push(game);
+          const spreadPatch: Record<string, unknown> = {};
+          if (freeze?.op === "set") {
+            spreadPatch.lockedSpread = freeze.lockedSpread;
+            spreadPatch.lockedSpreadTeamId = freeze.lockedSpreadTeamId;
+          } else if (freeze?.op === "clear") {
+            spreadPatch.lockedSpread = FieldValue.delete();
+            spreadPatch.lockedSpreadTeamId = FieldValue.delete();
+          }
+          if (livePatch) {
+            spreadPatch.liveSpread = livePatch.liveSpread;
+            spreadPatch.liveSpreadTeamId = livePatch.liveSpreadTeamId;
+          }
+          if (Object.keys(spreadPatch).length > 0) {
+            await gameDoc.ref.update(spreadPatch);
+          }
+          updatedGames.push(graded);
           continue;
         }
 
         const prevStatus = game.status;
-        const nextStatus = nextGameStatus(game.status, parsed);
         const patch: Record<string, unknown> = { status: nextStatus };
         if (parsed.homeScore != null) patch.homeScore = parsed.homeScore;
         if (parsed.awayScore != null) patch.awayScore = parsed.awayScore;
@@ -577,9 +630,27 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
           parsed.homeScore != null &&
           parsed.awayScore != null
         ) {
-          patch.winnerTeamId = coveredTeamId(game, parsed.homeScore, parsed.awayScore, pickMode);
+          const line = gradingLine(graded);
+          patch.winnerTeamId = coveredTeamId(
+            { ...graded, spread: line.spread, spreadTeamId: line.spreadTeamId },
+            parsed.homeScore,
+            parsed.awayScore,
+            pickMode
+          );
         }
-        if (slateGameNeedsWrite(game, nextStatus, parsed)) {
+        if (freeze?.op === "set") {
+          patch.lockedSpread = freeze.lockedSpread;
+          patch.lockedSpreadTeamId = freeze.lockedSpreadTeamId;
+        } else if (freeze?.op === "clear") {
+          patch.lockedSpread = FieldValue.delete();
+          patch.lockedSpreadTeamId = FieldValue.delete();
+        }
+        if (livePatch) {
+          patch.liveSpread = livePatch.liveSpread;
+          patch.liveSpreadTeamId = livePatch.liveSpreadTeamId;
+        }
+        const spreadWrite = freeze != null || livePatch != null;
+        if (slateGameNeedsWrite(game, nextStatus, parsed) || spreadWrite) {
           const transitioningToFinal = prevStatus !== "final" && nextStatus === "final";
           let notifyFinal = false;
           if (transitioningToFinal) {
@@ -601,9 +672,12 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
           changedGameIds.add(game.id);
           if (transitioningToFinal) anyFinalizedThisPass = true;
           if (notifyFinal) {
-            const finalGame = { ...game, ...patch } as SlateGameDoc;
+            if (parsed.homeScore != null) graded.homeScore = parsed.homeScore;
+            if (parsed.awayScore != null) graded.awayScore = parsed.awayScore;
+            const line = gradingLine(graded);
+            const finalGame = { ...graded, spread: line.spread, spreadTeamId: line.spreadTeamId };
             await notifyGameFinal(groupId, weekId, finalGame, pickMode, week, now, leagueName);
-            if (gameIsLocked(week, game.id, game.kickoff, now)) {
+            if (gameEffectivelyLocked(weekForLock, graded, now)) {
               noPickGames.push(
                 noPickGameFromSlate({
                   id: finalGame.id,
@@ -614,8 +688,8 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
                   homeTeamName: finalGame.homeTeamName,
                   awayScore: finalGame.awayScore,
                   homeScore: finalGame.homeScore,
-                  spread: finalGame.spread,
-                  spreadTeamId: finalGame.spreadTeamId,
+                  spread: line.spread,
+                  spreadTeamId: line.spreadTeamId,
                   homeTeamId: finalGame.homeTeamId,
                   awayTeamId: finalGame.awayTeamId,
                 })
@@ -623,7 +697,23 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
             }
           }
         }
-        updatedGames.push({ ...game, ...patch } as SlateGameDoc);
+        if (parsed?.homeScore != null) graded.homeScore = parsed.homeScore;
+        if (parsed?.awayScore != null) graded.awayScore = parsed.awayScore;
+        if (typeof patch.winnerTeamId === "string") graded.winnerTeamId = patch.winnerTeamId;
+        updatedGames.push(graded);
+      }
+
+      if (Object.keys(lockPhases).length > 0) {
+        await weekDoc.ref.collection("gameLock").doc("current").set(
+          {
+            kickoffs: lockKickoffs,
+            phases: lockPhases,
+            // Non-pregame ids. Rules `hasAny` this list instead of walking `phases`.
+            liveIds: phaseLockedGameIds(updatedGames),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
       }
 
       if (noPickGames.length > 0) {

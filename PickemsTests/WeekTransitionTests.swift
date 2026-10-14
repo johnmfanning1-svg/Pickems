@@ -203,8 +203,11 @@ struct WeekTransitionTests {
     }
 
     @Test func rollingSnapshotUsesLastKickoffForWeekLock() {
-        let first = Date().addingTimeInterval(3600)
-        let last = Date().addingTimeInterval(7200)
+        // Whole-second dates: Timestamp(date:) stores microseconds, so a raw
+        // Date() does not always round-trip exactly through dateValue().
+        let now = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
+        let first = now.addingTimeInterval(3600)
+        let last = now.addingTimeInterval(7200)
         var rules = GroupRules.default
         rules.pickDeadline = .rolling
         let updates = WeekTransition.toPickingUpdates(
@@ -302,6 +305,56 @@ struct WeekTransitionTests {
         #expect(!WeekTransition.canChangeWeekPickMode(
             week(status: .picking, deadline: past),
             leagueMode: .ats
+        ))
+    }
+
+    @Test func midWeekUnlockKeepsStartedGamesLocked() {
+        let past = Date().addingTimeInterval(-60)
+        let future = Date().addingTimeInterval(3600)
+        let reopened = week(status: .picking, deadline: future)
+        let started = SlateGame(
+            id: "started",
+            espnEventId: "started",
+            homeTeamId: "h",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "a",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: 7,
+            spreadTeamId: "h",
+            lockedSpread: 3,
+            lockedSpreadTeamId: "h",
+            kickoff: past,
+            status: .inProgress
+        )
+        let upcoming = SlateGame(
+            id: "upcoming",
+            espnEventId: "upcoming",
+            homeTeamId: "h",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "a",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: 4,
+            spreadTeamId: "a",
+            kickoff: future,
+            status: .scheduled
+        )
+        #expect(WeekTransition.isGameLocked(started, week: reopened))
+        #expect(WeekTransition.isSpreadLocked(started, week: reopened))
+        #expect(!WeekTransition.isGameLocked(upcoming, week: reopened))
+        #expect(!WeekTransition.isSpreadLocked(upcoming, week: reopened))
+        #expect(WeekTransition.isGameLocked(
+            gameId: "started",
+            kickoff: future,
+            status: .inProgress,
+            week: reopened
         ))
     }
 

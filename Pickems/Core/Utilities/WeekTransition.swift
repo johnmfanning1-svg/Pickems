@@ -184,12 +184,13 @@ enum WeekTransition {
 
     /// Game G is frozen for member edits.
     static func isGameLocked(_ game: SlateGame, week: WeekSummary, now: Date = Date()) -> Bool {
-        isGameLocked(gameId: game.id, kickoff: game.kickoff, week: week, now: now)
+        isGameLocked(gameId: game.id, kickoff: game.kickoff, status: game.status, week: week, now: now)
     }
 
     static func isGameLocked(
         gameId: String,
         kickoff: Date,
+        status: SlateGame.GameStatus? = nil,
         week: WeekSummary,
         now: Date = Date()
     ) -> Bool {
@@ -199,19 +200,52 @@ enum WeekTransition {
         case .picking:
             break
         }
-        if let remaining = week.remainingLockAt, now >= remaining {
+        if weekLevelLocked(week, now: now) { return true }
+        return gameHasStarted(gameId: gameId, kickoff: kickoff, status: status, week: week, now: now)
+    }
+
+    /// Spread edits use the same lock, except during Selection the week itself
+    /// is not a pick lock — only a started game is frozen.
+    static func isSpreadLocked(_ game: SlateGame, week: WeekSummary, now: Date = Date()) -> Bool {
+        switch week.status {
+        case .locked, .scored:
             return true
+        case .selection:
+            return gameHasStarted(gameId: game.id, kickoff: game.kickoff, status: game.status, week: week, now: now)
+        case .picking:
+            return isGameLocked(game, week: week, now: now)
         }
-        if week.isRollingLock {
-            if let stamped = week.gameKickoffs?[gameId] {
-                return now >= stamped
+    }
+
+    /// Week-level lock. Does not include this game's own kickoff.
+    static func weekLevelLocked(_ week: WeekSummary, now: Date = Date()) -> Bool {
+        switch week.status {
+        case .locked, .scored:
+            return true
+        case .selection:
+            return false
+        case .picking:
+            if let remaining = week.remainingLockAt, now >= remaining { return true }
+            if week.isRollingLock {
+                if let weekLockAt = week.weekLockAt { return now >= weekLockAt }
+                return false
             }
-            return now >= kickoff
+            if let deadline = week.pickDeadline { return now >= deadline }
+            return false
         }
-        if let deadline = week.pickDeadline {
-            return now >= deadline
-        }
-        return false
+    }
+
+    /// Kickoff has passed, or the game is in progress / final (`in` / `post`).
+    static func gameHasStarted(
+        gameId: String,
+        kickoff: Date,
+        status: SlateGame.GameStatus?,
+        week: WeekSummary,
+        now: Date = Date()
+    ) -> Bool {
+        if let status, status != .scheduled { return true }
+        if let stamped = week.gameKickoffs?[gameId], now >= stamped { return true }
+        return now >= kickoff
     }
 
     /// True when no remaining games can be edited (rolling: last kickoff / remaining freeze).
