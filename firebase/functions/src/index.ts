@@ -69,6 +69,7 @@ import {
 import { shouldRefreshLiveStandings } from "./liveStandings";
 import {
   canonicalPhase,
+  phaseLockedGameIds,
   gameEffectivelyLocked,
   gradingLine,
   lockedSpreadPatch,
@@ -707,6 +708,8 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
           {
             kickoffs: lockKickoffs,
             phases: lockPhases,
+            // Non-pregame ids. Rules `hasAny` this list instead of walking `phases`.
+            liveIds: phaseLockedGameIds(updatedGames),
             updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true }

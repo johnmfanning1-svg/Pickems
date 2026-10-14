@@ -32,6 +32,21 @@ export function canonicalPhase(status: unknown): GamePhase {
   return "pre";
 }
 
+/**
+ * Games the pick rules should reject without a per-id phase map walk.
+ * Kickoff time stays on `kickoffs` so rules can compare `request.time` exactly.
+ * This list is only the non-pregame phase, which a timestamp compare would miss
+ * when ESPN flips status before the stored kickoff.
+ */
+export function phaseLockedGameIds(games: Array<{ id?: unknown; status?: unknown }>): string[] {
+  const ids: string[] = [];
+  for (const game of games) {
+    if (typeof game.id !== "string" || game.id.length === 0) continue;
+    if (canonicalPhase(game.status) !== "pre") ids.push(game.id);
+  }
+  return ids;
+}
+
 export function isPregameStatus(status: unknown): boolean {
   if (status == null || status === "") return true;
   return canonicalPhase(status) === "pre";
