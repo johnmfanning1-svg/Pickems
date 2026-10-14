@@ -32,7 +32,18 @@ xcodebuild test \
   > "$OUT/logs/test.log" 2>&1
 rc=$?
 set -e
-grep -E "error:|Test Case .* (passed|failed)|Executed [0-9]+ test|\*\* TEST" "$OUT/logs/test.log" | grep -v "^$" | tail -n 2000 || true
+# Swift Testing prints "Test case '...' passed", XCTest prints "Test Case '...' passed".
+grep -iE "error:|Test case .* (passed|failed)|Executed [0-9]+ test|\*\* TEST" "$OUT/logs/test.log" | grep -v "^$" | tail -n 2000 || true
+passed=$(grep -ciE "^Test case '.*' passed" "$OUT/logs/test.log" || true)
+failed=$(grep -ciE "^Test case '.*' failed" "$OUT/logs/test.log" || true)
+echo "Test results: ${passed} passed, ${failed} failed"
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  echo "- iOS unit tests: ${passed} passed, ${failed} failed" >> "$GITHUB_STEP_SUMMARY"
+fi
+if [ "${failed}" != "0" ]; then
+  echo "Failed tests:"
+  grep -iE "^Test case '.*' failed" "$OUT/logs/test.log" || true
+fi
 if [ $rc -ne 0 ]; then
   echo "::error::xcodebuild test failed (exit $rc). Last 150 log lines:"
   tail -n 150 "$OUT/logs/test.log"
