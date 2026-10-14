@@ -9,7 +9,7 @@ struct LeagueWeekCacheTests {
 
     @Test func selectionDeadlineDoesNotCrossLeaguesThatShareAWeekId() {
         let deadline = Date(timeIntervalSince1970: 1_700_000_000)
-        var current = week(deadline: nil)
+        var current: WeekSummary? = week(deadline: nil)
         var chips = [week(deadline: nil), week(id: "2026-W6", number: 6)]
         LeagueWeekCache.update(
             observedGroupId: core4,
@@ -27,8 +27,8 @@ struct LeagueWeekCacheTests {
             )
         }
 
-        #expect(current.selectionDeadline == nil)
-        #expect(current.selectionDeadlineSetBy == nil)
+        #expect(current?.selectionDeadline == nil)
+        #expect(current?.selectionDeadlineSetBy == nil)
         #expect(chips[0].selectionDeadline == nil)
         #expect(chips[1].id == "2026-W6")
     }
@@ -36,7 +36,7 @@ struct LeagueWeekCacheTests {
     @Test func selectionDeadlineUpdatesOnlyTheOwningLeagueCaches() {
         let deadline = Date(timeIntervalSince1970: 1_700_000_000)
         let setAt = Date(timeIntervalSince1970: 1_700_000_100)
-        var current = week(deadline: nil)
+        var current: WeekSummary? = week(deadline: nil)
         var chips = [week(deadline: nil)]
         LeagueWeekCache.update(
             observedGroupId: ppp,
@@ -49,16 +49,16 @@ struct LeagueWeekCacheTests {
             SelectionDeadlineLocal.apply(deadline: deadline, setAt: setAt, setBy: "commish", to: &week)
         }
 
-        #expect(current.selectionDeadline == deadline)
-        #expect(current.selectionDeadlineSetAt == setAt)
-        #expect(current.selectionDeadlineSetBy == "commish")
+        #expect(current?.selectionDeadline == deadline)
+        #expect(current?.selectionDeadlineSetAt == setAt)
+        #expect(current?.selectionDeadlineSetBy == "commish")
         #expect(chips[0].selectionDeadline == deadline)
         #expect(chips[0].selectionDeadlineSetBy == "commish")
     }
 
     @Test func displayedWeekAndChipListCanBelongToDifferentLeagues() {
         let deadline = Date(timeIntervalSince1970: 1_700_000_000)
-        var current = week(deadline: nil)
+        var current: WeekSummary? = week(deadline: nil)
         var chips = [week(deadline: nil)]
         // Listener has moved to Core 4, but the chip list is still PPP's.
         LeagueWeekCache.update(
@@ -72,13 +72,13 @@ struct LeagueWeekCacheTests {
             SelectionDeadlineLocal.apply(deadline: deadline, setAt: deadline, setBy: "commish", to: &week)
         }
 
-        #expect(current.selectionDeadline == nil)
+        #expect(current?.selectionDeadline == nil)
         #expect(chips[0].selectionDeadline == deadline)
     }
 
     @Test func clearingASelectionDeadlineDoesNotClearTheOtherLeague() {
         let deadline = Date(timeIntervalSince1970: 1_700_000_000)
-        var current = week(status: .picking, deadline: deadline, setBy: "commish")
+        var current: WeekSummary? = week(status: .picking, deadline: deadline, setBy: "commish")
         var chips = [week(status: .picking, deadline: deadline, setBy: "commish")]
         LeagueWeekCache.update(
             observedGroupId: core4,
@@ -91,13 +91,13 @@ struct LeagueWeekCacheTests {
             SelectionDeadlineLocal.clear(on: &week)
         }
 
-        #expect(current.status == .picking)
-        #expect(current.selectionDeadline == deadline)
+        #expect(current?.status == .picking)
+        #expect(current?.selectionDeadline == deadline)
         #expect(chips[0].selectionDeadline == deadline)
     }
 
     @Test func clearingUpdatesTheLeagueThatOwnsTheCache() {
-        var current = week(status: .picking, deadline: Date())
+        var current: WeekSummary? = week(status: .picking, deadline: Date())
         var chips = [week(status: .locked, deadline: Date())]
         LeagueWeekCache.update(
             observedGroupId: ppp,
@@ -110,16 +110,16 @@ struct LeagueWeekCacheTests {
             SelectionDeadlineLocal.clear(on: &week)
         }
 
-        #expect(current.status == .selection)
-        #expect(current.selectionDeadline == nil)
-        #expect(current.lockedAt == nil)
+        #expect(current?.status == .selection)
+        #expect(current?.selectionDeadline == nil)
+        #expect(current?.lockedAt == nil)
         #expect(chips[0].status == .selection)
         #expect(chips[0].selectionDeadline == nil)
     }
 
     @Test func pickDeadlineUsesCapturedLockModeAndStaysInOneLeague() {
         let deadline = Date(timeIntervalSince1970: 1_700_000_500)
-        var current = week(status: .picking, rolling: true)
+        var current: WeekSummary? = week(status: .picking, rolling: true)
         var chips = [week(status: .picking, rolling: true)]
         #expect(PickDeadlineWrite.fieldName(isRollingLock: false) == "pickDeadline")
 
@@ -134,14 +134,14 @@ struct LeagueWeekCacheTests {
             PickDeadlineWrite.apply(deadline: deadline, isRollingLock: false, to: &week)
         }
 
-        #expect(current.pickDeadline == nil)
-        #expect(current.remainingLockAt == nil)
+        #expect(current?.pickDeadline == nil)
+        #expect(current?.remainingLockAt == nil)
         #expect(chips[0].pickDeadline == nil)
     }
 
     @Test func rollingPickDeadlineSetsRemainingLockOnlyOnThatLeague() {
         let deadline = Date(timeIntervalSince1970: 1_700_000_500)
-        var current = week(status: .picking, rolling: true)
+        var current: WeekSummary? = week(status: .picking, rolling: true)
         var chips = [week(status: .picking, rolling: true)]
         #expect(PickDeadlineWrite.fieldName(isRollingLock: true) == "remainingLockAt")
 
@@ -156,15 +156,15 @@ struct LeagueWeekCacheTests {
             PickDeadlineWrite.apply(deadline: deadline, isRollingLock: true, to: &week)
         }
 
-        #expect(current.remainingLockAt == deadline)
-        #expect(current.pickDeadline == nil)
+        #expect(current?.remainingLockAt == deadline)
+        #expect(current?.pickDeadline == nil)
         #expect(chips[0].remainingLockAt == deadline)
         #expect(chips[0].pickDeadline == nil)
     }
 
     @Test func reopenPickemsDoesNotReopenAnotherLeaguesWeek() {
         let deadline = Date(timeIntervalSince1970: 1_700_000_500)
-        var current = week(status: .locked, rolling: false)
+        var current: WeekSummary? = week(status: .locked, rolling: false)
         var chips = [current]
         LeagueWeekCache.update(
             observedGroupId: core4,
@@ -179,8 +179,8 @@ struct LeagueWeekCacheTests {
             PickDeadlineWrite.apply(deadline: deadline, isRollingLock: false, to: &week)
         }
 
-        #expect(current.status == .locked)
-        #expect(current.pickDeadline == nil)
+        #expect(current?.status == .locked)
+        #expect(current?.pickDeadline == nil)
         #expect(chips[0].status == .locked)
     }
 
@@ -207,7 +207,7 @@ struct LeagueWeekCacheTests {
     }
 
     @Test func mismatchedWeekIdIsNotUpdatedEvenInTheSameLeague() {
-        var current = week(deadline: nil)
+        var current: WeekSummary? = week(deadline: nil)
         var chips = [week(deadline: nil)]
         LeagueWeekCache.update(
             observedGroupId: ppp,
@@ -225,7 +225,7 @@ struct LeagueWeekCacheTests {
             )
         }
 
-        #expect(current.selectionDeadline == nil)
+        #expect(current?.selectionDeadline == nil)
         #expect(chips[0].selectionDeadline == nil)
     }
 
