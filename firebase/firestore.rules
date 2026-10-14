@@ -9,8 +9,12 @@ service cloud.firestore {
     // Super-user privilege lives in the Auth ID token, not in a Firestore doc:
     // it costs zero reads and no client write can ever grant it.
     // Granted with firebase/admin-tools/set-admin.mjs or the setAdminRole callable.
+    // A missing `admin` claim must be false. Reading the key directly throws
+    // ("Property admin is undefined"), and that error is an evaluation by itself.
     function isSuperAdmin() {
-      return isSignedIn() && request.auth.token.admin == true;
+      return isSignedIn()
+        && request.auth.token.keys().hasAny(['admin'])
+        && request.auth.token.admin == true;
     }
 
     function isGroupMember(groupId) {
@@ -73,14 +77,18 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']);
     }
 
-    // Week lock shared with pick selections. A started game stays locked even
-    // when this is false — see gameDataOpen.
-    function weekLevelLocked(groupId, week) {
+    // Group read only after a non-rolling deadline has actually passed.
+    // `&&` skips this on the common "still before kickoff" path.
+    function allowLatePicks(groupId) {
       let group = get(/databases/$(database)/documents/groups/$(groupId)).data;
-      let lateOk = !isRollingWeek(week)
-        && group.keys().hasAll(['rules'])
+      return group.keys().hasAll(['rules'])
         && group.rules.keys().hasAll(['allowLatePicks'])
         && group.rules.allowLatePicks == true;
+    }
+
+    // Week lock shared with pick selections. A started game stays locked even
+    // when this is false — see gameDataOpen / gameOpen.
+    function weekLevelLocked(groupId, week) {
       return week.status in ['locked', 'scored']
         || (week.keys().hasAll(['remainingLockAt'])
             && week.remainingLockAt != null
@@ -90,10 +98,10 @@ service cloud.firestore {
             && week.weekLockAt != null
             && request.time >= week.weekLockAt)
         || (!isRollingWeek(week)
-            && !lateOk
             && week.keys().hasAll(['pickDeadline'])
             && week.pickDeadline != null
-            && request.time >= week.pickDeadline);
+            && request.time >= week.pickDeadline
+            && !allowLatePicks(groupId));
     }
 
     // `scheduled` is the stored name for ESPN `pre`.
@@ -105,65 +113,6 @@ service cloud.firestore {
           || data.status == null
           || data.status == 'pre'
           || data.status == 'scheduled');
-    }
-
-    // One slot of the slate. Rules cannot loop, and a per-game get() blows the
-    // expression limit, so this reads kickoff + phase maps only.
-    function slotOpen(kicks, phases, ids, changed, i) {
-      return ids.size() <= i
-        || !changed.hasAny([ids[i]])
-        || ((!(ids[i] in kicks) || request.time < kicks[ids[i]])
-            && (!(ids[i] in phases) || phases[ids[i]] in ['pre', 'scheduled']));
-    }
-
-    function slotsOpen(kicks, phases, ids, changed) {
-      return slotOpen(kicks, phases, ids, changed, 0)
-        && slotOpen(kicks, phases, ids, changed, 1)
-        && slotOpen(kicks, phases, ids, changed, 2)
-        && slotOpen(kicks, phases, ids, changed, 3)
-        && slotOpen(kicks, phases, ids, changed, 4)
-        && slotOpen(kicks, phases, ids, changed, 5)
-        && slotOpen(kicks, phases, ids, changed, 6)
-        && slotOpen(kicks, phases, ids, changed, 7)
-        && slotOpen(kicks, phases, ids, changed, 8)
-        && slotOpen(kicks, phases, ids, changed, 9)
-        && slotOpen(kicks, phases, ids, changed, 10)
-        && slotOpen(kicks, phases, ids, changed, 11)
-        && slotOpen(kicks, phases, ids, changed, 12)
-        && slotOpen(kicks, phases, ids, changed, 13)
-        && slotOpen(kicks, phases, ids, changed, 14)
-        && slotOpen(kicks, phases, ids, changed, 15)
-        && slotOpen(kicks, phases, ids, changed, 16)
-        && slotOpen(kicks, phases, ids, changed, 17)
-        && slotOpen(kicks, phases, ids, changed, 18)
-        && slotOpen(kicks, phases, ids, changed, 19);
-    }
-
-    function entryOpen(kicks, phases, gameId) {
-      return !(gameId is string)
-        || gameId.size() == 0
-        || ((!(gameId in kicks) || request.time < kicks[gameId])
-            && (!(gameId in phases) || phases[gameId] in ['pre', 'scheduled']));
-    }
-
-    // `gameLock/current` is the function-owned copy of each game's kickoff and
-    // phase. Clients cannot write it. Before that mirror exists, use the week
-    // snapshot. Called once per pick write so the slot list is not inlined twice.
-    function pickChangesOpen(groupId, weekId, changed, newConfidence, oldConfidence) {
-      let week = weekData(groupId, weekId);
-      let lockPath = /databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)/gameLock/current;
-      let hasLock = exists(lockPath);
-      let kicks = hasLock
-        ? get(lockPath).data.get('kickoffs', {})
-        : week.get('gameKickoffs', {});
-      let phases = hasLock
-        ? get(lockPath).data.get('phases', {})
-        : week.get('gamePhases', {});
-      return !weekLevelLocked(groupId, week)
-        && slotsOpen(kicks, phases, week.get('gameIds', []), changed)
-        && (newConfidence == oldConfidence
-            || (entryOpen(kicks, phases, newConfidence)
-                && entryOpen(kicks, phases, oldConfidence)));
     }
 
     function liveSpreadKeysOnly(changed) {
@@ -301,11 +250,26 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)).data;
     }
 
-    function selectionNominationsOpen(groupId, weekId) {
-      let week = weekData(groupId, weekId);
+    function selectionDeadlineOpen(week) {
       return !('selectionDeadline' in week)
         || week.selectionDeadline == null
         || request.time < week.selectionDeadline;
+    }
+
+    function nominationMemberMayEdit(groupId, weekId) {
+      let week = weekData(groupId, weekId);
+      return week.status == 'selection' && selectionDeadlineOpen(week);
+    }
+
+    // Week status first so a non-selection week does not also read the group.
+    // Own-submission is checked before the group read; commissioners fall through.
+    function nominationCreateAllowed(groupId, weekId) {
+      let week = weekData(groupId, weekId);
+      return week.status == 'selection'
+        && ((request.resource.data.submittedBy == request.auth.uid
+            && isGroupMember(groupId)
+            && selectionDeadlineOpen(week))
+          || isCommissioner(groupId));
     }
 
     // Nomination docs carry the ESPN kickoff the client is saving. Creates,
@@ -350,40 +314,101 @@ service cloud.firestore {
             && request.time >= week.weekLockAt);
     }
 
-    function rollingCreateOk(groupId, weekId) {
-      return pickChangesOpen(
-        groupId,
-        weekId,
-        request.resource.data.get('picks', {}).keys(),
-        request.resource.data.get('confidenceGameId', null),
-        null
-      );
+    // Tiebreaker id. Missing/empty is not a game. `liveIds` is the function's
+    // non-pregame list; kickoff is compared here so a stored timestamp locks at
+    // that instant, not on the next scoreboard pass.
+    function confidenceStillOpen(kicks, liveIds, gameId) {
+      return !(gameId is string)
+        || gameId.size() == 0
+        || (!liveIds.hasAny([gameId])
+            && (!(gameId in kicks) || request.time < kicks[gameId]));
     }
 
-    function rollingUpdateOk(groupId, weekId) {
-      return pickChangesOpen(
-        groupId,
-        weekId,
-        request.resource.data.get('picks', {}).diff(resource.data.get('picks', {})).affectedKeys(),
-        request.resource.data.get('confidenceGameId', null),
-        resource.data.get('confidenceGameId', null)
-      );
+    // Per-game locks from `gameLock/current` when that doc exists, else the week
+    // snapshot (`mirror` is {} and `.get` falls through). Kickoff checks are
+    // inlined: a function-per-slot re-evaluates into the 1,000-expression cap.
+    // Phase is NOT walked per id — 20 of those comparisons exceed the cap on a
+    // denial. Non-pregame ids are `liveIds` (one hasAny). Cap is 20 ids, same
+    // as before; rules cannot loop.
+    function pickSlateOpen(week, mirror, changed, newConfidence, oldConfidence) {
+      let kicks = mirror.get('kickoffs', week.get('gameKickoffs', {}));
+      let liveIds = mirror.get('liveIds', []);
+      let ids = week.get('gameIds', []);
+      return !changed.hasAny(liveIds)
+        && (changed.size() == 0
+            || ((ids.size() <= 0 || !changed.hasAny([ids[0]]) || !(ids[0] in kicks) || request.time < kicks[ids[0]])
+          && (ids.size() <= 1 || !changed.hasAny([ids[1]]) || !(ids[1] in kicks) || request.time < kicks[ids[1]])
+          && (ids.size() <= 2 || !changed.hasAny([ids[2]]) || !(ids[2] in kicks) || request.time < kicks[ids[2]])
+          && (ids.size() <= 3 || !changed.hasAny([ids[3]]) || !(ids[3] in kicks) || request.time < kicks[ids[3]])
+          && (ids.size() <= 4 || !changed.hasAny([ids[4]]) || !(ids[4] in kicks) || request.time < kicks[ids[4]])
+          && (ids.size() <= 5 || !changed.hasAny([ids[5]]) || !(ids[5] in kicks) || request.time < kicks[ids[5]])
+          && (ids.size() <= 6 || !changed.hasAny([ids[6]]) || !(ids[6] in kicks) || request.time < kicks[ids[6]])
+          && (ids.size() <= 7 || !changed.hasAny([ids[7]]) || !(ids[7] in kicks) || request.time < kicks[ids[7]])
+          && (ids.size() <= 8 || !changed.hasAny([ids[8]]) || !(ids[8] in kicks) || request.time < kicks[ids[8]])
+          && (ids.size() <= 9 || !changed.hasAny([ids[9]]) || !(ids[9] in kicks) || request.time < kicks[ids[9]])
+          && (ids.size() <= 10 || !changed.hasAny([ids[10]]) || !(ids[10] in kicks) || request.time < kicks[ids[10]])
+          && (ids.size() <= 11 || !changed.hasAny([ids[11]]) || !(ids[11] in kicks) || request.time < kicks[ids[11]])
+          && (ids.size() <= 12 || !changed.hasAny([ids[12]]) || !(ids[12] in kicks) || request.time < kicks[ids[12]])
+          && (ids.size() <= 13 || !changed.hasAny([ids[13]]) || !(ids[13] in kicks) || request.time < kicks[ids[13]])
+          && (ids.size() <= 14 || !changed.hasAny([ids[14]]) || !(ids[14] in kicks) || request.time < kicks[ids[14]])
+          && (ids.size() <= 15 || !changed.hasAny([ids[15]]) || !(ids[15] in kicks) || request.time < kicks[ids[15]])
+          && (ids.size() <= 16 || !changed.hasAny([ids[16]]) || !(ids[16] in kicks) || request.time < kicks[ids[16]])
+          && (ids.size() <= 17 || !changed.hasAny([ids[17]]) || !(ids[17] in kicks) || request.time < kicks[ids[17]])
+          && (ids.size() <= 18 || !changed.hasAny([ids[18]]) || !(ids[18] in kicks) || request.time < kicks[ids[18]])
+          && (ids.size() <= 19 || !changed.hasAny([ids[19]]) || !(ids[19] in kicks) || request.time < kicks[ids[19]])))
+        && (newConfidence == oldConfidence
+            || (confidenceStillOpen(kicks, liveIds, newConfidence)
+                && confidenceStillOpen(kicks, liveIds, oldConfidence)));
     }
 
-    function pickDeadlineOpen(groupId, weekId) {
-      let week = weekData(groupId, weekId);
+    // Own pick: lock flag can flip false→true once, with a submit time.
+    // Commissioners writing someone else's sheet are not held to this.
+    function memberLockShapeOk(isCreate) {
+      return request.resource.data.isLocked == false
+        || (request.resource.data.isLocked == true
+            && request.resource.data.submittedAt != null
+            && (isCreate || resource.data.isLocked == false));
+    }
+
+    // Cheap checks happen in pickWriteAllowed before this runs, so a signed-out
+    // or badly shaped write never gets here. One group get, then one week get,
+    // then the mirror.
+    function pickWriteAuthorized(groupId, weekId, pickId, selfWrite, changed, newConfidence, oldConfidence) {
       let group = get(/databases/$(database)/documents/groups/$(groupId)).data;
-      let lateOk = !isRollingWeek(week)
-        && group.keys().hasAll(['rules'])
-        && group.rules.keys().hasAll(['allowLatePicks'])
-        && group.rules.allowLatePicks == true;
-      return week.status == 'picking'
-        && (lateOk
-            || (isRollingWeek(week) && !weekFullyLocked(week))
-            || (!isRollingWeek(week)
-                && (!week.keys().hasAll(['pickDeadline'])
-                    || week.pickDeadline == null
-                    || request.time < week.pickDeadline)));
+      let selfOk = selfWrite && request.auth.uid in group.memberIds;
+      let commishOk = group.commissionerId == request.auth.uid && pickId in group.memberIds;
+      let week = weekData(groupId, weekId);
+      let windowOk = commishOk
+        ? (week.status in ['selection', 'picking', 'locked'] && !weekLevelLocked(groupId, week))
+        : (selfOk && week.status == 'picking' && !weekLevelLocked(groupId, week));
+      let lockPath = /databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)/gameLock/current;
+      let mirror = exists(lockPath) ? get(lockPath).data : {};
+      return windowOk && pickSlateOpen(week, mirror, changed, newConfidence, oldConfidence);
+    }
+
+    function pickWriteAllowed(groupId, weekId, pickId, isCreate) {
+      let selfWrite = isSignedIn() && request.auth.uid == pickId;
+      let shapeOk = !selfWrite || memberLockShapeOk(isCreate);
+      let data = request.resource.data;
+      let changed = isCreate
+        ? data.get('picks', {}).keys()
+        : data.get('picks', {}).diff(resource.data.get('picks', {})).affectedKeys();
+      let newConfidence = data.get('confidenceGameId', null);
+      let oldConfidence = isCreate ? null : resource.data.get('confidenceGameId', null);
+      return shapeOk
+        && isSignedIn()
+        && pickWriteAuthorized(groupId, weekId, pickId, selfWrite, changed, newConfidence, oldConfidence);
+    }
+
+    function memberPickDeleteOpen(groupId, weekId) {
+      let week = weekData(groupId, weekId);
+      return isRollingWeek(week)
+        ? rollingPickDeleteOpen(week)
+        : (week.status == 'picking'
+            && ((!week.keys().hasAll(['pickDeadline'])
+                || week.pickDeadline == null
+                || request.time < week.pickDeadline)
+              || allowLatePicks(groupId)));
     }
 
     function rollingPickDeleteOpen(week) {
@@ -392,23 +417,6 @@ service cloud.firestore {
         && (!week.keys().hasAll(['pickDeadline'])
             || week.pickDeadline == null
             || request.time < week.pickDeadline);
-    }
-
-    function commissionerPickWrite(groupId, weekId, pickId) {
-      return isCommissioner(groupId)
-        && pickId in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds
-        && weekData(groupId, weekId).status in ['selection', 'picking', 'locked'];
-    }
-
-    function memberPickWrite(groupId, weekId, pickUserId) {
-      return isSignedIn()
-        && request.auth.uid == pickUserId
-        && isGroupMember(groupId)
-        && pickDeadlineOpen(groupId, weekId)
-        && (request.resource.data.isLocked == false
-            || (request.resource.data.isLocked == true
-                && request.resource.data.submittedAt != null
-                && (!resource.exists || resource.data.isLocked == false)));
     }
 
     match /users/{userId} {
@@ -516,31 +524,24 @@ service cloud.firestore {
 
         match /nominations/{nominationId} {
           allow read: if isGroupMember(groupId) || isSuperAdmin();
-          // Members may only create their own Selections before the deadline
-          // and before that game's kickoff. Commissioners may create a
-          // Selection for any member while the week is still in selection
+          // Kickoff is request data, so a past game is rejected before any get().
+          // Members may only create their own Selections before the deadline.
+          // Commissioners may create one for any member during selection
           // (including after the member deadline) but not after kickoff.
           // Super-admin creates stay exempt so the portal can repair history.
           allow create: if isSuperAdmin()
-            || (isCommissioner(groupId)
-                && weekData(groupId, weekId).status == 'selection'
-                && selectionKickoffStillAhead())
-            || (isGroupMember(groupId)
-                && weekData(groupId, weekId).status == 'selection'
-                && selectionNominationsOpen(groupId, weekId)
-                && request.resource.data.submittedBy == request.auth.uid
-                && selectionKickoffStillAhead());
-          allow update: if (isCommissioner(groupId)
-              || (isSignedIn()
-                  && resource.data.submittedBy == request.auth.uid
-                  && weekData(groupId, weekId).status == 'selection'
-                  && selectionNominationsOpen(groupId, weekId)))
-            && selectionKeepsGameOrKickoffAhead();
-          allow delete: if isCommissioner(groupId)
             || (isSignedIn()
-                && resource.data.submittedBy == request.auth.uid
-                && weekData(groupId, weekId).status == 'selection'
-                && selectionNominationsOpen(groupId, weekId));
+                && selectionKickoffStillAhead()
+                && nominationCreateAllowed(groupId, weekId));
+          allow update: if selectionKeepsGameOrKickoffAhead()
+            && isSignedIn()
+            && ((resource.data.submittedBy == request.auth.uid
+                && nominationMemberMayEdit(groupId, weekId))
+              || isCommissioner(groupId));
+          allow delete: if isSignedIn()
+            && ((resource.data.submittedBy == request.auth.uid
+                && nominationMemberMayEdit(groupId, weekId))
+              || isCommissioner(groupId));
         }
 
         match /games/{gameId} {
@@ -562,21 +563,15 @@ service cloud.firestore {
             || isCommissioner(groupId)
             || (isGroupMember(groupId)
                 && (pickId == request.auth.uid || picksVisibleToAll(groupId, weekId)));
+          // Shape and auth run before group / week / gameLock reads.
           allow create: if isSuperAdmin()
-            || (rollingCreateOk(groupId, weekId)
-                && (commissionerPickWrite(groupId, weekId, pickId)
-                    || memberPickWrite(groupId, weekId, pickId)));
+            || pickWriteAllowed(groupId, weekId, pickId, true);
           allow update: if isSuperAdmin()
-            || (rollingUpdateOk(groupId, weekId)
-                && (commissionerPickWrite(groupId, weekId, pickId)
-                    || memberPickWrite(groupId, weekId, pickId)));
+            || pickWriteAllowed(groupId, weekId, pickId, false);
           // Members can remove their own pick; commissioner clears picks on league teardown.
-          allow delete: if isCommissioner(groupId)
-            || (isSignedIn()
-                && request.auth.uid == pickId
-                && (isRollingWeek(weekData(groupId, weekId))
-                    ? rollingPickDeleteOpen(weekData(groupId, weekId))
-                    : pickDeadlineOpen(groupId, weekId)));
+          allow delete: if isSignedIn()
+            && ((request.auth.uid == pickId && memberPickDeleteOpen(groupId, weekId))
+                || isCommissioner(groupId));
         }
 
         match /revealedPicks/{gameId} {

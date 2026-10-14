@@ -6,6 +6,7 @@ import {
   lockedSpreadPatch,
   movementCaption,
   oddsRefreshPatch,
+  phaseLockedGameIds,
   planLeagueSpreadWrite,
   rejectedPickIds,
   spreadDisplayLabel,
@@ -234,5 +235,20 @@ describe("league spread lock", () => {
     });
     expect(movementCaption(lockedLabel, liveLabel)).toBe("HOM -7.0 (HOM -6.5)");
     expect(movementCaption(lockedLabel, "HOM -7")).toBe("HOM -7.0");
+  });
+});
+
+describe("phaseLockedGameIds", () => {
+  it("lists only games that have left pregame", () => {
+    expect(
+      phaseLockedGameIds([
+        { id: "pre", status: "scheduled" },
+        { id: "soon", status: "pre" },
+        { id: "live", status: "in" },
+        { id: "playing", status: "inProgress" },
+        { id: "done", status: "final" },
+        { id: "", status: "in" },
+      ])
+    ).toEqual(["live", "playing", "done"]);
   });
 });
