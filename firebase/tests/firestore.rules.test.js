@@ -1735,3 +1735,52 @@ describe("pick write expression budget", () => {
     );
   });
 });
+
+describe("member writes to other people and league records", () => {
+  it("blocks a member from writing standings, seasons, career, or another member", async () => {
+    await seed();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertFails(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "standings", "current"), {
+        groupId: GROUP_ID,
+        entries: [{ id: MEMBER, weeklyWins: 99 }],
+      })
+    );
+    await assertFails(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "seasons", "2026"), {
+        championUserId: MEMBER,
+        seasonYear: 2026,
+      })
+    );
+    await assertFails(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "career", MEMBER), { titles: 9 })
+    );
+    await assertFails(
+      updateDoc(doc(memberDb, "groups", GROUP_ID, "members", OTHER_MEMBER), {
+        displayName: "Not Them",
+      })
+    );
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertSucceeds(
+      setDoc(doc(commishDb, "groups", GROUP_ID, "standings", "current"), {
+        groupId: GROUP_ID,
+        entries: [],
+      })
+    );
+  });
+
+  // KNOWN ISSUE (October audit): the rules let the author clear isDeleted after a
+  // commissioner hide. This states the intended behaviour; it.fails keeps CI green
+  // until the rule is fixed, then flips red so the marker gets removed.
+  it.fails("blocks the author from un-hiding a message the commissioner hid", async () => {
+    await seed();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertSucceeds(
+      updateDoc(doc(commishDb, "groups", GROUP_ID, "messages", "msg1"), { isDeleted: true })
+    );
+    const authorDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertFails(
+      updateDoc(doc(authorDb, "groups", GROUP_ID, "messages", "msg1"), { isDeleted: false })
+    );
+  });
+});

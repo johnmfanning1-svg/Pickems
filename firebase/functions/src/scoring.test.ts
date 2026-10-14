@@ -82,6 +82,38 @@ describe("coveredTeamId", () => {
     expect(coveredTeamId(g, 17, 17, "straightUp")).toBeNull();
     expect(coveredTeamId(g, 24, 17, "ats")).toBeNull();
   });
+
+  it("never pushes a half-point line, home or away favorite", () => {
+    const homeFav = game({ id: "1", spread: 3.5, spreadTeamId: "home" });
+    expect(coveredTeamId(homeFav, 24, 21)).toBe("away");
+    expect(coveredTeamId(homeFav, 28, 24)).toBe("home");
+    expect(coveredTeamId(homeFav, 24, 20)).toBe("home");
+
+    const awayFav = game({ id: "1", spread: 3.5, spreadTeamId: "away" });
+    expect(coveredTeamId(awayFav, 21, 24)).toBe("home");
+    expect(coveredTeamId(awayFav, 21, 28)).toBe("away");
+  });
+
+  it("treats a negative spread the same as a positive one", () => {
+    const positive = game({ id: "1", spread: 7, spreadTeamId: "home" });
+    const negative = game({ id: "1", spread: -7, spreadTeamId: "home" });
+    expect(coveredTeamId(negative, 24, 17)).toBe(coveredTeamId(positive, 24, 17));
+    expect(coveredTeamId(negative, 28, 17)).toBe("home");
+  });
+
+  it("pushes a pick'em only on a tie", () => {
+    const pickem = game({ id: "1", spread: 0, spreadTeamId: "home" });
+    expect(coveredTeamId(pickem, 17, 17)).toBeNull();
+    expect(coveredTeamId(pickem, 21, 17)).toBe("home");
+    expect(coveredTeamId(pickem, 17, 21)).toBe("away");
+  });
+
+  // October audit found a NaN spread graded as an away cover. Fixed by #91:
+  // gradingLine treats a non-finite spread as a pick'em, so the 35–0 winner covers.
+  it("grades a non-finite spread as a pick'em, not an away cover", () => {
+    const broken = game({ id: "1", spread: Number.NaN, homeScore: 35, awayScore: 0 });
+    expect(coveredTeamId(broken, 35, 0)).toBe("home");
+  });
 });
 
 describe("scorePicks", () => {
@@ -142,6 +174,20 @@ describe("scorePicks", () => {
   it("does not double a missed confidence game", () => {
     const g = game({ id: "g1" });
     expect(scorePicks({}, [g], "g1")).toEqual({ wins: 0, losses: 1, pushes: 0 });
+  });
+
+  it("doubles a confidence loss and does not double a push", () => {
+    const loss = game({ id: "g1", homeScore: 10, awayScore: 24, winnerTeamId: "away" });
+    expect(scorePicks({ g1: "home" }, [loss], "g1")).toEqual({ wins: 0, losses: 2, pushes: 0 });
+    const push = game({ id: "g1", homeScore: 24, awayScore: 17 });
+    expect(scorePicks({ g1: "home" }, [push], "g1")).toEqual({ wins: 0, losses: 0, pushes: 1 });
+  });
+
+  it("grades the spread on the game, so a later line edit changes the result", () => {
+    const atSeven = game({ id: "g1", spread: 7, homeScore: 24, awayScore: 17 });
+    expect(scorePicks({ g1: "home" }, [atSeven])).toEqual({ wins: 0, losses: 0, pushes: 1 });
+    const moved = game({ id: "g1", spread: 6.5, homeScore: 24, awayScore: 17 });
+    expect(scorePicks({ g1: "home" }, [moved])).toEqual({ wins: 1, losses: 0, pushes: 0 });
   });
 
   it("can skip missed Pickems when re-summing historical Week 0", () => {

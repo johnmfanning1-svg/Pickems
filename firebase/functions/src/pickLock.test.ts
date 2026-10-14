@@ -3,6 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import {
   resolvedPickLockMode,
   isRollingLock,
+  kickoffMillis,
   lockSnapshotFromGames,
   effectiveWeekLockMillis,
   gameIsLocked,
@@ -61,6 +62,23 @@ describe("pickLock helpers", () => {
         remainingLockAt: 1_500,
       })
     ).toBe(1_500);
+  });
+
+  it("locks on the UTC instant, so an Eastern offset and Zulu for the same moment agree", () => {
+    const zulu = Date.parse("2026-11-01T05:30:00Z");
+    const eastern = Date.parse("2026-11-01T01:30:00-04:00");
+    expect(eastern).toBe(zulu);
+    const week = { pickLockMode: "rolling" as const, gameKickoffs: { g: zulu } };
+    expect(gameIsLocked(week, "g", eastern, zulu)).toBe(true);
+    expect(gameIsLocked(week, "g", eastern, zulu - 1)).toBe(false);
+  });
+
+  it("ignores an ISO string kickoff instead of treating it as now", () => {
+    expect(kickoffMillis("2026-09-05T19:00:00Z")).toBeNull();
+    const week = { pickLockMode: "rolling" as const, gameKickoffs: {} };
+    expect(
+      gameIsLocked(week, "g", "2026-09-05T19:00:00Z", Date.parse("2026-09-06T00:00:00Z"))
+    ).toBe(false);
   });
 
   it("locks rolling games at kickoff and firstKickoff games at pickDeadline", () => {
