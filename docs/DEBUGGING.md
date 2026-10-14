@@ -15,7 +15,6 @@ A healthy cold launch always logs `app.launch` before any auth work. If the proc
 1. Firebase never finished configuring — confirm `GoogleService-Info.plist` is in the app bundle (Target → Build Phases → Copy Bundle Resources).
 2. `Messaging.messaging()` must not run before `FirebaseApp.configure()`. Auth / Messaging / Firestore clients are started from `AppState.configure()` after bootstrap.
 3. `UNUserNotificationCenter` delegates must use the **completion-handler** APIs. The `async` variants trap under Swift 6 / `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` when UserNotifications calls back off-main.
-4. Watch companion must declare `WKApplication = YES` (see `PickemsWatch/Info.plist`).
 
 Delete + reinstall does **not** clear the Firebase Auth keychain for the same team/bundle. A “fresh” install can still restore a session and run `onAuthStateReady` immediately.
 

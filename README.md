@@ -41,14 +41,13 @@ npx firebase-tools@latest deploy --only firestore:rules,functions
 1. Enable **Sign in with Apple** capability for `FannypackInc.Pickems`
 2. Add push notification capability + App Group `group.FannypackInc.Pickems`
 3. Configure APNs key in Firebase Console → Cloud Messaging
-4. Add Widget / Watch targets once — see [docs/WIDGETS_WATCH.md](docs/WIDGETS_WATCH.md)
+4. Set up the Widget target once — see [docs/WIDGETS_WATCH.md](docs/WIDGETS_WATCH.md)
 
 ## Project Structure
 
 ```
 Pickems/                 Main iOS app (SwiftUI)
 PickemsWidget/           Widget + Live Activity sources
-PickemsWatch/            watchOS glance sources
 firebase/
   firestore.rules
   functions/             Slate lock, scoring, push, season close
@@ -65,7 +64,7 @@ Web replica assessment (iOS + website on the same Firebase backend, Vercel Hobby
 - Cover Moments, week awards, streak badges
 - Confidence picks + late-pick policy (commissioner)
 - Discover public leagues + rivalry head-to-head
-- Home Screen widgets / Live Activities / Watch (sources + App Group)
+- Home Screen widgets / Live Activities (App Group)
 
 ## Debugging
 
