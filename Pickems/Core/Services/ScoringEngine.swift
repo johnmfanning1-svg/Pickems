@@ -184,6 +184,29 @@ enum ScoringEngine {
         return (picks, games)
     }
 
+    /// The standings board `AppState.rankedStandings(weekly:)` shows. Season boards
+    /// drop this week's picks and slate before ranking (see `rankingPicksAndGames`).
+    static func boardStandings(
+        entries: [StandingEntry],
+        weekly: Bool,
+        tieBreaker: TieBreakerPolicy,
+        allPicks: [UserPick],
+        games: [SlateGame],
+        tieBreakOrder: [String] = [],
+        pickMode: PickMode = .ats
+    ) -> [StandingEntry] {
+        let context = rankingPicksAndGames(weekly: weekly, picks: allPicks, games: games)
+        return rankedStandings(
+            entries: entries,
+            weekly: weekly,
+            tieBreaker: tieBreaker,
+            allPicks: context.picks,
+            games: context.games,
+            tieBreakOrder: tieBreakOrder,
+            pickMode: pickMode
+        )
+    }
+
     /// Rank by most wins outright, then the league's tie-breaker, then join date / name.
     /// Keep in sync with `firebase/functions/src/scoring.ts` `rankEntries`.
     /// Batting average is a display stat only — it must not change order.
