@@ -39,6 +39,9 @@ final class HomeViewModel {
         // Restarting the loop cancels the previous task. Don't do that while a
         // user pull is fetching — that discard leaves stale `liveGames` on screen.
         if forceRefreshCount > 0, refreshTask != nil { return }
+        // Already polling: tab, scene-phase, and onAppear all call this, so
+        // don't stack or restart a second loop.
+        if let refreshTask, !refreshTask.isCancelled { return }
         refreshTask = LiveScoreRefresh.start(existing: refreshTask) {
             guard self.forceRefreshCount == 0 else { return }
             await self.refresh(appState: appState)
