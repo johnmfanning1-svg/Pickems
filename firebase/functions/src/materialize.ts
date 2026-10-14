@@ -1,4 +1,5 @@
-import { getFirestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { gameEffectivelyLocked } from "./spreadLock";
 
 export interface MaterializeResult {
   /** Game docs written for the first time. */
@@ -12,7 +13,16 @@ export interface MaterializeResult {
 }
 
 /** Fields owned by the scoring pass — never clobbered when refreshing a game. */
-const SCORING_OWNED_FIELDS = ["status", "homeScore", "awayScore", "winnerTeamId"] as const;
+const SCORING_OWNED_FIELDS = [
+  "status",
+  "homeScore",
+  "awayScore",
+  "winnerTeamId",
+  "lockedSpread",
+  "lockedSpreadTeamId",
+  "liveSpread",
+  "liveSpreadTeamId",
+] as const;
 
 /**
  * Copy a week's nominations into its `games` subcollection, keyed by
@@ -36,7 +46,10 @@ export async function materializeNominations(
     return { created: 0, updated: 0, total: games.size, skipped: true };
   }
 
-  const existingIds = new Set(games.docs.map((d) => d.id));
+  const week = (await weekRef.get()).data() ?? {};
+  const now = Date.now();
+  const existingById = new Map(games.docs.map((d) => [d.id, d.data()]));
+  const existingIds = new Set(existingById.keys());
   let created = 0;
   let updated = 0;
   const batch = db.batch();
@@ -67,11 +80,32 @@ export async function materializeNominations(
     };
 
     const gameRef = weekRef.collection("games").doc(espnEventId);
-    if (existingIds.has(espnEventId)) {
+    const existing = existingById.get(espnEventId);
+    const locked = gameEffectivelyLocked(
+      week,
+      {
+        id: espnEventId,
+        kickoff: existing?.kickoff ?? n.kickoff,
+        status: existing?.status ?? "scheduled",
+      },
+      now
+    );
+    if (existing) {
       for (const field of SCORING_OWNED_FIELDS) delete payload[field];
+      if (locked) {
+        delete payload.spread;
+        delete payload.spreadTeamId;
+      } else {
+        payload.lockedSpread = FieldValue.delete();
+        payload.lockedSpreadTeamId = FieldValue.delete();
+      }
       batch.set(gameRef, payload, { merge: true });
       updated += 1;
     } else {
+      if (locked) {
+        payload.lockedSpread = payload.spread;
+        payload.lockedSpreadTeamId = payload.spreadTeamId;
+      }
       batch.set(gameRef, payload);
       created += 1;
       existingIds.add(espnEventId);

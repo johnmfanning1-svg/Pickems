@@ -460,14 +460,12 @@ final class PicksViewModel {
         }
     }
 
-    func lockRemainingGamesNow(appState: AppState) {
-        guard let group = appState.groupService.selectedGroup,
-              let week = appState.groupService.currentWeek else { return }
+    func lockRemainingGamesNow(groupId: String, weekId: String, appState: AppState) {
         Task {
             do {
                 try await appState.groupService.lockRemainingGamesNow(
-                    groupId: group.id,
-                    weekId: week.id
+                    groupId: groupId,
+                    weekId: weekId
                 )
                 PickemsHaptics.success()
             } catch {
@@ -496,19 +494,17 @@ final class PicksViewModel {
         lockSlateEarly(appState: appState)
     }
 
-    func reopenSelections(appState: AppState) {
-        guard let group = appState.groupService.selectedGroup,
-              let week = appState.groupService.currentWeek,
-              WeekTransition.canReopenSelections(week) else { return }
+    func reopenSelections(groupId: String, weekId: String, appState: AppState) {
+        guard let group = appState.groupService.groups.first(where: { $0.id == groupId }) else { return }
         Task {
             do {
                 try await appState.groupService.reopenWeekForSelections(
-                    groupId: group.id,
-                    weekId: week.id
+                    groupId: groupId,
+                    weekId: weekId
                 )
                 try await appState.pickService.clearSlateGamesForSelectionReopen(
-                    groupId: group.id,
-                    weekId: week.id,
+                    groupId: groupId,
+                    weekId: weekId,
                     commissionerUserId: appState.currentUserId ?? group.commissionerId,
                     commissionerName: appState.authService.currentUser?.displayName ?? "Commissioner"
                 )
@@ -544,7 +540,7 @@ final class PicksViewModel {
                     groupId: group.id,
                     weekId: week.id,
                     pickMode: pickMode,
-                    week: appState.groupService.currentWeek ?? week
+                    week: week
                 )
                 PickemsHaptics.success()
             } catch {
@@ -553,15 +549,18 @@ final class PicksViewModel {
         }
     }
 
-    func setSelectionDeadline(_ deadline: Date, appState: AppState) {
-        guard let group = appState.groupService.selectedGroup,
-              let week = appState.groupService.currentWeek,
-              let userId = appState.currentUserId else { return }
+    func setSelectionDeadline(
+        _ deadline: Date,
+        groupId: String,
+        weekId: String,
+        appState: AppState
+    ) {
+        guard let userId = appState.currentUserId else { return }
         Task {
             do {
                 try await appState.groupService.setSelectionDeadline(
-                    groupId: group.id,
-                    weekId: week.id,
+                    groupId: groupId,
+                    weekId: weekId,
                     deadline: deadline,
                     setByUserId: userId
                 )
@@ -573,33 +572,37 @@ final class PicksViewModel {
     }
 
     /// Commissioner sets/extends pick deadline; optionally reopens a locked week and unlocks submissions.
+    /// `groupId`, `weekId`, and `isRollingLock` are the week the editor opened on.
     func setPickDeadline(
         _ deadline: Date,
+        groupId: String,
+        weekId: String,
+        isRollingLock: Bool,
         reopenWeek: Bool,
         unlockMemberPicks: Bool,
         appState: AppState
     ) {
-        guard let group = appState.groupService.selectedGroup,
-              let week = appState.groupService.currentWeek else { return }
         Task {
             do {
                 if reopenWeek {
                     try await appState.groupService.reopenWeekForPicking(
-                        groupId: group.id,
-                        weekId: week.id,
-                        deadline: deadline
+                        groupId: groupId,
+                        weekId: weekId,
+                        deadline: deadline,
+                        isRollingLock: isRollingLock
                     )
                 } else {
                     try await appState.groupService.setPickDeadline(
-                        groupId: group.id,
-                        weekId: week.id,
-                        deadline: deadline
+                        groupId: groupId,
+                        weekId: weekId,
+                        deadline: deadline,
+                        isRollingLock: isRollingLock
                     )
                 }
                 if unlockMemberPicks {
                     try await appState.pickService.commissionerUnlockAllPicks(
-                        groupId: group.id,
-                        weekId: week.id
+                        groupId: groupId,
+                        weekId: weekId
                     )
                 }
                 PickemsHaptics.success()
@@ -659,6 +662,7 @@ final class PicksViewModel {
     func updateSpread(_ game: SlateGame, spread: Double, spreadTeamId: String, appState: AppState) {
         guard let group = appState.groupService.selectedGroup,
               let week = appState.groupService.currentWeek else { return }
+        guard !WeekTransition.isSpreadLocked(game, week: week) else { return }
         Task {
             do {
                 try await appState.pickService.updateGameSpread(
@@ -666,7 +670,8 @@ final class PicksViewModel {
                     weekId: week.id,
                     game: game,
                     spread: spread,
-                    spreadTeamId: spreadTeamId
+                    spreadTeamId: spreadTeamId,
+                    week: week
                 )
             } catch {
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)

@@ -1,4 +1,4 @@
-import { doc, updateDoc } from "firebase/firestore";
+import { deleteField, doc, updateDoc } from "firebase/firestore";
 import { useState } from "react";
 import { Badge } from "./Badge";
 import { Banner, ErrorBanner } from "./Banner";
@@ -12,6 +12,7 @@ import type { WithId } from "@/hooks/useFirestore";
 import { writeAudit } from "@/lib/audit";
 import { db } from "@/lib/firebase";
 import { favoriteSpreadLabel, formatTimestamp, matchupLabel } from "@/lib/format";
+import { gameEffectivelyLocked, type WeekLockInput } from "@/lib/gameLock";
 import type { SlateGameDoc } from "@/lib/types";
 
 /**
@@ -25,10 +26,12 @@ import type { SlateGameDoc } from "@/lib/types";
 export function WeekSlateEditor({
   groupId,
   weekId,
+  week,
   showsSpreads = true,
 }: {
   groupId: string;
   weekId: string;
+  week: WeekLockInput;
   showsSpreads?: boolean;
 }) {
   const games = useSlateGames(groupId, weekId);
@@ -64,7 +67,22 @@ export function WeekSlateEditor({
     }));
   }
 
+  function spreadLocked(game: WithId<SlateGameDoc>): boolean {
+    return gameEffectivelyLocked(week, game);
+  }
+
+  function lineLabel(spread: number | null | undefined, teamId: string | null | undefined, game: SlateGameDoc): string {
+    const abbr =
+      teamId === game.homeTeamId
+        ? game.homeTeamAbbreviation
+        : teamId === game.awayTeamId
+          ? game.awayTeamAbbreviation
+          : game.homeTeamAbbreviation;
+    return `${abbr} ${favoriteSpreadLabel(spread ?? 0)}`;
+  }
+
   async function saveSpread(game: WithId<SlateGameDoc>) {
+    if (spreadLocked(game)) return;
     const edit = editFor(game);
     const spread = Number(edit.spread);
     if (!Number.isFinite(spread)) {
@@ -79,8 +97,8 @@ export function WeekSlateEditor({
             {edit.spreadTeamId === game.homeTeamId ? game.homeTeamAbbreviation : game.awayTeamAbbreviation}{" "}
             {favoriteSpreadLabel(spread)}
           </strong>
-          . Scoring for this game is recomputed from the new line the next time the week is scored or
-          rescored — picks already made are not changed.
+          . Everyone picks against this line until the game locks. Scoring keeps the line captured at
+          lock — picks already made are not changed.
         </>
       ),
       tone: "primary",
@@ -92,6 +110,8 @@ export function WeekSlateEditor({
       await updateDoc(doc(db, "groups", groupId, "weeks", weekId, "games", game.id), {
         spread: Math.abs(spread),
         spreadTeamId: edit.spreadTeamId,
+        lockedSpread: deleteField(),
+        lockedSpreadTeamId: deleteField(),
       });
       await writeAudit(
         "adminUpdateGameSpread",
@@ -148,17 +168,29 @@ export function WeekSlateEditor({
       key: "line",
       header: "Line",
       render: (game) => {
-        const isEditing = edits[game.id] != null;
+        const locked = spreadLocked(game);
+        const gradedTeam = game.lockedSpreadTeamId || game.spreadTeamId;
+        const gradedSpread = game.lockedSpread ?? game.spread;
+        const live =
+          game.liveSpread != null && game.liveSpreadTeamId
+            ? lineLabel(game.liveSpread, game.liveSpreadTeamId, game)
+            : null;
+        const graded = lineLabel(gradedSpread, gradedTeam, game);
+        const isEditing = edits[game.id] != null && !locked;
         if (!isEditing) {
           return (
             <div className="flex items-center gap-3">
               <span className="font-mono text-slate-200">
-                {game.spreadTeamId === game.homeTeamId ? game.homeTeamAbbreviation : game.awayTeamAbbreviation}{" "}
-                {favoriteSpreadLabel(game.spread ?? 0)}
+                {graded}
+                {live && live !== graded ? <span className="text-slate-500"> ({live})</span> : null}
               </span>
-              <Button variant="ghost" disabled={action.busy} onClick={() => beginEdit(game)}>
-                Edit
-              </Button>
+              {locked ? (
+                <Badge tone="neutral">Locked</Badge>
+              ) : (
+                <Button variant="ghost" disabled={action.busy} onClick={() => beginEdit(game)}>
+                  Edit
+                </Button>
+              )}
             </div>
           );
         }
