@@ -97,6 +97,11 @@ enum DeepLinkRouter {
             return .openSelectionDeadline(groupId: groupId)
         case "selection_deadline_passed", "selection_deadline_reminder":
             return .openSelections(groupId: groupId)
+        case "selection_veto":
+            if let groupId, let weekId, let gameId {
+                return .openGame(groupId: groupId, weekId: weekId, gameId: gameId)
+            }
+            return .openSelections(groupId: groupId)
         case "game_final":
             if let groupId, let weekId, let gameId {
                 return .openGame(groupId: groupId, weekId: weekId, gameId: gameId)

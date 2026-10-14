@@ -458,6 +458,7 @@ struct GroupPicksView: View {
                                 }
                             }
                             Spacer(minLength: 8)
+                            vetoControl(for: nom)
                             if canRemove, let rules = appState.groupService.selectedGroup?.rules {
                                 if commissionerCanManage {
                                     Button {
@@ -490,6 +491,46 @@ struct GroupPicksView: View {
                     appState.picksViewModel.beginAddSelection(for: member, appState: appState)
                 }
                 .padding(.horizontal, 6)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func vetoControl(for nom: Nomination) -> some View {
+        if let group = appState.groupService.selectedGroup, group.rules.allowVeto {
+            let progress = SelectionVeto.progressText(nom, rules: group.rules, memberCount: group.memberCount)
+            let canVote = week.map {
+                SelectionVeto.canVote(
+                    rules: group.rules,
+                    week: $0,
+                    nomination: nom,
+                    voterId: currentUserId,
+                    memberIds: group.memberIds
+                )
+            } ?? false
+            VStack(alignment: .trailing, spacing: 2) {
+                if canVote {
+                    if appState.pickService.vetoVotedNominationIds.contains(nom.id) {
+                        Label("Voted", systemImage: "hand.thumbsdown.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(PickemsColors.textSecondary)
+                    } else {
+                        Button {
+                            appState.picksViewModel.voteToVeto(nom, appState: appState)
+                        } label: {
+                            Label("Veto", systemImage: "hand.thumbsdown")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(theme.accent)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityHint("Votes to remove this Selection. Votes are anonymous and final.")
+                    }
+                }
+                if let progress {
+                    Text(progress)
+                        .font(.caption2)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
             }
         }
     }

@@ -639,6 +639,24 @@ final class PicksViewModel {
         }
     }
 
+    func voteToVeto(_ nomination: Nomination, appState: AppState) {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek,
+              let userId = appState.currentUserId else { return }
+        Task {
+            do {
+                try await appState.pickService.castVetoVote(
+                    groupId: group.id,
+                    weekId: week.id,
+                    nominationId: nomination.id,
+                    voterId: userId
+                )
+            } catch {
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
+            }
+        }
+    }
+
     func removeCommissionerGame(_ game: SlateGame, week: WeekSummary, appState: AppState) {
         guard let group = appState.groupService.selectedGroup else { return }
         Task {

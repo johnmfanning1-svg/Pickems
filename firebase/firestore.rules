@@ -268,8 +268,31 @@ service cloud.firestore {
       return week.status == 'selection'
         && ((request.resource.data.submittedBy == request.auth.uid
             && isGroupMember(groupId)
-            && selectionDeadlineOpen(week))
+            && selectionDeadlineOpen(week)
+            && !gameVetoedThisWeek(groupId, weekId))
           || isCommissioner(groupId));
+    }
+
+    // A vetoed game stays out for that week for members (commissioners may override).
+    function gameVetoedThisWeek(groupId, weekId) {
+      return request.resource.data.keys().hasAll(['espnEventId'])
+        && request.resource.data.espnEventId is string
+        && exists(/databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)/vetoes/$(request.resource.data.espnEventId));
+    }
+
+    // Selection veto votes: league setting on, voter is another member, Selections
+    // open and before that game's kickoff. Counting/removal is onSelectionVetoVote.
+    function vetoVoteAllowed(groupId, weekId, nominationId) {
+      let group = get(/databases/$(database)/documents/groups/$(groupId)).data;
+      let week = weekData(groupId, weekId);
+      let nom = get(/databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)/nominations/$(nominationId)).data;
+      return request.auth.uid in group.memberIds
+        && ('rules' in group) && ('allowVeto' in group.rules) && group.rules.allowVeto == true
+        && nom.submittedBy != request.auth.uid
+        && week.status == 'selection'
+        && selectionDeadlineOpen(week)
+        && nom.kickoff is timestamp
+        && request.time < nom.kickoff;
     }
 
     // Nomination docs carry the ESPN kickoff the client is saving. Creates,
@@ -534,6 +557,7 @@ service cloud.firestore {
                 && selectionKickoffStillAhead()
                 && nominationCreateAllowed(groupId, weekId));
           allow update: if selectionKeepsGameOrKickoffAhead()
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['vetoVoteCount', 'vetoVotesNeeded'])
             && isSignedIn()
             && ((resource.data.submittedBy == request.auth.uid
                 && nominationMemberMayEdit(groupId, weekId))
@@ -542,6 +566,26 @@ service cloud.firestore {
             && ((resource.data.submittedBy == request.auth.uid
                 && nominationMemberMayEdit(groupId, weekId))
               || isCommissioner(groupId));
+
+          // One anonymous, final vote per member per Selection.
+          match /vetoVotes/{voterId} {
+            allow get: if isSignedIn() && request.auth.uid == voterId;
+            allow list: if false;
+            allow create: if isSignedIn()
+              && request.auth.uid == voterId
+              && request.resource.data.keys().hasOnly(['voterId', 'createdAt'])
+              && request.resource.data.voterId == voterId
+              && request.resource.data.createdAt == request.time
+              && exists(/databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)/nominations/$(nominationId))
+              && vetoVoteAllowed(groupId, weekId, nominationId);
+            allow update, delete: if false;
+          }
+        }
+
+        // Written by onSelectionVetoVote when a Selection is vetoed.
+        match /vetoes/{vetoId} {
+          allow read: if isGroupMember(groupId) || isSuperAdmin();
+          allow write: if false;
         }
 
         match /games/{gameId} {

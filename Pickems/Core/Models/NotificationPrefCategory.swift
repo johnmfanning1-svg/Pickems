@@ -106,7 +106,7 @@ enum NotificationPrefCategory: String, CaseIterable, Identifiable, Sendable {
     var pushTypes: [String] {
         switch self {
         case .selectionDeadlines:
-            return ["selection_deadline_reminder"]
+            return ["selection_deadline_reminder", "selection_veto"]
         case .pickemsDeadlines:
             return ["pickems_open", "deadline_reminder", "deadline_locked", "deadline_passed"]
         case .gameFinals:
