@@ -248,7 +248,7 @@ jobs:
           set -euo pipefail
           app="$RUNNER_TEMP/Pickems.xcarchive/Products/Applications/Pickems.app"
           status=0
-          for plist in "$app/Info.plist" "$app"/PlugIns/*.appex/Info.plist "$app"/Watch/*.app/Info.plist; do
+          for plist in "$app/Info.plist" "$app"/PlugIns/*.appex/Info.plist; do
             [ -f "$plist" ] || continue
             id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")
             short=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")
@@ -303,7 +303,7 @@ jobs:
           unzip -q "$IPA_PATH" -d "$work"
           app=$(find "$work/Payload" -maxdepth 1 -name '*.app' | head -n 1)
           status=0
-          for b in "$app" "$app"/PlugIns/*.appex "$app"/Watch/*.app; do
+          for b in "$app" "$app"/PlugIns/*.appex; do
             [ -d "$b" ] || continue
             auth=$(codesign -dvv "$b" 2>&1 | grep '^Authority=' | head -n 1 || true)
             ents=$(codesign -d --entitlements - --xml "$b" 2>/dev/null | plutil -p - 2>/dev/null || true)

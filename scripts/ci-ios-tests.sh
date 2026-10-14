@@ -32,17 +32,52 @@ xcodebuild test \
   > "$OUT/logs/test.log" 2>&1
 rc=$?
 set -e
-# Swift Testing prints "Test case '...' passed", XCTest prints "Test Case '...' passed".
-grep -iE "error:|Test case .* (passed|failed)|Executed [0-9]+ test|\*\* TEST" "$OUT/logs/test.log" | grep -v "^$" | tail -n 2000 || true
-passed=$(grep -ciE "^Test case '.*' passed" "$OUT/logs/test.log" || true)
-failed=$(grep -ciE "^Test case '.*' failed" "$OUT/logs/test.log" || true)
-echo "Test results: ${passed} passed, ${failed} failed"
-if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-  echo "- iOS unit tests: ${passed} passed, ${failed} failed" >> "$GITHUB_STEP_SUMMARY"
-fi
-if [ "${failed}" != "0" ]; then
-  echo "Failed tests:"
-  grep -iE "^Test case '.*' failed" "$OUT/logs/test.log" || true
+# Counts come from the .xcresult bundle (Swift Testing and XCTest alike),
+# not from grepping test.log.
+# Floor on passed + expected failures. Main runs 431 tests (Oct 14, 2026);
+# keep this 2 below that and BUMP IT as tests are added.
+MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-429}"
+grep -iE "error:|Test case .* failed|\*\* TEST" "$OUT/logs/test.log" | tail -n 200 || true
+summary="$OUT/logs/test-summary.json"
+if ! xcrun xcresulttool get test-results summary --path "$OUT/TestResults.xcresult" --format json > "$summary" 2>"$OUT/logs/xcresulttool.err"; then
+  echo "::error::Could not read test summary from TestResults.xcresult:"
+  cat "$OUT/logs/xcresulttool.err" || true
+  [ $rc -ne 0 ] || rc=1
+else
+  read -r total passed failed skipped expected_failures < <(python3 - "$summary" <<'PY' || true
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    print(int(d["totalTestCount"]), int(d.get("passedTests", 0)), int(d.get("failedTests", 0)),
+          int(d.get("skippedTests", 0)), int(d.get("expectedFailures", 0)))
+except Exception as e:
+    print(f"could not parse test summary: {e}", file=sys.stderr)
+PY
+)
+  if [ -z "${total:-}" ]; then
+    echo "::error::Could not parse the xcresult test summary ($summary); no test counts available."
+    [ $rc -ne 0 ] || rc=1
+  fi
+  total="${total:-0}"; passed="${passed:-0}"; failed="${failed:-0}"
+  skipped="${skipped:-0}"; expected_failures="${expected_failures:-0}"
+  counted=$(( passed + expected_failures ))
+  line="${total} total, ${passed} passed, ${failed} failed, ${skipped} skipped, ${expected_failures} expected failures"
+  echo "Test results: ${line}"
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    echo "- iOS unit tests: ${line} (minimum expected ${MIN_EXPECTED_TESTS})" >> "$GITHUB_STEP_SUMMARY"
+  fi
+  if [ "${failed}" != "0" ]; then
+    echo "Failed tests:"
+    python3 - "$summary" <<'PY' || true
+import json, sys
+for f in json.load(open(sys.argv[1])).get("testFailures", []):
+    print(f"  {f.get('testIdentifierString') or f.get('testName')}: {f.get('failureText', '')}")
+PY
+  fi
+  if [ "${counted}" -lt "${MIN_EXPECTED_TESTS}" ]; then
+    echo "::error::Only ${counted} tests passed (${passed}) or were expected failures (${expected_failures}); need at least ${MIN_EXPECTED_TESTS}. Tests may have been skipped, failed, or dropped from the target."
+    [ $rc -ne 0 ] || rc=1
+  fi
 fi
 if [ $rc -ne 0 ]; then
   echo "::error::xcodebuild test failed (exit $rc). Last 150 log lines:"
