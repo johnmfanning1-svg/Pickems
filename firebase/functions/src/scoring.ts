@@ -1,3 +1,5 @@
+import { gradingLine } from "./spreadLock";
+
 export interface SlateGameDoc {
   id: string;
   espnEventId: string;
@@ -7,8 +9,15 @@ export interface SlateGameDoc {
   awayTeamName?: string;
   homeTeamAbbreviation?: string;
   awayTeamAbbreviation?: string;
+  /** League line everyone picks against. Not a per-pick number. */
   spread: number;
   spreadTeamId: string;
+  /** Graded copy captured when this game locks. Missing on games locked before this field existed. */
+  lockedSpread?: number | null;
+  lockedSpreadTeamId?: string | null;
+  /** ESPN line for the parenthetical movement. Never used for grading. */
+  liveSpread?: number | null;
+  liveSpreadTeamId?: string | null;
   status: "scheduled" | "inProgress" | "final";
   homeScore?: number | null;
   awayScore?: number | null;
@@ -107,10 +116,11 @@ export function coveredTeamId(
     if (homeScore === awayScore) return null;
     return homeScore > awayScore ? game.homeTeamId : game.awayTeamId;
   }
-  const spreadMagnitude = Math.abs(game.spread);
+  const line = gradingLine(game);
+  const spreadMagnitude = Math.abs(line.spread);
   const margin = homeScore - awayScore;
   const adjusted =
-    margin + (game.spreadTeamId === game.homeTeamId ? -spreadMagnitude : spreadMagnitude);
+    margin + (line.spreadTeamId === game.homeTeamId ? -spreadMagnitude : spreadMagnitude);
   if (adjusted === 0) return null;
   return adjusted > 0 ? game.homeTeamId : game.awayTeamId;
 }
@@ -123,10 +133,11 @@ export function nearMissMargin(
   pickMode: PickMode = "ats"
 ): number {
   if (pickMode === "straightUp") return Math.abs(homeScore - awayScore);
+  const line = gradingLine(game);
   return Math.abs(
     homeScore -
       awayScore +
-      (game.spreadTeamId === game.homeTeamId ? -Math.abs(game.spread) : Math.abs(game.spread))
+      (line.spreadTeamId === game.homeTeamId ? -Math.abs(line.spread) : Math.abs(line.spread))
   );
 }
 

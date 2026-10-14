@@ -30,6 +30,18 @@ enum SlateGameDecoding {
         }
     }
 
+    static func optionalDouble(_ value: Any?) -> Double? {
+        if value == nil || value is NSNull { return nil }
+        switch value {
+        case let d as Double: return abs(d)
+        case let n as NSNumber: return abs(n.doubleValue)
+        case let s as String:
+            guard let parsed = Double(s) else { return nil }
+            return abs(parsed)
+        default: return nil
+        }
+    }
+
     static func doubleValue(_ value: Any?) -> Double {
         switch value {
         case let d as Double: return abs(d)
@@ -110,6 +122,10 @@ enum SlateGameDecoding {
             spreadTeamId: stringValue(data["spreadTeamId"])
                 ?? stringValue(data["homeTeamId"])
                 ?? "home",
+            lockedSpread: optionalDouble(data["lockedSpread"]),
+            lockedSpreadTeamId: stringValue(data["lockedSpreadTeamId"]),
+            liveSpread: optionalDouble(data["liveSpread"]),
+            liveSpreadTeamId: stringValue(data["liveSpreadTeamId"]),
             kickoff: kickoff,
             status: SlateGame.GameStatus(rawValue: statusRaw) ?? .scheduled,
             homeScore: intValue(data["homeScore"]),
@@ -120,11 +136,27 @@ enum SlateGameDecoding {
         )
     }
 
-    /// Week 0 rows were seeded with an inverted favorite. Repair scheduled games
-    /// from ESPN until kickoff; never rewrite a live or final line.
-    static func spreadRepair(existing: SlateGame, espn: SlateGame) -> (spread: Double, spreadTeamId: String)? {
+    /// Week 0 rows were seeded with an inverted favorite. Repair the league line
+    /// only while this game is still unlocked. Never rewrite a locked line.
+    static func spreadRepair(
+        existing: SlateGame,
+        espn: SlateGame,
+        spreadLocked: Bool = false
+    ) -> (spread: Double, spreadTeamId: String)? {
+        guard !spreadLocked else { return nil }
         guard existing.status == .scheduled else { return nil }
         if existing.spread == espn.spread && existing.spreadTeamId == espn.spreadTeamId {
+            return nil
+        }
+        return (espn.spread, espn.spreadTeamId)
+    }
+
+    /// Parenthetical movement. Updates even after the graded line is frozen.
+    static func liveSpreadUpdate(
+        existing: SlateGame,
+        espn: SlateGame
+    ) -> (liveSpread: Double, liveSpreadTeamId: String)? {
+        if existing.liveSpread == espn.spread && existing.liveSpreadTeamId == espn.spreadTeamId {
             return nil
         }
         return (espn.spread, espn.spreadTeamId)

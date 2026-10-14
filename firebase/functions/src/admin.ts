@@ -24,6 +24,7 @@ import {
   resolveWeekPickMode,
 } from "./scoring";
 import { isRollingLock } from "./pickLock";
+import { rejectedPickIds, type GameLockInput } from "./spreadLock";
 
 /**
  * Callable surface for the web admin portal (Lane J).
@@ -269,6 +270,36 @@ export const adminUpsertPick = onCall(async (request) => {
   }
 
   const weekSnap = await requireWeek(groupId, weekId);
+  const week = weekSnap.data() ?? {};
+  const gamesSnap = await weekSnap.ref.collection("games").get();
+  const groupSnap = await db().collection("groups").doc(groupId).get();
+  const games: Array<GameLockInput & { id: string }> = gamesSnap.docs.map((gameDoc) => {
+    const data = gameDoc.data();
+    return { id: gameDoc.id, kickoff: data.kickoff, status: data.status };
+  });
+  const pickRef = weekSnap.ref.collection("picks").doc(userId);
+  const pickSnap = await pickRef.get();
+  const before = pickSnap.data() ?? null;
+  const beforePicks = (before?.picks as Record<string, string> | undefined) ?? {};
+  const blocked = rejectedPickIds({
+    week: {
+      ...week,
+      allowLatePicks: groupSnap.data()?.rules?.allowLatePicks === true,
+    },
+    games,
+    before: beforePicks,
+    after: picks,
+    now: Date.now(),
+    beforeConfidence: before?.confidenceGameId,
+    afterConfidence: data.confidenceGameId ?? before?.confidenceGameId ?? null,
+  });
+  if (blocked.length > 0) {
+    throw new HttpsError(
+      "failed-precondition",
+      `Picks are locked for ${blocked.join(", ")}. Unlock only applies to games that have not kicked off.`
+    );
+  }
+
   const memberSnap = await db()
     .collection("groups")
     .doc(groupId)
@@ -277,9 +308,6 @@ export const adminUpsertPick = onCall(async (request) => {
     .get();
   const displayName = (memberSnap.data()?.displayName as string | undefined) ?? "Unknown";
 
-  const pickRef = weekSnap.ref.collection("picks").doc(userId);
-  const pickSnap = await pickRef.get();
-  const before = pickSnap.data() ?? null;
   const isLocked = data.isLocked ?? (before?.isLocked as boolean | undefined) ?? false;
 
   const payload: Record<string, unknown> = {

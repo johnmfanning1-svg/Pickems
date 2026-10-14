@@ -1342,7 +1342,7 @@ final class PickService {
         var trimmed = validGameIds.isEmpty
             ? cleaned
             : cleaned.filter { validGameIds.contains($0.key) }
-        if let week, week.isRollingLock, let existing = userPick?.picks {
+        if let week, let existing = userPick?.picks {
             trimmed = Self.preservingLockedPicks(
                 incoming: trimmed,
                 existing: existing,
@@ -1351,14 +1351,14 @@ final class PickService {
             )
         }
         let trimmedConfidence: String? = {
-            if let week, week.isRollingLock,
+            if let week,
                let existingConfidence = userPick?.confidenceGameId,
                let game = slateGames.first(where: { $0.id == existingConfidence }),
                WeekTransition.isGameLocked(game, week: week) {
                 return existingConfidence
             }
             guard let confidenceGameId, trimmed.keys.contains(confidenceGameId) else { return nil }
-            if let week, week.isRollingLock,
+            if let week,
                let game = slateGames.first(where: { $0.id == confidenceGameId }),
                WeekTransition.isGameLocked(game, week: week) {
                 return userPick?.confidenceGameId
@@ -1668,14 +1668,20 @@ final class PickService {
         weekId: String,
         game: SlateGame,
         spread: Double,
-        spreadTeamId: String
+        spreadTeamId: String,
+        week: WeekSummary? = nil
     ) async throws {
+        if let week, WeekTransition.isSpreadLocked(game, week: week) {
+            throw PickError.spreadLocked
+        }
         let weekRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
         let gamesRef = weekRef.collection("games")
         let patch: [String: Any] = [
             "spread": spread,
-            "spreadTeamId": spreadTeamId
+            "spreadTeamId": spreadTeamId,
+            "lockedSpread": FieldValue.delete(),
+            "lockedSpreadTeamId": FieldValue.delete(),
         ]
 
         var wroteGame = false
@@ -1838,6 +1844,7 @@ final class PickService {
         case selectionClosed
         case pickemsNotOpen
         case slateGameNotFound
+        case spreadLocked
         case gameKickedOff(String)
 
         var errorDescription: String? {
@@ -1852,6 +1859,7 @@ final class PickService {
             case .selectionClosed: return "Selections can't be changed after the Selection deadline."
             case .pickemsNotOpen: return "Pickems open when every Selection is in or the Selection deadline passes. Your commissioner can lock early."
             case .slateGameNotFound: return "Couldn't find that game to update the spread. Pull to refresh and try again."
+            case .spreadLocked: return "This game is locked, so the spread can't be changed."
             case .gameKickedOff(let message): return message
             }
         }

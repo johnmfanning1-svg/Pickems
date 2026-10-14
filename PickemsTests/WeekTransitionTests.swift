@@ -305,6 +305,56 @@ struct WeekTransitionTests {
         ))
     }
 
+    @Test func midWeekUnlockKeepsStartedGamesLocked() {
+        let past = Date().addingTimeInterval(-60)
+        let future = Date().addingTimeInterval(3600)
+        let reopened = week(status: .picking, deadline: future)
+        let started = SlateGame(
+            id: "started",
+            espnEventId: "started",
+            homeTeamId: "h",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "a",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: 7,
+            spreadTeamId: "h",
+            lockedSpread: 3,
+            lockedSpreadTeamId: "h",
+            kickoff: past,
+            status: .inProgress
+        )
+        let upcoming = SlateGame(
+            id: "upcoming",
+            espnEventId: "upcoming",
+            homeTeamId: "h",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "a",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: 4,
+            spreadTeamId: "a",
+            kickoff: future,
+            status: .scheduled
+        )
+        #expect(WeekTransition.isGameLocked(started, week: reopened))
+        #expect(WeekTransition.isSpreadLocked(started, week: reopened))
+        #expect(!WeekTransition.isGameLocked(upcoming, week: reopened))
+        #expect(!WeekTransition.isSpreadLocked(upcoming, week: reopened))
+        #expect(WeekTransition.isGameLocked(
+            gameId: "started",
+            kickoff: future,
+            status: .inProgress,
+            week: reopened
+        ))
+    }
+
     @Test func pickModeChangeResetsWorkOnceSelectionsExist() {
         #expect(!WeekTransition.weekPickModeChangeResetsWork(
             week(status: .selection),
