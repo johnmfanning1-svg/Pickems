@@ -1,0 +1,44 @@
+name: ASC Certificates (maintenance)
+
+# Manual only. mode=list prints signing certificates (no private material).
+# mode=revoke deletes ONLY the explicit ids given; the script refuses any
+# Distribution certificate.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "list or revoke"
+        type: choice
+        options: [list, revoke]
+        default: list
+      ids:
+        description: "Comma-separated certificate ids (revoke only)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: asc-certs
+  cancel-in-progress: false
+
+jobs:
+  certs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check PyJWT cryptography requests
+      - name: Certificates (${{ inputs.mode }})
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_CERT_MODE: ${{ inputs.mode }}
+          ASC_CERT_IDS: ${{ inputs.ids }}
+        run: python3 scripts/asc_certs.py
