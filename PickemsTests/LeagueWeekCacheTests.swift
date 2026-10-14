@@ -165,7 +165,7 @@ struct LeagueWeekCacheTests {
     @Test func reopenPickemsDoesNotReopenAnotherLeaguesWeek() {
         let deadline = Date(timeIntervalSince1970: 1_700_000_500)
         var current: WeekSummary? = week(status: .locked, rolling: false)
-        var chips = [current]
+        var chips: [WeekSummary] = [current!]
         LeagueWeekCache.update(
             observedGroupId: core4,
             availableWeeksGroupId: core4,
