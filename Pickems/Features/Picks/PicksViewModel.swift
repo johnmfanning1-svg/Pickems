@@ -659,6 +659,7 @@ final class PicksViewModel {
     func updateSpread(_ game: SlateGame, spread: Double, spreadTeamId: String, appState: AppState) {
         guard let group = appState.groupService.selectedGroup,
               let week = appState.groupService.currentWeek else { return }
+        guard !WeekTransition.isSpreadLocked(game, week: week) else { return }
         Task {
             do {
                 try await appState.pickService.updateGameSpread(
@@ -666,7 +667,8 @@ final class PicksViewModel {
                     weekId: week.id,
                     game: game,
                     spread: spread,
-                    spreadTeamId: spreadTeamId
+                    spreadTeamId: spreadTeamId,
+                    week: week
                 )
             } catch {
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)

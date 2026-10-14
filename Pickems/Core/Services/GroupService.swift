@@ -477,12 +477,24 @@ final class GroupService {
                 let slate = game.toSlateGame()
                 if !existingIds.contains(slate.espnEventId) {
                     try await gamesRef.document(slate.espnEventId).setData(from: slate)
-                } else if let existing = existingByEventId[slate.espnEventId],
-                          let repair = SlateGameDecoding.spreadRepair(existing: existing.game, espn: slate) {
-                    try await gamesRef.document(existing.documentId).updateData([
-                        FirestoreField.spread: repair.spread,
-                        FirestoreField.spreadTeamId: repair.spreadTeamId,
-                    ])
+                } else if let existing = existingByEventId[slate.espnEventId] {
+                    let spreadLocked = WeekTransition.isSpreadLocked(existing.game, week: week)
+                    var lineUpdates: [String: Any] = [:]
+                    if let repair = SlateGameDecoding.spreadRepair(
+                        existing: existing.game,
+                        espn: slate,
+                        spreadLocked: spreadLocked
+                    ) {
+                        lineUpdates[FirestoreField.spread] = repair.spread
+                        lineUpdates[FirestoreField.spreadTeamId] = repair.spreadTeamId
+                    }
+                    if let live = SlateGameDecoding.liveSpreadUpdate(existing: existing.game, espn: slate) {
+                        lineUpdates[FirestoreField.liveSpread] = live.liveSpread
+                        lineUpdates[FirestoreField.liveSpreadTeamId] = live.liveSpreadTeamId
+                    }
+                    if !lineUpdates.isEmpty {
+                        try await gamesRef.document(existing.documentId).updateData(lineUpdates)
+                    }
                 }
                 kickoffs.append(slate.kickoff)
             }
