@@ -34,7 +34,9 @@ rc=$?
 set -e
 # Counts come from the .xcresult bundle (Swift Testing and XCTest alike),
 # not from grepping test.log.
-MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-420}"
+# Floor on passed + expected failures. Main runs 431 tests (Oct 14, 2026);
+# keep this 2 below that and BUMP IT as tests are added.
+MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-429}"
 grep -iE "error:|Test case .* failed|\*\* TEST" "$OUT/logs/test.log" | tail -n 200 || true
 summary="$OUT/logs/test-summary.json"
 if ! xcrun xcresulttool get test-results summary --path "$OUT/TestResults.xcresult" --format json > "$summary" 2>"$OUT/logs/xcresulttool.err"; then
@@ -42,13 +44,23 @@ if ! xcrun xcresulttool get test-results summary --path "$OUT/TestResults.xcresu
   cat "$OUT/logs/xcresulttool.err" || true
   [ $rc -ne 0 ] || rc=1
 else
-  read -r total passed failed skipped expected_failures < <(python3 - "$summary" <<'PY'
+  read -r total passed failed skipped expected_failures < <(python3 - "$summary" <<'PY' || true
 import json, sys
-d = json.load(open(sys.argv[1]))
-print(d.get("totalTestCount", 0), d.get("passedTests", 0), d.get("failedTests", 0),
-      d.get("skippedTests", 0), d.get("expectedFailures", 0))
+try:
+    d = json.load(open(sys.argv[1]))
+    print(int(d["totalTestCount"]), int(d.get("passedTests", 0)), int(d.get("failedTests", 0)),
+          int(d.get("skippedTests", 0)), int(d.get("expectedFailures", 0)))
+except Exception as e:
+    print(f"could not parse test summary: {e}", file=sys.stderr)
 PY
 )
+  if [ -z "${total:-}" ]; then
+    echo "::error::Could not parse the xcresult test summary ($summary); no test counts available."
+    [ $rc -ne 0 ] || rc=1
+  fi
+  total="${total:-0}"; passed="${passed:-0}"; failed="${failed:-0}"
+  skipped="${skipped:-0}"; expected_failures="${expected_failures:-0}"
+  counted=$(( passed + expected_failures ))
   line="${total} total, ${passed} passed, ${failed} failed, ${skipped} skipped, ${expected_failures} expected failures"
   echo "Test results: ${line}"
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
@@ -62,8 +74,8 @@ for f in json.load(open(sys.argv[1])).get("testFailures", []):
     print(f"  {f.get('testIdentifierString') or f.get('testName')}: {f.get('failureText', '')}")
 PY
   fi
-  if [ "${total}" -lt "${MIN_EXPECTED_TESTS}" ]; then
-    echo "::error::Only ${total} tests ran; expected at least ${MIN_EXPECTED_TESTS}. Tests may have been skipped or dropped from the target."
+  if [ "${counted}" -lt "${MIN_EXPECTED_TESTS}" ]; then
+    echo "::error::Only ${counted} tests passed (${passed}) or were expected failures (${expected_failures}); need at least ${MIN_EXPECTED_TESTS}. Tests may have been skipped, failed, or dropped from the target."
     [ $rc -ne 0 ] || rc=1
   fi
 fi
