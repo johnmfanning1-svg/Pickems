@@ -6,7 +6,7 @@ struct CommissionerWeekAdminSections: View {
     @Environment(\.themePalette) private var theme
 
     let present: (CommissionerSheet) -> Void
-    @Binding var showReopenSelectionsConfirm: Bool
+    let requestReopenSelections: () -> Void
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var week: WeekSummary? { appState.groupService.currentWeek }
@@ -87,7 +87,7 @@ struct CommissionerWeekAdminSections: View {
                     closedSelectionDeadlineLabel(week)
                     if WeekTransition.canReopenSelections(week) {
                         Button("Reopen Selections") {
-                            showReopenSelectionsConfirm = true
+                            requestReopenSelections()
                         }
                         .listRowBackground(PickemsColors.cardBackground)
                     }
