@@ -199,7 +199,7 @@ extension AppState {
 
         let tieBreaker = group?.rules.tieBreaker ?? .commissionerOverride
         let tieBreakOrder = weekly ? (groupService.currentWeek?.tieBreakOrder ?? []) : []
-        return ScoringEngine.rankedStandings(
+        return ScoringEngine.boardStandings(
             entries: baseEntries,
             weekly: weekly,
             tieBreaker: tieBreaker,

@@ -14,4 +14,10 @@ enum LiveRefreshPolicy {
         let hour = calendar.component(.hour, from: Date())
         return hour >= 10 && hour <= 23
     }
+
+    /// Home is the only tab that polls ESPN on a timer. Pause it in the background
+    /// and on every other tab. The Picks tab has its own loop and stops on disappear.
+    static func shouldPollLiveScores(isHomeTab: Bool, isActive: Bool) -> Bool {
+        isHomeTab && isActive
+    }
 }
