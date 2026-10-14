@@ -149,7 +149,7 @@ Repository → Settings → Secrets and variables → Actions:
 | `ASC_ISSUER_ID` | Issuer ID (UUID shown above the key list in App Store Connect → Users and Access → Integrations) |
 | `ASC_KEY_P8` | Full contents of `AuthKey_<KEY_ID>.p8`, raw PEM (`-----BEGIN PRIVATE KEY-----` …). Base64 of the file also works. |
 
-The key must have the **Admin** role. Cloud-managed signing (`-allowProvisioningUpdates` with `-authenticationKeyPath/-authenticationKeyID/-authenticationKeyIssuerID`) creates or fetches signing certificates and provisioning profiles for the app, widget, and watch bundle IDs, and Apple only allows that with an Admin key. With an App Manager or Developer key, archive/export fails with a signing or permission error. No certificates or profiles are stored as secrets.
+The key must have the **Admin** role. Cloud-managed signing (`-allowProvisioningUpdates` with `-authenticationKeyPath/-authenticationKeyID/-authenticationKeyIssuerID`) creates or fetches signing certificates and provisioning profiles for the app and widget bundle IDs, and Apple only allows that with an Admin key. With an App Manager or Developer key, archive/export fails with a signing or permission error. No certificates or profiles are stored as secrets.
 
 The key file is written to `~/.appstoreconnect/private_keys/` on the runner only for the job and deleted in an `always()` step at the end, along with a temporary signing keychain. Key ID and issuer ID are scrubbed from the log files that are kept as artifacts.
 
