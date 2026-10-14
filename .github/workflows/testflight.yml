@@ -81,7 +81,7 @@ jobs:
           set -euo pipefail
           pbx="$PROJECT/project.pbxproj"
 
-          # Shipping targets (Pickems, PickemsWidget, PickemsWatch; Debug + Release)
+          # Shipping targets (Pickems, PickemsWidget; Debug + Release)
           # share one build number. Test targets stay at 1 and are left alone.
           shipping_builds=$(grep -Eo 'CURRENT_PROJECT_VERSION = [0-9]+;' "$pbx" | grep -Ev '= 1;$' | sort -u)
           if [ "$(printf '%s\n' "$shipping_builds" | wc -l | tr -d ' ')" != "1" ]; then
@@ -126,7 +126,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Marketing version $marketing, repo build $repo_build, CI build $build"
 
-      - name: Set build number on Pickems, PickemsWidget and PickemsWatch (runner only)
+      - name: Set build number on Pickems and PickemsWidget (runner only)
         env:
           REPO_BUILD: ${{ steps.version.outputs.repo_build }}
           NEW_BUILD: ${{ steps.version.outputs.build }}
@@ -134,14 +134,14 @@ jobs:
           set -euo pipefail
           pbx="$PROJECT/project.pbxproj"
           before=$(grep -c "CURRENT_PROJECT_VERSION = ${REPO_BUILD};" "$pbx" || true)
-          if [ "$before" != "6" ]; then
-            echo "::error::Expected 6 CURRENT_PROJECT_VERSION = ${REPO_BUILD} entries (3 targets x Debug/Release), found $before"
+          if [ "$before" != "4" ]; then
+            echo "::error::Expected 4 CURRENT_PROJECT_VERSION = ${REPO_BUILD} entries (2 targets x Debug/Release), found $before"
             exit 1
           fi
           sed -i '' "s/CURRENT_PROJECT_VERSION = ${REPO_BUILD};/CURRENT_PROJECT_VERSION = ${NEW_BUILD};/g" "$pbx"
           after=$(grep -c "CURRENT_PROJECT_VERSION = ${NEW_BUILD};" "$pbx" || true)
-          if [ "$after" != "6" ]; then
-            echo "::error::Build number replacement failed ($after of 6 entries updated)"
+          if [ "$after" != "4" ]; then
+            echo "::error::Build number replacement failed ($after of 4 entries updated)"
             exit 1
           fi
           grep -n 'CURRENT_PROJECT_VERSION' "$pbx"
