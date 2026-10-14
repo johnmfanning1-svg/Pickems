@@ -321,9 +321,11 @@ struct SlateGame: Codable, Identifiable, Equatable {
     /// Line used for scoring and the lock icon. `lockedSpread` wins once the game has frozen.
     var gradingLine: (spread: Double, teamId: String) {
         if let lockedSpread, let lockedSpreadTeamId, !lockedSpreadTeamId.isEmpty {
-            return (abs(lockedSpread), lockedSpreadTeamId)
+            return (lockedSpread.isFinite ? abs(lockedSpread) : 0, lockedSpreadTeamId)
         }
-        return (abs(spread), spreadTeamId)
+        // Match the server's gradingLine (spreadLock.ts): a NaN or infinite spread
+        // counts as 0, so the outright winner covers.
+        return (spread.isFinite ? abs(spread) : 0, spreadTeamId)
     }
 
     func spreadLabel(for teamId: String) -> String {

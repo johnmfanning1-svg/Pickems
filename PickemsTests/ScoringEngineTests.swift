@@ -3,6 +3,33 @@ import Testing
 @testable import Pickems
 
 struct ScoringEngineTests {
+    /// Server parity (spreadLock.ts gradingLine): a NaN or infinite spread counts
+    /// as 0, so the home team that won 35–0 covers and the away pick loses.
+    @Test(arguments: [Double.nan, Double.infinity, -Double.infinity])
+    func nonFiniteSpreadDoesNotCoverTheAwayTeam(spread: Double) {
+        let game = SlateGame(
+            id: "1",
+            espnEventId: "1",
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: spread,
+            spreadTeamId: "home",
+            kickoff: Date(timeIntervalSince1970: 0),
+            status: .final,
+            homeScore: 35,
+            awayScore: 0,
+            winnerTeamId: "home"
+        )
+        #expect(ScoringEngine.isPickCorrect(pickedTeamId: "home", game: game) == true)
+        #expect(ScoringEngine.isPickCorrect(pickedTeamId: "away", game: game) == false)
+    }
+
     @Test func pickCorrectWhenFavoriteCovers() {
         let game = SlateGame(
             id: "1",
