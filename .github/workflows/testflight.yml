@@ -206,7 +206,13 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             2>&1 | tee "$RUNNER_TEMP/logs/resolve-packages.log" | tail -n 40
 
-      - name: Archive (Release)
+      # Archive is ad-hoc signed ("-") with the project entitlements embedded and
+      # no provisioning: no Apple Development certificate is needed or created.
+      # Previously automatic signing at archive minted a new "Created via API"
+      # development certificate on every fresh runner until the account hit
+      # Apple's limit. The real signing happens at export: cloud-managed
+      # Apple Distribution signing via the ASC API key (app-store-connect).
+      - name: Archive (Release, ad-hoc signed; no development certificate)
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -221,11 +227,12 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             -skipPackagePluginValidation \
             -skipMacroValidation \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY=- \
+            PROVISIONING_PROFILE_SPECIFIER= \
+            PROVISIONING_PROFILE= \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
             > "$RUNNER_TEMP/logs/archive.log" 2>&1 || {
               echo "::error::xcodebuild archive failed. Last 150 log lines:"
               tail -n 150 "$RUNNER_TEMP/logs/archive.log"
@@ -287,6 +294,29 @@ jobs:
             exit 1
           fi
           echo "IPA_PATH=$ipa" >> "$GITHUB_ENV"
+
+      - name: Verify IPA signing and entitlements
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/ipa-check"
+          rm -rf "$work"; mkdir -p "$work"
+          unzip -q "$IPA_PATH" -d "$work"
+          app=$(find "$work/Payload" -maxdepth 1 -name '*.app' | head -n 1)
+          status=0
+          for b in "$app" "$app"/PlugIns/*.appex "$app"/Watch/*.app; do
+            [ -d "$b" ] || continue
+            auth=$(codesign -dvv "$b" 2>&1 | grep '^Authority=' | head -n 1 || true)
+            ents=$(codesign -d --entitlements - --xml "$b" 2>/dev/null | plutil -p - 2>/dev/null || true)
+            echo "== $(basename "$b"): $auth"
+            echo "$ents"
+            case "$auth" in *"Apple Distribution"*|*"iPhone Distribution"*) ;; *) echo "::error::$(basename "$b") not distribution-signed"; status=1;; esac
+            case "$(basename "$b")" in
+              Pickems.app|PickemsWidget*.appex)
+                echo "$ents" | grep -q 'group.FannypackInc.Pickems' || { echo "::error::$(basename "$b") missing app group entitlement"; status=1; } ;;
+            esac
+          done
+          echo "$(codesign -d --entitlements - --xml "$app" 2>/dev/null | plutil -p - 2>/dev/null)" | grep -q 'aps-environment' || { echo "::error::Pickems.app missing aps-environment"; status=1; }
+          exit $status
 
       - name: Upload to TestFlight
         if: github.event_name == 'push' || github.event.inputs.upload != 'false'
