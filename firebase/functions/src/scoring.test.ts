@@ -87,7 +87,7 @@ describe("coveredTeamId", () => {
     const homeFav = game({ id: "1", spread: 3.5, spreadTeamId: "home" });
     expect(coveredTeamId(homeFav, 24, 21)).toBe("away");
     expect(coveredTeamId(homeFav, 28, 24)).toBe("home");
-    expect(coveredTeamId(homeFav, 24, 20)).not.toBeNull();
+    expect(coveredTeamId(homeFav, 24, 20)).toBe("home");
 
     const awayFav = game({ id: "1", spread: 3.5, spreadTeamId: "away" });
     expect(coveredTeamId(awayFav, 21, 24)).toBe("home");
@@ -108,11 +108,12 @@ describe("coveredTeamId", () => {
     expect(coveredTeamId(pickem, 17, 21)).toBe("away");
   });
 
-  it("grades a non-finite spread as the away team", () => {
-    // A nomination can store a non-numeric spread. Math.abs(NaN) is NaN,
-    // NaN is not > 0, so the away side covers a 35–0 home win.
+  // KNOWN ISSUE (October audit): a nomination can store a non-numeric spread.
+  // Math.abs(NaN) is NaN, NaN is not > 0, so today the away side "covers" a 35–0
+  // home win. Whatever the fix (push/ungraded or pick'em), away must not cover.
+  it.fails("does not grade a non-finite spread as an away cover", () => {
     const broken = game({ id: "1", spread: Number.NaN, homeScore: 35, awayScore: 0 });
-    expect(coveredTeamId(broken, 35, 0)).toBe("away");
+    expect(coveredTeamId(broken, 35, 0)).not.toBe("away");
   });
 });
 

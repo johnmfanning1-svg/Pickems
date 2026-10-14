@@ -326,13 +326,14 @@ describe("shouldNotifyGameFinal", () => {
     expect(shouldNotifyGameFinal({ prevStatus: "final", nextStatus: "final" })).toBe(false);
   });
 
-  it("cannot retry a final that was skipped while the game was still unlocked", () => {
-    // The scorer stamps status final on the first pass. If that pass skips the
-    // push because kickoff has not passed, the next pass sees prevStatus final
-    // and will not send, even when finalNotifiedAt was never set.
+  // KNOWN ISSUE (October audit): the scorer stamps status final on the first
+  // pass. If that pass skips the push because kickoff has not passed, the next
+  // pass sees prevStatus final and never sends, even though finalNotifiedAt was
+  // never set. Intended: a final with no finalNotifiedAt is retried.
+  it.fails("retries a final push that an earlier pass skipped", () => {
     expect(
       shouldNotifyGameFinal({ prevStatus: "final", nextStatus: "final", finalNotifiedAt: undefined })
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("does not send when a prior pass already stamped finalNotifiedAt", () => {

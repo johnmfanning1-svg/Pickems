@@ -45,10 +45,13 @@ struct PickScoreAuditTests {
         #expect(ScoringEngine.isPickCorrect(pickedTeamId: "home", game: tie, pickMode: .straightUp) == nil)
     }
 
-    @Test func nonFiniteSpreadFallsThroughToTheAwayTeam() {
+    /// KNOWN ISSUE (October audit): a non-finite spread falls through to the away
+    /// team, so away "covers" a 35–0 home win. States the intended behaviour.
+    @Test func nonFiniteSpreadDoesNotCoverTheAwayTeam() {
         let broken = lineGame(spread: .nan, spreadTeamId: "home", homeScore: 35, awayScore: 0)
-        #expect(ScoringEngine.isPickCorrect(pickedTeamId: "away", game: broken) == true)
-        #expect(ScoringEngine.isPickCorrect(pickedTeamId: "home", game: broken) == false)
+        withKnownIssue("NaN spread grades as an away cover") {
+            #expect(ScoringEngine.isPickCorrect(pickedTeamId: "away", game: broken) != true)
+        }
     }
 
     @Test func confidenceDoublesALossAndDoesNotDoubleAPush() {
@@ -64,18 +67,25 @@ struct PickScoreAuditTests {
         #expect(once.pushes == 1)
     }
 
-    @Test func blankPickIsALossAndTheGradedLineIsTheGameLine() {
+    @Test func blankPickIsALoss() {
         let push = lineGame(spread: 7, spreadTeamId: "home", homeScore: 24, awayScore: 17)
         let blank = ScoringEngine.scorePicks(picks: ["1": "   "], games: [push])
         #expect(blank.losses == 1)
         #expect(blank.pushes == 0)
+    }
 
+    /// KNOWN ISSUE (October audit): grading reads the game's current spread, so a
+    /// line edit after the pick (7 → 6.5) regrades a push as a win. Intended: the
+    /// pick keeps the line it was made against.
+    @Test func lineEditAfterPickDoesNotRegrade() {
+        let push = lineGame(spread: 7, spreadTeamId: "home", homeScore: 24, awayScore: 17)
         var moved = push
         moved.spread = 6.5
-        let covered = ScoringEngine.scorePicks(picks: ["1": "home"], games: [moved])
-        #expect(covered.wins == 1)
-        #expect(covered.losses == 0)
-        #expect(covered.pushes == 0)
+        let graded = ScoringEngine.scorePicks(picks: ["1": "home"], games: [moved])
+        withKnownIssue("line edits regrade existing picks") {
+            #expect(graded.pushes == 1)
+            #expect(graded.wins == 0)
+        }
     }
 
     @Test func headToHeadIgnoresSameSidePicksAndPushes() {
@@ -98,7 +108,9 @@ struct PickScoreAuditTests {
         #expect(points.b == 0)
     }
 
-    @Test func seasonHeadToHeadFollowsWhateverGamesArePassed() {
+    /// Season ties fall to join date; this week's games must not decide them
+    /// (see #86). Head-to-head from this week's slate applies to the weekly board.
+    @Test func seasonTieIgnoresThisWeekWeeklyTieUsesHeadToHead() {
         let early = Date(timeIntervalSince1970: 1_000)
         let late = Date(timeIntervalSince1970: 2_000)
         let entries = [
@@ -139,14 +151,19 @@ struct PickScoreAuditTests {
             UserPick(id: "late", userId: "late", displayName: "Late", picks: ["1": "home"], isLocked: true),
             UserPick(id: "early", userId: "early", displayName: "Early", picks: ["1": "away"], isLocked: true),
         ]
-        let byThisWeek = ScoringEngine.rankedStandings(
-            entries: entries,
-            weekly: false,
+        var weeklyTie = entries
+        for i in weeklyTie.indices {
+            weeklyTie[i].weeklyWins = 1
+            weeklyTie[i].weeklyLosses = 0
+        }
+        let weeklyBoard = ScoringEngine.rankedStandings(
+            entries: weeklyTie,
+            weekly: true,
             tieBreaker: .headToHead,
             allPicks: picks,
             games: [game]
         )
-        #expect(byThisWeek.map(\.id) == ["late", "early"])
+        #expect(weeklyBoard.map(\.id) == ["late", "early"])
     }
 
     private func lineGame(

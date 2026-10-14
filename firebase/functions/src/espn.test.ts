@@ -76,14 +76,14 @@ describe("parseEventScores / nextGameStatus", () => {
     expect(nextGameStatus("inProgress", parsed)).toBe("final");
   });
 
-  it("treats ESPN state post as complete even when the completed flag is false", () => {
-    // parseEventScores sets completed when state is "post". A postponed game
-    // that still carries score strings (often "0") is then marked final.
+  // KNOWN ISSUE (October audit): parseEventScores sets completed when state is
+  // "post", so a postponed game that still carries score strings (often "0") is
+  // marked final. Intended: completed:false must not finalize a game.
+  it.fails("does not finalize a state-post game whose completed flag is false", () => {
     const parsed = parseEventScores(
       event({ homeScore: "0", awayScore: "0", completed: false, state: "post" })
     );
-    expect(parsed?.completed).toBe(true);
-    expect(nextGameStatus("scheduled", parsed)).toBe("final");
+    expect(nextGameStatus("scheduled", parsed)).not.toBe("final");
   });
 
   it("keeps a delayed game scheduled while ESPN state is still pre", () => {
@@ -94,11 +94,13 @@ describe("parseEventScores / nextGameStatus", () => {
     expect(nextGameStatus("scheduled", parsed)).toBe("scheduled");
   });
 
-  it("marks a completed 0-0 final, which is how a canceled game is scored today", () => {
+  // KNOWN ISSUE (October audit): a canceled game reported as a completed 0-0 is
+  // marked final today. Intended: a 0-0 "final" must not be graded as final.
+  it.fails("does not mark a completed 0-0 (canceled) game final", () => {
     const parsed = parseEventScores(
       event({ homeScore: "0", awayScore: "0", completed: true, state: "post" })
     );
-    expect(nextGameStatus("scheduled", parsed)).toBe("final");
+    expect(nextGameStatus("scheduled", parsed)).not.toBe("final");
   });
 });
 
