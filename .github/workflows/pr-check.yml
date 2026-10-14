@@ -1,0 +1,39 @@
+name: PR check
+
+# Runs on pull requests. Does not deploy Firebase, upload to TestFlight, or
+# submit for App Review. iOS unit tests need a Mac runner this repo does not
+# have; the presentation lint is the iOS check that can run on Ubuntu.
+# Cloud Functions tests also run from Deploy Firebase when the PR touches
+# firebase/**. This job covers Swift-only PRs that never hit that filter.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Presentation rules
+        run: python3 scripts/check-presentations.py Pickems
+
+  functions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: firebase/functions/package-lock.json
+
+      - name: Typecheck and unit-test Cloud Functions
+        run: |
+          npm ci --prefix firebase/functions
+          npm run build --prefix firebase/functions
+          npm test --prefix firebase/functions
