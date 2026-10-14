@@ -203,8 +203,11 @@ struct WeekTransitionTests {
     }
 
     @Test func rollingSnapshotUsesLastKickoffForWeekLock() {
-        let first = Date().addingTimeInterval(3600)
-        let last = Date().addingTimeInterval(7200)
+        // Whole-second dates: Timestamp(date:) stores microseconds, so a raw
+        // Date() does not always round-trip exactly through dateValue().
+        let now = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
+        let first = now.addingTimeInterval(3600)
+        let last = now.addingTimeInterval(7200)
         var rules = GroupRules.default
         rules.pickDeadline = .rolling
         let updates = WeekTransition.toPickingUpdates(
