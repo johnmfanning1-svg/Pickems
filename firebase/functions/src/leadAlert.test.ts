@@ -134,6 +134,20 @@ describe("tookTheLeadRecipients", () => {
     expect(realLead()).toEqual(["U"]);
   });
 
+  it("does not alert when the final game's kickoff is still in the future", () => {
+    const future = NOW + 60_000;
+    expect(
+      realLead({
+        week: {
+          status: "picking",
+          pickLockMode: "rolling",
+          gameKickoffs: { G: future },
+        },
+        games: [finalGame("G", future)],
+      })
+    ).toEqual([]);
+  });
+
   it("alerts when a rival drops and the leader's own score stays the same", () => {
     const current = [
       { id: "U", weeklyWins: 3 },
@@ -310,6 +324,15 @@ describe("shouldNotifyGameFinal", () => {
 
   it("does not send when the game was already final", () => {
     expect(shouldNotifyGameFinal({ prevStatus: "final", nextStatus: "final" })).toBe(false);
+  });
+
+  it("cannot retry a final that was skipped while the game was still unlocked", () => {
+    // The scorer stamps status final on the first pass. If that pass skips the
+    // push because kickoff has not passed, the next pass sees prevStatus final
+    // and will not send, even when finalNotifiedAt was never set.
+    expect(
+      shouldNotifyGameFinal({ prevStatus: "final", nextStatus: "final", finalNotifiedAt: undefined })
+    ).toBe(false);
   });
 
   it("does not send when a prior pass already stamped finalNotifiedAt", () => {
