@@ -54,4 +54,4 @@ jobs:
         working-directory: firebase
         run: |
           npm ci --prefix tests
-          npx -y firebase-tools@latest emulators:exec --only firestore --project pickems-rules-test "npm --prefix tests test"
+          npx -y firebase-tools@15 emulators:exec --only firestore --project pickems-rules-test "npm --prefix tests test"
