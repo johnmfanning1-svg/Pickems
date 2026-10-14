@@ -59,6 +59,9 @@ struct HomeView: View {
             .onAppear {
                 updateLivePolling()
             }
+            .onDisappear {
+                viewModel.stopLiveUpdates()
+            }
             .onChange(of: appState.selectedTab) { _, _ in
                 updateLivePolling()
             }
