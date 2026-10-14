@@ -15,6 +15,10 @@ final class GroupService {
     var currentWeek: WeekSummary?
     /// Weeks available for the selected group (Picks tab week bar). Ascending by season/week.
     var availableWeeks: [WeekSummary] = []
+    /// League `availableWeeks` was loaded for. Week ids are shared across leagues,
+    /// so a deadline mirror must not treat a matching id as this list.
+    @ObservationIgnored
+    private var availableWeeksGroupId: String?
     var seasonDateRangeByWeekId: [String: String] = [:]
     var cfbWeek: CFBWeekInfo?
     var seasonArchives: [SeasonArchive] = []
@@ -179,6 +183,7 @@ final class GroupService {
             weekSelectionPinned = false
         }
         availableWeeks = []
+        availableWeeksGroupId = nil
         seasonDateRangeByWeekId = [:]
         Task {
             if let queuedWeek {
@@ -231,7 +236,9 @@ final class GroupService {
         if deepLinkWeekHold != nil { return }
         weekSelectionPinned = false
         guard let activeId = cfbWeek.map({ CFBWeekSync.weekId(for: $0) }) else { return }
-        if let known = availableWeeks.first(where: { $0.id == activeId }), currentWeek?.id != known.id {
+        if availableWeeksGroupId == selectedGroup?.id,
+           let known = availableWeeks.first(where: { $0.id == activeId }),
+           currentWeek?.id != known.id {
             currentWeek = known
         }
         guard let groupId = selectedGroup?.id else { return }
@@ -250,13 +257,20 @@ final class GroupService {
         seasonDateRangeByWeekId[weekId]
     }
 
+    /// True when the week chip list was loaded for `groupId`.
+    /// Week ids are shared, so callers must not read `availableWeeks` for another league.
+    func availableWeeksBelong(to groupId: String) -> Bool {
+        availableWeeksGroupId == groupId
+    }
+
     /// Switch the observed week for the selected group (Picks week tabs). Defaults stay on the active ESPN week.
     func selectWeek(weekId: String) async {
         guard let groupId = selectedGroup?.id else { return }
         let activeWeekId = cfbWeek.map { CFBWeekSync.weekId(for: $0) }
         weekSelectionPinned = activeWeekId.map { $0 != weekId } ?? (observedWeekId != weekId)
         // Seed immediately so Picks/pick listeners don't briefly attach to the previous week.
-        if let known = availableWeeks.first(where: { $0.id == weekId }) {
+        // Only from this league's chip list — `2026-W7` exists in every league.
+        if availableWeeksGroupId == groupId, let known = availableWeeks.first(where: { $0.id == weekId }) {
             currentWeek = known
         }
         // Attach the new week observer before any await. Leaving the previous week's
@@ -278,7 +292,9 @@ final class GroupService {
     func loadAvailableWeeks(groupId: String) async {
         do {
             var weeks = try await fetchPastWeeks(groupId: groupId, limit: 20)
-            if let current = currentWeek, !weeks.contains(where: { $0.id == current.id }) {
+            if observedGroupId == groupId,
+               let current = currentWeek,
+               !weeks.contains(where: { $0.id == current.id }) {
                 weeks.append(current)
             }
             let year = currentWeek?.seasonYear
@@ -304,13 +320,17 @@ final class GroupService {
                     memberCount: memberCount
                 )
             }
+            guard selectedGroup?.id == groupId else { return }
             availableWeeks = Self.sortedWeeksAscending(Array(byId.values))
+            availableWeeksGroupId = groupId
         } catch {
-            if let current = currentWeek {
+            guard selectedGroup?.id == groupId else { return }
+            if let current = currentWeek, observedGroupId == groupId {
                 availableWeeks = [current]
             } else {
                 availableWeeks = []
             }
+            availableWeeksGroupId = groupId
         }
     }
 
@@ -420,12 +440,12 @@ final class GroupService {
                 )
                 try await weekRef.setData(from: week)
                 // Seed local state immediately so Home doesn't flash an empty week card.
-                publishCurrentWeekIfUnpinned(week)
+                publishCurrentWeekIfUnpinned(week, groupId: groupId)
                 await seedFixedSlateIfNeeded(groupId: groupId, weekId: weekId, week: week)
             } else {
                 let existing = try? snapshot.data(as: WeekSummary.self)
                 if let existing {
-                    publishCurrentWeekIfUnpinned(existing)
+                    publishCurrentWeekIfUnpinned(existing, groupId: groupId)
                     await seedFixedSlateIfNeeded(groupId: groupId, weekId: weekId, week: existing)
                 }
                 await reconcileSelectionWeekSnapshot(
@@ -443,13 +463,20 @@ final class GroupService {
 
     /// Keep a pinned Picks/Selections week (including future W1 during Week 0) from
     /// being overwritten when we seed the calendar's active week document.
-    private func publishCurrentWeekIfUnpinned(_ week: WeekSummary) {
+    private func publishCurrentWeekIfUnpinned(_ week: WeekSummary, groupId: String) {
+        // A stale sync for the previous league must not install its week over the
+        // one on screen. Matching week ids are not the same document.
+        guard selectedGroup?.id == groupId else { return }
         if weekSelectionPinned, let current = currentWeek, current.id != week.id {
             return
         }
-        if currentWeek?.id != week.id {
-            currentWeek = week
+        // Same week id in another league is a different document. Replace it.
+        // Once we are already observing this league, keep the on-screen copy so a
+        // re-fetch does not wipe a deadline the commissioner just saved.
+        if observedGroupId == groupId, currentWeek?.id == week.id {
+            return
         }
+        currentWeek = week
     }
 
     /// Writes ESPN's Saturday openers onto a fixed-slate Week 0. Idempotent merge.
@@ -477,12 +504,24 @@ final class GroupService {
                 let slate = game.toSlateGame()
                 if !existingIds.contains(slate.espnEventId) {
                     try await gamesRef.document(slate.espnEventId).setData(from: slate)
-                } else if let existing = existingByEventId[slate.espnEventId],
-                          let repair = SlateGameDecoding.spreadRepair(existing: existing.game, espn: slate) {
-                    try await gamesRef.document(existing.documentId).updateData([
-                        FirestoreField.spread: repair.spread,
-                        FirestoreField.spreadTeamId: repair.spreadTeamId,
-                    ])
+                } else if let existing = existingByEventId[slate.espnEventId] {
+                    let spreadLocked = WeekTransition.isSpreadLocked(existing.game, week: week)
+                    var lineUpdates: [String: Any] = [:]
+                    if let repair = SlateGameDecoding.spreadRepair(
+                        existing: existing.game,
+                        espn: slate,
+                        spreadLocked: spreadLocked
+                    ) {
+                        lineUpdates[FirestoreField.spread] = repair.spread
+                        lineUpdates[FirestoreField.spreadTeamId] = repair.spreadTeamId
+                    }
+                    if let live = SlateGameDecoding.liveSpreadUpdate(existing: existing.game, espn: slate) {
+                        lineUpdates[FirestoreField.liveSpread] = live.liveSpread
+                        lineUpdates[FirestoreField.liveSpreadTeamId] = live.liveSpreadTeamId
+                    }
+                    if !lineUpdates.isEmpty {
+                        try await gamesRef.document(existing.documentId).updateData(lineUpdates)
+                    }
                 }
                 kickoffs.append(slate.kickoff)
             }
@@ -497,7 +536,7 @@ final class GroupService {
                 let slate = game.toSlateGame()
                 return (slate.id, slate.kickoff)
             }
-            if week.pickDeadline == nil || week.pickLockMode == nil {
+            if (week.pickDeadline == nil || week.pickLockMode == nil), selectedGroup?.id == groupId {
                 let rules = selectedGroup?.rules ?? .default
                 for (key, value) in WeekTransition.lockSnapshotFields(rules: rules, games: lockGames) {
                     if key == "pickDeadline", week.pickDeadline != nil { continue }
@@ -508,16 +547,16 @@ final class GroupService {
                 updates["lockedAt"] = Timestamp(date: Date())
             }
             try await weekRef.updateData(updates)
-            if currentWeek?.id == weekId {
+            if observedGroupId == groupId, currentWeek?.id == weekId {
                 currentWeek?.slateSize = games.count
                 currentWeek?.slateSource = CFBWeekCalendar.weekZeroSlateSource
                 if week.status == .selection {
                     currentWeek?.status = .picking
                 }
-                if currentWeek?.pickDeadline == nil {
+                if currentWeek?.pickDeadline == nil, selectedGroup?.id == groupId {
                     currentWeek?.pickDeadline = kickoffs.min()
                 }
-                if currentWeek?.pickLockMode == nil {
+                if currentWeek?.pickLockMode == nil, selectedGroup?.id == groupId {
                     currentWeek?.pickLockMode = selectedGroup?.rules.pickDeadline == .rolling ? .rolling : .firstKickoff
                     currentWeek?.weekLockAt = selectedGroup?.rules.pickDeadline == .rolling
                         ? kickoffs.max()
@@ -532,7 +571,9 @@ final class GroupService {
         }
     }
 
-    /// Commissioner sets the nomination deadline for the current selection week.
+    /// Commissioner sets the nomination deadline for one league's week.
+    /// `groupId` is the league the editor captured. A shared week id must not
+    /// copy the deadline onto another league still on screen.
     func setSelectionDeadline(
         groupId: String,
         weekId: String,
@@ -546,67 +587,44 @@ final class GroupService {
             "selectionDeadlineSetBy": setByUserId,
         ]
         try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
-        if var week = currentWeek, week.id == weekId {
-            week.selectionDeadline = deadline
-            week.selectionDeadlineSetAt = setAt
-            week.selectionDeadlineSetBy = setByUserId
-            currentWeek = week
-        }
         // Chip switches reseed `currentWeek` from `availableWeeks`. Mirror the
-        // write so leaving and coming back does not restore a pre-deadline copy.
-        if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
-            availableWeeks[idx].selectionDeadline = deadline
-            availableWeeks[idx].selectionDeadlineSetAt = setAt
-            availableWeeks[idx].selectionDeadlineSetBy = setByUserId
+        // write so leaving and coming back does not restore a pre-deadline copy,
+        // but only on caches that still belong to this league.
+        updateDisplayedWeek(groupId: groupId, weekId: weekId) { week in
+            SelectionDeadlineLocal.apply(
+                deadline: deadline,
+                setAt: setAt,
+                setBy: setByUserId,
+                to: &week
+            )
         }
     }
 
-    /// Commissioner sets or extends the spread-pick deadline for the current week.
+    /// Commissioner sets or extends the spread-pick deadline for one league's week.
+    /// `isRollingLock` comes from the week the editor opened, not from whichever
+    /// league is selected when the write finishes.
     func setPickDeadline(
         groupId: String,
         weekId: String,
-        deadline: Date
+        deadline: Date,
+        isRollingLock: Bool
     ) async throws {
-        var updates: [String: Any] = [
-            "pickDeadline": Timestamp(date: deadline),
-        ]
-        if currentWeek?.id == weekId, currentWeek?.isRollingLock == true {
-            updates = rollingRemainingLockUpdates(deadline: deadline)
+        try await db.week(groupId: groupId, weekId: weekId).updateData(
+            PickDeadlineWrite.firestoreFields(deadline: deadline, isRollingLock: isRollingLock)
+        )
+        updateDisplayedWeek(groupId: groupId, weekId: weekId) { week in
+            PickDeadlineWrite.apply(deadline: deadline, isRollingLock: isRollingLock, to: &week)
         }
-        try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
-        applyDeadlineLocally(weekId: weekId, deadline: deadline, remainingLockAt: currentWeek?.isRollingLock == true ? deadline : nil)
     }
 
     /// Freeze every still-open rolling game immediately.
     func lockRemainingGamesNow(groupId: String, weekId: String) async throws {
         let now = Date()
         try await db.week(groupId: groupId, weekId: weekId).updateData(
-            rollingRemainingLockUpdates(deadline: now)
+            PickDeadlineWrite.firestoreFields(deadline: now, isRollingLock: true)
         )
-        applyDeadlineLocally(weekId: weekId, deadline: now, remainingLockAt: now)
-    }
-
-    private func rollingRemainingLockUpdates(deadline: Date) -> [String: Any] {
-        [
-            "remainingLockAt": Timestamp(date: deadline),
-        ]
-    }
-
-    private func applyDeadlineLocally(weekId: String, deadline: Date, remainingLockAt: Date?) {
-        if var week = currentWeek, week.id == weekId {
-            if week.isRollingLock {
-                week.remainingLockAt = remainingLockAt
-            } else {
-                week.pickDeadline = deadline
-            }
-            currentWeek = week
-        }
-        if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
-            if availableWeeks[idx].isRollingLock {
-                availableWeeks[idx].remainingLockAt = remainingLockAt
-            } else {
-                availableWeeks[idx].pickDeadline = deadline
-            }
+        updateDisplayedWeek(groupId: groupId, weekId: weekId) { week in
+            PickDeadlineWrite.apply(deadline: now, isRollingLock: true, to: &week)
         }
     }
 
@@ -632,21 +650,26 @@ final class GroupService {
             "selectionDeadlineSetBy": FieldValue.delete(),
             "selectionDeadlinePassedNotified": FieldValue.delete(),
         ])
-        if var week = currentWeek, week.id == weekId {
-            week.status = .selection
-            week.lockedAt = nil
-            week.selectionDeadline = nil
-            week.selectionDeadlineSetAt = nil
-            week.selectionDeadlineSetBy = nil
-            currentWeek = week
+        updateDisplayedWeek(groupId: groupId, weekId: weekId) { week in
+            SelectionDeadlineLocal.clear(on: &week)
         }
-        if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
-            availableWeeks[idx].status = .selection
-            availableWeeks[idx].lockedAt = nil
-            availableWeeks[idx].selectionDeadline = nil
-            availableWeeks[idx].selectionDeadlineSetAt = nil
-            availableWeeks[idx].selectionDeadlineSetBy = nil
-        }
+    }
+
+    /// Apply a week-field change only when the on-screen cache is still that league.
+    private func updateDisplayedWeek(
+        groupId: String,
+        weekId: String,
+        mutate: (inout WeekSummary) -> Void
+    ) {
+        LeagueWeekCache.update(
+            observedGroupId: observedGroupId,
+            availableWeeksGroupId: availableWeeksGroupId,
+            currentWeek: &currentWeek,
+            availableWeeks: &availableWeeks,
+            groupId: groupId,
+            weekId: weekId,
+            mutate: mutate
+        )
     }
 
     /// Sets (or clears) one week's scoring mode directly. Commissioner Settings now
@@ -680,53 +703,35 @@ final class GroupService {
         } else {
             try await weekRef.updateData([FirestoreField.pickMode: FieldValue.delete()])
         }
-        applyPickModeLocally(weekId: weekId, pickMode: pickMode)
+        applyPickModeLocally(groupId: groupId, weekId: weekId, pickMode: pickMode)
     }
 
-    private func applyPickModeLocally(weekId: String, pickMode: PickMode?) {
-        if var week = currentWeek, week.id == weekId {
+    private func applyPickModeLocally(groupId: String, weekId: String, pickMode: PickMode?) {
+        updateDisplayedWeek(groupId: groupId, weekId: weekId) { week in
             week.pickMode = pickMode
-            currentWeek = week
-        }
-        if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
-            availableWeeks[idx].pickMode = pickMode
         }
     }
 
     /// Commissioner reopens a locked week for picking with a new deadline.
+    /// `isRollingLock` is the week the editor captured, not the league now selected.
     func reopenWeekForPicking(
         groupId: String,
         weekId: String,
-        deadline: Date
+        deadline: Date,
+        isRollingLock: Bool
     ) async throws {
         var updates: [String: Any] = [
             "status": WeekStatus.picking.rawValue,
             "lockedAt": FieldValue.delete(),
         ]
-        if currentWeek?.id == weekId, currentWeek?.isRollingLock == true {
-            updates["remainingLockAt"] = Timestamp(date: deadline)
-        } else {
-            updates["pickDeadline"] = Timestamp(date: deadline)
+        for (key, value) in PickDeadlineWrite.firestoreFields(deadline: deadline, isRollingLock: isRollingLock) {
+            updates[key] = value
         }
         try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
-        if var week = currentWeek, week.id == weekId {
+        updateDisplayedWeek(groupId: groupId, weekId: weekId) { week in
             week.status = .picking
             week.lockedAt = nil
-            if week.isRollingLock {
-                week.remainingLockAt = deadline
-            } else {
-                week.pickDeadline = deadline
-            }
-            currentWeek = week
-        }
-        if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
-            availableWeeks[idx].status = .picking
-            availableWeeks[idx].lockedAt = nil
-            if availableWeeks[idx].isRollingLock {
-                availableWeeks[idx].remainingLockAt = deadline
-            } else {
-                availableWeeks[idx].pickDeadline = deadline
-            }
+            PickDeadlineWrite.apply(deadline: deadline, isRollingLock: isRollingLock, to: &week)
         }
     }
 
@@ -1469,7 +1474,7 @@ final class GroupService {
         let weekModes: [String: Any] = (result["weekModes"] as? [String: Any]) ?? [:]
         for (id, value) in weekModes {
             let mode: PickMode? = (value as? String).flatMap { PickMode(rawValue: $0) }
-            applyPickModeLocally(weekId: id, pickMode: mode)
+            applyPickModeLocally(groupId: groupId, weekId: id, pickMode: mode)
         }
         let applied: Bool? = result["currentWeekApplied"] as? Bool
         return applied ?? false
@@ -1486,7 +1491,10 @@ final class GroupService {
         rules: GroupRules,
         memberCount: Int? = nil
     ) async {
-        guard var week = currentWeek, week.status == .selection, !week.skipsSelection else { return }
+        // `currentWeek` is only this league's document while we are still observing it.
+        // A shared week id must not push another league's slate size onto `groupId`.
+        guard observedGroupId == groupId else { return }
+        guard let week = currentWeek, week.status == .selection, !week.skipsSelection else { return }
         let count = max(
             memberCount
                 ?? selectedGroup?.memberIds.count
@@ -1499,6 +1507,7 @@ final class GroupService {
             // Only pay for a taken-count read when we might shrink.
             takenUnique = await uniqueTakenGameCount(groupId: groupId, weekId: week.id)
         }
+        let weekId = week.id
         let target = SelectionSlateReconcile.targetSlateSize(
             expected: expected,
             currentSlateSize: week.slateSize,
@@ -1508,15 +1517,16 @@ final class GroupService {
             || week.selectionMode != rules.selectionMode
             || week.selectionsPerMember != rules.selectionsPerMember else { return }
         do {
-            try await db.week(groupId: groupId, weekId: week.id).updateData([
+            try await db.week(groupId: groupId, weekId: weekId).updateData([
                 "slateSize": target,
                 "selectionMode": rules.selectionMode.rawValue,
                 "selectionsPerMember": rules.selectionsPerMember,
             ])
-            week.slateSize = target
-            week.selectionMode = rules.selectionMode
-            week.selectionsPerMember = rules.selectionsPerMember
-            currentWeek = week
+            updateDisplayedWeek(groupId: groupId, weekId: weekId) { displayed in
+                displayed.slateSize = target
+                displayed.selectionMode = rules.selectionMode
+                displayed.selectionsPerMember = rules.selectionsPerMember
+            }
         } catch {
             AppLog.error(AppLog.firestore, "selection slate size reconcile failed", error: error, metadata: [
                 "group_id": groupId,
@@ -1629,9 +1639,10 @@ final class GroupService {
         guard Set(orderedUserIds).count >= 2 else { return }
 
         let currentOrder: [String]
-        if currentWeek?.id == weekId {
+        if observedGroupId == groupId, currentWeek?.id == weekId {
             currentOrder = currentWeek?.tieBreakOrder ?? []
-        } else if let stored = availableWeeks.first(where: { $0.id == weekId })?.tieBreakOrder {
+        } else if availableWeeksGroupId == groupId,
+                  let stored = availableWeeks.first(where: { $0.id == weekId })?.tieBreakOrder {
             currentOrder = stored
         } else {
             currentOrder = []
@@ -1640,16 +1651,12 @@ final class GroupService {
 
         try await db.week(groupId: groupId, weekId: weekId)
             .updateData([FirestoreField.tieBreakOrder: updated])
-        applyTieBreakOrderLocally(weekId: weekId, order: updated)
+        applyTieBreakOrderLocally(groupId: groupId, weekId: weekId, order: updated)
     }
 
-    private func applyTieBreakOrderLocally(weekId: String, order: [String]) {
-        if var week = currentWeek, week.id == weekId {
+    private func applyTieBreakOrderLocally(groupId: String, weekId: String, order: [String]) {
+        updateDisplayedWeek(groupId: groupId, weekId: weekId) { week in
             week.tieBreakOrder = order
-            currentWeek = week
-        }
-        if let idx = availableWeeks.firstIndex(where: { $0.id == weekId }) {
-            availableWeeks[idx].tieBreakOrder = order
         }
     }
 
@@ -2150,6 +2157,7 @@ final class GroupService {
         weekSelectionPinned = false
         currentWeek = nil
         availableWeeks = []
+        availableWeeksGroupId = nil
         seasonDateRangeByWeekId = [:]
         cfbWeek = nil
         standings = nil

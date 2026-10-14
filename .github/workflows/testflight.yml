@@ -66,6 +66,9 @@ jobs:
           sudo xcode-select -s "$XCODE_APP"
           xcodebuild -version
 
+      - name: Run iOS unit tests (gate; failure blocks archive and upload)
+        run: scripts/ci-ios-tests.sh
+
       - name: Compute version and build number
         id: version
         env:
@@ -78,7 +81,7 @@ jobs:
           set -euo pipefail
           pbx="$PROJECT/project.pbxproj"
 
-          # Shipping targets (Pickems, PickemsWidget, PickemsWatch; Debug + Release)
+          # Shipping targets (Pickems, PickemsWidget; Debug + Release)
           # share one build number. Test targets stay at 1 and are left alone.
           shipping_builds=$(grep -Eo 'CURRENT_PROJECT_VERSION = [0-9]+;' "$pbx" | grep -Ev '= 1;$' | sort -u)
           if [ "$(printf '%s\n' "$shipping_builds" | wc -l | tr -d ' ')" != "1" ]; then
@@ -123,7 +126,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Marketing version $marketing, repo build $repo_build, CI build $build"
 
-      - name: Set build number on Pickems, PickemsWidget and PickemsWatch (runner only)
+      - name: Set build number on Pickems and PickemsWidget (runner only)
         env:
           REPO_BUILD: ${{ steps.version.outputs.repo_build }}
           NEW_BUILD: ${{ steps.version.outputs.build }}
@@ -131,14 +134,14 @@ jobs:
           set -euo pipefail
           pbx="$PROJECT/project.pbxproj"
           before=$(grep -c "CURRENT_PROJECT_VERSION = ${REPO_BUILD};" "$pbx" || true)
-          if [ "$before" != "6" ]; then
-            echo "::error::Expected 6 CURRENT_PROJECT_VERSION = ${REPO_BUILD} entries (3 targets x Debug/Release), found $before"
+          if [ "$before" != "4" ]; then
+            echo "::error::Expected 4 CURRENT_PROJECT_VERSION = ${REPO_BUILD} entries (2 targets x Debug/Release), found $before"
             exit 1
           fi
           sed -i '' "s/CURRENT_PROJECT_VERSION = ${REPO_BUILD};/CURRENT_PROJECT_VERSION = ${NEW_BUILD};/g" "$pbx"
           after=$(grep -c "CURRENT_PROJECT_VERSION = ${NEW_BUILD};" "$pbx" || true)
-          if [ "$after" != "6" ]; then
-            echo "::error::Build number replacement failed ($after of 6 entries updated)"
+          if [ "$after" != "4" ]; then
+            echo "::error::Build number replacement failed ($after of 4 entries updated)"
             exit 1
           fi
           grep -n 'CURRENT_PROJECT_VERSION' "$pbx"
@@ -203,7 +206,13 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             2>&1 | tee "$RUNNER_TEMP/logs/resolve-packages.log" | tail -n 40
 
-      - name: Archive (Release)
+      # Archive is ad-hoc signed ("-") with the project entitlements embedded and
+      # no provisioning: no Apple Development certificate is needed or created.
+      # Previously automatic signing at archive minted a new "Created via API"
+      # development certificate on every fresh runner until the account hit
+      # Apple's limit. The real signing happens at export: cloud-managed
+      # Apple Distribution signing via the ASC API key (app-store-connect).
+      - name: Archive (Release, ad-hoc signed; no development certificate)
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -218,11 +227,12 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             -skipPackagePluginValidation \
             -skipMacroValidation \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY=- \
+            PROVISIONING_PROFILE_SPECIFIER= \
+            PROVISIONING_PROFILE= \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
             > "$RUNNER_TEMP/logs/archive.log" 2>&1 || {
               echo "::error::xcodebuild archive failed. Last 150 log lines:"
               tail -n 150 "$RUNNER_TEMP/logs/archive.log"
@@ -284,6 +294,29 @@ jobs:
             exit 1
           fi
           echo "IPA_PATH=$ipa" >> "$GITHUB_ENV"
+
+      - name: Verify IPA signing and entitlements
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/ipa-check"
+          rm -rf "$work"; mkdir -p "$work"
+          unzip -q "$IPA_PATH" -d "$work"
+          app=$(find "$work/Payload" -maxdepth 1 -name '*.app' | head -n 1)
+          status=0
+          for b in "$app" "$app"/PlugIns/*.appex "$app"/Watch/*.app; do
+            [ -d "$b" ] || continue
+            auth=$(codesign -dvv "$b" 2>&1 | grep '^Authority=' | head -n 1 || true)
+            ents=$(codesign -d --entitlements - --xml "$b" 2>/dev/null | plutil -p - 2>/dev/null || true)
+            echo "== $(basename "$b"): $auth"
+            echo "$ents"
+            case "$auth" in *"Apple Distribution"*|*"iPhone Distribution"*) ;; *) echo "::error::$(basename "$b") not distribution-signed"; status=1;; esac
+            case "$(basename "$b")" in
+              Pickems.app|PickemsWidget*.appex)
+                echo "$ents" | grep -q 'group.FannypackInc.Pickems' || { echo "::error::$(basename "$b") missing app group entitlement"; status=1; } ;;
+            esac
+          done
+          echo "$(codesign -d --entitlements - --xml "$app" 2>/dev/null | plutil -p - 2>/dev/null)" | grep -q 'aps-environment' || { echo "::error::Pickems.app missing aps-environment"; status=1; }
+          exit $status
 
       - name: Upload to TestFlight
         if: github.event_name == 'push' || github.event.inputs.upload != 'false'

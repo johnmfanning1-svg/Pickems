@@ -124,6 +124,26 @@ export function resolveSpreadTeamId(options: {
   return options.homeTeamId;
 }
 
+/** Reference line from the scoreboard. Not the graded league spread. */
+export function liveSpreadFromEvent(
+  event: EspnEvent,
+  homeTeamId: string,
+  awayTeamId: string
+): { liveSpread: number; liveSpreadTeamId: string } | null {
+  const odds = event.competitions?.[0]?.odds?.[0];
+  if (!odds || typeof odds.spread !== "number" || !Number.isFinite(odds.spread)) return null;
+  return {
+    liveSpread: Math.abs(odds.spread),
+    liveSpreadTeamId: resolveSpreadTeamId({
+      homeTeamId,
+      awayTeamId,
+      spread: odds.spread,
+      homeFavorite: odds.homeTeamOdds?.favorite,
+      awayFavorite: odds.awayTeamOdds?.favorite,
+    }),
+  };
+}
+
 export function parseEventScores(event: EspnEvent): ParsedEventScores | null {
   const competition = event.competitions?.[0];
   if (!competition?.competitors || competition.competitors.length < 2) {
