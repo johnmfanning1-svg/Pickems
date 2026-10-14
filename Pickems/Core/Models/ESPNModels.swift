@@ -28,6 +28,9 @@ struct ESPNGame: Identifiable, Equatable {
     var isNeutralSite: Bool = false
     /// ESPN live clock, e.g. `2nd 7:12` or `Halftime`. Nil when the game is not in progress.
     var liveClockLabel: String? = nil
+    /// Overall W-L from ESPN `competitor.records` (e.g. `5-1`). Nil when ESPN omits it.
+    var homeRecord: String? = nil
+    var awayRecord: String? = nil
 
     var isTop25: Bool { homeCuratedRank != nil || awayCuratedRank != nil }
 
@@ -88,6 +91,13 @@ struct ESPNScoreboardResponse: Decodable {
         let team: ESPNTeam
         let score: String?
         let curatedRank: ESPNCuratedRank?
+        var records: [ESPNRecord]? = nil
+    }
+
+    struct ESPNRecord: Decodable {
+        let name: String?
+        let type: String?
+        let summary: String?
     }
 
     struct ESPNCuratedRank: Decodable {
@@ -168,6 +178,8 @@ struct ESPNLiveGameCard: Identifiable, Equatable {
     var pickResult: PickResult?
     /// ESPN's current line when `spreadLabel` is the locked Pickems slate line.
     var liveSpreadLabel: String? = nil
+    var homeRecord: String? = nil
+    var awayRecord: String? = nil
 
     enum PickResult: Equatable {
         case win, loss, push, pending
