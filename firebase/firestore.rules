@@ -190,6 +190,21 @@ service cloud.firestore {
         || request.time < week.selectionDeadline;
     }
 
+    // Nomination docs carry the ESPN kickoff the client is saving. Creates,
+    // and updates that point a Selection at a different game, must be strictly
+    // before that kickoff. A missing kickoff is rejected. This does not
+    // rewrite selections already saved.
+    function selectionKickoffStillAhead() {
+      return request.resource.data.keys().hasAll(['kickoff'])
+        && request.resource.data.kickoff is timestamp
+        && request.time < request.resource.data.kickoff;
+    }
+
+    function selectionKeepsGameOrKickoffAhead() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['espnEventId'])
+        || selectionKickoffStillAhead();
+    }
+
     function picksVisibleToAll(groupId, weekId) {
       let week = weekData(groupId, weekId);
       return week.status in ['locked', 'scored']
@@ -427,17 +442,27 @@ service cloud.firestore {
 
         match /nominations/{nominationId} {
           allow read: if isGroupMember(groupId) || isSuperAdmin();
-          // Members may only create their own Selections before the deadline.
-          // Commissioners may create/replace a Selection for any member while
-          // the week is still in selection (including after the member deadline).
+          // Members may only create their own Selections before the deadline
+          // and before that game's kickoff. Commissioners may create a
+          // Selection for any member while the week is still in selection
+          // (including after the member deadline) but not after kickoff.
+          // Super-admin creates stay exempt so the portal can repair history.
           allow create: if isSuperAdmin()
             || (isCommissioner(groupId)
-                && weekData(groupId, weekId).status == 'selection')
+                && weekData(groupId, weekId).status == 'selection'
+                && selectionKickoffStillAhead())
             || (isGroupMember(groupId)
                 && weekData(groupId, weekId).status == 'selection'
                 && selectionNominationsOpen(groupId, weekId)
-                && request.resource.data.submittedBy == request.auth.uid);
-          allow update, delete: if isCommissioner(groupId)
+                && request.resource.data.submittedBy == request.auth.uid
+                && selectionKickoffStillAhead());
+          allow update: if (isCommissioner(groupId)
+              || (isSignedIn()
+                  && resource.data.submittedBy == request.auth.uid
+                  && weekData(groupId, weekId).status == 'selection'
+                  && selectionNominationsOpen(groupId, weekId)))
+            && selectionKeepsGameOrKickoffAhead();
+          allow delete: if isCommissioner(groupId)
             || (isSignedIn()
                 && resource.data.submittedBy == request.auth.uid
                 && weekData(groupId, weekId).status == 'selection'
