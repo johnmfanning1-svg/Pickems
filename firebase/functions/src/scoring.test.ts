@@ -108,12 +108,11 @@ describe("coveredTeamId", () => {
     expect(coveredTeamId(pickem, 17, 21)).toBe("away");
   });
 
-  // KNOWN ISSUE (October audit): a nomination can store a non-numeric spread.
-  // Math.abs(NaN) is NaN, NaN is not > 0, so today the away side "covers" a 35–0
-  // home win. Whatever the fix (push/ungraded or pick'em), away must not cover.
-  it.fails("does not grade a non-finite spread as an away cover", () => {
+  // October audit found a NaN spread graded as an away cover. Fixed by #91:
+  // gradingLine treats a non-finite spread as a pick'em, so the 35–0 winner covers.
+  it("grades a non-finite spread as a pick'em, not an away cover", () => {
     const broken = game({ id: "1", spread: Number.NaN, homeScore: 35, awayScore: 0 });
-    expect(coveredTeamId(broken, 35, 0)).not.toBe("away");
+    expect(coveredTeamId(broken, 35, 0)).toBe("home");
   });
 });
 

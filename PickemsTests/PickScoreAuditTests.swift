@@ -74,18 +74,17 @@ struct PickScoreAuditTests {
         #expect(blank.pushes == 0)
     }
 
-    /// KNOWN ISSUE (October audit): grading reads the game's current spread, so a
-    /// line edit after the pick (7 → 6.5) regrades a push as a win. Intended: the
-    /// pick keeps the line it was made against.
-    @Test func lineEditAfterPickDoesNotRegrade() {
-        let push = lineGame(spread: 7, spreadTeamId: "home", homeScore: 24, awayScore: 17)
-        var moved = push
+    /// October audit: a line edit after the pick (7 → 6.5) regraded a push as a
+    /// win. Since #91 the line freezes at kickoff (`lockedSpread`) and grading
+    /// uses it, so a later edit to `spread` does not regrade.
+    @Test func lineEditAfterLockDoesNotRegrade() {
+        var moved = lineGame(spread: 7, spreadTeamId: "home", homeScore: 24, awayScore: 17)
+        moved.lockedSpread = 7
+        moved.lockedSpreadTeamId = "home"
         moved.spread = 6.5
         let graded = ScoringEngine.scorePicks(picks: ["1": "home"], games: [moved])
-        withKnownIssue("line edits regrade existing picks") {
-            #expect(graded.pushes == 1)
-            #expect(graded.wins == 0)
-        }
+        #expect(graded.pushes == 1)
+        #expect(graded.wins == 0)
     }
 
     @Test func headToHeadIgnoresSameSidePicksAndPushes() {
