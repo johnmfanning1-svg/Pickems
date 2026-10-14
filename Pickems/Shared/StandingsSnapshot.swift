@@ -1,6 +1,6 @@
 import Foundation
 
-/// Shared App Group payload for widgets, Live Activities, and Watch.
+/// Shared App Group payload for widgets and Live Activities.
 struct StandingsSnapshot: Codable, Equatable {
     var groupId: String
     var groupName: String

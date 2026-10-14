@@ -179,7 +179,6 @@ Use when ASO fields in `fastlane/metadata/en-US/` changed. Binary upload is [TES
 - [ ] Marketing URL is `https://pickems-fb.web.app/` (not pickems.app, not an App Store listing) and the homepage loads
 - [ ] Support URL is `https://pickems-fb.web.app/support` (not pickems.app) and the form loads
 - [ ] Sheets that present league flows still use `.pickemsEnvironment` (1.0 crash)
-- [ ] Watch remains `SKIP_INSTALL`; do not change embedding as part of a routine ship
 
 ---
 

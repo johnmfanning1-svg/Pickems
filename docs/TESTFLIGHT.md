@@ -37,7 +37,7 @@ Typical phrasing: “bump TestFlight”, “new build”, “upload to TestFligh
 
 ## 2. Bump shipping versions
 
-In `Pickems.xcodeproj/project.pbxproj`, replace the **current shipping** marketing version and build on Pickems, PickemsWidget, and PickemsWatch (Debug + Release). Convention: marketing `X.Y.Z` ↔ build `XYZ` with no dropped digits (example: `3.2.3` / `323`, `3.3.11` / `3311`). Never increment the build as a bare integer (`339 → 340`) when the marketing patch rolls to two digits.
+In `Pickems.xcodeproj/project.pbxproj`, replace the **current shipping** marketing version and build on Pickems and PickemsWidget (Debug + Release). Convention: marketing `X.Y.Z` ↔ build `XYZ` with no dropped digits (example: `3.2.3` / `323`, `3.3.11` / `3311`). Never increment the build as a bare integer (`339 → 340`) when the marketing patch rolls to two digits.
 
 ```text
 CURRENT_PROJECT_VERSION = <old>;  →  CURRENT_PROJECT_VERSION = <new>;
@@ -149,13 +149,13 @@ Repository → Settings → Secrets and variables → Actions:
 | `ASC_ISSUER_ID` | Issuer ID (UUID shown above the key list in App Store Connect → Users and Access → Integrations) |
 | `ASC_KEY_P8` | Full contents of `AuthKey_<KEY_ID>.p8`, raw PEM (`-----BEGIN PRIVATE KEY-----` …). Base64 of the file also works. |
 
-The key must have the **Admin** role. Cloud-managed signing (`-allowProvisioningUpdates` with `-authenticationKeyPath/-authenticationKeyID/-authenticationKeyIssuerID`) creates or fetches signing certificates and provisioning profiles for the app, widget, and watch bundle IDs, and Apple only allows that with an Admin key. With an App Manager or Developer key, archive/export fails with a signing or permission error. No certificates or profiles are stored as secrets.
+The key must have the **Admin** role. Cloud-managed signing (`-allowProvisioningUpdates` with `-authenticationKeyPath/-authenticationKeyID/-authenticationKeyIssuerID`) creates or fetches signing certificates and provisioning profiles for the app and widget bundle IDs, and Apple only allows that with an Admin key. With an App Manager or Developer key, archive/export fails with a signing or permission error. No certificates or profiles are stored as secrets.
 
 The key file is written to `~/.appstoreconnect/private_keys/` on the runner only for the job and deleted in an `always()` step at the end, along with a temporary signing keychain. Key ID and issuer ID are scrubbed from the log files that are kept as artifacts.
 
 ### Build number
 
-Marketing version comes from the repo unchanged (`MARKETING_VERSION` in `project.pbxproj`). The build number is set on the runner only, identically on Pickems, PickemsWidget, and PickemsWatch (Debug + Release; test targets stay at `1`):
+Marketing version comes from the repo unchanged (`MARKETING_VERSION` in `project.pbxproj`). The build number is set on the runner only, identically on Pickems and PickemsWidget (Debug + Release; test targets stay at `1`):
 
 - Default: `TESTFLIGHT_BUILD_BASE + github.run_number`, where the optional repository **variable** `TESTFLIGHT_BUILD_BASE` defaults to `10000` (first run = `10001`).
 - Manual override: the `build_number` input on **Run workflow**.
@@ -195,4 +195,4 @@ Runs on `macos-26` with Xcode 26.6 selected via `xcode-select` (the project's iO
 
 ### Watch target
 
-The Pickems scheme does not embed PickemsWatch today (the `Embed Watch Content` phase exists but is not attached to the Pickems target; see [WIDGETS_WATCH.md](WIDGETS_WATCH.md)). The workflow still bumps its build number so all three stay in lockstep. If the watch app is embedded later, cloud signing will also need to provision `FannypackInc.Pickems.watchkitapp`, and the job's version check already inspects `Pickems.app/Watch/*.app`.
+There is no Watch app; the unused PickemsWatch target was removed in #99. The workflow bumps the build number on Pickems and PickemsWidget (4 entries, Debug + Release).
