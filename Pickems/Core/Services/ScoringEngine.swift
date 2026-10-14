@@ -172,6 +172,18 @@ enum ScoringEngine {
         return wins
     }
 
+    /// Weekly standings use this week's picks and slate. Season standings do not.
+    /// Those games are one week. Feeding them in as head-to-head reorders a season
+    /// tie that the January champion job breaks by join date, then name.
+    static func rankingPicksAndGames(
+        weekly: Bool,
+        picks: [UserPick],
+        games: [SlateGame]
+    ) -> (picks: [UserPick], games: [SlateGame]) {
+        guard weekly else { return ([], []) }
+        return (picks, games)
+    }
+
     /// Rank by most wins outright, then the league's tie-breaker, then join date / name.
     /// Keep in sync with `firebase/functions/src/scoring.ts` `rankEntries`.
     /// Batting average is a display stat only — it must not change order.

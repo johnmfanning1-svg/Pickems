@@ -199,12 +199,17 @@ extension AppState {
 
         let tieBreaker = group?.rules.tieBreaker ?? .commissionerOverride
         let tieBreakOrder = weekly ? (groupService.currentWeek?.tieBreakOrder ?? []) : []
+        let context = ScoringEngine.rankingPicksAndGames(
+            weekly: weekly,
+            picks: pickService.allPicks,
+            games: pickService.slateGames
+        )
         return ScoringEngine.rankedStandings(
             entries: baseEntries,
             weekly: weekly,
             tieBreaker: tieBreaker,
-            allPicks: pickService.allPicks,
-            games: pickService.slateGames,
+            allPicks: context.picks,
+            games: context.games,
             tieBreakOrder: tieBreakOrder,
             pickMode: selectedPickMode
         )
