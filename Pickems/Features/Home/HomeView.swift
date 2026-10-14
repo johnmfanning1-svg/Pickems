@@ -4,6 +4,7 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
+    @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel = HomeViewModel()
     @State private var coverMoment = CoverMomentPresenter()
     @State private var scoreboardFilter: HomeScoreboardFilter = .default
@@ -52,16 +53,17 @@ struct HomeView: View {
             }
             .task(id: appState.groupService.selectedGroup?.id) {
                 await appState.syncSelectedWeek()
-                viewModel.startLiveUpdates(appState: appState)
+                updateLivePolling()
                 appState.publishSurfaces()
             }
             .onAppear {
-                viewModel.startLiveUpdates(appState: appState)
+                updateLivePolling()
             }
-            .onChange(of: appState.selectedTab) { _, tab in
-                if tab == .home {
-                    viewModel.startLiveUpdates(appState: appState)
-                }
+            .onChange(of: appState.selectedTab) { _, _ in
+                updateLivePolling()
+            }
+            .onChange(of: scenePhase) { _, _ in
+                updateLivePolling()
             }
             .onChange(of: appState.pickService.userPick) { _, _ in
                 Task { await viewModel.refresh(appState: appState) }
@@ -74,6 +76,17 @@ struct HomeView: View {
             .onChange(of: appState.groupService.standings) { _, _ in
                 appState.publishSurfaces()
             }
+        }
+    }
+
+    private func updateLivePolling() {
+        if LiveRefreshPolicy.shouldPollLiveScores(
+            isHomeTab: appState.selectedTab == .home,
+            isActive: scenePhase == .active
+        ) {
+            viewModel.startLiveUpdates(appState: appState)
+        } else {
+            viewModel.stopLiveUpdates()
         }
     }
 
