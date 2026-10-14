@@ -298,6 +298,12 @@ struct SlateGame: Codable, Identifiable, Equatable {
     var awayTeamLogoURL: String?
     var spread: Double
     var spreadTeamId: String
+    /// Graded copy captured when this game locks. Nil on games locked before the field existed.
+    var lockedSpread: Double? = nil
+    var lockedSpreadTeamId: String? = nil
+    /// ESPN line shown in parentheses. Never used for grading.
+    var liveSpread: Double? = nil
+    var liveSpreadTeamId: String? = nil
     var kickoff: Date
     var status: GameStatus
     var homeScore: Int?
@@ -312,24 +318,35 @@ struct SlateGame: Codable, Identifiable, Equatable {
         case final
     }
 
+    /// Line used for scoring and the lock icon. `lockedSpread` wins once the game has frozen.
+    var gradingLine: (spread: Double, teamId: String) {
+        if let lockedSpread, let lockedSpreadTeamId, !lockedSpreadTeamId.isEmpty {
+            return (abs(lockedSpread), lockedSpreadTeamId)
+        }
+        return (abs(spread), spreadTeamId)
+    }
+
     func spreadLabel(for teamId: String) -> String {
-        let isFavorite = teamId == spreadTeamId
-        let value = abs(spread)
+        let line = gradingLine
+        let isFavorite = teamId == line.teamId
+        let value = abs(line.spread)
         let sign = isFavorite ? "-" : "+"
         return "\(sign)\(value.formatted(.number.precision(.fractionLength(1))))"
     }
 
     /// Home scoreboard format: `UVA -4.0`.
     var favoriteSpreadDisplay: String {
-        let abbr = spreadTeamId == homeTeamId ? homeTeamAbbreviation : awayTeamAbbreviation
-        return "\(abbr) \(spreadLabel(for: spreadTeamId))"
+        let line = gradingLine
+        let abbr = line.teamId == homeTeamId ? homeTeamAbbreviation : awayTeamAbbreviation
+        return "\(abbr) \(spreadLabel(for: line.teamId))"
     }
 
     /// Which side the Pickems spread applies to. `nil` when there is no favorite.
     var favoredSide: TeamDisplay.FavoredSide? {
-        guard abs(spread) > 0 else { return nil }
-        if spreadTeamId == homeTeamId { return .home }
-        if spreadTeamId == awayTeamId { return .away }
+        let line = gradingLine
+        guard abs(line.spread) > 0 else { return nil }
+        if line.teamId == homeTeamId { return .home }
+        if line.teamId == awayTeamId { return .away }
         return nil
     }
 
@@ -340,9 +357,10 @@ struct SlateGame: Codable, Identifiable, Equatable {
             if homeScore == awayScore { return nil }
             return homeScore > awayScore ? homeTeamId : awayTeamId
         }
-        let spreadMagnitude = abs(spread)
+        let line = gradingLine
+        let spreadMagnitude = abs(line.spread)
         let margin = Double(homeScore - awayScore)
-        let adjusted = margin + (spreadTeamId == homeTeamId ? -spreadMagnitude : spreadMagnitude)
+        let adjusted = margin + (line.teamId == homeTeamId ? -spreadMagnitude : spreadMagnitude)
         if adjusted == 0 { return nil }
         return adjusted > 0 ? homeTeamId : awayTeamId
     }
@@ -352,9 +370,10 @@ struct SlateGame: Codable, Identifiable, Equatable {
         if pickMode == .straightUp {
             return Double(abs(homeScore - awayScore))
         }
+        let line = gradingLine
         return abs(
             Double(homeScore - awayScore)
-                + (spreadTeamId == homeTeamId ? -abs(spread) : abs(spread))
+                + (line.teamId == homeTeamId ? -abs(line.spread) : abs(line.spread))
         )
     }
 

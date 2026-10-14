@@ -1,0 +1,33 @@
+name: iOS tests
+
+# Runs the PickemsTests unit tests on a macOS runner. Never deploys or uploads.
+on:
+  pull_request:
+    paths-ignore:
+      - "firebase/**"
+      - "web/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      XCODE_APP: /Applications/Xcode_26.6.app
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s "$XCODE_APP" && xcodebuild -version
+      - name: Run PickemsTests
+        run: scripts/ci-ios-tests.sh
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-logs
+          path: ${{ runner.temp }}/logs/
+          if-no-files-found: ignore
+          retention-days: 14

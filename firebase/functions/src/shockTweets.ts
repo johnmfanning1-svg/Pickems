@@ -11,6 +11,7 @@ import {
   type PickMode,
   type SlateGameDoc,
 } from "./scoring";
+import { gradingLine } from "./spreadLock";
 
 /**
  * Shock Tweets v1 — anonymized pick-share drafts after surprising finals.
@@ -208,11 +209,17 @@ export function parseLeagueGameSample(input: {
 }): LeagueGameSample | null {
   const homeTeamId = readString(input.data.homeTeamId);
   const awayTeamId = readString(input.data.awayTeamId);
-  const spreadTeamId = readString(input.data.spreadTeamId);
+  const gradedSpread = gradingLine({
+    spread: input.data.spread,
+    spreadTeamId: input.data.spreadTeamId,
+    lockedSpread: input.data.lockedSpread,
+    lockedSpreadTeamId: input.data.lockedSpreadTeamId,
+  });
+  const spreadTeamId = gradedSpread.spreadTeamId || readString(input.data.spreadTeamId);
   const status = input.data.status;
   if (!homeTeamId || !awayTeamId || !spreadTeamId) return null;
   if (status !== "scheduled" && status !== "inProgress" && status !== "final") return null;
-  if (typeof input.data.spread !== "number" || !Number.isFinite(input.data.spread)) return null;
+  if (!Number.isFinite(gradedSpread.spread)) return null;
   return {
     gameId: input.gameId,
     espnEventId: readString(input.data.espnEventId) ?? undefined,
@@ -222,7 +229,7 @@ export function parseLeagueGameSample(input: {
     awayTeamName: readString(input.data.awayTeamName) ?? "",
     homeTeamAbbreviation: readString(input.data.homeTeamAbbreviation) ?? undefined,
     awayTeamAbbreviation: readString(input.data.awayTeamAbbreviation) ?? undefined,
-    spread: input.data.spread,
+    spread: gradedSpread.spread,
     spreadTeamId,
     status,
     homeScore: finiteNumber(input.data.homeScore),

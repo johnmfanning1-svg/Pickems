@@ -228,6 +228,23 @@ struct SlateGameDecodingTests {
         #expect(repair?.spreadTeamId == "h")
     }
 
+    @Test func spreadRepairSkipsALockedGameWhileLiveLineStillUpdates() {
+        let stored = game(spread: 3, spreadTeamId: "h", status: .scheduled)
+        let espn = game(spread: 6.5, spreadTeamId: "a", status: .scheduled)
+        #expect(SlateGameDecoding.spreadRepair(existing: stored, espn: espn, spreadLocked: true) == nil)
+        let live = SlateGameDecoding.liveSpreadUpdate(existing: stored, espn: espn)
+        #expect(live?.liveSpread == 6.5)
+        #expect(live?.liveSpreadTeamId == "a")
+    }
+
+    @Test func gradingUsesLockedSpreadWhenPresent() {
+        var stored = game(spread: 14, spreadTeamId: "a", status: .final)
+        stored.lockedSpread = 3
+        stored.lockedSpreadTeamId = "h"
+        #expect(stored.coveredTeamId(homeScore: 24, awayScore: 20) == "h")
+        #expect(stored.favoriteSpreadDisplay == "HOM -3.0")
+    }
+
     @Test func spreadRepairSkipsLiveAndMatchingRows() {
         let live = game(spread: 5.5, spreadTeamId: "a", status: .inProgress)
         let espn = game(spread: 4, spreadTeamId: "h", status: .scheduled)

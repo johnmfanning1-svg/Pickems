@@ -4,6 +4,8 @@ DerivedData/
 xcuserdata/
 
 # Firebase
+firebase/*-debug.log
+firebase-debug.log
 firebase/functions/node_modules/
 firebase/functions/lib/
 .firebase/
