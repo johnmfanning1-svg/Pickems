@@ -1,16 +1,20 @@
 name: PR check
 
 # Runs on pull requests. Does not deploy Firebase, upload to TestFlight, or
-# submit for App Review. iOS unit tests need a Mac runner this repo does not
-# have; the presentation lint is the iOS check that can run on Ubuntu.
-# Cloud Functions tests also run from Deploy Firebase when the PR touches
-# firebase/**. This job covers Swift-only PRs that never hit that filter.
+# submit for App Review. iOS unit tests run separately in ios-tests.yml on a
+# macOS runner; this job covers the Linux-side checks for every PR.
+# Cloud Functions and rules tests also run from Deploy Firebase when the PR
+# touches firebase/**. This job covers PRs that never hit that filter.
 
 on:
   pull_request:
 
 permissions:
   contents: read
+
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   hygiene:
@@ -26,14 +30,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node version comes from "engines.node" in firebase/functions/package.json.
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version-file: firebase/functions/package.json
           cache: npm
-          cache-dependency-path: firebase/functions/package-lock.json
+          cache-dependency-path: |
+            firebase/functions/package-lock.json
+            firebase/tests/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
 
       - name: Typecheck and unit-test Cloud Functions
         run: |
           npm ci --prefix firebase/functions
           npm run build --prefix firebase/functions
           npm test --prefix firebase/functions
+
+      - name: Firestore rules tests (emulator)
+        working-directory: firebase
+        run: |
+          npm ci --prefix tests
+          npx -y firebase-tools@latest emulators:exec --only firestore --project pickems-rules-test "npm --prefix tests test"
