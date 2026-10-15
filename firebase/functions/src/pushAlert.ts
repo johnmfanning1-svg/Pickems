@@ -4,7 +4,7 @@ import type { PickMode } from "./scoring";
 /** Lock-screen context line. APNs draws this under the title. */
 export const MAX_PUSH_SUBTITLE_LENGTH = 50;
 
-export type PushPayloadType = "game_final" | "no_pick" | "lead";
+export type PushPayloadType = "game_final" | "no_pick" | "lead" | "selection_veto";
 
 export interface PushPresentation {
   subtitle?: string;
@@ -203,6 +203,36 @@ export function buildNoPickPush(input: {
       groupId: input.groupId,
       weekId: input.weekId,
       deepLink: pickemsDeepLink(input.groupId, input.weekId),
+    },
+  };
+}
+
+/** Selection veto. Names the league and the matchup, and opens that game. */
+export function buildSelectionVetoPush(input: {
+  leagueName: unknown;
+  groupId: string;
+  weekId: string;
+  gameId: string;
+  away: string;
+  home: string;
+}): BuiltPush {
+  const subtitle = gameContextSubtitle(input.leagueName as string, {
+    away: input.away,
+    home: input.home,
+  });
+  const threadId = leagueThreadId(input.groupId);
+  const gameId = input.gameId.trim();
+  return {
+    subtitle,
+    threadId,
+    collapseId: alertCollapseId(input.groupId, "veto", gameId),
+    payloadType: "selection_veto",
+    data: {
+      type: "selection_veto",
+      groupId: input.groupId,
+      weekId: input.weekId,
+      gameId,
+      deepLink: gameDeepLink(input.groupId, input.weekId, gameId),
     },
   };
 }

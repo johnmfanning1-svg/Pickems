@@ -44,7 +44,7 @@ enum NotificationPrefCategory: String, CaseIterable, Identifiable, Sendable {
     var subtitle: String {
         switch self {
         case .selectionDeadlines:
-            return "Reminders to finish Selections before the nomination deadline."
+            return "Reminders to finish Selections, and when a Selection is vetoed."
         case .pickemsDeadlines:
             return "Pickems are open, lock-in reminders, and when the board locks."
         case .gameFinals:
@@ -106,7 +106,7 @@ enum NotificationPrefCategory: String, CaseIterable, Identifiable, Sendable {
     var pushTypes: [String] {
         switch self {
         case .selectionDeadlines:
-            return ["selection_deadline_reminder"]
+            return ["selection_deadline_reminder", "selection_veto"]
         case .pickemsDeadlines:
             return ["pickems_open", "deadline_reminder", "deadline_locked", "deadline_passed"]
         case .gameFinals:

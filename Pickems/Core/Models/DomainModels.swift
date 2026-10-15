@@ -492,6 +492,33 @@ struct Nomination: Codable, Identifiable, Equatable {
     }
 }
 
+/// A Selection removed by veto. Readable by the league; voter ids are not on it.
+struct SelectionVeto: Codable, Identifiable, Equatable {
+    var id: String
+    var submittedBy: String
+    var submitterName: String
+    var espnEventId: String
+    var awayTeamName: String
+    var awayTeamAbbreviation: String?
+    var homeTeamName: String
+    var homeTeamAbbreviation: String?
+    var voteCount: Int
+    var votesNeeded: Int
+
+    var matchupLabel: String {
+        let away = abbreviation(awayTeamAbbreviation, fallback: awayTeamName)
+        let home = abbreviation(homeTeamAbbreviation, fallback: homeTeamName)
+        return "\(away) @ \(home)"
+    }
+
+    private func abbreviation(_ value: String?, fallback: String) -> String {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty { return trimmed }
+        let name = fallback.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "TBD" : String(name.prefix(4)).uppercased()
+    }
+}
+
 struct UserPick: Codable, Identifiable, Equatable {
     var id: String
     var userId: String

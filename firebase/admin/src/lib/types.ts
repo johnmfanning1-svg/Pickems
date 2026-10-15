@@ -32,6 +32,10 @@ export interface GroupRules {
   latePickPenaltyWins: number;
   /** Missing on existing leagues — treat as ats. */
   pickMode?: PickMode;
+  /** Missing means off. Members can vote a Selection off the slate. */
+  vetoEnabled?: boolean;
+  /** Votes required. The app and Cloud Functions clamp this to league size − 1. */
+  vetoVotesNeeded?: number;
 }
 
 export const DEFAULT_GROUP_RULES: GroupRules = {
@@ -46,6 +50,8 @@ export const DEFAULT_GROUP_RULES: GroupRules = {
   allowLatePicks: false,
   latePickPenaltyWins: 1,
   pickMode: "ats",
+  vetoEnabled: false,
+  vetoVotesNeeded: 2,
 };
 
 export function resolvePickMode(rules?: Partial<GroupRules> | null): PickMode {

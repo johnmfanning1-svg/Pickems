@@ -10,7 +10,8 @@ export type DeadlinePushType =
   | "game_final"
   | "took_the_lead"
   | "season_closed"
-  | "chat_message";
+  | "chat_message"
+  | "selection_veto";
 
 export type PushPrefFields = {
   notifySelectionDeadlines?: boolean;
@@ -29,6 +30,7 @@ export type MemberPushPrefFields = PushPrefFields & {
 
 const PREF_FOR_TYPE: Record<DeadlinePushType, keyof PushPrefFields> = {
   selection_deadline_reminder: "notifySelectionDeadlines",
+  selection_veto: "notifySelectionDeadlines",
   deadline_reminder: "notifyPickemsDeadlines",
   deadline_locked: "notifyPickemsDeadlines",
   deadline_passed: "notifyPickemsDeadlines",

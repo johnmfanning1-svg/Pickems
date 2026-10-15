@@ -11,6 +11,7 @@ describe("deadline notification prefs", () => {
   it("skips Selection deadline pushes when opted out", () => {
     const data = { notifySelectionDeadlines: false };
     expect(shouldSendDeadlinePush(data, "selection_deadline_reminder")).toBe(false);
+    expect(shouldSendDeadlinePush(data, "selection_veto")).toBe(false);
     expect(shouldSendDeadlinePush(data, "deadline_reminder")).toBe(true);
   });
 

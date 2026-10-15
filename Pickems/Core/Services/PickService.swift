@@ -22,6 +22,12 @@ final class PickService {
     /// Public per-game pick projection for rolling lock. Empty until games start.
     var revealedPicksByGameId: [String: RevealedGamePicks] = [:]
     var submissions: [PickSubmission] = []
+    /// Successful vetoes this week. A member cannot renominate their own vetoed game.
+    var vetoes: [SelectionVeto] = []
+    /// Eligible vote counts keyed by nomination id. Voter names are not included.
+    var vetoTallies: [String: Int] = [:]
+    /// Nomination ids the signed-in member has already voted on.
+    var myVetoNominationIds: Set<String> = []
     var isLoading = false
     var errorMessage: String?
 
@@ -38,6 +44,9 @@ final class PickService {
     private var revealedPicksListener: ListenerRegistration?
     @ObservationIgnored
     private var submissionsListener: ListenerRegistration?
+    private var vetoesListener: ListenerRegistration?
+    private var vetoTalliesListener: ListenerRegistration?
+    private var ownVetoRefreshGeneration = 0
     @ObservationIgnored
     private var observedUserId: String?
     @ObservationIgnored
@@ -46,6 +55,10 @@ final class PickService {
     private(set) var observedWeekId: String?
     /// True after the games listener has delivered a snapshot for `observedWeekId`.
     private(set) var didLoadSlateGames = false
+    /// True after nominations have been delivered for `observedWeekId`.
+    private(set) var didLoadNominations = false
+    /// True after veto records have been delivered for `observedWeekId`.
+    private(set) var didLoadVetoes = false
     /// Invalidates in-flight `savePickDraft` local mirrors after a later clear/set.
     @ObservationIgnored
     private var userPickWriteGeneration = 0
@@ -66,9 +79,17 @@ final class PickService {
         pickListener?.remove()
         revealedPicksListener?.remove()
         submissionsListener?.remove()
+        vetoesListener?.remove()
+        vetoTalliesListener?.remove()
         nominations = []
         slateGames = []
+        vetoes = []
+        vetoTallies = [:]
+        myVetoNominationIds = []
         didLoadSlateGames = false
+        didLoadNominations = false
+        didLoadVetoes = false
+        ownVetoRefreshGeneration += 1
         observedUserId = userId
         observedGroupId = groupId
         observedWeekId = weekId
@@ -88,6 +109,7 @@ final class PickService {
                     guard self.observedWeekId == weekId else { return }
                     if let error {
                         UserFacingError.apply(error, to: &self.errorMessage, context: .listener)
+                        self.didLoadNominations = true
                         AppEvents.failure(.picksListenerError, error: error, metadata: [
                             "listener": "nominations",
                             "group_id": groupId,
@@ -96,6 +118,8 @@ final class PickService {
                         return
                     }
                     self.nominations = snapshot?.documents.compactMap { try? $0.data(as: Nomination.self) } ?? []
+                    self.didLoadNominations = true
+                    self.refreshOwnVetoVotes(groupId: groupId, weekId: weekId, userId: userId)
                     self.onSlateChanged?()
                 }
             }
@@ -204,6 +228,33 @@ final class PickService {
                     } ?? []
                 }
             }
+
+        let weekRef = db.week(groupId: groupId, weekId: weekId)
+        vetoesListener = weekRef.vetoes.addSnapshotListener { [weak self] snapshot, error in
+            Task { @MainActor in
+                guard let self else { return }
+                guard self.observedWeekId == weekId else { return }
+                if let error {
+                    UserFacingError.apply(error, to: &self.errorMessage, context: .listener)
+                    self.didLoadVetoes = true
+                    return
+                }
+                self.vetoes = snapshot?.documents.compactMap { try? $0.data(as: SelectionVeto.self) } ?? []
+                self.didLoadVetoes = true
+            }
+        }
+        vetoTalliesListener = weekRef.vetoTallies.addSnapshotListener { [weak self] snapshot, error in
+            Task { @MainActor in
+                guard let self else { return }
+                guard self.observedWeekId == weekId else { return }
+                if error != nil { return }
+                var counts: [String: Int] = [:]
+                for doc in snapshot?.documents ?? [] {
+                    counts[doc.documentID] = doc.data()["count"] as? Int ?? 0
+                }
+                self.vetoTallies = counts
+            }
+        }
     }
 
     func resetSession() {
@@ -212,14 +263,24 @@ final class PickService {
         pickListener?.remove()
         revealedPicksListener?.remove()
         submissionsListener?.remove()
+        vetoesListener?.remove()
+        vetoTalliesListener?.remove()
         nominationsListener = nil
         gamesListener = nil
         pickListener = nil
         revealedPicksListener = nil
         submissionsListener = nil
+        vetoesListener = nil
+        vetoTalliesListener = nil
         nominations = []
         slateGames = []
+        vetoes = []
+        vetoTallies = [:]
+        myVetoNominationIds = []
         didLoadSlateGames = false
+        didLoadNominations = false
+        didLoadVetoes = false
+        ownVetoRefreshGeneration += 1
         observedUserId = nil
         observedGroupId = nil
         observedWeekId = nil
@@ -621,6 +682,12 @@ final class PickService {
         if !isCommissioner, ScoringEngine.isPastDeadline(deadline: week.selectionDeadline) {
             throw PickError.selectionClosed
         }
+        if !isCommissioner {
+            let blocked = SelectionVetoPolicy.blockedEventIds(vetoes: vetoes, userId: submittedBy)
+            if let hit = requested.first(where: { blocked.contains($0.espnEventId) }) {
+                throw PickError.selectionVetoed(matchupLabel(for: hit))
+            }
+        }
         if remainingUser <= 0 {
             throw PickError.nominationLimitReached
         }
@@ -761,6 +828,60 @@ final class PickService {
             if !slateGames.contains(where: { $0.espnEventId == game.espnEventId || $0.id == game.id }) {
                 slateGames.append(game)
             }
+        }
+    }
+
+    func castSelectionVeto(
+        groupId: String,
+        weekId: String,
+        nomination: Nomination,
+        rules: GroupRules,
+        week: WeekSummary,
+        userId: String
+    ) async throws {
+        guard rules.vetoEnabled else { throw PickError.selectionVetoClosed }
+        guard nomination.submittedBy != userId else { throw PickError.selectionVetoOwn }
+        guard WeekTransition.canRemakeSelections(week) else { throw PickError.selectionClosed }
+        guard !SelectionKickoffGate.hasKickedOff(kickoff: nomination.kickoff) else {
+            throw PickError.gameKickedOff(
+                SelectionKickoffGate.rejectionMessage(matchups: [matchupLabel(for: nomination)])
+            )
+        }
+        guard !myVetoNominationIds.contains(nomination.id) else {
+            throw PickError.selectionVetoAlreadyVoted
+        }
+
+        let ref = db.week(groupId: groupId, weekId: weekId)
+            .collection(FirestoreCollection.nominations)
+            .document(nomination.id)
+            .collection(FirestoreCollection.vetoVotes)
+            .document(userId)
+        try await ref.setData([
+            "userId": userId,
+            "createdAt": FieldValue.serverTimestamp(),
+        ])
+        myVetoNominationIds.insert(nomination.id)
+    }
+
+    /// Reads this member's own vote docs so the button can show "Voted" without listing anyone else.
+    private func refreshOwnVetoVotes(groupId: String, weekId: String, userId: String) {
+        ownVetoRefreshGeneration += 1
+        let generation = ownVetoRefreshGeneration
+        let targets = nominations.filter { $0.submittedBy != userId }
+        Task {
+            var voted = Set<String>()
+            for nomination in targets {
+                let ref = db.week(groupId: groupId, weekId: weekId)
+                    .collection(FirestoreCollection.nominations)
+                    .document(nomination.id)
+                    .collection(FirestoreCollection.vetoVotes)
+                    .document(userId)
+                if let snap = try? await ref.getDocument(), snap.exists {
+                    voted.insert(nomination.id)
+                }
+            }
+            guard generation == ownVetoRefreshGeneration, observedWeekId == weekId else { return }
+            myVetoNominationIds.formUnion(voted)
         }
     }
 
@@ -1846,6 +1967,10 @@ final class PickService {
         case slateGameNotFound
         case spreadLocked
         case gameKickedOff(String)
+        case selectionVetoed(String)
+        case selectionVetoClosed
+        case selectionVetoOwn
+        case selectionVetoAlreadyVoted
 
         var errorDescription: String? {
             switch self {
@@ -1861,6 +1986,14 @@ final class PickService {
             case .slateGameNotFound: return "Couldn't find that game to update the spread. Pull to refresh and try again."
             case .spreadLocked: return "This game is locked, so the spread can't be changed."
             case .gameKickedOff(let message): return message
+            case .selectionVetoed(let matchup):
+                return "\(matchup) was vetoed. Pick a different game."
+            case .selectionVetoClosed:
+                return "Veto is off for this league."
+            case .selectionVetoOwn:
+                return "You can't veto your own Selection."
+            case .selectionVetoAlreadyVoted:
+                return "You already voted to veto this Selection."
             }
         }
     }

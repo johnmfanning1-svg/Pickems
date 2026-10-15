@@ -18,6 +18,9 @@ enum FirestoreCollection {
     static let messages = "messages"
     static let reports = "reports"
     static let appConfig = "appConfig"
+    static let vetoVotes = "vetoVotes"
+    static let vetoes = "vetoes"
+    static let vetoTallies = "vetoTallies"
 }
 
 enum FirestoreDocument {
@@ -83,6 +86,8 @@ extension DocumentReference {
 
 extension DocumentReference {
     var nominations: CollectionReference { collection(FirestoreCollection.nominations) }
+    var vetoes: CollectionReference { collection(FirestoreCollection.vetoes) }
+    var vetoTallies: CollectionReference { collection(FirestoreCollection.vetoTallies) }
     var games: CollectionReference { collection(FirestoreCollection.games) }
     var picks: CollectionReference { collection(FirestoreCollection.picks) }
     var revealedPicks: CollectionReference { collection(FirestoreCollection.revealedPicks) }

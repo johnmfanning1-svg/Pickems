@@ -1784,3 +1784,221 @@ describe("member writes to other people and league records", () => {
     );
   });
 });
+
+describe("selection veto votes", () => {
+  function futureKickoff() {
+    return new Date(Date.now() + 3 * 60 * 60 * 1000);
+  }
+
+  function pastKickoff() {
+    return new Date(Date.now() - 60 * 1000);
+  }
+
+  function nomination(submittedBy, espnEventId = "401") {
+    return {
+      id: espnEventId,
+      submittedBy,
+      submitterName: submittedBy,
+      espnEventId,
+      spread: 3.5,
+      spreadTeamId: "333",
+      homeTeamId: "333",
+      homeTeamName: "Georgia",
+      homeTeamAbbreviation: "UGA",
+      awayTeamId: "61",
+      awayTeamName: "Alabama",
+      awayTeamAbbreviation: "ALA",
+      kickoff: futureKickoff(),
+      createdAt: new Date(),
+    };
+  }
+
+  function vote(voterId) {
+    return { userId: voterId, createdAt: serverTimestamp() };
+  }
+
+  async function openVetoWindow({
+    vetoEnabled = true,
+    selectionMode = "member",
+    deadlineOffsetMs = 60 * 60 * 1000,
+    weekStatus = "selection",
+    kickoff = futureKickoff(),
+    recordVeto = false,
+  } = {}) {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await updateDoc(doc(db, "groups", GROUP_ID), {
+        rules: { vetoEnabled, vetoVotesNeeded: 2, selectionMode: "member" },
+      });
+      await updateDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID), {
+        status: weekStatus,
+        selectionMode,
+        selectionDeadline: new Date(Date.now() + deadlineOffsetMs),
+      });
+      const body = nomination(MEMBER);
+      body.kickoff = kickoff;
+      const nominationRef = doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "401");
+      await setDoc(nominationRef, body);
+      if (recordVeto) {
+        await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "vetoes", `${MEMBER}_401`), {
+          submittedBy: MEMBER,
+          espnEventId: "401",
+        });
+        await deleteDoc(nominationRef);
+      }
+    });
+  }
+
+  function voteRef(db, voterId, nominationId = "401") {
+    return doc(
+      db,
+      "groups",
+      GROUP_ID,
+      "weeks",
+      WEEK_ID,
+      "nominations",
+      nominationId,
+      "vetoVotes",
+      voterId
+    );
+  }
+
+  it("lets another member vote once while Selections are open", async () => {
+    await openVetoWindow();
+    const voterDb = testEnv.authenticatedContext(OTHER_MEMBER).firestore();
+    await assertSucceeds(setDoc(voteRef(voterDb, OTHER_MEMBER), vote(OTHER_MEMBER)));
+    await assertFails(setDoc(voteRef(voterDb, OTHER_MEMBER), vote(OTHER_MEMBER)));
+    await assertFails(deleteDoc(voteRef(voterDb, OTHER_MEMBER)));
+    const own = await assertSucceeds(getDoc(voteRef(voterDb, OTHER_MEMBER)));
+    expect(own.exists()).toBe(true);
+  });
+
+  it("hides who voted from everyone except that voter", async () => {
+    await openVetoWindow();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(voteRef(ctx.firestore(), OTHER_MEMBER), {
+        userId: OTHER_MEMBER,
+        createdAt: new Date(),
+      });
+    });
+    const selectorDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const voterDb = testEnv.authenticatedContext(OTHER_MEMBER).firestore();
+    await assertFails(getDoc(voteRef(selectorDb, OTHER_MEMBER)));
+    await assertFails(
+      getDocs(
+        collection(
+          voterDb,
+          "groups",
+          GROUP_ID,
+          "weeks",
+          WEEK_ID,
+          "nominations",
+          "401",
+          "vetoVotes"
+        )
+      )
+    );
+    await assertSucceeds(getDoc(voteRef(voterDb, OTHER_MEMBER)));
+  });
+
+  it("rejects the selector, outsiders, and votes after the window", async () => {
+    await openVetoWindow();
+    const selectorDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER).firestore();
+    await assertFails(setDoc(voteRef(selectorDb, MEMBER), vote(MEMBER)));
+    await assertFails(setDoc(voteRef(outsiderDb, OUTSIDER), vote(OUTSIDER)));
+
+    await openVetoWindow({ weekStatus: "picking" });
+    const voterDb = testEnv.authenticatedContext(OTHER_MEMBER).firestore();
+    await assertFails(setDoc(voteRef(voterDb, OTHER_MEMBER), vote(OTHER_MEMBER)));
+
+    await openVetoWindow({ deadlineOffsetMs: -60 * 1000 });
+    await assertFails(setDoc(voteRef(voterDb, OTHER_MEMBER), vote(OTHER_MEMBER)));
+
+    await openVetoWindow({ kickoff: pastKickoff() });
+    await assertFails(setDoc(voteRef(voterDb, OTHER_MEMBER), vote(OTHER_MEMBER)));
+
+    await openVetoWindow({ vetoEnabled: false });
+    await assertFails(setDoc(voteRef(voterDb, OTHER_MEMBER), vote(OTHER_MEMBER)));
+
+    await openVetoWindow({ selectionMode: "commissioner" });
+    await assertFails(setDoc(voteRef(voterDb, OTHER_MEMBER), vote(OTHER_MEMBER)));
+  });
+
+  it("lets the commissioner vote on someone else's selection", async () => {
+    await openVetoWindow();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertSucceeds(setDoc(voteRef(commishDb, COMMISH), vote(COMMISH)));
+  });
+
+  it("rejects a vote that names someone else or adds extra fields", async () => {
+    await openVetoWindow();
+    const voterDb = testEnv.authenticatedContext(OTHER_MEMBER).firestore();
+    await assertFails(setDoc(voteRef(voterDb, COMMISH), vote(COMMISH)));
+    await assertFails(
+      setDoc(voteRef(voterDb, OTHER_MEMBER), { ...vote(OTHER_MEMBER), note: "no" })
+    );
+  });
+
+  it("blocks clients from writing the veto record or the tally", async () => {
+    await openVetoWindow();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "vetoTallies", "401"), {
+        count: 1,
+        votesNeeded: 2,
+      });
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "vetoes", `${MEMBER}_401`), {
+        submittedBy: MEMBER,
+        espnEventId: "401",
+        voteCount: 2,
+      });
+    });
+    const voterDb = testEnv.authenticatedContext(OTHER_MEMBER).firestore();
+    const tally = doc(voterDb, "groups", GROUP_ID, "weeks", WEEK_ID, "vetoTallies", "401");
+    const veto = doc(voterDb, "groups", GROUP_ID, "weeks", WEEK_ID, "vetoes", `${MEMBER}_401`);
+    await assertFails(setDoc(doc(voterDb, "groups", GROUP_ID, "weeks", WEEK_ID, "vetoTallies", "new"), {
+      count: 9,
+      votesNeeded: 1,
+    }));
+    await assertFails(
+      setDoc(doc(voterDb, "groups", GROUP_ID, "weeks", WEEK_ID, "vetoes", "forged"), {
+        submittedBy: MEMBER,
+        espnEventId: "401",
+        voteCount: 9,
+      })
+    );
+    const tallySnap = await assertSucceeds(getDoc(tally));
+    expect(tallySnap.data().count).toBe(1);
+    const vetoSnap = await assertSucceeds(getDoc(veto));
+    expect(vetoSnap.data().espnEventId).toBe("401");
+    await assertFails(updateDoc(tally, { count: 0 }));
+    await assertFails(deleteDoc(veto));
+  });
+
+  it("stops the vetoed member from reselecting that game and lets the commissioner restore it", async () => {
+    await openVetoWindow({ recordVeto: true });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const otherDb = testEnv.authenticatedContext(OTHER_MEMBER).firestore();
+    await assertFails(
+      setDoc(
+        doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "401"),
+        nomination(MEMBER)
+      )
+    );
+    await assertSucceeds(
+      setDoc(
+        doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "401-restored"),
+        nomination(MEMBER, "401")
+      )
+    );
+    await assertSucceeds(
+      setDoc(
+        doc(otherDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "401-other"),
+        nomination(OTHER_MEMBER, "401")
+      )
+    );
+  });
+});
