@@ -756,6 +756,48 @@ final class PickService {
         )
     }
 
+    /// Creates the replacement Selection and deletes the previous one together.
+    /// Another member already holding the new game fails the whole transaction,
+    /// so a rules or network failure cannot leave both Selections in place.
+    private func swapNomination(
+        newRef: DocumentReference,
+        oldRef: DocumentReference,
+        nomination: Nomination
+    ) async throws {
+        do {
+            _ = try await db.runTransaction { transaction, errorPointer in
+                do {
+                    let newSnap = try transaction.getDocument(newRef)
+                    if newSnap.exists {
+                        let owner = newSnap.data()?["submittedBy"] as? String
+                        if owner != nomination.submittedBy {
+                            let taken = NSError(
+                                domain: "Pickems.NominationClaim",
+                                code: 409,
+                                userInfo: [NSLocalizedDescriptionKey: "taken"]
+                            )
+                            errorPointer?.pointee = taken
+                            return nil
+                        }
+                    }
+                    _ = try transaction.getDocument(oldRef)
+                    try transaction.setData(from: nomination, forDocument: newRef)
+                    transaction.deleteDocument(oldRef)
+                    return nil
+                } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+            }
+        } catch {
+            let ns = error as NSError
+            if ns.domain == "Pickems.NominationClaim", ns.code == 409 {
+                throw PickError.duplicateGame
+            }
+            throw error
+        }
+    }
+
     /// Creates `nominations/{espnEventId}` only if nobody else claimed it.
     /// Same member retry is treated as already saved.
     private func createNominationIfFree(
@@ -985,9 +1027,11 @@ final class PickService {
         if !isCommissioner, newEventId != nomination.espnEventId {
             updated.id = newEventId
             let newRef = weekRef.nominations.document(newEventId)
-            try await createNominationIfFree(newRef, nomination: updated)
             if nomination.id != newEventId {
-                try await weekRef.nominations.document(nomination.id).delete()
+                let oldRef = weekRef.nominations.document(nomination.id)
+                try await swapNomination(newRef: newRef, oldRef: oldRef, nomination: updated)
+            } else {
+                try await createNominationIfFree(newRef, nomination: updated)
             }
             try await deleteSlateGames(matchingEventId: nomination.espnEventId, weekRef: weekRef)
             nominations.removeAll { $0.id == nomination.id || $0.espnEventId == nomination.espnEventId }

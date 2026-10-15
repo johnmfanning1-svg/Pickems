@@ -15,6 +15,7 @@ import {
   updateDoc,
   deleteDoc,
   deleteField,
+  runTransaction,
   query,
   where,
   serverTimestamp,
@@ -2047,6 +2048,44 @@ describe("selection veto votes", () => {
     );
   });
 
+  it("swaps a member selection in one transaction and keeps the old one if the new game is vetoed", async () => {
+    await openVetoWindow();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const oldRef = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "401");
+    const newRef = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "403");
+    await assertSucceeds(
+      runTransaction(memberDb, async (transaction) => {
+        transaction.set(newRef, nomination(MEMBER, "403"));
+        transaction.delete(oldRef);
+      })
+    );
+    const created = await assertSucceeds(getDoc(newRef));
+    expect(created.exists()).toBe(true);
+    expect(created.data().espnEventId).toBe("403");
+    const removed = await assertSucceeds(getDoc(oldRef));
+    expect(removed.exists()).toBe(false);
+
+    await openVetoWindow({ recordVeto: true });
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "402"),
+        nomination(MEMBER, "402")
+      );
+    });
+    const current = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "402");
+    const blocked = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "401");
+    await assertFails(
+      runTransaction(memberDb, async (transaction) => {
+        transaction.set(blocked, nomination(MEMBER, "401"));
+        transaction.delete(current);
+      })
+    );
+    const stillThere = await assertSucceeds(getDoc(current));
+    expect(stillThere.exists()).toBe(true);
+    expect(stillThere.data().espnEventId).toBe("402");
+    const notCreated = await assertSucceeds(getDoc(blocked));
+    expect(notCreated.exists()).toBe(false);
+  });
 });
 
 describe("selection veto votes needed", () => {
