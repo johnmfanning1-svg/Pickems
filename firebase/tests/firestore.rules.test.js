@@ -2001,4 +2001,49 @@ describe("selection veto votes", () => {
       )
     );
   });
+
+  it("stops the selector from moving or deleting kickoff", async () => {
+    await openVetoWindow();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const nominationRef = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "401");
+    const before = await assertSucceeds(getDoc(nominationRef));
+    await assertFails(updateDoc(nominationRef, { kickoff: pastKickoff() }));
+    await assertFails(updateDoc(nominationRef, { kickoff: futureKickoff() }));
+    await assertFails(updateDoc(nominationRef, { kickoff: deleteField() }));
+    await assertSucceeds(updateDoc(nominationRef, { spread: 6 }));
+    const after = await assertSucceeds(getDoc(nominationRef));
+    expect(after.data().kickoff.toMillis()).toBe(before.data().kickoff.toMillis());
+    expect(after.data().spread).toBe(6);
+  });
+
+  it("stops an update from putting a vetoed game back or reassigning it", async () => {
+    await openVetoWindow();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(
+        doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "402"),
+        nomination(MEMBER, "402")
+      );
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "vetoes", `${MEMBER}_401`), {
+        submittedBy: MEMBER,
+        espnEventId: "401",
+      });
+    });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const otherRef = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "402");
+    await assertFails(updateDoc(otherRef, { espnEventId: "401" }));
+    await assertFails(updateDoc(otherRef, { submittedBy: OTHER_MEMBER }));
+    await assertSucceeds(updateDoc(otherRef, { espnEventId: "403" }));
+    const after = await assertSucceeds(getDoc(otherRef));
+    expect(after.data().espnEventId).toBe("403");
+    expect(after.data().submittedBy).toBe(MEMBER);
+
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertSucceeds(
+      updateDoc(doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "401"), {
+        espnEventId: "404",
+        kickoff: futureKickoff(),
+      })
+    );
+  });
 });

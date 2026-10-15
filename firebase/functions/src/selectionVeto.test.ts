@@ -8,8 +8,12 @@ import {
   effectiveVetoVotesNeeded,
   eligibleVetoVoterIds,
   nominationCountAfterRemoval,
+  nominationEventIdsAfterRemoval,
   planSelectionVeto,
   selectionMatchupLabel,
+  selectionVetoDeliverySucceeded,
+  SELECTION_VETO_SETTINGS_TRIGGER,
+  SELECTION_VETO_VOTE_TRIGGER,
   selectionVetoMessages,
   indexOfPendingVetoRecord,
   selectionVetoRecordId,
@@ -227,16 +231,30 @@ describe("selection veto record and slate cleanup", () => {
   it("frees the slot by dropping that nomination from the count and matching slate docs", () => {
     expect(nominationCountAfterRemoval(["401", "402"], "401")).toBe(1);
     expect(nominationCountAfterRemoval(["401"], "401")).toBe(0);
+    const games = [
+      { id: "401", espnEventId: "401" },
+      { id: "other", espnEventId: "401" },
+      { id: "402", espnEventId: "402" },
+    ];
+    expect(slateGameIdsForEvent(games, "401", ["401"]).sort()).toEqual([]);
+    expect(slateGameIdsForEvent(games, "401", []).sort()).toEqual(["401", "other"]);
     expect(
-      slateGameIdsForEvent(
+      nominationEventIdsAfterRemoval(
         [
           { id: "401", espnEventId: "401" },
-          { id: "other", espnEventId: "401" },
-          { id: "402", espnEventId: "402" },
+          { id: "401-other", espnEventId: "401" },
         ],
         "401"
-      ).sort()
-    ).toEqual(["401", "other"]);
+      )
+    ).toEqual(["401"]);
+  });
+
+  it("marks the veto announced only after every send succeeds", () => {
+    expect(selectionVetoDeliverySucceeded([true, true])).toBe(true);
+    expect(selectionVetoDeliverySucceeded([true, false])).toBe(false);
+    expect(selectionVetoDeliverySucceeded([])).toBe(false);
+    expect(SELECTION_VETO_VOTE_TRIGGER.retry).toBe(true);
+    expect(SELECTION_VETO_SETTINGS_TRIGGER.retry).toBe(true);
   });
 });
 

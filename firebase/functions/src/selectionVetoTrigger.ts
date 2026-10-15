@@ -16,8 +16,12 @@ import {
   deadlineMillis,
   memberIdList,
   nominationCountAfterRemoval,
+  nominationEventIdsAfterRemoval,
   planSelectionVeto,
+  SELECTION_VETO_SETTINGS_TRIGGER,
+  SELECTION_VETO_VOTE_TRIGGER,
   selectionMatchupLabel,
+  selectionVetoDeliverySucceeded,
   selectionVetoMessages,
   indexOfPendingVetoRecord,
   selectionVetoRecordId,
@@ -50,7 +54,10 @@ interface VetoNotice {
  * eligible votes and, at the threshold, removes the Selection.
  */
 export const onSelectionVetoVoteCreated = onDocumentCreated(
-  "groups/{groupId}/weeks/{weekId}/nominations/{nominationId}/vetoVotes/{voterId}",
+  {
+    document: SELECTION_VETO_VOTE_TRIGGER.document,
+    retry: SELECTION_VETO_VOTE_TRIGGER.retry,
+  },
   async (event) => {
     const groupId = event.params.groupId;
     const weekId = event.params.weekId;
@@ -71,7 +78,10 @@ export const onSelectionVetoVoteCreated = onDocumentCreated(
  * votes already cast reach the threshold without anyone voting again.
  */
 export const onGroupVetoSettingsUpdated = onDocumentUpdated(
-  "groups/{groupId}",
+  {
+    document: SELECTION_VETO_SETTINGS_TRIGGER.document,
+    retry: SELECTION_VETO_SETTINGS_TRIGGER.retry,
+  },
   async (event) => {
     const before = event.data?.before.data() as VetoGroupFields | undefined;
     const after = event.data?.after.data() as VetoGroupFields | undefined;
@@ -190,7 +200,14 @@ export async function evaluateSelectionVeto(
       votes: votesSnap.docs,
       gameIds: slateGameIdsForEvent(
         gamesSnap.docs.map((doc) => ({ id: doc.id, espnEventId: doc.data().espnEventId })),
-        gameId
+        gameId,
+        nominationEventIdsAfterRemoval(
+          nominationsSnap.docs.map((doc) => ({
+            id: doc.id,
+            espnEventId: doc.data().espnEventId,
+          })),
+          nominationId
+        )
       ),
       gamesCollection: weekRef.collection("games"),
       nominationCount: nominationCountAfterRemoval(
@@ -286,7 +303,7 @@ async function deliverSelectionVeto(firestore: Firestore, notice: VetoNotice): P
     home: notice.home,
   });
   const recipients = notice.memberIds.length > 0 ? notice.memberIds : [notice.selectorId];
-  await Promise.all(
+  const results = await Promise.all(
     recipients.map((userId) => {
       const copy = userId === notice.selectorId ? messages.selector : messages.league;
       return sendToUser(
@@ -300,6 +317,9 @@ async function deliverSelectionVeto(firestore: Firestore, notice: VetoNotice): P
       );
     })
   );
+  if (!selectionVetoDeliverySucceeded(results)) {
+    throw new Error("selection veto notification failed");
+  }
   await firestore
     .collection("groups")
     .doc(notice.groupId)

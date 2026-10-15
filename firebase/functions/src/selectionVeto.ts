@@ -250,13 +250,30 @@ export function selectionVetoTitlesFit(): boolean {
 /** Slate docs for this ESPN event (doc id or `espnEventId`). */
 export function slateGameIdsForEvent(
   games: ReadonlyArray<{ id: string; espnEventId?: unknown }>,
-  espnEventId: string
+  espnEventId: string,
+  remainingNominationEventIds: readonly string[] = []
 ): string[] {
+  if (remainingNominationEventIds.includes(espnEventId)) return [];
   const ids = new Set<string>();
   for (const game of games) {
     if (game.id === espnEventId || game.espnEventId === espnEventId) ids.add(game.id);
   }
   return [...ids];
+}
+
+/** ESPN event ids still selected after this nomination doc is removed. */
+export function nominationEventIdsAfterRemoval(
+  nominations: ReadonlyArray<{ id: string; espnEventId?: unknown }>,
+  removedId: string
+): string[] {
+  const ids: string[] = [];
+  for (const nomination of nominations) {
+    if (nomination.id === removedId) continue;
+    const raw = nomination.espnEventId;
+    const eventId = typeof raw === "string" && raw.trim() ? raw.trim() : nomination.id;
+    ids.push(eventId);
+  }
+  return ids;
 }
 
 /** Nomination counter after this Selection is removed. */
@@ -267,6 +284,21 @@ export function nominationCountAfterRemoval(existingIds: readonly string[], remo
 export function deadlineMillis(value: unknown): number | null {
   return kickoffMillis(value);
 }
+
+/** True when every recipient send that should count has succeeded. */
+export function selectionVetoDeliverySucceeded(results: readonly boolean[]): boolean {
+  return results.length > 0 && results.every((ok) => ok === true);
+}
+
+export const SELECTION_VETO_VOTE_TRIGGER = {
+  document: "groups/{groupId}/weeks/{weekId}/nominations/{nominationId}/vetoVotes/{voterId}",
+  retry: true,
+} as const;
+
+export const SELECTION_VETO_SETTINGS_TRIGGER = {
+  document: "groups/{groupId}",
+  retry: true,
+} as const;
 
 function finiteInt(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;

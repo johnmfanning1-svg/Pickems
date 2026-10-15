@@ -287,6 +287,17 @@ service cloud.firestore {
         || selectionKickoffStillAhead();
     }
 
+    // A member cannot move or delete kickoff. Doing either closes the veto
+    // window while the game is still the one other members voted on.
+    function memberUpdateKeepsKickoff() {
+      return request.resource.data.keys().hasAll(['kickoff'])
+        && request.resource.data.kickoff == resource.data.kickoff;
+    }
+
+    function memberUpdateKeepsOwner() {
+      return request.resource.data.submittedBy == resource.data.submittedBy;
+    }
+
     function groupRules(groupId) {
       return get(/databases/$(database)/documents/groups/$(groupId)).data.get('rules', {});
     }
@@ -334,15 +345,32 @@ service cloud.firestore {
         && data.createdAt == request.time;
     }
 
+    function vetoRecordExists(groupId, weekId, ownerId, espnEventId) {
+      return ownerId is string
+        && espnEventId is string
+        && exists(/databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)/vetoes/$(ownerId + '_' + espnEventId));
+    }
+
     // A recorded veto blocks that member from putting the same game back.
     // Commissioners (and super admins, via isCommissioner) can restore it.
+    // Create keys the record by the owner on the write. Update keys it by the
+    // owner already stored, so retargeting the doc cannot dodge the block.
     function memberVetoBlocksReselection(groupId, weekId) {
       let data = request.resource.data;
       return !isCommissioner(groupId)
         && data.keys().hasAll(['submittedBy', 'espnEventId'])
-        && data.submittedBy is string
-        && data.espnEventId is string
-        && exists(/databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)/vetoes/$(data.submittedBy + '_' + data.espnEventId));
+        && vetoRecordExists(groupId, weekId, data.submittedBy, data.espnEventId);
+    }
+
+    function memberUpdateAllowsGame(groupId, weekId) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['espnEventId'])
+        || (selectionKickoffStillAhead()
+            && !vetoRecordExists(
+              groupId,
+              weekId,
+              resource.data.submittedBy,
+              request.resource.data.espnEventId
+            ));
     }
 
     function picksVisibleToAll(groupId, weekId) {
@@ -592,11 +620,13 @@ service cloud.firestore {
                 && selectionKickoffStillAhead()
                 && nominationCreateAllowed(groupId, weekId)
                 && !memberVetoBlocksReselection(groupId, weekId));
-          allow update: if selectionKeepsGameOrKickoffAhead()
-            && isSignedIn()
-            && ((resource.data.submittedBy == request.auth.uid
-                && nominationMemberMayEdit(groupId, weekId))
-              || isCommissioner(groupId));
+          allow update: if isSignedIn()
+            && ((isCommissioner(groupId) && selectionKeepsGameOrKickoffAhead())
+              || (resource.data.submittedBy == request.auth.uid
+                  && nominationMemberMayEdit(groupId, weekId)
+                  && memberUpdateKeepsKickoff()
+                  && memberUpdateKeepsOwner()
+                  && memberUpdateAllowsGame(groupId, weekId)));
           allow delete: if isSignedIn()
             && ((resource.data.submittedBy == request.auth.uid
                 && nominationMemberMayEdit(groupId, weekId))

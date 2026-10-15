@@ -881,7 +881,7 @@ final class PickService {
                 }
             }
             guard generation == ownVetoRefreshGeneration, observedWeekId == weekId else { return }
-            myVetoNominationIds.formUnion(voted)
+            myVetoNominationIds = voted
         }
     }
 
@@ -953,6 +953,11 @@ final class PickService {
         }
 
         let newEventId = game.espnEventId
+        if !isCommissioner,
+           SelectionVetoPolicy.blockedEventIds(vetoes: vetoes, userId: nomination.submittedBy)
+            .contains(newEventId) {
+            throw PickError.selectionVetoed(SelectionKickoffGate.matchupLabel(game))
+        }
         let weekRef = db.week(groupId: groupId, weekId: weekId)
         let nomsSnap = try await weekRef.nominations.getDocuments(source: .server)
         let takenByOtherNom = nomsSnap.documents.contains { doc in
@@ -975,6 +980,28 @@ final class PickService {
             createdAt: nomination.createdAt
         )
         updated.id = nomination.id
+        // Members cannot rewrite kickoff on an existing Selection. A different
+        // game is a new Selection so the create rules check its own kickoff.
+        if !isCommissioner, newEventId != nomination.espnEventId {
+            updated.id = newEventId
+            let newRef = weekRef.nominations.document(newEventId)
+            try await createNominationIfFree(newRef, nomination: updated)
+            if nomination.id != newEventId {
+                try await weekRef.nominations.document(nomination.id).delete()
+            }
+            try await deleteSlateGames(matchingEventId: nomination.espnEventId, weekRef: weekRef)
+            nominations.removeAll { $0.id == nomination.id || $0.espnEventId == nomination.espnEventId }
+            nominations.append(updated)
+            let countSnap = try await weekRef.nominations.getDocuments(source: .server)
+            try await weekRef.updateData([
+                FirestoreField.nominationCount: countSnap.count
+            ])
+            userPickEpoch += 1
+            return
+        }
+        if !isCommissioner {
+            updated.kickoff = nomination.kickoff
+        }
         try await weekRef.collection("nominations").document(nomination.id).setData(from: updated)
 
         if nomination.espnEventId != newEventId {

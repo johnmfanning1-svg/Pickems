@@ -16,7 +16,7 @@ export async function sendToUser(
   extra: Record<string, string> = {},
   member?: MemberPushPrefFields,
   presentation?: PushPresentation
-): Promise<void> {
+): Promise<boolean> {
   try {
     const snap = await getFirestore().collection("users").doc(userId).get();
     let memberPrefs = member;
@@ -32,7 +32,7 @@ export async function sendToUser(
     const decision = resolvePushDelivery(snap.data(), type, memberPrefs);
     if (decision.action === "skip") {
       logger.info("push skipped", { userId, type, reason: decision.reason, groupId: extra.groupId });
-      return;
+      return true;
     }
 
     await getMessaging().send(
@@ -44,6 +44,7 @@ export async function sendToUser(
         presentation,
       })
     );
+    return true;
   } catch (err) {
     if (isUnregisteredFcmTokenError(err)) {
       logger.warn("clearing stale FCM token", { userId, type });
@@ -57,9 +58,10 @@ export async function sendToUser(
           error: String(clearErr),
         });
       }
-      return;
+      return true;
     }
     logger.error("push send failed", { userId, type, error: String(err) });
+    return false;
   }
 }
 
