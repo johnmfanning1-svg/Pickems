@@ -2032,6 +2032,13 @@ describe("selection veto votes", () => {
     });
     const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
     const otherRef = doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "402");
+    const beforeSwap = await assertSucceeds(getDoc(otherRef));
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID, "gameLock", "current"), {
+        kickoffs: { 403: beforeSwap.data().kickoff },
+        liveIds: [],
+      });
+    });
     await assertFails(updateDoc(otherRef, { espnEventId: "401" }));
     await assertFails(updateDoc(otherRef, { submittedBy: OTHER_MEMBER }));
     await assertSucceeds(updateDoc(otherRef, { espnEventId: "403" }));

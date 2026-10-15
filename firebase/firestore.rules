@@ -358,10 +358,10 @@ service cloud.firestore {
 
     // Same game: kickoff stays present and unchanged, so a selector cannot
     // move the veto window. A swap may write an earlier kickoff (Thursday
-    // replacing Saturday). It may not invent one. When gameLock/current or
-    // the slate doc has that event's kickoff, the write must match it.
-    // Kickoff and the event id are checked before the veto reads. The
-    // selection window stays at the call site (nominationMemberMayEdit)
+    // replacing Saturday) only when that timestamp is the server catalog's.
+    // A missing gameLock entry and a slate doc with no timestamp both deny
+    // the swap. Kickoff and the event id are checked before the veto reads.
+    // The selection window stays at the call site (nominationMemberMayEdit)
     // so this does not get() the week again. The game doc is read only
     // when the mirror has no kickoff for this event.
     function memberUpdateGameAndKickoff(groupId, weekId, nominationId) {
@@ -384,9 +384,8 @@ service cloud.firestore {
             && !nominationVetoTallyExists(groupId, weekId, nominationId));
     }
 
-    // Mirror first. A missing catalog does not invent a kickoff check:
-    // older clients swap games that are not on the lock mirror yet, and
-    // create already accepts their future kickoff.
+    // Mirror first, then the slate doc. Either source has to hold a timestamp
+    // for this event. No catalog timestamp means the swap does not match.
     function swapKickoffMatchesKnownGame(groupId, weekId, eventId) {
       let lockPath = /databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)/gameLock/current;
       let gamePath = /databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)/games/$(eventId);
@@ -401,7 +400,7 @@ service cloud.firestore {
     function gameDocKickoffAgrees(gamePath) {
       let game = exists(gamePath) ? get(gamePath).data : {};
       let kick = game.get('kickoff', null);
-      return !(kick is timestamp) || request.resource.data.kickoff == kick;
+      return kick is timestamp && request.resource.data.kickoff == kick;
     }
 
     // Votes already counted for this nomination id. A member cannot point
@@ -727,7 +726,8 @@ service cloud.firestore {
         }
 
         // Kickoff and phase copied from each game by lockAndScoreWeeks.
-        // Clients cannot rewrite it to reopen a game that has already started.
+        // During Selections that function writes ESPN kickoffs here before
+        // any slate docs exist. Clients cannot rewrite it.
         match /gameLock/{lockId} {
           allow read: if isGroupMember(groupId) || isSuperAdmin();
           allow write: if false;

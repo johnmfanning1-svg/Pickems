@@ -163,6 +163,16 @@ async function seedNomination(body, id = body.id) {
   });
 }
 
+/** Server catalog the old in-place swap has to match. */
+async function seedKickoffs(kickoffs) {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "groups", GROUP_ID, "weeks", WEEK_ID, "gameLock", "current"), {
+      kickoffs,
+      liveIds: [],
+    });
+  });
+}
+
 describe.each([
   { label: "off", vetoEnabled: false },
   { label: "on", vetoEnabled: true },
@@ -194,6 +204,7 @@ describe.each([
     const kickoff = futureKickoff();
     const existing = nomination(MEMBER, "401", kickoff);
     await seedNomination(existing);
+    await seedKickoffs({ 402: kickoff });
     const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
     await assertSucceeds(setDoc(nominationRef(memberDb, "401"), swapped(existing, "402", kickoff)));
     const saved = await assertSucceeds(getDoc(nominationRef(memberDb, "401")));
@@ -211,6 +222,7 @@ describe.each([
     const later = futureKickoff(96);
     const existing = nomination(MEMBER, "401", kickoff);
     await seedNomination(existing);
+    await seedKickoffs({ 402: later });
     const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
     await assertSucceeds(setDoc(nominationRef(memberDb, "401"), swapped(existing, "402", later)));
     const saved = await assertSucceeds(getDoc(nominationRef(memberDb, "401")));
@@ -310,11 +322,13 @@ describe("pre-#107 swaps still cannot move the veto window", () => {
     await seedNomination(existing);
     const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
     const otherDb = testEnv.authenticatedContext(OTHER_MEMBER).firestore();
+    const next = futureKickoff(90);
+    await seedKickoffs({ 403: next });
     await assertFails(
       setDoc(nominationRef(otherDb, "401"), swapped(existing, "404", futureKickoff(90)))
     );
     await assertSucceeds(
-      setDoc(nominationRef(memberDb, "401"), swapped(existing, "403", futureKickoff(90)))
+      setDoc(nominationRef(memberDb, "401"), swapped(existing, "403", next))
     );
 
     await seedNomination(nomination(MEMBER, "401", kickoff));
@@ -444,6 +458,29 @@ describe("swap kickoff must be the real game's when the catalog has it", () => {
     const saved = await assertSucceeds(getDoc(ref));
     expect(saved.data().espnEventId).toBe("402");
     expect(saved.data().kickoff.toMillis()).toBe(thursday.getTime());
+  });
+
+  it("rejects a swap when the catalog has no timestamp for the new game", async () => {
+    const { saturday, existing } = await seedCatalog();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const ref = nominationRef(memberDb, "401");
+    await assertFails(setDoc(ref, swapped(existing, "402", futureKickoff(24))));
+    await assertFails(setDoc(ref, swapped(existing, "402", saturday)));
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "gameLock", "current"), {
+        kickoffs: { 401: saturday },
+        liveIds: [],
+      });
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "games", "402"), {
+        espnEventId: "402",
+        status: "scheduled",
+      });
+    });
+    await assertFails(setDoc(ref, swapped(existing, "402", saturday)));
+    const saved = await assertSucceeds(getDoc(ref));
+    expect(saved.data().espnEventId).toBe("401");
+    expect(saved.data().kickoff.toMillis()).toBe(saturday.getTime());
   });
 
   it("rejects an empty or non-string event id before the veto lookup", async () => {
