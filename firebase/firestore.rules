@@ -287,13 +287,6 @@ service cloud.firestore {
         || selectionKickoffStillAhead();
     }
 
-    // A member cannot move or delete kickoff. Doing either closes the veto
-    // window while the game is still the one other members voted on.
-    function memberUpdateKeepsKickoff() {
-      return request.resource.data.keys().hasAll(['kickoff'])
-        && request.resource.data.kickoff == resource.data.kickoff;
-    }
-
     function memberUpdateKeepsOwner() {
       return request.resource.data.submittedBy == resource.data.submittedBy;
     }
@@ -353,8 +346,9 @@ service cloud.firestore {
 
     // A recorded veto blocks that member from putting the same game back.
     // Commissioners (and super admins, via isCommissioner) can restore it.
-    // Create keys the record by the owner on the write. Update keys it by the
-    // owner already stored, so retargeting the doc cannot dodge the block.
+    // Create keys the record by the owner on the write. A member swap keys
+    // it by the owner already stored (memberUpdateGameAndKickoff), so
+    // retargeting the doc cannot dodge the block.
     function memberVetoBlocksReselection(groupId, weekId) {
       let data = request.resource.data;
       return !isCommissioner(groupId)
@@ -362,9 +356,19 @@ service cloud.firestore {
         && vetoRecordExists(groupId, weekId, data.submittedBy, data.espnEventId);
     }
 
-    function memberUpdateAllowsGame(groupId, weekId) {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['espnEventId'])
-        || (selectionKickoffStillAhead()
+    // Same game: kickoff stays present and unchanged, so a selector cannot
+    // move the veto window. Older clients swap by overwriting this doc,
+    // including kickoff. A new espnEventId may bring that game's kickoff
+    // only when the write would pass create for it. Kickoff is checked
+    // before any read. The selection window stays at the call site
+    // (nominationMemberMayEdit) so this does not get() the week again.
+    function memberUpdateGameAndKickoff(groupId, weekId) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return !changed.hasAny(['espnEventId'])
+        ? (request.resource.data.keys().hasAll(['kickoff'])
+            && request.resource.data.kickoff == resource.data.kickoff)
+        : (selectionKickoffStillAhead()
+            && isGroupMember(groupId)
             && !vetoRecordExists(
               groupId,
               weekId,
@@ -652,9 +656,8 @@ service cloud.firestore {
             && ((isCommissioner(groupId) && selectionKeepsGameOrKickoffAhead())
               || (resource.data.submittedBy == request.auth.uid
                   && nominationMemberMayEdit(groupId, weekId)
-                  && memberUpdateKeepsKickoff()
                   && memberUpdateKeepsOwner()
-                  && memberUpdateAllowsGame(groupId, weekId)));
+                  && memberUpdateGameAndKickoff(groupId, weekId)));
           allow delete: if isSignedIn()
             && ((resource.data.submittedBy == request.auth.uid
                 && nominationMemberMayEdit(groupId, weekId))
