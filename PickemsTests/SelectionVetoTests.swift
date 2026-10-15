@@ -27,6 +27,18 @@ struct SelectionVetoTests {
         #expect(rules.vetoVotesNeeded == 2)
     }
 
+    @Test func commissionerVotesNeededRoundTripsAndClamps() throws {
+        var rules = GroupRules.default
+        rules.vetoEnabled = true
+        rules.vetoVotesNeeded = 3
+        let data = try JSONEncoder().encode(rules)
+        let decoded = try JSONDecoder().decode(GroupRules.self, from: data)
+        #expect(decoded.vetoEnabled == true)
+        #expect(decoded.vetoVotesNeeded == 3)
+        #expect(SelectionVetoPolicy.clampedVotesNeeded(1, memberCount: 5) == 1)
+        #expect(SelectionVetoPolicy.clampedVotesNeeded(9, memberCount: 5) == 4)
+    }
+
     @Test func votesNeededCapsAtOneLessThanLeagueSize() {
         #expect(SelectionVetoPolicy.maxVotesNeeded(memberCount: 1) == 0)
         #expect(SelectionVetoPolicy.maxVotesNeeded(memberCount: 5) == 4)

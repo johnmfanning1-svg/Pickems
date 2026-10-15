@@ -119,6 +119,42 @@ describe("planSelectionVeto", () => {
     expect(plan).toEqual({ kind: "apply", count: 3, votesNeeded: 3 });
   });
 
+  it("uses the league's stored votes needed instead of the default of 2", () => {
+    const oneVote = planSelectionVeto(
+      openInput({
+        configuredVotesNeeded: 1,
+        voterIds: ["m2"],
+        triggerVoterId: "m2",
+      })
+    );
+    expect(oneVote).toEqual({ kind: "apply", count: 1, votesNeeded: 1 });
+
+    const fiveMembers = ["commish", "selector", "m2", "m3", "m4"];
+    const held = planSelectionVeto(
+      openInput({
+        configuredVotesNeeded: 4,
+        memberIds: fiveMembers,
+        voterIds: ["m2", "m3"],
+        triggerVoterId: "m3",
+      })
+    );
+    expect(held).toEqual({ kind: "tally", count: 2, votesNeeded: 4 });
+  });
+
+  it("recomputes an existing vote when the stored threshold drops", () => {
+    const plan = planSelectionVeto(
+      openInput({
+        configuredVotesNeeded: 1,
+        voterIds: ["m2"],
+        triggerVoterId: null,
+      })
+    );
+    expect(plan).toEqual({ kind: "apply", count: 1, votesNeeded: 1 });
+    expect(
+      planSelectionVeto(openInput({ voterIds: ["m2"], triggerVoterId: null }))
+    ).toEqual({ kind: "tally", count: 1, votesNeeded: 2 });
+  });
+
   it("applies at exactly the required count", () => {
     const plan = planSelectionVeto(
       openInput({ voterIds: ["m2", "m3"], triggerVoterId: "m3" })

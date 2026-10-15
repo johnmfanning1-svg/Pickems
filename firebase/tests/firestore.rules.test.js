@@ -2046,4 +2046,105 @@ describe("selection veto votes", () => {
       })
     );
   });
+
+});
+
+describe("selection veto votes needed", () => {
+  function leagueRules(votesNeeded) {
+    return {
+      selectionMode: "member",
+      selectionsPerMember: 3,
+      slateSize: 12,
+      pickDeadline: "firstKickoff",
+      tieBreaker: "commissionerOverride",
+      customDeadlineHour: 18,
+      customDeadlineMinute: 0,
+      allowConfidencePick: false,
+      allowLatePicks: false,
+      latePickPenaltyWins: 1,
+      pickMode: "ats",
+      vetoEnabled: true,
+      vetoVotesNeeded: votesNeeded,
+    };
+  }
+
+  it("lets the commissioner save 1 through the number of other members", async () => {
+    await seed();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const ref = doc(commishDb, "groups", GROUP_ID);
+    await assertSucceeds(updateDoc(ref, { rules: leagueRules(1) }));
+    await assertSucceeds(updateDoc(ref, { rules: leagueRules(2) }));
+    const snap = await assertSucceeds(getDoc(ref));
+    expect(snap.data().rules.vetoVotesNeeded).toBe(2);
+    expect(snap.data().rules.vetoEnabled).toBe(true);
+  });
+
+  it("rejects zero, a non-integer, and a count above the other members", async () => {
+    await seed();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const ref = doc(commishDb, "groups", GROUP_ID);
+    await assertFails(updateDoc(ref, { rules: leagueRules(0) }));
+    await assertFails(updateDoc(ref, { rules: leagueRules(-1) }));
+    await assertFails(updateDoc(ref, { rules: leagueRules(3) }));
+    await assertFails(updateDoc(ref, { rules: leagueRules(2.5) }));
+    await assertFails(
+      setDoc(doc(commishDb, "groups", "solo-bad"), {
+        id: "solo-bad",
+        name: "Solo",
+        inviteCode: "SOLO00",
+        commissionerId: COMMISH,
+        memberIds: [COMMISH],
+        rules: leagueRules(0),
+      })
+    );
+  });
+
+  it("lets a one-person league store an integer and blocks a member from writing it", async () => {
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertSucceeds(
+      setDoc(doc(commishDb, "groups", "solo"), {
+        id: "solo",
+        name: "Solo",
+        inviteCode: "SOLO11",
+        commissionerId: COMMISH,
+        memberIds: [COMMISH],
+        rules: leagueRules(2),
+      })
+    );
+    await seed();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertFails(updateDoc(doc(memberDb, "groups", GROUP_ID), { rules: leagueRules(1) }));
+  });
+
+  it("still lets a member leave and a commissioner rename when the stored number is above the new cap", async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await updateDoc(doc(db, "groups", GROUP_ID), {
+        memberIds: [COMMISH, OTHER_MEMBER],
+        rules: leagueRules(2),
+      });
+    });
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    const ref = doc(commishDb, "groups", GROUP_ID);
+    const before = await assertSucceeds(getDoc(ref));
+    expect(before.data().memberIds).toEqual([COMMISH, OTHER_MEMBER]);
+    await assertSucceeds(updateDoc(ref, { name: "Still named" }));
+    await assertFails(
+      updateDoc(ref, { rules: { ...leagueRules(2), pickMode: "straightUp" } })
+    );
+    await assertSucceeds(updateDoc(ref, { rules: leagueRules(1) }));
+    await assertFails(updateDoc(ref, { rules: leagueRules(2) }));
+
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "groups", GROUP_ID), {
+        rules: leagueRules(2),
+      });
+    });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertSucceeds(
+      updateDoc(doc(memberDb, "groups", GROUP_ID), { memberIds: arrayRemove(MEMBER) })
+    );
+  });
 });
