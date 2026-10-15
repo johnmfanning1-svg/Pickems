@@ -558,7 +558,8 @@ struct GroupPicksView: View {
                 ?? live?.homeTeamAbbreviation
                 ?? "",
             awayRecord: live?.awayRecord ?? espn?.awayRecord,
-            homeRecord: live?.homeRecord ?? espn?.homeRecord
+            homeRecord: live?.homeRecord ?? espn?.homeRecord,
+            statusLabel: live?.statusLabel ?? espn?.statusLabel
         )
     }
 

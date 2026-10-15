@@ -13,11 +13,32 @@ struct SelectionGameDetail: Equatable {
     var network: String?
     var records: String?
     var phase: Phase
+    var awayAbbreviation: String = ""
+    var homeAbbreviation: String = ""
+    var awayScore: Int?
+    var homeScore: Int?
 
+    /// Live scores are also colored, so VoiceOver names the state and both teams.
     var accessibilityLabel: String {
-        [headline, network, records]
-            .compactMap { $0 }
-            .joined(separator: ", ")
+        var parts: [String] = []
+        if phase == .live {
+            if let awayScore, let homeScore,
+               !awayAbbreviation.isEmpty, !homeAbbreviation.isEmpty {
+                parts.append("Live")
+                parts.append("\(awayAbbreviation) \(awayScore)")
+                parts.append("\(homeAbbreviation) \(homeScore)")
+            } else if headline.caseInsensitiveCompare("Live") == .orderedSame {
+                parts.append("Live")
+            } else {
+                parts.append("Live")
+                parts.append(headline)
+            }
+        } else {
+            parts.append(headline)
+        }
+        if let network { parts.append(network) }
+        if let records { parts.append(records) }
+        return parts.joined(separator: ", ")
     }
 
     static func make(
@@ -30,14 +51,16 @@ struct SelectionGameDetail: Equatable {
         homeAbbreviation: String = "",
         awayRecord: String? = nil,
         homeRecord: String? = nil,
+        statusLabel: String? = nil,
         calendar: Calendar = .autoupdatingCurrent
     ) -> SelectionGameDetail {
+        let disruption = disruptionHeadline(statusLabel)
         let phase: Phase
         let headline: String
         switch status {
         case .scheduled:
             phase = .scheduled
-            headline = weekdayClock(kickoff: kickoff, calendar: calendar)
+            headline = disruption ?? weekdayClock(kickoff: kickoff, calendar: calendar)
         case .inProgress:
             phase = .live
             if let awayScore, let homeScore {
@@ -46,10 +69,14 @@ struct SelectionGameDetail: Equatable {
                 headline = "Live"
             }
         case .final:
-            phase = .final
-            if let awayScore, let homeScore {
+            if let disruption {
+                phase = .scheduled
+                headline = disruption
+            } else if let awayScore, let homeScore {
+                phase = .final
                 headline = "Final \(awayScore)-\(homeScore)"
             } else {
+                phase = .final
                 headline = "Final"
             }
         }
@@ -63,8 +90,20 @@ struct SelectionGameDetail: Equatable {
                 homeAbbreviation: homeAbbreviation,
                 homeRecord: homeRecord
             ),
-            phase: phase
+            phase: phase,
+            awayAbbreviation: awayAbbreviation,
+            homeAbbreviation: homeAbbreviation,
+            awayScore: awayScore,
+            homeScore: homeScore
         )
+    }
+
+    /// Canceled, postponed, suspended, and delayed replace both the kickoff and `Final`.
+    static func disruptionHeadline(_ statusLabel: String?) -> String? {
+        guard let statusLabel else { return nil }
+        let trimmed = statusLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 
     /// `Sat 3:30 PM` in `calendar`'s time zone.

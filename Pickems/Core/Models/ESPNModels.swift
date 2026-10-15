@@ -31,6 +31,8 @@ struct ESPNGame: Identifiable, Equatable {
     /// ESPN overall record summary, e.g. `5-1`. Nil when the scoreboard omitted it.
     var homeRecord: String? = nil
     var awayRecord: String? = nil
+    /// `Postponed`, `Canceled`, `Suspended`, or `Delayed`. Nil for a normal kickoff or final.
+    var statusLabel: String? = nil
 
     var isTop25: Bool { homeCuratedRank != nil || awayCuratedRank != nil }
 
@@ -142,6 +144,8 @@ struct ESPNScoreboardResponse: Decodable {
     struct ESPNStatusType: Decodable {
         let completed: Bool
         let state: String
+        /// ESPN name, e.g. `STATUS_POSTPONED`. `completed` is also true for these.
+        let name: String?
         let shortDetail: String?
         let detail: String?
     }
@@ -197,6 +201,8 @@ struct ESPNLiveGameCard: Identifiable, Equatable {
     /// ESPN overall record summary, e.g. `5-1`. Nil when the scoreboard omitted it.
     var awayRecord: String? = nil
     var homeRecord: String? = nil
+    /// `Postponed`, `Canceled`, `Suspended`, or `Delayed` when this is not a real final.
+    var statusLabel: String? = nil
 
     enum PickResult: Equatable {
         case win, loss, push, pending

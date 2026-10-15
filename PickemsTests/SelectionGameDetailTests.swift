@@ -99,6 +99,7 @@ struct SelectionGameDetailTests {
         #expect(!detail.headline.contains("Sat"))
         #expect(detail.network == "CBS")
         #expect(detail.records == "AUB 3-2 · UGA 5-0")
+        #expect(detail.accessibilityLabel.hasPrefix("Live, AUB 14, UGA 21"))
     }
 
     @Test func liveWithoutScoreSaysLive() {
@@ -109,6 +110,7 @@ struct SelectionGameDetailTests {
         )
         #expect(detail.headline == "Live")
         #expect(detail.phase == .live)
+        #expect(detail.accessibilityLabel == "Live")
     }
 
     @Test func finalReplacesKickoff() {

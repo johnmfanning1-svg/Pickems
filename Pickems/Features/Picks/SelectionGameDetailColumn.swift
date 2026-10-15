@@ -23,9 +23,11 @@ struct SelectionGameDetailColumn: View {
                     .font(.caption2)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .minimumScaleFactor(0.85)
+                    .layoutPriority(1)
             }
         }
+        .layoutPriority(1)
         .multilineTextAlignment(.trailing)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(detail.accessibilityLabel)

@@ -219,7 +219,8 @@ actor ESPNService {
                 pickResult: result,
                 liveSpreadLabel: hideSpread ? nil : Self.liveSpreadLabel(espnGame: game, isSlateGame: isSlate),
                 awayRecord: game.awayRecord,
-                homeRecord: game.homeRecord
+                homeRecord: game.homeRecord,
+                statusLabel: game.statusLabel
             )
         }
 
@@ -358,6 +359,7 @@ actor ESPNService {
     private func statusDetail(for game: ESPNGame) -> String {
         switch game.status {
         case .scheduled:
+            if let label = game.statusLabel, !label.isEmpty { return label }
             return game.kickoff.formatted(date: .abbreviated, time: .shortened)
         case .inProgress:
             return Self.inProgressStatusDetail(
@@ -425,7 +427,7 @@ actor ESPNService {
         }
     }
 
-    private func parseEvent(_ event: ESPNScoreboardResponse.ESPNEvent) -> ESPNGame? {
+    func parseEvent(_ event: ESPNScoreboardResponse.ESPNEvent) -> ESPNGame? {
         guard let competition = event.competitions?.first,
               let competitors = competition.competitors,
               competitors.count == 2 else { return nil }
@@ -447,12 +449,14 @@ actor ESPNService {
         // parsing fails on those and previously fell back to `Date()` ("now"), which
         // stamped `pickDeadline` in the past while game rows still showed future kickoffs.
         guard let kickoff = Self.parseKickoffDate(event.date) else { return nil }
-        let status: SlateGame.GameStatus = {
-            guard let type = competition.status?.type else { return .scheduled }
-            if type.completed { return .final }
-            if type.state == "in" { return .inProgress }
-            return .scheduled
-        }()
+        let resolved = Self.resolvedSlateStatus(
+            name: competition.status?.type.name,
+            state: competition.status?.type.state,
+            completed: competition.status?.type.completed ?? false,
+            shortDetail: competition.status?.type.shortDetail,
+            detail: competition.status?.type.detail
+        )
+        let status = resolved.status
 
         return ESPNGame(
             id: event.id,
@@ -489,8 +493,46 @@ actor ESPNService {
                 isInProgress: status == .inProgress
             ),
             homeRecord: Self.overallRecordSummary(home.records),
-            awayRecord: Self.overallRecordSummary(away.records)
+            awayRecord: Self.overallRecordSummary(away.records),
+            statusLabel: resolved.label
         )
+    }
+
+    /// ESPN sends `STATUS_CANCELED` / `POSTPONED` / `SUSPENDED` / `DELAYED` as
+    /// `state: "post"` with `completed: true`, often at 0-0. Those are not finals.
+    nonisolated static func resolvedSlateStatus(
+        name: String?,
+        state: String?,
+        completed: Bool,
+        shortDetail: String?,
+        detail: String?
+    ) -> (status: SlateGame.GameStatus, label: String?) {
+        if let label = disruptionLabel(name: name, shortDetail: shortDetail, detail: detail) {
+            return (.scheduled, label)
+        }
+        guard state != nil || completed else { return (.scheduled, nil) }
+        if completed { return (.final, nil) }
+        if state == "in" { return (.inProgress, nil) }
+        return (.scheduled, nil)
+    }
+
+    /// Compact card label from `type.name` or `shortDetail`. Nil for a normal game.
+    nonisolated static func disruptionLabel(name: String?, shortDetail: String?, detail: String?) -> String? {
+        for raw in [shortDetail, name, detail] {
+            if let label = canonicalDisruptionLabel(raw) { return label }
+        }
+        return nil
+    }
+
+    nonisolated static func canonicalDisruptionLabel(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let token = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !token.isEmpty else { return nil }
+        if token.contains("POSTPON") { return "Postponed" }
+        if token.contains("CANCEL") { return "Canceled" }
+        if token.contains("SUSPEND") { return "Suspended" }
+        if token.contains("DELAY") { return "Delayed" }
+        return nil
     }
 
     /// ESPN overall line (`type == total`). Home/away splits are not the season record.
