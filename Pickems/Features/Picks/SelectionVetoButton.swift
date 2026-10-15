@@ -26,6 +26,7 @@ struct SelectionVetoButton: View {
         }
         .disabled(voted)
         .accessibilityHint(voted ? "You already voted" : "Vote to remove this Selection")
+        .accessibilityIdentifier(SelectionVetoPrompt.buttonIdentifier(nominationId: nominationId))
         .background {
             SelectionVetoConfirmAnchor(
                 nominationId: nominationId,
@@ -60,10 +61,19 @@ final class SelectionVetoConfirmAnchorView: UIView {
             preferredStyle: .actionSheet
         )
         let confirm = onConfirm
-        alert.addAction(UIAlertAction(title: "Veto", style: .destructive) { _ in
+        let run = {
             Task { @MainActor in
                 confirm()
             }
+        }
+        objc_setAssociatedObject(
+            alert,
+            &SelectionVetoActionKey.key,
+            SelectionVetoActionBox(run),
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
+        alert.addAction(UIAlertAction(title: "Veto", style: .destructive) { _ in
+            run()
         })
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         SelectionVetoPrompt.anchor(alert, to: self)
@@ -111,7 +121,26 @@ private struct SelectionVetoConfirmAnchor: UIViewRepresentable {
     }
 }
 
+private enum SelectionVetoActionKey {
+    static var key: UInt8 = 0
+}
+
+private final class SelectionVetoActionBox {
+    let run: () -> Void
+    init(_ run: @escaping () -> Void) { self.run = run }
+}
+
 extension SelectionVetoPrompt {
+    /// Runs the destructive Veto action from a confirmation alert.
+    @discardableResult
+    static func performVeto(on alert: UIAlertController) -> Bool {
+        guard let box = objc_getAssociatedObject(alert, &SelectionVetoActionKey.key) as? SelectionVetoActionBox else {
+            return false
+        }
+        box.run()
+        return true
+    }
+
     /// Popover source is `source` (the tapped Veto control), in that view's own coordinates.
     static func anchor(_ alert: UIAlertController, to source: UIView) {
         alert.modalPresentationStyle = .popover
@@ -134,7 +163,7 @@ private enum SelectionVetoPopoverRetain {
     static var key: UInt8 = 0
 }
 
-final class SelectionVetoPopoverDelegate: NSObject, UIPopoverPresentationControllerDelegate {
+private final class SelectionVetoPopoverDelegate: NSObject, UIPopoverPresentationControllerDelegate {
     /// Keep the popover on iPhone so it stays attached to the tapped Veto button.
     func adaptivePresentationStyle(for controller: UIPresentationController) -> UIModalPresentationStyle {
         .none

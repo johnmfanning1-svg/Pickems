@@ -61,4 +61,8 @@ enum SelectionVetoPrompt {
     static func anchorIdentifier(nominationId: String) -> String {
         "selection-veto-\(nominationId)"
     }
+
+    static func buttonIdentifier(nominationId: String) -> String {
+        "selection-veto-button-\(nominationId)"
+    }
 }
