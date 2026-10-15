@@ -100,7 +100,11 @@ export {
 export { onMessageCreated, onReportCreated } from "./chat";
 
 // Selection vetoes — members write a vote; this removes the Selection and notifies.
-export { onSelectionVetoVoteCreated, onGroupVetoSettingsUpdated } from "./selectionVetoTrigger";
+export {
+  onSelectionVetoVoteCreated,
+  onGroupVetoSettingsUpdated,
+  onSelectionNominationUpdated,
+} from "./selectionVetoTrigger";
 
 // Shock tweet drafts. Admin SDK writes; does not post to X.
 export { detectShockTweets, runDetectShockTweets } from "./shockTweets";

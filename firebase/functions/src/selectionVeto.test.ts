@@ -9,6 +9,7 @@ import {
   eligibleVetoVoterIds,
   nominationCountAfterRemoval,
   nominationEventIdsAfterRemoval,
+  planNominationSwapVoteRepair,
   planSelectionVeto,
   selectionMatchupLabel,
   selectionVetoDeliverySucceeded,
@@ -91,6 +92,88 @@ describe("selection veto window", () => {
   it("stays closed in commissioner mode", () => {
     expect(selectionVetoWindowOpen({ ...open, weekSelectionMode: "commissioner" })).toBe(false);
     expect(selectionVetoWindowOpen({ ...open, groupSelectionMode: "commissioner" })).toBe(false);
+  });
+});
+
+describe("planNominationSwapVoteRepair", () => {
+  const swap = {
+    beforeEventId: "401",
+    afterEventId: "402",
+    currentEventId: "402",
+    anchorEventId: null as string | null,
+    votesExist: true,
+    eligibleVoteCount: 1,
+    votesNeeded: 2 as number | null,
+    beforeWindowOpen: true,
+  };
+
+  it("ignores a write that keeps the event or has no votes", () => {
+    expect(planNominationSwapVoteRepair({ ...swap, afterEventId: "401" })).toEqual({ kind: "ignore" });
+    expect(planNominationSwapVoteRepair({ ...swap, votesExist: false, eligibleVoteCount: 0 })).toEqual({
+      kind: "ignore",
+    });
+    expect(planNominationSwapVoteRepair({ ...swap, beforeEventId: " " })).toEqual({ kind: "ignore" });
+  });
+
+  it("restores the previous event when the tally is still short", () => {
+    expect(planNominationSwapVoteRepair(swap)).toEqual({
+      kind: "revert",
+      espnEventId: "401",
+      kickoffSource: "before",
+    });
+  });
+
+  it("vetoes the previous event once the threshold is met, using that game's window", () => {
+    expect(planNominationSwapVoteRepair({ ...swap, eligibleVoteCount: 2 })).toEqual({
+      kind: "apply",
+      espnEventId: "401",
+      kickoffSource: "before",
+    });
+    expect(
+      planNominationSwapVoteRepair({ ...swap, eligibleVoteCount: 2, beforeWindowOpen: false })
+    ).toEqual({
+      kind: "revert",
+      espnEventId: "401",
+      kickoffSource: "before",
+    });
+  });
+
+  it("stops after the restore and does not swap back", () => {
+    expect(
+      planNominationSwapVoteRepair({
+        ...swap,
+        beforeEventId: "402",
+        afterEventId: "401",
+        currentEventId: "401",
+        anchorEventId: "401",
+      })
+    ).toEqual({ kind: "ignore" });
+  });
+
+  it("follows the tally anchor when the stored event and the update disagree", () => {
+    expect(
+      planNominationSwapVoteRepair({
+        ...swap,
+        anchorEventId: "401",
+        currentEventId: "402",
+      })
+    ).toEqual({
+      kind: "revert",
+      espnEventId: "401",
+      kickoffSource: "anchor",
+    });
+    expect(
+      planNominationSwapVoteRepair({
+        ...swap,
+        anchorEventId: "401",
+        currentEventId: "402",
+        eligibleVoteCount: 2,
+      })
+    ).toEqual({
+      kind: "apply",
+      espnEventId: "401",
+      kickoffSource: "anchor",
+    });
   });
 });
 

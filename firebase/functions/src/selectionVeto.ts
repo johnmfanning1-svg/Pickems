@@ -290,8 +290,71 @@ export function selectionVetoDeliverySucceeded(results: readonly boolean[]): boo
   return results.length > 0 && results.every((ok) => ok === true);
 }
 
+/**
+ * What to do when a nomination update changes `espnEventId` while votes
+ * still sit on that nomination id.
+ * Below the threshold, put the event and kickoff back. Clearing the votes
+ * would throw away a tally that has not finished, and leaving the new event
+ * would ban the wrong game if another vote arrives.
+ * At the threshold, and only while the pre-swap kickoff is still inside the
+ * selection window, record the veto for that previous event. The swapped
+ * kickoff is ignored so a one-second or far-future timestamp cannot close
+ * the window or move the ban.
+ * `anchor` is the event id stored on the tally. Once a revert writes it,
+ * a second run sees the current event match and stops, instead of swapping
+ * back to the game the selector just tried to leave.
+ */
+export type NominationSwapRepairPlan =
+  | { kind: "ignore" }
+  | { kind: "revert"; espnEventId: string; kickoffSource: "before" | "anchor" }
+  | { kind: "apply"; espnEventId: string; kickoffSource: "before" | "anchor" };
+
+export function planNominationSwapVoteRepair(input: {
+  beforeEventId: string;
+  afterEventId: string;
+  currentEventId: string;
+  anchorEventId: string | null;
+  votesExist: boolean;
+  eligibleVoteCount: number;
+  votesNeeded: number | null;
+  beforeWindowOpen: boolean;
+}): NominationSwapRepairPlan {
+  if (!input.votesExist) return { kind: "ignore" };
+  const beforeEventId = input.beforeEventId.trim();
+  const afterEventId = input.afterEventId.trim();
+  if (!beforeEventId || beforeEventId === afterEventId) return { kind: "ignore" };
+
+  const anchorEventId = input.anchorEventId?.trim() || null;
+  if (anchorEventId) {
+    if (input.currentEventId.trim() === anchorEventId) return { kind: "ignore" };
+    if (thresholdMet(input) && input.beforeWindowOpen) {
+      return { kind: "apply", espnEventId: anchorEventId, kickoffSource: "anchor" };
+    }
+    return { kind: "revert", espnEventId: anchorEventId, kickoffSource: "anchor" };
+  }
+
+  const currentEventId = input.currentEventId.trim();
+  if (!currentEventId || currentEventId !== afterEventId) return { kind: "ignore" };
+  if (thresholdMet(input) && input.beforeWindowOpen) {
+    return { kind: "apply", espnEventId: beforeEventId, kickoffSource: "before" };
+  }
+  return { kind: "revert", espnEventId: beforeEventId, kickoffSource: "before" };
+}
+
+function thresholdMet(input: {
+  eligibleVoteCount: number;
+  votesNeeded: number | null;
+}): boolean {
+  return input.votesNeeded != null && input.eligibleVoteCount >= input.votesNeeded;
+}
+
 export const SELECTION_VETO_VOTE_TRIGGER = {
   document: "groups/{groupId}/weeks/{weekId}/nominations/{nominationId}/vetoVotes/{voterId}",
+  retry: true,
+} as const;
+
+export const SELECTION_NOMINATION_UPDATE_TRIGGER = {
+  document: "groups/{groupId}/weeks/{weekId}/nominations/{nominationId}",
   retry: true,
 } as const;
 

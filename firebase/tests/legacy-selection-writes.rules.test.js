@@ -345,3 +345,138 @@ describe("pre-#107 swaps still cannot move the veto window", () => {
     expect(saved.data().kickoff.toMillis()).toBe(kickoff.getTime());
   });
 });
+
+describe("swap kickoff must be the real game's when the catalog has it", () => {
+  async function seedCatalog({ mirror = null, game = null, tally = false } = {}) {
+    await seedSelectionWeek({ vetoEnabled: true });
+    const saturday = futureKickoff(72);
+    const existing = nomination(MEMBER, "401", saturday);
+    await seedNomination(existing);
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      if (mirror) {
+        await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "gameLock", "current"), {
+          kickoffs: mirror,
+          liveIds: [],
+        });
+      }
+      if (game) {
+        await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "games", game.id), game.body);
+      }
+      if (tally) {
+        await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "vetoTallies", "401"), {
+          count: 1,
+          votesNeeded: 2,
+          espnEventId: "401",
+        });
+      }
+    });
+    return { saturday, existing };
+  }
+
+  it("allows an earlier future kickoff that matches the new game", async () => {
+    const thursday = futureKickoff(24);
+    const saturday = futureKickoff(72);
+    const { existing } = await seedCatalog({
+      mirror: { 401: saturday, 402: thursday },
+    });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertSucceeds(
+      setDoc(nominationRef(memberDb, "401"), swapped(existing, "402", thursday))
+    );
+    const saved = await assertSucceeds(getDoc(nominationRef(memberDb, "401")));
+    expect(saved.data().espnEventId).toBe("402");
+    expect(saved.data().kickoff.toMillis()).toBe(thursday.getTime());
+    expect(thursday.getTime()).toBeLessThan(saturday.getTime());
+  });
+
+  it("rejects a one-second kickoff and a kickoff years ahead of the real game", async () => {
+    const thursday = futureKickoff(24);
+    const { saturday, existing } = await seedCatalog({
+      mirror: { 401: futureKickoff(72), 402: thursday },
+    });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const ref = nominationRef(memberDb, "401");
+    await assertFails(
+      setDoc(ref, swapped(existing, "402", new Date(Date.now() + 1000)))
+    );
+    await assertFails(
+      setDoc(ref, swapped(existing, "402", new Date(Date.now() + 5 * 365 * 24 * 60 * 60 * 1000)))
+    );
+    const saved = await assertSucceeds(getDoc(ref));
+    expect(saved.data().espnEventId).toBe("401");
+    expect(saved.data().kickoff.toMillis()).toBe(saturday.getTime());
+  });
+
+  it("rejects a round trip that moves the original game's kickoff", async () => {
+    const thursday = futureKickoff(24);
+    const saturday = futureKickoff(72);
+    const { existing } = await seedCatalog({
+      mirror: { 401: saturday, 402: thursday },
+    });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const ref = nominationRef(memberDb, "401");
+    await assertSucceeds(setDoc(ref, swapped(existing, "402", thursday)));
+    const onThursday = await assertSucceeds(getDoc(ref));
+    await assertFails(setDoc(ref, swapped(onThursday.data(), "401", thursday)));
+    await assertFails(setDoc(ref, swapped(onThursday.data(), "401", new Date(Date.now() + 1000))));
+    const stillThursday = await assertSucceeds(getDoc(ref));
+    expect(stillThursday.data().espnEventId).toBe("402");
+    expect(stillThursday.data().kickoff.toMillis()).toBe(thursday.getTime());
+    await assertSucceeds(setDoc(ref, swapped(stillThursday.data(), "401", saturday)));
+    const restored = await assertSucceeds(getDoc(ref));
+    expect(restored.data().espnEventId).toBe("401");
+    expect(restored.data().kickoff.toMillis()).toBe(saturday.getTime());
+  });
+
+  it("uses the slate doc when the lock mirror has no kickoff for that event", async () => {
+    const thursday = futureKickoff(24);
+    const { existing } = await seedCatalog({
+      game: {
+        id: "402",
+        body: { espnEventId: "402", kickoff: thursday, status: "scheduled" },
+      },
+    });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const ref = nominationRef(memberDb, "401");
+    await assertFails(setDoc(ref, swapped(existing, "402", futureKickoff(80))));
+    await assertSucceeds(setDoc(ref, swapped(existing, "402", thursday)));
+    const saved = await assertSucceeds(getDoc(ref));
+    expect(saved.data().espnEventId).toBe("402");
+    expect(saved.data().kickoff.toMillis()).toBe(thursday.getTime());
+  });
+
+  it("rejects an empty or non-string event id before the veto lookup", async () => {
+    const { saturday, existing } = await seedCatalog();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const ref = nominationRef(memberDb, "401");
+    await assertFails(setDoc(ref, { ...swapped(existing, "402", futureKickoff(30)), espnEventId: "" }));
+    await assertFails(setDoc(ref, { ...swapped(existing, "402", futureKickoff(30)), espnEventId: 402 }));
+    const saved = await assertSucceeds(getDoc(ref));
+    expect(saved.data().espnEventId).toBe("401");
+    expect(saved.data().kickoff.toMillis()).toBe(saturday.getTime());
+  });
+
+  it("rejects a member event change while that nomination's veto tally exists", async () => {
+    const thursday = futureKickoff(24);
+    const { saturday, existing } = await seedCatalog({
+      mirror: { 402: thursday },
+      tally: true,
+    });
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const ref = nominationRef(memberDb, "401");
+    await assertFails(setDoc(ref, swapped(existing, "402", thursday)));
+    await assertSucceeds(setDoc(ref, { ...existing, spread: 9 }));
+    const saved = await assertSucceeds(getDoc(ref));
+    expect(saved.data().espnEventId).toBe("401");
+    expect(saved.data().kickoff.toMillis()).toBe(saturday.getTime());
+    expect(saved.data().spread).toBe(9);
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertSucceeds(
+      setDoc(nominationRef(commishDb, "401"), swapped(existing, "402", thursday))
+    );
+    const moved = await assertSucceeds(getDoc(nominationRef(commishDb, "401")));
+    expect(moved.data().espnEventId).toBe("402");
+    expect(moved.data().kickoff.toMillis()).toBe(thursday.getTime());
+  });
+});
