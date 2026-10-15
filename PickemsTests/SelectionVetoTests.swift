@@ -1,5 +1,7 @@
 import Foundation
+import SwiftUI
 import Testing
+import UIKit
 @testable import Pickems
 
 struct SelectionVetoTests {
@@ -146,4 +148,177 @@ struct SelectionVetoTests {
         let others = NotificationPrefCategory.allCases.filter { $0 != .selectionDeadlines }
         #expect(others.allSatisfy { !$0.pushTypes.contains("selection_veto") })
     }
+
+    @Test func vetoConfirmNamesTheGameAndKeepsASeparateAnchorPerRow() {
+        #expect(SelectionVetoPrompt.title == "Veto this Selection?")
+        #expect(
+            SelectionVetoPrompt.message(matchup: "#4 OSU @ #5 IU", votesNeeded: 2)
+                == "#4 OSU @ #5 IU is removed if 2 members vote before kickoff. You can't take this vote back."
+        )
+        let ids = (1...5).map { SelectionVetoPrompt.anchorIdentifier(nominationId: "nom-\($0)") }
+        #expect(Set(ids).count == ids.count)
+        #expect(ids[4] == "selection-veto-nom-5")
+        #expect(!ids.contains("member-header"))
+    }
+
+    @MainActor
+    @Test func fifthRowVetoPopoverAnchorsToThatButton() throws {
+        let header = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 64))
+        header.accessibilityIdentifier = "member-header"
+        let rows: [(id: String, matchup: String, y: CGFloat)] = [
+            ("n1", "#1 ALA @ AUB", 80),
+            ("n2", "#2 UGA @ TEN", 160),
+            ("n3", "#3 TEX @ OU", 240),
+            ("n4", "#6 PSU @ #7 ORE", 320),
+            ("n5", "#4 OSU @ #5 IU", 480),
+        ]
+        let container = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        container.addSubview(header)
+        let anchors = rows.map { row in
+            let anchor = SelectionVetoConfirmAnchorView(
+                frame: CGRect(x: 220, y: row.y, width: 72, height: 30)
+            )
+            anchor.promptMessage = SelectionVetoPrompt.message(matchup: row.matchup, votesNeeded: 2)
+            anchor.accessibilityIdentifier = SelectionVetoPrompt.anchorIdentifier(nominationId: row.id)
+            container.addSubview(anchor)
+            return anchor
+        }
+        let fifth = try #require(anchors.last)
+        let alert = fifth.makeAlert()
+        let popover = try #require(alert.popoverPresentationController)
+        let sourceId = popover.sourceView.map(ObjectIdentifier.init)
+
+        #expect(alert.title == "Veto this Selection?")
+        #expect(
+            alert.message
+                == "#4 OSU @ #5 IU is removed if 2 members vote before kickoff. You can't take this vote back."
+        )
+        #expect(sourceId == ObjectIdentifier(fifth))
+        #expect(popover.sourceRect == fifth.bounds)
+        #expect(popover.sourceRect == CGRect(x: 0, y: 0, width: 72, height: 30))
+        #expect(sourceId != ObjectIdentifier(header))
+        #expect(sourceId != ObjectIdentifier(container))
+        #expect(sourceId != ObjectIdentifier(anchors[0]))
+        #expect(alert.modalPresentationStyle == .popover)
+        #expect(popover.permittedArrowDirections.contains(.up))
+        #expect(popover.permittedArrowDirections.contains(.down))
+        #expect(alert.actions.contains { $0.title == "Veto" && $0.style == .destructive })
+        #expect(alert.actions.contains { $0.title == "Cancel" && $0.style == .cancel })
+
+        let presentation = UIPresentationController(
+            presentedViewController: UIViewController(),
+            presenting: UIViewController()
+        )
+        let adapted = popover.delegate?.adaptivePresentationStyle(
+            for: presentation,
+            traitCollection: UITraitCollection(horizontalSizeClass: .compact)
+        )
+        #expect(adapted == .none)
+
+        let sources = Set(anchors.compactMap { anchor -> ObjectIdentifier? in
+            guard let view = anchor.makeAlert().popoverPresentationController?.sourceView else { return nil }
+            return ObjectIdentifier(view)
+        })
+        #expect(sources.count == anchors.count)
+    }
+}
+
+/// Renders a member header plus five Veto buttons and checks the 5th row's
+/// confirmation source sits on that button, below the header.
+@MainActor
+struct SelectionVetoAnchorUITests {
+    @Test func fifthSelectionButtonAnchorsItsOwnPopover() async throws {
+        let rows = [
+            VetoAnchorFixture(id: "n1", matchup: "#1 ALA @ AUB"),
+            VetoAnchorFixture(id: "n2", matchup: "#2 UGA @ TEN"),
+            VetoAnchorFixture(id: "n3", matchup: "#3 TEX @ OU"),
+            VetoAnchorFixture(id: "n4", matchup: "#6 PSU @ #7 ORE"),
+            VetoAnchorFixture(id: "n5", matchup: "#4 OSU @ #5 IU"),
+        ]
+        let host = UIHostingController(rootView: SelectionVetoAnchorHarness(rows: rows))
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow()
+        window.frame = CGRect(x: 0, y: 0, width: 393, height: 852)
+        let previousKey = scene?.windows.first { $0.isKeyWindow }
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+            if let previousKey, previousKey !== window {
+                previousKey.makeKeyAndVisible()
+            }
+        }
+
+        host.view.frame = window.bounds
+        let fifthId = SelectionVetoPrompt.anchorIdentifier(nominationId: "n5")
+        var anchors: [SelectionVetoConfirmAnchorView] = []
+        for _ in 0..<20 {
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+            anchors = vetoAnchorViews(in: host.view)
+            if anchors.count == rows.count,
+               anchors.contains(where: { $0.accessibilityIdentifier == fifthId }) {
+                break
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+
+        try #require(anchors.count == rows.count)
+        let fifth = try #require(anchors.first { $0.accessibilityIdentifier == fifthId })
+        let first = try #require(anchors.first {
+            $0.accessibilityIdentifier == SelectionVetoPrompt.anchorIdentifier(nominationId: "n1")
+        })
+        #expect(fifth.bounds.width > 1)
+        #expect(fifth.bounds.height > 1)
+        let fifthY = fifth.convert(fifth.bounds, to: nil).minY
+        let firstY = first.convert(first.bounds, to: nil).minY
+        #expect(fifthY > firstY)
+
+        let alert = fifth.makeAlert()
+        #expect(alert.popoverPresentationController?.sourceView.map(ObjectIdentifier.init) == ObjectIdentifier(fifth))
+        #expect(
+            alert.message
+                == "#4 OSU @ #5 IU is removed if 2 members vote before kickoff. You can't take this vote back."
+        )
+    }
+}
+
+private struct VetoAnchorFixture: Identifiable {
+    let id: String
+    let matchup: String
+}
+
+private struct SelectionVetoAnchorHarness: View {
+    let rows: [VetoAnchorFixture]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Button("Alex") {}
+                .accessibilityIdentifier("member-header")
+            ForEach(rows) { row in
+                SelectionVetoButton(
+                    nominationId: row.id,
+                    matchup: row.matchup,
+                    votesNeeded: 2,
+                    voted: false,
+                    onConfirm: {}
+                )
+            }
+        }
+        .padding()
+        .frame(width: 393, alignment: .leading)
+        .environment(\.themePalette, .pickemsDefault)
+    }
+}
+
+private func vetoAnchorViews(in view: UIView) -> [SelectionVetoConfirmAnchorView] {
+    var found: [SelectionVetoConfirmAnchorView] = []
+    if let anchor = view as? SelectionVetoConfirmAnchorView {
+        found.append(anchor)
+    }
+    for child in view.subviews {
+        found.append(contentsOf: vetoAnchorViews(in: child))
+    }
+    return found
 }
