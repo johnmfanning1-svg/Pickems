@@ -49,10 +49,25 @@ fileprivate final class SelectionVetoConfirmTrigger {
     }
 }
 
-/// UIView whose bounds are the Veto button. The confirmation popover uses this as `sourceView`.
-final class SelectionVetoConfirmAnchorView: UIView {
+/// Control whose bounds are the Veto button. The confirmation popover uses this as `sourceView`.
+/// `touchUpInside` presents the confirmation, so a row tap after a reorder runs that row's action.
+final class SelectionVetoConfirmAnchorView: UIControl {
     var promptMessage = ""
     var onConfirm: () -> Void = {}
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        addAction(UIAction { [weak self] _ in
+            self?.present()
+        }, for: .touchUpInside)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        addAction(UIAction { [weak self] _ in
+            self?.present()
+        }, for: .touchUpInside)
+    }
 
     func makeAlert() -> UIAlertController {
         let alert = UIAlertController(

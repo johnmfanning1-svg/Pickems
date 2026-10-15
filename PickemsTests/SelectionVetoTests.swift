@@ -212,7 +212,7 @@ struct SelectionVetoTests {
             for: presentation,
             traitCollection: UITraitCollection(horizontalSizeClass: .compact)
         )
-        #expect(adapted == .none)
+        #expect(adapted == UIModalPresentationStyle.none)
 
         let sources = Set(anchors.compactMap { anchor -> ObjectIdentifier? in
             guard let view = anchor.makeAlert().popoverPresentationController?.sourceView else { return nil }
@@ -423,9 +423,11 @@ private func waitForVetoAnchors(in root: UIView, count: Int) async throws -> [Se
     return anchors
 }
 
-/// Taps the Veto button for the anchor's row. The anchor itself does not receive hits.
+/// Taps the Veto control for this row. The anchor is that control; the visible SwiftUI
+/// button is the fallback when the identifier is installed on a different view.
 @MainActor
 private func tapRow(_ anchor: UIView, in root: UIView) -> Bool {
+    if activate(anchor) { return true }
     let buttonId = anchor.accessibilityIdentifier.map {
         $0.replacingOccurrences(of: "selection-veto-", with: "selection-veto-button-")
     }
@@ -433,7 +435,7 @@ private func tapRow(_ anchor: UIView, in root: UIView) -> Bool {
        let button = uiViews(in: root).first(where: { $0.accessibilityIdentifier == buttonId }) {
         if activate(button) { return true }
     }
-    var current: UIView? = anchor
+    var current = anchor.superview
     while let candidate = current {
         if activate(candidate) { return true }
         current = candidate.superview
