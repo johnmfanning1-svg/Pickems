@@ -159,6 +159,9 @@ struct CommissionerManageSelectionsSheet: View {
     }
 
     private func applyBrowse(_ games: [ESPNGame]) async throws -> SelectionBrowseSaveResult {
+        if let message = ScheduledGameEligibility.selectionRejectionMessage(for: games) {
+            throw PickService.PickError.gameDisrupted(message)
+        }
         let rules = appState.groupService.selectedGroup?.rules ?? .default
         if let replacing {
             guard let game = games.first else {

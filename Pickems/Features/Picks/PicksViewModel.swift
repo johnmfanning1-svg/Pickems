@@ -294,6 +294,9 @@ final class PicksViewModel {
             collidedLabels: []
         )
         guard !games.isEmpty else { return empty }
+        if let message = ScheduledGameEligibility.selectionRejectionMessage(for: games) {
+            throw PickService.PickError.gameDisrupted(message)
+        }
 
         let rules = group.rules
         switch selectionBrowseIntent {
@@ -426,6 +429,11 @@ final class PicksViewModel {
               let user = appState.authService.currentUser else { return }
         let picks = PickService.sanitizedPicks(draftPicks)
         let confidence = group.rules.allowConfidencePick ? confidenceGameId : nil
+        let ineligibleGameIds = Set(
+            appState.pickService.slateGames.compactMap { game in
+                allowsPicks(game) ? nil : game.id
+            }
+        )
         pendingWritePicks = picks
         writeInFlight = true
         Task {
@@ -444,7 +452,8 @@ final class PicksViewModel {
                     deadline: week.pickDeadline,
                     confidenceGameId: confidence,
                     allowLatePicks: group.rules.allowLatePicks,
-                    week: week
+                    week: week,
+                    ineligibleGameIds: ineligibleGameIds
                 )
                 if pendingWritePicks == picks {
                     writeInFlight = false
@@ -705,7 +714,9 @@ final class PicksViewModel {
         guard let group = appState.groupService.selectedGroup else { return }
         do {
             let espn = try await ESPNService.shared.fetchScoreboard(for: week)
-            let scheduled = espn.filter { $0.status == .scheduled }.map { $0.toSlateGame() }
+            let scheduled = ScheduledGameEligibility
+                .gamesEligibleForScheduledImport(espn)
+                .map { $0.toSlateGame() }
             try await appState.pickService.bulkImportGames(
                 groupId: group.id,
                 weekId: week.id,
@@ -717,6 +728,25 @@ final class PicksViewModel {
         } catch {
             UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
         }
+    }
+
+    /// ESPN label for this event. A loaded live card wins, even when its label is nil.
+    func disruptionLabel(forEventId espnEventId: String) -> String? {
+        ScheduledGameEligibility.resolvedStatusLabel(
+            liveCardPresent: livePickCards[espnEventId] != nil,
+            liveLabel: livePickCards[espnEventId]?.statusLabel,
+            espnLabel: espnGames.first {
+                $0.espnEventId == espnEventId || $0.id == espnEventId
+            }?.statusLabel
+        )
+    }
+
+    func allowsPicks(_ game: SlateGame) -> Bool {
+        ScheduledGameEligibility.canSelectOrPick(statusLabel: disruptionLabel(forEventId: game.espnEventId))
+    }
+
+    func pickBlockCaption(_ game: SlateGame) -> String? {
+        ESPNService.canonicalDisruptionLabel(disruptionLabel(forEventId: game.espnEventId))
     }
 
     func refreshLiveNow(appState: AppState, forceRefresh: Bool = true) async {

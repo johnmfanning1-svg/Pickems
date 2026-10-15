@@ -988,6 +988,9 @@ final class PickService {
             }
         }
 
+        if let message = ScheduledGameEligibility.selectionRejectionMessage(for: [game]) {
+            throw PickError.gameDisrupted(message)
+        }
         if SelectionKickoffGate.hasKickedOff(game) {
             throw PickError.gameKickedOff(
                 SelectionKickoffGate.rejectionMessage(matchups: [SelectionKickoffGate.matchupLabel(game)])
@@ -1597,7 +1600,8 @@ final class PickService {
         deadline: Date?,
         confidenceGameId: String? = nil,
         allowLatePicks: Bool = false,
-        week: WeekSummary? = nil
+        week: WeekSummary? = nil,
+        ineligibleGameIds: Set<String> = []
     ) async throws {
         let rolling = week?.isRollingLock == true
         if rolling {
@@ -1607,8 +1611,12 @@ final class PickService {
         } else if ScoringEngine.isPastDeadline(deadline: deadline), !allowLatePicks {
             throw PickError.deadlinePassed
         }
-        let requiredGameIds = Set(slateGames.map(\.id))
-        var cleaned = Self.sanitizedPicks(picks).filter { requiredGameIds.contains($0.key) }
+        let slateIds = Set(slateGames.map(\.id))
+        let requiredGameIds = ScheduledGameEligibility.requiredPickIds(
+            slateGameIds: slateIds,
+            ineligibleGameIds: ineligibleGameIds
+        )
+        var cleaned = Self.sanitizedPicks(picks).filter { slateIds.contains($0.key) }
         if let week, rolling, let existing = userPick?.picks {
             cleaned = Self.preservingLockedPicks(
                 incoming: cleaned,
@@ -1618,16 +1626,23 @@ final class PickService {
             )
         }
         if rolling, let week {
-            let openIds = Set(
-                slateGames
+            let openIds = ScheduledGameEligibility.requiredPickIds(
+                slateGameIds: slateGames
                     .filter { !WeekTransition.isGameLocked($0, week: week) }
-                    .map(\.id)
+                    .map(\.id),
+                ineligibleGameIds: ineligibleGameIds
             )
-            guard openIds.isSubset(of: Set(cleaned.keys)) else {
+            guard ScheduledGameEligibility.picksCover(
+                requiredGameIds: openIds,
+                pickedGameIds: Set(cleaned.keys)
+            ) else {
                 throw PickError.incompletePicks
             }
         } else {
-            guard Set(cleaned.keys) == requiredGameIds else {
+            guard ScheduledGameEligibility.picksCover(
+                requiredGameIds: requiredGameIds,
+                pickedGameIds: Set(cleaned.keys)
+            ) else {
                 throw PickError.incompletePicks
             }
         }
@@ -2038,6 +2053,7 @@ final class PickService {
         case slateGameNotFound
         case spreadLocked
         case gameKickedOff(String)
+        case gameDisrupted(String)
         case selectionVetoed(String)
         case selectionVetoClosed
         case selectionVetoOwn
@@ -2057,6 +2073,7 @@ final class PickService {
             case .slateGameNotFound: return "Couldn't find that game to update the spread. Pull to refresh and try again."
             case .spreadLocked: return "This game is locked, so the spread can't be changed."
             case .gameKickedOff(let message): return message
+            case .gameDisrupted(let message): return message
             case .selectionVetoed(let matchup):
                 return "\(matchup) was vetoed. Pick a different game."
             case .selectionVetoClosed:

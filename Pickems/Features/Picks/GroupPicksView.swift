@@ -702,7 +702,18 @@ struct GroupPicksView: View {
             // Commissioner-built slate: members don't nominate; show slate fill for commissioner only.
             return userId == commissionerId ? slateSize : 0
         }
-        return max(slateGames.count, 1)
+        if slateGames.isEmpty { return 1 }
+        return pickableSlateCount
+    }
+
+    /// Postponed, canceled, suspended, and delayed games stay on the slate
+    /// but are not part of the Pickems each member must make.
+    private var ineligiblePickGameIds: Set<String> {
+        Set(slateGames.filter { !appState.picksViewModel.allowsPicks($0) }.map(\.id))
+    }
+
+    private var pickableSlateCount: Int {
+        slateGames.count - ineligiblePickGameIds.count
     }
 
     private func madeCount(for userId: String, pick: UserPick?) -> Int {
@@ -716,13 +727,24 @@ struct GroupPicksView: View {
             return 0
         }
 
-        let fromPick = pick?.picks.count ?? 0
         let fromSub = submission(for: userId)?.pickCount ?? 0
-        let total = slateGames.count
-        if isLockedIn(userId), max(fromPick, fromSub) == 0, total > 0 {
-            return total
+        if ineligiblePickGameIds.isEmpty {
+            let fromPick = pick?.picks.count ?? 0
+            let total = slateGames.count
+            if isLockedIn(userId), max(fromPick, fromSub) == 0, total > 0 {
+                return total
+            }
+            return max(fromPick, fromSub)
         }
-        return max(fromPick, fromSub)
+        let eligible = Set(slateGames.map(\.id)).subtracting(ineligiblePickGameIds)
+        let fromPick = pick?.picks.keys.filter { eligible.contains($0) }.count ?? 0
+        if isLockedIn(userId), max(fromPick, fromSub) == 0, pickableSlateCount > 0 {
+            return pickableSlateCount
+        }
+        if pick != nil {
+            return fromPick
+        }
+        return fromSub
     }
 
     private func isDone(_ userId: String) -> Bool {
