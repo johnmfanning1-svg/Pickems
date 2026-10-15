@@ -287,6 +287,92 @@ service cloud.firestore {
         || selectionKickoffStillAhead();
     }
 
+    // A member cannot move or delete kickoff. Doing either closes the veto
+    // window while the game is still the one other members voted on.
+    function memberUpdateKeepsKickoff() {
+      return request.resource.data.keys().hasAll(['kickoff'])
+        && request.resource.data.kickoff == resource.data.kickoff;
+    }
+
+    function memberUpdateKeepsOwner() {
+      return request.resource.data.submittedBy == resource.data.submittedBy;
+    }
+
+    function groupRules(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId)).data.get('rules', {});
+    }
+
+    // Missing `vetoEnabled` is off. Commissioner mode never takes veto votes.
+    function vetoFeatureOn(groupId) {
+      return groupRules(groupId).get('vetoEnabled', false) == true;
+    }
+
+    function memberSelectionMode(groupId, week) {
+      let groupMode = groupRules(groupId).get('selectionMode', 'member');
+      let weekMode = week.get('selectionMode', groupMode);
+      return groupMode == 'member' && weekMode == 'member';
+    }
+
+    // Selections open: member mode, status `selection`, deadline still ahead.
+    function selectionVetoWindow(groupId, weekId) {
+      let week = weekData(groupId, weekId);
+      return vetoFeatureOn(groupId)
+        && memberSelectionMode(groupId, week)
+        && week.status == 'selection'
+        && selectionDeadlineOpen(week);
+    }
+
+    function nominationParent(groupId, weekId, nominationId) {
+      return get(/databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)/nominations/$(nominationId)).data;
+    }
+
+    // One vote per member, not the selector, only while Selections are open
+    // and strictly before that game's kickoff. Votes are create-only.
+    function selectionVetoVoteCreate(groupId, weekId, nominationId, voterId) {
+      let nomination = nominationParent(groupId, weekId, nominationId);
+      let data = request.resource.data;
+      return isSignedIn()
+        && request.auth.uid == voterId
+        && isGroupMember(groupId)
+        && selectionVetoWindow(groupId, weekId)
+        && nomination.keys().hasAll(['submittedBy', 'kickoff'])
+        && nomination.submittedBy is string
+        && nomination.submittedBy != voterId
+        && nomination.kickoff is timestamp
+        && request.time < nomination.kickoff
+        && data.keys().hasOnly(['userId', 'createdAt'])
+        && data.userId == voterId
+        && data.createdAt == request.time;
+    }
+
+    function vetoRecordExists(groupId, weekId, ownerId, espnEventId) {
+      return ownerId is string
+        && espnEventId is string
+        && exists(/databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)/vetoes/$(ownerId + '_' + espnEventId));
+    }
+
+    // A recorded veto blocks that member from putting the same game back.
+    // Commissioners (and super admins, via isCommissioner) can restore it.
+    // Create keys the record by the owner on the write. Update keys it by the
+    // owner already stored, so retargeting the doc cannot dodge the block.
+    function memberVetoBlocksReselection(groupId, weekId) {
+      let data = request.resource.data;
+      return !isCommissioner(groupId)
+        && data.keys().hasAll(['submittedBy', 'espnEventId'])
+        && vetoRecordExists(groupId, weekId, data.submittedBy, data.espnEventId);
+    }
+
+    function memberUpdateAllowsGame(groupId, weekId) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['espnEventId'])
+        || (selectionKickoffStillAhead()
+            && !vetoRecordExists(
+              groupId,
+              weekId,
+              resource.data.submittedBy,
+              request.resource.data.espnEventId
+            ));
+    }
+
     function picksVisibleToAll(groupId, weekId) {
       let week = weekData(groupId, weekId);
       return week.status in ['locked', 'scored']
@@ -448,6 +534,31 @@ service cloud.firestore {
         && isCommissioner(resource.data.groupId);
     }
 
+    // Optional on the group. Absent means the default of 2, applied when a
+    // function reads the league. A commissioner who writes the field must
+    // store an integer from 1 through the number of other members. A
+    // one-person league may store an integer ≥ 1; nobody else can vote yet,
+    // and the function clamps once someone joins. Join, leave, and any
+    // update that does not touch `rules` skip this so a roster change cannot
+    // get stuck behind a stored number.
+    function vetoVotesNeededInBounds() {
+      let data = request.resource.data;
+      return !data.keys().hasAll(['rules'])
+        || !(data.rules is map)
+        || !data.rules.keys().hasAll(['vetoVotesNeeded'])
+        || (data.keys().hasAll(['memberIds'])
+            && data.memberIds is list
+            && data.rules.vetoVotesNeeded is int
+            && data.rules.vetoVotesNeeded >= 1
+            && (data.memberIds.size() < 2
+                || data.rules.vetoVotesNeeded < data.memberIds.size()));
+    }
+
+    function vetoVotesNeededChangeInBounds() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['rules'])
+        || vetoVotesNeededInBounds();
+    }
+
     match /groups/{groupId} {
       // Non-members must not read inviteCode or the roster. Join looks up
       // inviteCodes/{code} (the code the user typed) and then writes a ticket.
@@ -459,8 +570,11 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.commissionerId == request.auth.uid
         && request.resource.data.memberIds.size() == 1
-        && request.auth.uid in request.resource.data.memberIds;
-      allow update: if isCommissioner(groupId) || isJoiningGroup(groupId) || isLeavingGroup();
+        && request.auth.uid in request.resource.data.memberIds
+        && vetoVotesNeededInBounds();
+      allow update: if isJoiningGroup(groupId)
+        || isLeavingGroup()
+        || (isCommissioner(groupId) && vetoVotesNeededChangeInBounds());
       // Commissioners write nested `rules` including `pickMode` (`ats` | `straightUp`).
       // Missing pickMode is treated as ats by iOS and Cloud Functions.
       // Per-week modes live on `weeks/{id}.pickMode` and win over the league value.
@@ -532,16 +646,41 @@ service cloud.firestore {
           allow create: if isSuperAdmin()
             || (isSignedIn()
                 && selectionKickoffStillAhead()
-                && nominationCreateAllowed(groupId, weekId));
-          allow update: if selectionKeepsGameOrKickoffAhead()
-            && isSignedIn()
-            && ((resource.data.submittedBy == request.auth.uid
-                && nominationMemberMayEdit(groupId, weekId))
-              || isCommissioner(groupId));
+                && nominationCreateAllowed(groupId, weekId)
+                && !memberVetoBlocksReselection(groupId, weekId));
+          allow update: if isSignedIn()
+            && ((isCommissioner(groupId) && selectionKeepsGameOrKickoffAhead())
+              || (resource.data.submittedBy == request.auth.uid
+                  && nominationMemberMayEdit(groupId, weekId)
+                  && memberUpdateKeepsKickoff()
+                  && memberUpdateKeepsOwner()
+                  && memberUpdateAllowsGame(groupId, weekId)));
           allow delete: if isSignedIn()
             && ((resource.data.submittedBy == request.auth.uid
                 && nominationMemberMayEdit(groupId, weekId))
               || isCommissioner(groupId));
+
+          // Anonymous: a member can read only their own vote. The tally
+          // lives on vetoTallies/{nominationId}, which everyone in the league
+          // can read. Clients cannot change or retract a vote.
+          match /vetoVotes/{voterId} {
+            allow get: if isSignedIn() && request.auth.uid == voterId;
+            allow list: if false;
+            allow create: if selectionVetoVoteCreate(groupId, weekId, nominationId, voterId);
+            allow update, delete: if false;
+          }
+        }
+
+        // Written only by the veto function. Members can read the record
+        // (matchup, count) but not the voter ids — those are not stored here.
+        match /vetoes/{vetoId} {
+          allow read: if isGroupMember(groupId) || isSuperAdmin();
+          allow write: if false;
+        }
+
+        match /vetoTallies/{nominationId} {
+          allow read: if isGroupMember(groupId) || isSuperAdmin();
+          allow write: if false;
         }
 
         match /games/{gameId} {

@@ -621,6 +621,28 @@ final class PicksViewModel {
         }
     }
 
+    func castSelectionVeto(_ nomination: Nomination, appState: AppState) {
+        guard let group = appState.groupService.selectedGroup,
+              let week = appState.groupService.currentWeek,
+              let userId = appState.currentUserId else { return }
+        Task {
+            do {
+                try await appState.pickService.castSelectionVeto(
+                    groupId: group.id,
+                    weekId: week.id,
+                    nomination: nomination,
+                    rules: group.rules,
+                    week: week,
+                    userId: userId
+                )
+                PickemsHaptics.success()
+            } catch {
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
+                PickemsHaptics.warning()
+            }
+        }
+    }
+
     func removeNomination(_ nomination: Nomination, rules: GroupRules, appState: AppState) {
         guard let group = appState.groupService.selectedGroup,
               let week = appState.groupService.currentWeek,

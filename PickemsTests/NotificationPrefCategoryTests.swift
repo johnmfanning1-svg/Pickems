@@ -93,6 +93,9 @@ struct NotificationPrefCategoryTests {
             NotificationPrefCategory.selectionDeadlines.pushTypes.contains("selection_deadline_reminder")
         )
         #expect(
+            NotificationPrefCategory.selectionDeadlines.pushTypes.contains("selection_veto")
+        )
+        #expect(
             !NotificationPrefCategory.selectionDeadlines.pushTypes.contains("set_selection_deadline")
         )
         #expect(

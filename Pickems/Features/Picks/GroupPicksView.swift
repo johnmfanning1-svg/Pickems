@@ -1,5 +1,10 @@
 import SwiftUI
 
+private struct PendingSelectionVeto: Identifiable {
+    let nomination: Nomination
+    var id: String { nomination.id }
+}
+
 struct GroupPicksView: View {
     var embedded: Bool = false
     var forceNominatingDisplay: Bool = false
@@ -12,6 +17,7 @@ struct GroupPicksView: View {
     @State private var ownPickLoadAttempted = false
     @State private var isRefreshing = false
     @State private var showExpandedBoard = false
+    @State private var pendingVeto: PendingSelectionVeto?
 
     private var members: [GroupMember] {
         appState.groupService.members
@@ -158,6 +164,34 @@ struct GroupPicksView: View {
         .fullScreenCover(isPresented: $showExpandedBoard) {
             expandedPickemsBoard
         }
+        .confirmationDialog(
+            "Veto this Selection?",
+            isPresented: pendingVetoPresented,
+            titleVisibility: .visible,
+            presenting: pendingVeto
+        ) { (pending: PendingSelectionVeto) in
+            Button("Veto", role: .destructive) {
+                appState.picksViewModel.castSelectionVeto(pending.nomination, appState: appState)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { (pending: PendingSelectionVeto) in
+            Text(vetoConfirmMessage(pending.nomination))
+        }
+    }
+
+    private var pendingVetoPresented: Binding<Bool> {
+        Binding(
+            get: { pendingVeto != nil },
+            set: { if !$0 { pendingVeto = nil } }
+        )
+    }
+
+    private func vetoConfirmMessage(_ nomination: Nomination) -> String {
+        let needed = SelectionVetoPolicy.clampedVotesNeeded(
+            appState.groupService.selectedGroup?.rules.vetoVotesNeeded ?? SelectionVetoPolicy.defaultVotesNeeded,
+            memberCount: max(appState.groupService.selectedGroup?.memberCount ?? members.count, 1)
+        )
+        return "\(nominationMatchupLabel(nomination)) is removed if \(needed) members vote before kickoff. You can't take this vote back."
     }
 
     private var expandedPickemsBoard: some View {
@@ -465,8 +499,8 @@ struct GroupPicksView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
                                 SelectionGameDetailColumn(detail: selectionGameDetail(for: nom))
+                                vetoControls(for: nom, isOwn: isOwn)
                             }
-
                             if canRemove, let rules = appState.groupService.selectedGroup?.rules {
                                 HStack(spacing: 12) {
                                     Spacer(minLength: 0)
@@ -502,6 +536,45 @@ struct GroupPicksView: View {
                     appState.picksViewModel.beginAddSelection(for: member, appState: appState)
                 }
                 .padding(.horizontal, 6)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func vetoControls(for nom: Nomination, isOwn: Bool) -> some View {
+        let rules = appState.groupService.selectedGroup?.rules
+        let vetoEnabled = rules?.vetoEnabled == true && selectionMode == .member
+        let selectionsOpen = week.map { WeekTransition.canRemakeSelections($0) } ?? false
+        let kickoffOpen = !SelectionKickoffGate.hasKickedOff(kickoff: nom.kickoff)
+        let canVeto = SelectionVetoPolicy.canVote(
+            vetoEnabled: vetoEnabled,
+            isOwnSelection: isOwn,
+            selectionsOpen: selectionsOpen,
+            kickoff: nom.kickoff
+        )
+        let tally = appState.pickService.vetoTallies[nom.id] ?? 0
+        let needed = SelectionVetoPolicy.clampedVotesNeeded(
+            rules?.vetoVotesNeeded ?? SelectionVetoPolicy.defaultVotesNeeded,
+            memberCount: max(appState.groupService.selectedGroup?.memberCount ?? members.count, 1)
+        )
+        let voted = appState.pickService.myVetoNominationIds.contains(nom.id)
+        if vetoEnabled && selectionsOpen && kickoffOpen && (canVeto || tally > 0) {
+            VStack(alignment: .trailing, spacing: 4) {
+                if canVeto {
+                    Button {
+                        pendingVeto = PendingSelectionVeto(nomination: nom)
+                    } label: {
+                        Label(voted ? "Voted" : "Veto", systemImage: "hand.raised")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(theme.accent)
+                    }
+                    .disabled(voted)
+                    .accessibilityHint(voted ? "You already voted" : "Vote to remove this Selection")
+                }
+                Text("\(tally) of \(needed)")
+                    .font(.caption2)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .accessibilityLabel("\(tally) of \(needed) veto votes")
             }
         }
     }

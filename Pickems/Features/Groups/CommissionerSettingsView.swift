@@ -112,9 +112,11 @@ struct CommissionerSettingsView: View {
     }
 
     private var slateConfigurationFooter: String {
-        rules.selectionMode == .member
-            ? "Each member selects this many games. Weekly game target = members × Selections. You’ll set a Selection deadline each week."
-            : "You choose every game for the group each week."
+        if rules.selectionMode == .member {
+            let base = "Each member selects this many games. Weekly game target = members × Selections. You’ll set a Selection deadline each week."
+            return "\(base) \(SelectionVetoPolicy.settingsFooter(memberCount: liveGroup.memberCount))"
+        }
+        return "You choose every game for the group each week."
     }
 
     private var slateConfigurationSection: some View {
@@ -133,6 +135,19 @@ struct CommissionerSettingsView: View {
                     in: 1...10
                 )
                 .listRowBackground(PickemsColors.cardBackground)
+
+                Toggle("Veto", isOn: $rules.vetoEnabled)
+                    .disabled(!SelectionVetoPolicy.canConfigure(memberCount: liveGroup.memberCount))
+                    .listRowBackground(PickemsColors.cardBackground)
+
+                if rules.vetoEnabled, SelectionVetoPolicy.canConfigure(memberCount: liveGroup.memberCount) {
+                    Stepper(
+                        "Votes needed: \(vetoVotesBinding.wrappedValue)",
+                        value: vetoVotesBinding,
+                        in: 1...max(SelectionVetoPolicy.maxVotesNeeded(memberCount: liveGroup.memberCount), 1)
+                    )
+                    .listRowBackground(PickemsColors.cardBackground)
+                }
             } else {
                 Stepper("Games per week: \(rules.slateSize)", value: $rules.slateSize, in: 1...20)
                     .listRowBackground(PickemsColors.cardBackground)
@@ -860,6 +875,18 @@ struct CommissionerSettingsView: View {
         }
     }
 
+    private var vetoVotesBinding: Binding<Int> {
+        Binding(
+            get: {
+                SelectionVetoPolicy.clampedVotesNeeded(
+                    rules.vetoVotesNeeded,
+                    memberCount: liveGroup.memberCount
+                )
+            },
+            set: { rules.vetoVotesNeeded = $0 }
+        )
+    }
+
     private var lockModeBinding: Binding<DeadlinePolicy> {
         Binding(
             get: { rules.pickDeadline == .rolling ? .rolling : .firstKickoff },
@@ -880,6 +907,10 @@ struct CommissionerSettingsView: View {
         if rules.pickDeadline == .rolling {
             rules.allowLatePicks = false
         }
+        rules.vetoVotesNeeded = SelectionVetoPolicy.clampedVotesNeeded(
+            rules.vetoVotesNeeded,
+            memberCount: liveGroup.memberCount
+        )
         Task {
             do {
                 let trimmedName = groupName.trimmingCharacters(in: .whitespacesAndNewlines)

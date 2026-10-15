@@ -99,6 +99,9 @@ export {
 // Group chat — push fan-out plus the report counter clients cannot write.
 export { onMessageCreated, onReportCreated } from "./chat";
 
+// Selection vetoes — members write a vote; this removes the Selection and notifies.
+export { onSelectionVetoVoteCreated, onGroupVetoSettingsUpdated } from "./selectionVetoTrigger";
+
 // Shock tweet drafts. Admin SDK writes; does not post to X.
 export { detectShockTweets, runDetectShockTweets } from "./shockTweets";
 

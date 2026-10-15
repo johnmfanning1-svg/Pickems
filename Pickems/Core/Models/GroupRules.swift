@@ -152,6 +152,10 @@ struct GroupRules: Codable, Equatable {
     var latePickPenaltyWins: Int
     /// ATS (default) vs Straight Up. Existing docs without this field decode as `.ats`.
     var pickMode: PickMode
+    /// Member Selections can be voted off the slate. Missing on existing leagues means off.
+    var vetoEnabled: Bool
+    /// Votes required to remove one Selection. Clamped to 1…(league size − 1) when used.
+    var vetoVotesNeeded: Int
 
     /// Expected unique games for a week under the active mode.
     /// Member mode is always `members × Selections per person`, never the unused
@@ -172,6 +176,7 @@ struct GroupRules: Codable, Equatable {
         case customDeadlineHour, customDeadlineMinute
         case allowConfidencePick, allowLatePicks, latePickPenaltyWins
         case pickMode
+        case vetoEnabled, vetoVotesNeeded
     }
 
     init(
@@ -185,7 +190,9 @@ struct GroupRules: Codable, Equatable {
         allowConfidencePick: Bool = false,
         allowLatePicks: Bool = false,
         latePickPenaltyWins: Int = 1,
-        pickMode: PickMode = .ats
+        pickMode: PickMode = .ats,
+        vetoEnabled: Bool = false,
+        vetoVotesNeeded: Int = SelectionVetoPolicy.defaultVotesNeeded
     ) {
         self.selectionMode = selectionMode
         self.selectionsPerMember = selectionsPerMember
@@ -198,6 +205,25 @@ struct GroupRules: Codable, Equatable {
         self.allowLatePicks = allowLatePicks
         self.latePickPenaltyWins = latePickPenaltyWins
         self.pickMode = pickMode
+        self.vetoEnabled = vetoEnabled
+        self.vetoVotesNeeded = vetoVotesNeeded
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(selectionMode, forKey: .selectionMode)
+        try container.encode(selectionsPerMember, forKey: .selectionsPerMember)
+        try container.encode(slateSize, forKey: .slateSize)
+        try container.encode(pickDeadline, forKey: .pickDeadline)
+        try container.encode(tieBreaker, forKey: .tieBreaker)
+        try container.encode(customDeadlineHour, forKey: .customDeadlineHour)
+        try container.encode(customDeadlineMinute, forKey: .customDeadlineMinute)
+        try container.encode(allowConfidencePick, forKey: .allowConfidencePick)
+        try container.encode(allowLatePicks, forKey: .allowLatePicks)
+        try container.encode(latePickPenaltyWins, forKey: .latePickPenaltyWins)
+        try container.encode(pickMode, forKey: .pickMode)
+        try container.encode(vetoEnabled, forKey: .vetoEnabled)
+        try container.encode(vetoVotesNeeded, forKey: .vetoVotesNeeded)
     }
 
     init(from decoder: Decoder) throws {
@@ -213,6 +239,9 @@ struct GroupRules: Codable, Equatable {
         allowLatePicks = try container.decodeIfPresent(Bool.self, forKey: .allowLatePicks) ?? false
         latePickPenaltyWins = try container.decodeIfPresent(Int.self, forKey: .latePickPenaltyWins) ?? 1
         pickMode = try container.decodeIfPresent(PickMode.self, forKey: .pickMode) ?? .ats
+        vetoEnabled = try container.decodeIfPresent(Bool.self, forKey: .vetoEnabled) ?? false
+        vetoVotesNeeded = try container.decodeIfPresent(Int.self, forKey: .vetoVotesNeeded)
+            ?? SelectionVetoPolicy.defaultVotesNeeded
     }
 
     static let `default` = GroupRules(
@@ -226,6 +255,8 @@ struct GroupRules: Codable, Equatable {
         allowConfidencePick: false,
         allowLatePicks: false,
         latePickPenaltyWins: 1,
-        pickMode: .ats
+        pickMode: .ats,
+        vetoEnabled: false,
+        vetoVotesNeeded: SelectionVetoPolicy.defaultVotesNeeded
     )
 }
