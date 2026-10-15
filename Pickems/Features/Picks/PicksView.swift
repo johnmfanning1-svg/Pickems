@@ -500,7 +500,9 @@ struct PicksView: View {
         let picksClosed = fullyLocked && !allowLate
         let submittedFrozen = !rolling && appState.pickService.userPick?.isLocked == true
         let games = appState.pickService.slateGames.sortedByKickoff
-        let openGames = games.filter { !WeekTransition.isGameLocked($0, week: week) }
+        let openGames = games.filter {
+            !WeekTransition.isGameLocked($0, week: week) && viewModel.allowsPicks($0)
+        }
 
         return VStack(spacing: 16) {
             PickemsSectionHeader(
@@ -532,25 +534,29 @@ struct PicksView: View {
 
             ForEach(games) { game in
                 let gameLocked = WeekTransition.isGameLocked(game, week: week)
+                let pickBlocked = !viewModel.allowsPicks(game)
                 GamePickRow(
                     game: game,
                     selectedTeamId: viewModel.draftPicks[game.id],
-                    isDisabled: submittedFrozen || picksClosed || gameLocked,
+                    isDisabled: submittedFrozen || picksClosed || gameLocked || pickBlocked,
                     liveCard: viewModel.livePickCards[game.espnEventId],
                     homeRank: viewModel.teamRanks.rank(for: game.homeTeamId),
                     awayRank: viewModel.teamRanks.rank(for: game.awayTeamId),
                     showConfidenceToggle: appState.groupService.selectedGroup?.rules.allowConfidencePick == true
                         && !submittedFrozen
                         && !picksClosed
-                        && !gameLocked,
+                        && !gameLocked
+                        && !pickBlocked,
                     isConfidence: viewModel.confidenceGameId == game.id,
                     onConfidenceToggle: {
+                        guard viewModel.allowsPicks(game) else { return }
                         viewModel.confidenceGameId = viewModel.confidenceGameId == game.id ? nil : game.id
                         viewModel.saveDraft(appState: appState)
                     },
-                    lockedCaption: gameLocked ? "Locked at kickoff" : nil,
+                    lockedCaption: viewModel.pickBlockCaption(game) ?? (gameLocked ? "Locked at kickoff" : nil),
                     showsSpread: appState.selectedPickMode.showsSpreads
                 ) { teamId in
+                    guard viewModel.allowsPicks(game) else { return }
                     if teamId.isEmpty {
                         viewModel.draftPicks.removeValue(forKey: game.id)
                         if viewModel.confidenceGameId == game.id {
