@@ -34,10 +34,10 @@ rc=$?
 set -e
 # Counts come from the .xcresult bundle (Swift Testing and XCTest alike),
 # not from grepping test.log.
-# Floor on passed + expected failures. The veto head runs 475 tests
-# (466 on main, plus the Selection veto cases); keep this 2 below that
-# count and BUMP IT as tests are added.
-MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-473}"
+# Floor on passed + expected failures. This head runs 479 tests
+# (475 on the previous veto head, plus the Selection veto anchor cases);
+# keep this 2 below that count and BUMP IT as tests are added.
+MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-477}"
 grep -iE "error:|Test case .* failed|\*\* TEST" "$OUT/logs/test.log" | tail -n 200 || true
 summary="$OUT/logs/test-summary.json"
 if ! xcrun xcresulttool get test-results summary --path "$OUT/TestResults.xcresult" --format json > "$summary" 2>"$OUT/logs/xcresulttool.err"; then

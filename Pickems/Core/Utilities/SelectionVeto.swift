@@ -48,3 +48,21 @@ enum SelectionVetoPolicy {
         return "Veto needs at least one other member, so it stays off until someone else joins."
     }
 }
+
+/// Copy and identity for the "Veto this Selection?" confirmation.
+enum SelectionVetoPrompt {
+    static let title = "Veto this Selection?"
+
+    static func message(matchup: String, votesNeeded: Int) -> String {
+        "\(matchup) is removed if \(votesNeeded) members vote before kickoff. You can't take this vote back."
+    }
+
+    /// One id per Selection. A shared id anchors the popover to the member header.
+    static func anchorIdentifier(nominationId: String) -> String {
+        "selection-veto-\(nominationId)"
+    }
+
+    static func buttonIdentifier(nominationId: String) -> String {
+        "selection-veto-button-\(nominationId)"
+    }
+}
