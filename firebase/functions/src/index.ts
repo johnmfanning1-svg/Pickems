@@ -5,7 +5,6 @@ import {
   getFirestore,
   type DocumentReference,
   type QueryDocumentSnapshot,
-  type QuerySnapshot,
 } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onDocumentUpdated, onDocumentCreated } from "firebase-functions/v2/firestore";
@@ -19,6 +18,7 @@ import {
   type EspnEvent,
 } from "./espn";
 import { espnScoreboardWeek } from "./cfbWeekCalendar";
+import { kickoffsMillisByEspnEventId } from "./selectionCatalog";
 import { sendToUser, sendToUsers } from "./notifications";
 import { shouldSendDeadlinePush } from "./deadlinePushPrefs";
 import {
@@ -100,7 +100,11 @@ export {
 export { onMessageCreated, onReportCreated } from "./chat";
 
 // Selection vetoes — members write a vote; this removes the Selection and notifies.
-export { onSelectionVetoVoteCreated, onGroupVetoSettingsUpdated } from "./selectionVetoTrigger";
+export {
+  onSelectionVetoVoteCreated,
+  onGroupVetoSettingsUpdated,
+  onSelectionNominationUpdated,
+} from "./selectionVetoTrigger";
 
 // Shock tweet drafts. Admin SDK writes; does not post to X.
 export { detectShockTweets, runDetectShockTweets } from "./shockTweets";
@@ -452,40 +456,77 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
   }
 });
 
-async function loadScoreboardEvents(
-  weekNumbers: Iterable<number>
-): Promise<Map<string, EspnEvent>> {
+async function loadScoreboardPages(weekNumbers: Iterable<number>): Promise<{
+  byWeek: Map<number, EspnEvent[]>;
+  byId: Map<string, EspnEvent>;
+}> {
   const weeks = [...new Set([...weekNumbers].map((n) => espnScoreboardWeek(n)))]
     .filter((n) => Number.isFinite(n) && n > 0);
-  const fetches =
-    weeks.length === 0
-      ? [fetchScoreboard({ seasonType: 2 })]
-      : weeks.map((week) => fetchScoreboard({ week, seasonType: 2 }));
+  const targets: Array<number | undefined> = weeks.length === 0 ? [undefined] : weeks;
   const pages = await Promise.all(
-    fetches.map((promise) =>
-      promise.catch((err) => {
+    targets.map(async (week) => {
+      try {
+        const events = await fetchScoreboard(
+          week == null ? { seasonType: 2 } : { week, seasonType: 2 }
+        );
+        return { week, events };
+      } catch (err) {
         logger.error("ESPN fetch failed", err);
-        return [] as EspnEvent[];
-      })
-    )
+        return { week, events: [] as EspnEvent[] };
+      }
+    })
   );
-  const eventById = new Map<string, EspnEvent>();
-  for (const events of pages) {
-    for (const event of events) {
-      eventById.set(event.id, event);
-    }
+  const byWeek = new Map<number, EspnEvent[]>();
+  const byId = new Map<string, EspnEvent>();
+  for (const page of pages) {
+    if (page.week != null) byWeek.set(page.week, page.events);
+    for (const event of page.events) byId.set(event.id, event);
   }
-  return eventById;
+  return { byWeek, byId };
 }
 
-/** Lock weeks past deadline; score finals from ESPN. */
+/**
+ * Selection weeks have no slate docs yet. Publish ESPN kickoffs onto
+ * gameLock/current so a member swap has to use the real kickoff. An empty
+ * scoreboard (fetch failure or no games) leaves an existing catalog in place.
+ */
+async function publishSelectionKickoffCatalog(
+  weekDoc: QueryDocumentSnapshot,
+  eventsByScoreboardWeek: Map<number, EspnEvent[]>
+): Promise<void> {
+  const weekNumber = weekDoc.data().weekNumber;
+  if (typeof weekNumber !== "number") return;
+  const events = eventsByScoreboardWeek.get(espnScoreboardWeek(weekNumber));
+  if (!events || events.length === 0) return;
+  const millisById = kickoffsMillisByEspnEventId(events);
+  const ids = Object.keys(millisById);
+  if (ids.length === 0) return;
+  const kickoffs: Record<string, Timestamp> = {};
+  const phases: Record<string, string> = {};
+  for (const id of ids) {
+    kickoffs[id] = Timestamp.fromMillis(millisById[id]);
+    phases[id] = "pre";
+  }
+  await weekDoc.ref.collection("gameLock").doc("current").set(
+    {
+      kickoffs,
+      phases,
+      liveIds: [],
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+/** Lock weeks past deadline; score finals from ESPN. Also catalogs Selection kickoffs. */
 export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
   const now = Date.now();
   const groups = await db.collection("groups").get();
   const activeWeeksByGroup: Array<{
     groupDoc: QueryDocumentSnapshot;
     memberIds: string[];
-    weeks: QuerySnapshot;
+    scoringWeeks: QueryDocumentSnapshot[];
+    selectionWeeks: QueryDocumentSnapshot[];
   }> = [];
   const weekNumbers = new Set<number>();
 
@@ -493,23 +534,33 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
     const memberIds = (groupDoc.data().memberIds as string[]) ?? [];
     const weeks = await groupDoc.ref
       .collection("weeks")
-      .where("status", "in", ["picking", "locked"])
+      .where("status", "in", ["selection", "picking", "locked"])
       .get();
+    const scoringWeeks: QueryDocumentSnapshot[] = [];
+    const selectionWeeks: QueryDocumentSnapshot[] = [];
     for (const weekDoc of weeks.docs) {
       const number = weekDoc.data().weekNumber;
       if (typeof number === "number") weekNumbers.add(number);
+      if (weekDoc.data().status === "selection") selectionWeeks.push(weekDoc);
+      else scoringWeeks.push(weekDoc);
     }
-    activeWeeksByGroup.push({ groupDoc, memberIds, weeks });
+    activeWeeksByGroup.push({ groupDoc, memberIds, scoringWeeks, selectionWeeks });
   }
 
-  const eventById = await loadScoreboardEvents(weekNumbers);
+  const { byWeek, byId: eventById } = await loadScoreboardPages(weekNumbers);
 
-  for (const { groupDoc, memberIds, weeks: activeWeeks } of activeWeeksByGroup) {
+  for (const { selectionWeeks } of activeWeeksByGroup) {
+    for (const weekDoc of selectionWeeks) {
+      await publishSelectionKickoffCatalog(weekDoc, byWeek);
+    }
+  }
+
+  for (const { groupDoc, memberIds, scoringWeeks } of activeWeeksByGroup) {
     const groupId = groupDoc.id;
     const leagueName = leagueDisplayName(groupDoc.data()?.name);
     const leaguePickMode = resolvePickMode(groupDoc.data()?.rules?.pickMode);
 
-    for (const weekDoc of activeWeeks.docs) {
+    for (const weekDoc of scoringWeeks) {
       const week = weekDoc.data();
       const weekId = weekDoc.id;
       const pickMode = resolveWeekPickMode(week.pickMode, leaguePickMode);

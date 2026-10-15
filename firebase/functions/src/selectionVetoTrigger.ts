@@ -14,13 +14,21 @@ import { sendToUser } from "./notifications";
 import { buildSelectionVetoPush, leagueDisplayName, teamTag } from "./pushAlert";
 import {
   deadlineMillis,
+  effectiveVetoVotesNeeded,
+  eligibleVetoVoterIds,
   memberIdList,
   nominationCountAfterRemoval,
   nominationEventIdsAfterRemoval,
+  nominationGameRestorePatch,
+  planNominationSwapVoteRepair,
   planSelectionVeto,
+  planUnanchoredTallyPin,
+  selectionVetoEventForEvaluate,
+  SELECTION_NOMINATION_UPDATE_TRIGGER,
   SELECTION_VETO_SETTINGS_TRIGGER,
   SELECTION_VETO_VOTE_TRIGGER,
   selectionMatchupLabel,
+  selectionVetoWindowOpen,
   selectionVetoDeliverySucceeded,
   selectionVetoMessages,
   indexOfPendingVetoRecord,
@@ -111,6 +119,51 @@ export const onGroupVetoSettingsUpdated = onDocumentUpdated(
 );
 
 /**
+ * Commissioner swaps and any event-id change that lands before the tally doc
+ * exists are not stopped by rules. Votes and tallies are keyed by nomination
+ * id, so they would follow the new game.
+ * Below the threshold, restore every pre-swap game field. At the threshold,
+ * veto the previous game using its own kickoff. This trigger is the only
+ * writer of the tally's espnEventId while votes exist, so a vote recount
+ * that lands first cannot record the swapped game.
+ */
+export const onSelectionNominationUpdated = onDocumentUpdated(
+  {
+    document: SELECTION_NOMINATION_UPDATE_TRIGGER.document,
+    retry: SELECTION_NOMINATION_UPDATE_TRIGGER.retry,
+  },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    const groupId = event.params.groupId;
+    const weekId = event.params.weekId;
+    const nominationId = event.params.nominationId;
+    if (!before || !after || !groupId || !weekId || !nominationId) return;
+    const beforeEventId = stringField(before, "espnEventId");
+    const afterEventId = stringField(after, "espnEventId");
+    if (!beforeEventId) return;
+    if (beforeEventId === afterEventId) {
+      await ensureSelectionTallyAnchor(db(), {
+        groupId,
+        weekId,
+        nominationId,
+        espnEventId: afterEventId,
+      });
+      return;
+    }
+    const notice = await repairSwappedNomination(db(), {
+      groupId,
+      weekId,
+      nominationId,
+      before,
+      beforeEventId,
+      afterEventId,
+    });
+    if (notice) await deliverSelectionVeto(db(), notice);
+  }
+);
+
+/**
  * Recount one Selection and apply the plan. Exported so the two triggers share
  * one transaction. Idempotent: a retry after the Selection is gone only
  * finishes an unsent notification.
@@ -134,6 +187,7 @@ export async function evaluateSelectionVeto(
     const groupSnap = await tx.get(groupRef);
     const weekSnap = await tx.get(weekRef);
     const nominationSnap = await tx.get(nominationRef);
+    const tallySnap = await tx.get(tallyRef);
     const votesSnap = await tx.get(nominationRef.collection("vetoVotes"));
     const gamesSnap = await tx.get(weekRef.collection("games"));
     const nominationsSnap = await tx.get(weekRef.collection("nominations"));
@@ -141,8 +195,24 @@ export async function evaluateSelectionVeto(
     const group = groupSnap.data() as VetoGroupFields | undefined;
     const week = weekSnap.data();
     const nomination = nominationSnap.data();
+    const tally = tallySnap.data();
     const selectorFromNomination = stringField(nomination, "submittedBy");
-    const espnEventId = stringField(nomination, "espnEventId") || nominationId;
+    const currentEventId = stringField(nomination, "espnEventId") || nominationId;
+    const eventChoice = nominationSnap.exists
+      ? selectionVetoEventForEvaluate({
+          currentEventId,
+          anchorEventId: stringField(tally, "espnEventId") || null,
+          nominationUpdatedAtMs: timestampMillis(nominationSnap.updateTime),
+          earliestVoteCreatedAtMs: earliestCreateMillis(votesSnap.docs),
+        })
+      : { kind: "use" as const, espnEventId: currentEventId, kickoffSource: "current" as const };
+    if (eventChoice.kind === "defer") return null;
+
+    const espnEventId = eventChoice.espnEventId;
+    const kickoffForPlan =
+      eventChoice.kickoffSource === "anchor" && tally?.kickoff != null
+        ? tally.kickoff
+        : nomination?.kickoff;
     const vetoSnap = await readVetoSnap(tx, weekRef, {
       nominationExists: nominationSnap.exists,
       selectorId: selectorFromNomination,
@@ -162,7 +232,7 @@ export async function evaluateSelectionVeto(
       weekSelectionMode: week?.selectionMode,
       groupSelectionMode: group?.rules?.selectionMode,
       selectionDeadlineMs: deadlineMillis(week?.selectionDeadline),
-      kickoffMs: deadlineMillis(nomination?.kickoff),
+      kickoffMs: deadlineMillis(kickoffForPlan),
       selectorId,
       voterIds: votesSnap.docs.map((doc) => doc.id),
       triggerVoterId,
@@ -276,7 +346,15 @@ function commitPlan(
     return null;
   }
   if (plan.kind === "tally") {
-    tx.set(ctx.tallyRef, { count: plan.count, votesNeeded: plan.votesNeeded });
+    // Count only. Repair is the only writer of espnEventId while votes exist.
+    tx.set(
+      ctx.tallyRef,
+      {
+        count: plan.count,
+        votesNeeded: plan.votesNeeded,
+      },
+      { merge: true }
+    );
     return null;
   }
   if (plan.kind === "apply" && ctx.vetoRef && ctx.record) {
@@ -337,7 +415,234 @@ async function deliverSelectionVeto(firestore: Firestore, notice: VetoNotice): P
   });
 }
 
+/**
+ * A same-game edit while votes exist has not changed the event those votes
+ * were cast against. Pin that event so a later recount cannot treat a swap
+ * as the ban target, then recount in case the edit landed first.
+ */
+async function ensureSelectionTallyAnchor(
+  firestore: Firestore,
+  input: {
+    groupId: string;
+    weekId: string;
+    nominationId: string;
+    espnEventId: string;
+  }
+): Promise<void> {
+  const weekRef = firestore.collection("groups").doc(input.groupId).collection("weeks").doc(input.weekId);
+  const nominationRef = weekRef.collection("nominations").doc(input.nominationId);
+  const tallyRef = weekRef.collection("vetoTallies").doc(input.nominationId);
+
+  const pinned = await firestore.runTransaction(async (tx) => {
+    const nominationSnap = await tx.get(nominationRef);
+    const tallySnap = await tx.get(tallyRef);
+    const votesSnap = await tx.get(nominationRef.collection("vetoVotes"));
+    if (!nominationSnap.exists || votesSnap.empty) return false;
+    const liveEventId = stringField(nominationSnap.data(), "espnEventId");
+    if (!liveEventId || liveEventId !== input.espnEventId) return false;
+    const plan = planUnanchoredTallyPin({
+      votesExist: true,
+      anchorEventId: stringField(tallySnap.data(), "espnEventId") || null,
+      eventId: liveEventId,
+    });
+    if (plan.kind !== "pin") return false;
+    tx.set(
+      tallyRef,
+      {
+        espnEventId: plan.espnEventId,
+        kickoff: nominationSnap.data()?.kickoff ?? null,
+      },
+      { merge: true }
+    );
+    return true;
+  });
+  if (!pinned) return;
+  await evaluateSelectionVeto(firestore, {
+    groupId: input.groupId,
+    weekId: input.weekId,
+    nominationId: input.nominationId,
+    triggerVoterId: null,
+  });
+}
+
+async function repairSwappedNomination(
+  firestore: Firestore,
+  input: {
+    groupId: string;
+    weekId: string;
+    nominationId: string;
+    before: DocumentData;
+    beforeEventId: string;
+    afterEventId: string;
+  }
+): Promise<VetoNotice | null> {
+  const { groupId, weekId, nominationId, before, beforeEventId, afterEventId } = input;
+  const groupRef = firestore.collection("groups").doc(groupId);
+  const weekRef = groupRef.collection("weeks").doc(weekId);
+  const nominationRef = weekRef.collection("nominations").doc(nominationId);
+  const tallyRef = weekRef.collection("vetoTallies").doc(nominationId);
+
+  return firestore.runTransaction(async (tx) => {
+    const groupSnap = await tx.get(groupRef);
+    const weekSnap = await tx.get(weekRef);
+    const nominationSnap = await tx.get(nominationRef);
+    const tallySnap = await tx.get(tallyRef);
+    const votesSnap = await tx.get(nominationRef.collection("vetoVotes"));
+    if (!nominationSnap.exists || votesSnap.empty) return null;
+
+    const group = groupSnap.data() as VetoGroupFields | undefined;
+    const week = weekSnap.data();
+    const current = nominationSnap.data();
+    const tally = tallySnap.data();
+    const anchorEventId = stringField(tally, "espnEventId");
+    const selectorId = stringField(before, "submittedBy") || stringField(current, "submittedBy");
+    const eligible = eligibleVetoVoterIds(
+      votesSnap.docs.map((doc) => doc.id),
+      memberIdList(group?.memberIds),
+      selectorId
+    );
+    const votesNeeded = effectiveVetoVotesNeeded(
+      group?.rules?.vetoVotesNeeded,
+      memberIdList(group?.memberIds).length
+    );
+    const windowKickoff = anchorEventId ? (tally?.kickoff ?? before.kickoff) : before.kickoff;
+    const plan = planNominationSwapVoteRepair({
+      beforeEventId,
+      afterEventId,
+      currentEventId: stringField(current, "espnEventId"),
+      anchorEventId: anchorEventId || null,
+      votesExist: true,
+      eligibleVoteCount: eligible.length,
+      votesNeeded,
+      beforeWindowOpen: selectionVetoWindowOpen({
+        nowMs: Date.now(),
+        weekStatus: week?.status,
+        weekSelectionMode: week?.selectionMode,
+        groupSelectionMode: group?.rules?.selectionMode,
+        selectionDeadlineMs: deadlineMillis(week?.selectionDeadline),
+        kickoffMs: deadlineMillis(windowKickoff),
+      }),
+    });
+    if (plan.kind === "ignore") return null;
+
+    const kickoff =
+      plan.kickoffSource === "anchor" && tally?.kickoff != null ? tally.kickoff : before.kickoff;
+    if (plan.kind === "revert" || !selectorId) {
+      tx.update(nominationRef, nominationGameRestoreUpdate(before, plan.espnEventId, kickoff));
+      tx.set(
+        tallyRef,
+        {
+          espnEventId: plan.espnEventId,
+          ...(kickoff != null ? { kickoff } : {}),
+          count: eligible.length,
+          ...(votesNeeded != null ? { votesNeeded } : {}),
+        },
+        { merge: true }
+      );
+      return null;
+    }
+
+    const gamesSnap = await tx.get(weekRef.collection("games"));
+    const nominationsSnap = await tx.get(weekRef.collection("nominations"));
+    const vetoId = selectorId ? selectionVetoRecordId(selectorId, plan.espnEventId) : "";
+    const vetoRef = vetoId ? weekRef.collection("vetoes").doc(vetoId) : null;
+    const vetoSnap = vetoRef ? await tx.get(vetoRef) : null;
+    const teams = { ...before };
+    const away = teamTag(teams.awayTeamAbbreviation, teams.awayTeamName, "AWAY");
+    const home = teamTag(teams.homeTeamAbbreviation, teams.homeTeamName, "HOME");
+    const notice: VetoNotice | null =
+      vetoRef && vetoId && selectorId && vetoSnap?.data()?.notified !== true
+        ? {
+            groupId,
+            weekId,
+            gameId: plan.espnEventId,
+            selectorId,
+            memberIds: memberIdList(group?.memberIds),
+            gameLabel: selectionMatchupLabel(teams),
+            leagueName: leagueDisplayName(group?.name),
+            away,
+            home,
+            vetoId,
+          }
+        : null;
+    return commitPlan(
+      tx,
+      { kind: "apply", count: eligible.length, votesNeeded: votesNeeded ?? eligible.length },
+      {
+        triggerVoterId: null,
+        nominationRef,
+        weekRef,
+        tallyRef,
+        vetoRef,
+        votes: votesSnap.docs,
+        gameIds: slateGameIdsForEvent(
+          gamesSnap.docs.map((doc) => ({ id: doc.id, espnEventId: doc.data().espnEventId })),
+          plan.espnEventId,
+          nominationEventIdsAfterRemoval(
+            nominationsSnap.docs.map((doc) => ({
+              id: doc.id,
+              espnEventId: doc.data().espnEventId,
+            })),
+            nominationId
+          )
+        ),
+        gamesCollection: weekRef.collection("games"),
+        nominationCount: nominationCountAfterRemoval(
+          nominationsSnap.docs.map((doc) => doc.id),
+          nominationId
+        ),
+        record: vetoRef
+          ? {
+              id: vetoId,
+              submittedBy: selectorId,
+              submitterName: stringField(before, "submitterName") || "A member",
+              espnEventId: plan.espnEventId,
+              awayTeamName: stringField(before, "awayTeamName"),
+              awayTeamAbbreviation: stringField(before, "awayTeamAbbreviation"),
+              homeTeamName: stringField(before, "homeTeamName"),
+              homeTeamAbbreviation: stringField(before, "homeTeamAbbreviation"),
+              voteCount: eligible.length,
+              votesNeeded: votesNeeded ?? eligible.length,
+              createdAt: FieldValue.serverTimestamp(),
+              notified: false,
+            }
+          : null,
+        notice,
+      }
+    );
+  });
+}
+
 function stringField(data: DocumentData | undefined, key: string): string {
   const value = data?.[key];
   return typeof value === "string" ? value.trim() : "";
+}
+
+function timestampMillis(value: { toMillis?: () => number } | undefined): number | null {
+  if (!value || typeof value.toMillis !== "function") return null;
+  const ms = value.toMillis();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function earliestCreateMillis(docs: readonly QueryDocumentSnapshot[]): number | null {
+  let earliest: number | null = null;
+  for (const doc of docs) {
+    const ms = timestampMillis(doc.createTime);
+    if (ms == null) continue;
+    if (earliest == null || ms < earliest) earliest = ms;
+  }
+  return earliest;
+}
+
+function nominationGameRestoreUpdate(
+  before: DocumentData,
+  espnEventId: string,
+  kickoff: unknown
+): Record<string, unknown> {
+  const patch = nominationGameRestorePatch(before, espnEventId, kickoff);
+  const update: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    update[key] = value === null ? FieldValue.delete() : value;
+  }
+  return update;
 }
