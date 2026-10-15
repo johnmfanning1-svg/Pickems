@@ -710,7 +710,8 @@ final class PicksViewModel {
         forceRefresh: Bool = false
     ) async {
         let slateIds = Set(appState.pickService.slateGames.map(\.espnEventId))
-        guard !slateIds.isEmpty else { return }
+        let hasNominations = !appState.pickService.nominations.isEmpty
+        guard !slateIds.isEmpty || hasNominations else { return }
         if !forceRefresh, liveForceRefreshCount > 0 { return }
         liveResultsGeneration += 1
         let generation = liveResultsGeneration

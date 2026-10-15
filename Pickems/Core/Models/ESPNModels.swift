@@ -28,6 +28,9 @@ struct ESPNGame: Identifiable, Equatable {
     var isNeutralSite: Bool = false
     /// ESPN live clock, e.g. `2nd 7:12` or `Halftime`. Nil when the game is not in progress.
     var liveClockLabel: String? = nil
+    /// ESPN overall record summary, e.g. `5-1`. Nil when the scoreboard omitted it.
+    var homeRecord: String? = nil
+    var awayRecord: String? = nil
 
     var isTop25: Bool { homeCuratedRank != nil || awayCuratedRank != nil }
 
@@ -88,6 +91,29 @@ struct ESPNScoreboardResponse: Decodable {
         let team: ESPNTeam
         let score: String?
         let curatedRank: ESPNCuratedRank?
+        /// Overall/home/away lines. A malformed `records` array is ignored so one
+        /// bad competitor cannot drop the rest of the scoreboard.
+        let records: [ESPNRecord]?
+
+        enum CodingKeys: String, CodingKey {
+            case id, homeAway, team, score, curatedRank, records
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            homeAway = try container.decode(String.self, forKey: .homeAway)
+            team = try container.decode(ESPNTeam.self, forKey: .team)
+            score = try container.decodeIfPresent(String.self, forKey: .score)
+            curatedRank = try container.decodeIfPresent(ESPNCuratedRank.self, forKey: .curatedRank)
+            records = try? container.decode([ESPNRecord].self, forKey: .records)
+        }
+    }
+
+    struct ESPNRecord: Decodable, Equatable {
+        let name: String?
+        let type: String?
+        let summary: String?
     }
 
     struct ESPNCuratedRank: Decodable {
@@ -168,6 +194,9 @@ struct ESPNLiveGameCard: Identifiable, Equatable {
     var pickResult: PickResult?
     /// ESPN's current line when `spreadLabel` is the locked Pickems slate line.
     var liveSpreadLabel: String? = nil
+    /// ESPN overall record summary, e.g. `5-1`. Nil when the scoreboard omitted it.
+    var awayRecord: String? = nil
+    var homeRecord: String? = nil
 
     enum PickResult: Equatable {
         case win, loss, push, pending

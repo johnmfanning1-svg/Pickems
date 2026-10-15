@@ -217,7 +217,9 @@ actor ESPNService {
                 isNeutralSite: game.isNeutralSite,
                 userPickTeamAbbreviation: pickAbbr,
                 pickResult: result,
-                liveSpreadLabel: hideSpread ? nil : Self.liveSpreadLabel(espnGame: game, isSlateGame: isSlate)
+                liveSpreadLabel: hideSpread ? nil : Self.liveSpreadLabel(espnGame: game, isSlateGame: isSlate),
+                awayRecord: game.awayRecord,
+                homeRecord: game.homeRecord
             )
         }
 
@@ -485,8 +487,25 @@ actor ESPNService {
                 period: competition.status?.period,
                 displayClock: competition.status?.displayClock,
                 isInProgress: status == .inProgress
-            )
+            ),
+            homeRecord: Self.overallRecordSummary(home.records),
+            awayRecord: Self.overallRecordSummary(away.records)
         )
+    }
+
+    /// ESPN overall line (`type == total`). Home/away splits are not the season record.
+    nonisolated static func overallRecordSummary(
+        _ records: [ESPNScoreboardResponse.ESPNRecord]?
+    ) -> String? {
+        guard let records else { return nil }
+        let overall = records.first { record in
+            let type = record.type?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+            let name = record.name?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+            return type == "total" || name == "overall" || name == "total"
+        }
+        guard let summary = overall?.summary?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !summary.isEmpty else { return nil }
+        return summary
     }
 
     private func parseSpread(from odds: ESPNScoreboardResponse.ESPNOdds?, homeId: String, awayId: String) -> Double? {

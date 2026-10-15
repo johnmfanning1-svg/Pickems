@@ -81,6 +81,60 @@ struct ESPNServiceTests {
         #expect(!unranked.isTop25)
     }
 
+    @Test func overallRecordSummaryPrefersSeasonTotal() {
+        let records = [
+            ESPNScoreboardResponse.ESPNRecord(name: "Home", type: "homerecord", summary: "1-1"),
+            ESPNScoreboardResponse.ESPNRecord(name: "overall", type: "total", summary: "1-4"),
+            ESPNScoreboardResponse.ESPNRecord(name: "Away", type: "awayrecord", summary: "0-3")
+        ]
+        #expect(ESPNService.overallRecordSummary(records) == "1-4")
+        #expect(ESPNService.overallRecordSummary(nil) == nil)
+        #expect(ESPNService.overallRecordSummary([]) == nil)
+        #expect(
+            ESPNService.overallRecordSummary([
+                ESPNScoreboardResponse.ESPNRecord(name: "Home", type: "homerecord", summary: "2-0")
+            ]) == nil
+        )
+    }
+
+    @Test func competitorJSONDecodesOverallRecord() throws {
+        let json = Data("""
+        {
+          "id": "c1",
+          "homeAway": "away",
+          "score": "14",
+          "records": [
+            {"name": "Home", "type": "homerecord", "summary": "1-1"},
+            {"name": "overall", "abbreviation": "overall", "type": "total", "summary": "3-2"}
+          ],
+          "team": {
+            "id": "2",
+            "displayName": "Auburn Tigers",
+            "abbreviation": "AUB"
+          }
+        }
+        """.utf8)
+        let competitor = try JSONDecoder().decode(ESPNScoreboardResponse.ESPNCompetitor.self, from: json)
+        #expect(competitor.records?.count == 2)
+        #expect(ESPNService.overallRecordSummary(competitor.records) == "3-2")
+
+        let malformed = Data("""
+        {
+          "id": "c2",
+          "homeAway": "home",
+          "records": {"total": "5-0"},
+          "team": {
+            "id": "61",
+            "displayName": "Georgia Bulldogs",
+            "abbreviation": "UGA"
+          }
+        }
+        """.utf8)
+        let stillDecoded = try JSONDecoder().decode(ESPNScoreboardResponse.ESPNCompetitor.self, from: malformed)
+        #expect(stillDecoded.team.abbreviation == "UGA")
+        #expect(stillDecoded.records == nil)
+    }
+
     @Test func competitorJSONDecodesCuratedRankAndConference() throws {
         let json = Data("""
         {
