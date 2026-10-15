@@ -81,6 +81,154 @@ struct ESPNServiceTests {
         #expect(!unranked.isTop25)
     }
 
+    @Test func parseEventPostponedZeroZeroDoesNotShowFinal() async throws {
+        let json = Data("""
+        {
+          "id": "401752866",
+          "date": "2026-10-17T19:30:00Z",
+          "competitions": [{
+            "id": "401752866",
+            "competitors": [
+              {
+                "id": "away",
+                "homeAway": "away",
+                "score": "0",
+                "team": {"id": "2", "displayName": "Auburn Tigers", "abbreviation": "AUB"}
+              },
+              {
+                "id": "home",
+                "homeAway": "home",
+                "score": "0",
+                "team": {"id": "61", "displayName": "Georgia Bulldogs", "abbreviation": "UGA"}
+              }
+            ],
+            "status": {
+              "type": {
+                "name": "STATUS_POSTPONED",
+                "state": "post",
+                "completed": true,
+                "shortDetail": "Postponed",
+                "detail": "Postponed"
+              }
+            }
+          }]
+        }
+        """.utf8)
+        let event = try JSONDecoder().decode(ESPNScoreboardResponse.ESPNEvent.self, from: json)
+        let game = try #require(await ESPNService.shared.parseEvent(event))
+        #expect(game.status != .final)
+        #expect(game.awayScore == 0)
+        #expect(game.homeScore == 0)
+        #expect(game.statusLabel == "Postponed")
+
+        let detail = SelectionGameDetail.make(
+            kickoff: game.kickoff,
+            status: game.status,
+            awayScore: game.awayScore,
+            homeScore: game.homeScore,
+            awayAbbreviation: game.awayTeamAbbreviation,
+            homeAbbreviation: game.homeTeamAbbreviation,
+            statusLabel: game.statusLabel
+        )
+        #expect(detail.headline == "Postponed")
+        #expect(detail.phase != .final)
+        #expect(!detail.headline.localizedCaseInsensitiveContains("final"))
+        #expect(!detail.accessibilityLabel.localizedCaseInsensitiveContains("final"))
+    }
+
+    @Test func canceledSuspendedAndDelayedAreNotFinal() {
+        let cases: [(String, String)] = [
+            ("STATUS_CANCELED", "Canceled"),
+            ("STATUS_SUSPENDED", "Suspended"),
+            ("STATUS_DELAYED", "Delayed")
+        ]
+        for (name, label) in cases {
+            let resolved = ESPNService.resolvedSlateStatus(
+                name: name,
+                state: "post",
+                completed: true,
+                shortDetail: label,
+                detail: nil
+            )
+            #expect(resolved.status != .final)
+            #expect(resolved.label == label)
+        }
+
+        let final = ESPNService.resolvedSlateStatus(
+            name: "STATUS_FINAL",
+            state: "post",
+            completed: true,
+            shortDetail: "Final",
+            detail: "Final"
+        )
+        #expect(final.status == .final)
+        #expect(final.label == nil)
+
+        let detail = SelectionGameDetail.make(
+            kickoff: Date(timeIntervalSince1970: 0),
+            status: .final,
+            awayScore: 0,
+            homeScore: 0,
+            statusLabel: "Postponed"
+        )
+        #expect(detail.headline == "Postponed")
+        #expect(!detail.headline.contains("Final"))
+    }
+
+    @Test func overallRecordSummaryPrefersSeasonTotal() {
+        let records = [
+            ESPNScoreboardResponse.ESPNRecord(name: "Home", type: "homerecord", summary: "1-1"),
+            ESPNScoreboardResponse.ESPNRecord(name: "overall", type: "total", summary: "1-4"),
+            ESPNScoreboardResponse.ESPNRecord(name: "Away", type: "awayrecord", summary: "0-3")
+        ]
+        #expect(ESPNService.overallRecordSummary(records) == "1-4")
+        #expect(ESPNService.overallRecordSummary(nil) == nil)
+        #expect(ESPNService.overallRecordSummary([]) == nil)
+        #expect(
+            ESPNService.overallRecordSummary([
+                ESPNScoreboardResponse.ESPNRecord(name: "Home", type: "homerecord", summary: "2-0")
+            ]) == nil
+        )
+    }
+
+    @Test func competitorJSONDecodesOverallRecord() throws {
+        let json = Data("""
+        {
+          "id": "c1",
+          "homeAway": "away",
+          "score": "14",
+          "records": [
+            {"name": "Home", "type": "homerecord", "summary": "1-1"},
+            {"name": "overall", "abbreviation": "overall", "type": "total", "summary": "3-2"}
+          ],
+          "team": {
+            "id": "2",
+            "displayName": "Auburn Tigers",
+            "abbreviation": "AUB"
+          }
+        }
+        """.utf8)
+        let competitor = try JSONDecoder().decode(ESPNScoreboardResponse.ESPNCompetitor.self, from: json)
+        #expect(competitor.records?.count == 2)
+        #expect(ESPNService.overallRecordSummary(competitor.records) == "3-2")
+
+        let malformed = Data("""
+        {
+          "id": "c2",
+          "homeAway": "home",
+          "records": {"total": "5-0"},
+          "team": {
+            "id": "61",
+            "displayName": "Georgia Bulldogs",
+            "abbreviation": "UGA"
+          }
+        }
+        """.utf8)
+        let stillDecoded = try JSONDecoder().decode(ESPNScoreboardResponse.ESPNCompetitor.self, from: malformed)
+        #expect(stillDecoded.team.abbreviation == "UGA")
+        #expect(stillDecoded.records == nil)
+    }
+
     @Test func competitorJSONDecodesCuratedRankAndConference() throws {
         let json = Data("""
         {

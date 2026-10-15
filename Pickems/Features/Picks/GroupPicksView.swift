@@ -138,6 +138,9 @@ struct GroupPicksView: View {
             await appState.syncSelectedWeek()
             await refreshAllPicks()
             await appState.picksViewModel.ensureTeamRanks(appState: appState)
+            if let week, !nominations.isEmpty || !slateGames.isEmpty {
+                await appState.picksViewModel.refreshLiveNow(appState: appState, forceRefresh: false)
+            }
             if showsPickemsBoard, let week {
                 appState.picksViewModel.startLiveRefresh(week: week, appState: appState)
             }
@@ -442,41 +445,50 @@ struct GroupPicksView: View {
             } else {
                 ForEach(noms) { nom in
                     PickemsCard {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(nominationMatchupLabel(nom))
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(PickemsColors.textPrimary)
-                                if appState.selectedPickMode.showsSpreads {
-                                    LockedSpreadLabel(
-                                        lockedText: nominationSpreadLabel(nom),
-                                        liveText: liveSpreadText(forEventId: nom.espnEventId),
-                                        isLocked: true,
-                                        font: .caption.weight(.bold),
-                                        lockedColor: theme.accent
-                                    )
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(alignment: .center, spacing: 10) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(nominationMatchupLabel(nom))
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(PickemsColors.textPrimary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    if appState.selectedPickMode.showsSpreads {
+                                        LockedSpreadLabel(
+                                            lockedText: nominationSpreadLabel(nom),
+                                            liveText: liveSpreadText(forEventId: nom.espnEventId),
+                                            isLocked: true,
+                                            font: .caption.weight(.bold),
+                                            lockedColor: theme.accent
+                                        )
+                                    }
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                                SelectionGameDetailColumn(detail: selectionGameDetail(for: nom))
                             }
-                            Spacer(minLength: 8)
+
                             if canRemove, let rules = appState.groupService.selectedGroup?.rules {
-                                if commissionerCanManage {
-                                    Button {
-                                        appState.picksViewModel.beginReplaceSelection(nom, appState: appState)
+                                HStack(spacing: 12) {
+                                    Spacer(minLength: 0)
+                                    if commissionerCanManage {
+                                        Button {
+                                            appState.picksViewModel.beginReplaceSelection(nom, appState: appState)
+                                        } label: {
+                                            Label("Replace", systemImage: "arrow.triangle.2.circlepath")
+                                                .font(.caption.weight(.semibold))
+                                                .foregroundStyle(theme.accent)
+                                        }
+                                        .accessibilityHint("Pick a different game for \(member.displayName)")
+                                    }
+                                    Button(role: .destructive) {
+                                        appState.picksViewModel.removeNomination(nom, rules: rules, appState: appState)
                                     } label: {
-                                        Label("Replace", systemImage: "arrow.triangle.2.circlepath")
+                                        Label("Remove", systemImage: "trash")
                                             .font(.caption.weight(.semibold))
                                             .foregroundStyle(theme.accent)
                                     }
-                                    .accessibilityHint("Pick a different game for \(member.displayName)")
+                                    .accessibilityHint("Frees a slot so a different game can be selected")
                                 }
-                                Button(role: .destructive) {
-                                    appState.picksViewModel.removeNomination(nom, rules: rules, appState: appState)
-                                } label: {
-                                    Label("Remove", systemImage: "trash")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(theme.accent)
-                                }
-                                .accessibilityHint("Frees a slot so a different game can be selected")
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -522,6 +534,33 @@ struct GroupPicksView: View {
         guard let card = appState.picksViewModel.livePickCards[espnEventId] else { return nil }
         if card.isSlateGame { return card.liveSpreadLabel }
         return card.spreadLabel
+    }
+
+    /// Kickoff comes from the saved Selection. Network, records, and live/final
+    /// come from the ESPN scoreboard the app already loaded.
+    private func selectionGameDetail(for nom: Nomination) -> SelectionGameDetail {
+        let live = appState.picksViewModel.livePickCards[nom.espnEventId]
+        let espn = appState.picksViewModel.espnGames.first {
+            $0.espnEventId == nom.espnEventId || $0.id == nom.espnEventId
+        }
+        return SelectionGameDetail.make(
+            kickoff: nom.kickoff,
+            status: live?.status ?? espn?.status ?? .scheduled,
+            awayScore: live?.awayScore ?? espn?.awayScore,
+            homeScore: live?.homeScore ?? espn?.homeScore,
+            broadcastLabel: live?.broadcastLabel ?? espn?.broadcastLabel,
+            awayAbbreviation: nom.awayTeamAbbreviation
+                ?? espn?.awayTeamAbbreviation
+                ?? live?.awayTeamAbbreviation
+                ?? "",
+            homeAbbreviation: nom.homeTeamAbbreviation
+                ?? espn?.homeTeamAbbreviation
+                ?? live?.homeTeamAbbreviation
+                ?? "",
+            awayRecord: live?.awayRecord ?? espn?.awayRecord,
+            homeRecord: live?.homeRecord ?? espn?.homeRecord,
+            statusLabel: live?.statusLabel ?? espn?.statusLabel
+        )
     }
 
     private var ownPickPendingState: some View {
