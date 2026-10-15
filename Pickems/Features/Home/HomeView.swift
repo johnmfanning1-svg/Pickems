@@ -358,13 +358,19 @@ struct HomeView: View {
         let week = appState.groupService.currentWeek
         let userId = appState.currentUserId
         let userNoms = appState.pickService.nominations.filter { $0.submittedBy == userId }.count
+        let slate = appState.pickService.slateGames
+        let ineligible = Set(slate.filter { !appState.picksViewModel.allowsPicks($0) }.map(\.id))
+        let picks = appState.pickService.userPick?.picks ?? [:]
+        let pickCount = ineligible.isEmpty
+            ? picks.count
+            : picks.keys.filter { !ineligible.contains($0) }.count
         return HomeCTAResolver.resolve(
             week: week,
             isCommissioner: appState.isCommissioner,
             didSubmitNominations: appState.pickService.didSubmitNominations,
             userNominationCount: userNoms,
-            pickCount: appState.pickService.userPick?.picks.count ?? 0,
-            slateCount: appState.pickService.slateGames.count,
+            pickCount: pickCount,
+            slateCount: slate.count - ineligible.count,
             pickemsLocked: week.map { WeekTransition.arePicksFullyLocked($0) } ?? false,
             picksSubmitted: appState.pickService.userPick?.isLocked == true
         )

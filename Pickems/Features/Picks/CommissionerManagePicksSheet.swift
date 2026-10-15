@@ -34,14 +34,18 @@ struct CommissionerManagePicksSheet: View {
                         )
                     } else {
                         ForEach(slateGames) { game in
+                            let pickBlocked = !appState.picksViewModel.allowsPicks(game)
                             GamePickRow(
                                 game: game,
                                 selectedTeamId: draftPicks[game.id],
+                                isDisabled: pickBlocked,
                                 homeRank: appState.picksViewModel.teamRanks.rank(for: game.homeTeamId),
                                 awayRank: appState.picksViewModel.teamRanks.rank(for: game.awayTeamId),
                                 showConfidenceToggle: false,
+                                lockedCaption: appState.picksViewModel.pickBlockCaption(game),
                                 showsSpread: appState.selectedPickMode.showsSpreads
                             ) { teamId in
+                                guard appState.picksViewModel.allowsPicks(game) else { return }
                                 if teamId.isEmpty {
                                     draftPicks.removeValue(forKey: game.id)
                                 } else {
@@ -60,9 +64,9 @@ struct CommissionerManagePicksSheet: View {
                     PrimaryButton(title: "Save Forced Pickems", isLoading: isWorking) {
                         save(isLocked: true)
                     }
-                    .disabled(slateGames.isEmpty || draftPicks.count < slateGames.count || isWorking)
-                    if !slateGames.isEmpty, draftPicks.count < slateGames.count {
-                        Text("Pick a side for every game (\(draftPicks.count)/\(slateGames.count)) before saving.")
+                    .disabled(eligibleGames.isEmpty || eligiblePickedCount < eligibleGames.count || isWorking)
+                    if !eligibleGames.isEmpty, eligiblePickedCount < eligibleGames.count {
+                        Text("Pick a side for every game (\(eligiblePickedCount)/\(eligibleGames.count)) before saving.")
                             .font(.caption)
                             .foregroundStyle(PickemsColors.textSecondary)
                     }
@@ -108,6 +112,15 @@ struct CommissionerManagePicksSheet: View {
                     }
                 }
             }
+    }
+
+    private var eligibleGames: [SlateGame] {
+        slateGames.filter { appState.picksViewModel.allowsPicks($0) }
+    }
+
+    private var eligiblePickedCount: Int {
+        let ids = Set(eligibleGames.map(\.id))
+        return draftPicks.keys.filter { ids.contains($0) }.count
     }
 
     private func save(isLocked: Bool) {

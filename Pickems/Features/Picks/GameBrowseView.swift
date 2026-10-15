@@ -195,6 +195,7 @@ struct GameBrowseView: View {
                 ).matching(seasonYear: app.seasonYear, appWeekNumber: app.weekNumber)
             }
             loadedGames = fetched
+            rejectDisruptedSelections(using: fetched)
             loadError = nil
         } catch is CancellationError {
             return
@@ -258,6 +259,7 @@ struct GameBrowseView: View {
             isNominated: nominated,
             isDraftSelected: selectedEventIds.contains(game.espnEventId),
             isKickedOff: SelectionKickoffGate.hasKickedOff(game, now: now),
+            isDisrupted: ScheduledGameEligibility.hasDisruptionLabel(game.statusLabel),
             nominatorName: nominatorNamesByEventId[game.espnEventId],
             hasSelectableSlots: hasSelectableSlots,
             isSaving: isSaving,
@@ -274,6 +276,25 @@ struct GameBrowseView: View {
             }
             now = Date()
         }
+    }
+
+    /// Drops draft picks ESPN has postponed, canceled, suspended, or delayed.
+    @discardableResult
+    private func rejectDisruptedSelections(using board: [ESPNGame]? = nil) -> Bool {
+        let fresh = Dictionary(
+            (board ?? loadedGames).map { ($0.espnEventId, $0) },
+            uniquingKeysWith: { _, last in last }
+        )
+        let blocked = selected.filter { game in
+            let label = fresh[game.espnEventId]?.statusLabel ?? game.statusLabel
+            return ScheduledGameEligibility.hasDisruptionLabel(label)
+        }
+        guard !blocked.isEmpty else { return false }
+        let ids = Set(blocked.map(\.espnEventId))
+        selected.removeAll { ids.contains($0.espnEventId) }
+        saveError = ScheduledGameEligibility.rejectionMessage(for: blocked)
+        PickemsHaptics.warning()
+        return true
     }
 
     /// Drops draft picks that kicked off while the sheet was open and explains why.
@@ -293,6 +314,11 @@ struct GameBrowseView: View {
         if let idx = selected.firstIndex(where: { $0.espnEventId == game.espnEventId }) {
             selected.remove(at: idx)
             PickemsHaptics.selection()
+            return
+        }
+        if ScheduledGameEligibility.hasDisruptionLabel(game.statusLabel) {
+            saveError = ScheduledGameEligibility.rejectionMessage(for: [game])
+            PickemsHaptics.warning()
             return
         }
         let tappedAt = Date()
@@ -318,6 +344,7 @@ struct GameBrowseView: View {
 
     private func save() {
         guard !selected.isEmpty, !isSaving else { return }
+        if rejectDisruptedSelections() { return }
         let savedAt = Date()
         if selected.contains(where: { SelectionKickoffGate.hasKickedOff($0, now: savedAt) }) {
             rejectDraftsThatKickedOff(at: savedAt)
@@ -445,7 +472,8 @@ struct GameBrowseView: View {
     private func matchesFilter(_ game: ESPNGame) -> Bool {
         switch filter {
         case .all: return true
-        case .scheduled: return game.status == .scheduled
+        case .scheduled:
+            return ScheduledGameEligibility.isUpcoming(status: game.status, statusLabel: game.statusLabel)
         case .live: return game.status == .inProgress
         case .final: return game.status == .final
         }
@@ -467,13 +495,14 @@ private struct GameBrowsePickRow: View {
     let isNominated: Bool
     let isDraftSelected: Bool
     let isKickedOff: Bool
+    let isDisrupted: Bool
     let nominatorName: String?
     let hasSelectableSlots: Bool
     let isSaving: Bool
     let onTap: () -> Void
 
     private var isBlocked: Bool {
-        isNominated || isKickedOff || !hasSelectableSlots
+        isNominated || isKickedOff || isDisrupted || !hasSelectableSlots
     }
 
     var body: some View {
@@ -484,6 +513,7 @@ private struct GameBrowsePickRow: View {
                 isNominated: isNominated,
                 isDraftSelected: isDraftSelected,
                 isKickedOff: isKickedOff,
+                isDisrupted: isDisrupted,
                 nominatorName: nominatorName
             )
         }
@@ -500,11 +530,12 @@ struct GameBrowseRow: View {
     var isNominated: Bool = false
     var isDraftSelected: Bool = false
     var isKickedOff: Bool = false
+    var isDisrupted: Bool = false
     var nominatorName: String? = nil
     @Environment(\.themePalette) private var theme
 
     var body: some View {
-        if isNominated || isKickedOff {
+        if isNominated || isDisrupted || isKickedOff {
             inaccessibleRow
         } else {
             rowContent
@@ -523,17 +554,24 @@ struct GameBrowseRow: View {
             .accessibilityRemoveTraits(.isButton)
     }
 
+    private var disruptionBadge: String {
+        ESPNService.canonicalDisruptionLabel(game.statusLabel) ?? "Unavailable"
+    }
+
     private var inaccessibleLabel: String {
         let matchup = "\(game.awayTeamAbbreviation) \(game.isNeutralSite ? "versus" : "at") \(game.homeTeamAbbreviation)"
         if isNominated {
             return "\(matchup), already selected by \(nominatorName ?? "another member")"
+        }
+        if isDisrupted {
+            return "\(matchup), \(disruptionBadge)"
         }
         return "\(matchup), kicked off"
     }
 
     private var rowContent: some View {
         HStack(spacing: 12) {
-            if isDraftSelected && !isKickedOff {
+            if isDraftSelected && !isKickedOff && !isDisrupted {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(theme.accent)
                     .accessibilityHidden(true)
@@ -590,6 +628,8 @@ struct GameBrowseRow: View {
 
                 if isNominated {
                     StatusBadge(text: "Taken", color: PickemsColors.textSecondary)
+                } else if isDisrupted {
+                    StatusBadge(text: disruptionBadge, color: PickemsColors.textSecondary)
                 } else if isKickedOff {
                     StatusBadge(text: "Kicked off", color: PickemsColors.textSecondary)
                 } else if isDraftSelected {
@@ -610,9 +650,15 @@ struct GameBrowseRow: View {
     private var statusLabel: some View {
         switch game.status {
         case .scheduled:
-            Text("Scheduled")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(PickemsColors.textSecondary)
+            if let label = ESPNService.canonicalDisruptionLabel(game.statusLabel) {
+                Text(label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+            } else {
+                Text("Scheduled")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+            }
         case .inProgress:
             HStack(spacing: 4) {
                 Circle()
