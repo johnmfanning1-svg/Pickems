@@ -281,6 +281,98 @@ export function nominationCountAfterRemoval(existingIds: readonly string[], remo
   return existingIds.filter((id) => id !== removedId).length;
 }
 
+/** Game fields stored on a Selection. Owner, name, and createdAt are not game fields. */
+export const NOMINATION_GAME_FIELDS = [
+  "espnEventId",
+  "spread",
+  "spreadTeamId",
+  "homeTeamId",
+  "homeTeamName",
+  "homeTeamAbbreviation",
+  "homeTeamLogoURL",
+  "awayTeamId",
+  "awayTeamName",
+  "awayTeamAbbreviation",
+  "awayTeamLogoURL",
+  "kickoff",
+] as const;
+
+/**
+ * Fields to put back when a swap is undone. Null means the pre-swap Selection
+ * had no value, so the commissioner's team, spread, or name must be cleared.
+ */
+export function nominationGameRestorePatch(
+  before: Readonly<Record<string, unknown>>,
+  espnEventId: string,
+  kickoff: unknown
+): Record<string, unknown | null> {
+  const patch: Record<string, unknown | null> = {};
+  for (const field of NOMINATION_GAME_FIELDS) {
+    if (field === "espnEventId") {
+      patch.espnEventId = espnEventId;
+      continue;
+    }
+    if (field === "kickoff") {
+      patch.kickoff = kickoff == null ? null : kickoff;
+      continue;
+    }
+    patch[field] =
+      Object.prototype.hasOwnProperty.call(before, field) && before[field] != null
+        ? before[field]
+        : null;
+  }
+  return patch;
+}
+
+/**
+ * Event a vote recount is allowed to ban.
+ * The nomination repair transaction is the only writer of `espnEventId` on
+ * the tally while votes exist. A recount uses that anchor when the Selection
+ * still shows it. If the doc has moved off the anchor, or the Selection was
+ * updated at or after the earliest vote and nothing has pinned the event yet,
+ * the recount waits. That is the window where a swap has already moved
+ * `espnEventId` and a tally write would record the new game.
+ */
+export function selectionVetoEventForEvaluate(input: {
+  currentEventId: string;
+  anchorEventId: string | null;
+  nominationUpdatedAtMs: number | null;
+  earliestVoteCreatedAtMs: number | null;
+}):
+  | { kind: "use"; espnEventId: string; kickoffSource: "anchor" | "current" }
+  | { kind: "defer" } {
+  const anchor = input.anchorEventId?.trim() || "";
+  const current = input.currentEventId.trim();
+  if (anchor) {
+    // The doc moved off the event the votes were pinned to. Repair still has
+    // the pre-swap teams and kickoff, so the recount does not ban this write.
+    if (current && current !== anchor) return { kind: "defer" };
+    return { kind: "use", espnEventId: anchor, kickoffSource: "anchor" };
+  }
+  const updated = input.nominationUpdatedAtMs;
+  const voted = input.earliestVoteCreatedAtMs;
+  if (!current || (updated != null && voted != null && updated >= voted)) {
+    return { kind: "defer" };
+  }
+  return { kind: "use", espnEventId: current, kickoffSource: "current" };
+}
+
+/**
+ * Pin the event votes already belong to. Skipped once a repair has written
+ * the anchor, so a later same-game edit cannot move it onto a swapped id.
+ */
+export function planUnanchoredTallyPin(input: {
+  votesExist: boolean;
+  anchorEventId: string | null;
+  eventId: string;
+}): { kind: "pin"; espnEventId: string } | { kind: "skip" } {
+  if (!input.votesExist) return { kind: "skip" };
+  if (input.anchorEventId?.trim()) return { kind: "skip" };
+  const eventId = input.eventId.trim();
+  if (!eventId) return { kind: "skip" };
+  return { kind: "pin", espnEventId: eventId };
+}
+
 export function deadlineMillis(value: unknown): number | null {
   return kickoffMillis(value);
 }
@@ -300,9 +392,11 @@ export function selectionVetoDeliverySucceeded(results: readonly boolean[]): boo
  * selection window, record the veto for that previous event. The swapped
  * kickoff is ignored so a one-second or far-future timestamp cannot close
  * the window or move the ban.
- * `anchor` is the event id stored on the tally. Once a revert writes it,
- * a second run sees the current event match and stops, instead of swapping
- * back to the game the selector just tried to leave.
+ * `anchor` is the event id stored on the tally by this repair, not by the
+ * vote recount. Once a revert writes it, a second run sees the current event
+ * match and stops, instead of swapping back to the game the selector just
+ * tried to leave. A recount that committed first leaves the anchor empty, so
+ * this still restores or vetoes the pre-swap event.
  */
 export type NominationSwapRepairPlan =
   | { kind: "ignore" }

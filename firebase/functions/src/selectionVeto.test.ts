@@ -9,8 +9,11 @@ import {
   eligibleVetoVoterIds,
   nominationCountAfterRemoval,
   nominationEventIdsAfterRemoval,
+  nominationGameRestorePatch,
   planNominationSwapVoteRepair,
   planSelectionVeto,
+  planUnanchoredTallyPin,
+  selectionVetoEventForEvaluate,
   selectionMatchupLabel,
   selectionVetoDeliverySucceeded,
   SELECTION_VETO_SETTINGS_TRIGGER,
@@ -148,6 +151,114 @@ describe("planNominationSwapVoteRepair", () => {
         anchorEventId: "401",
       })
     ).toEqual({ kind: "ignore" });
+  });
+
+  it("lets repair veto the pre-swap event when evaluate commits first", () => {
+    const voteAt = 1_000;
+    const swapAt = 2_000;
+    const evaluate = selectionVetoEventForEvaluate({
+      currentEventId: "402",
+      anchorEventId: null,
+      nominationUpdatedAtMs: swapAt,
+      earliestVoteCreatedAtMs: voteAt,
+    });
+    expect(evaluate).toEqual({ kind: "defer" });
+    const anchorAfterEvaluate = null;
+    expect(
+      planNominationSwapVoteRepair({
+        ...swap,
+        anchorEventId: anchorAfterEvaluate,
+        eligibleVoteCount: 2,
+      })
+    ).toEqual({
+      kind: "apply",
+      espnEventId: "401",
+      kickoffSource: "before",
+    });
+    expect(
+      planNominationSwapVoteRepair({
+        ...swap,
+        anchorEventId: anchorAfterEvaluate,
+        eligibleVoteCount: 1,
+      })
+    ).toEqual({
+      kind: "revert",
+      espnEventId: "401",
+      kickoffSource: "before",
+    });
+  });
+
+  it("uses a matching tally anchor and waits when the doc has moved off it", () => {
+    expect(
+      selectionVetoEventForEvaluate({
+        currentEventId: "401",
+        anchorEventId: "401",
+        nominationUpdatedAtMs: 2_000,
+        earliestVoteCreatedAtMs: 1_000,
+      })
+    ).toEqual({ kind: "use", espnEventId: "401", kickoffSource: "anchor" });
+    expect(
+      selectionVetoEventForEvaluate({
+        currentEventId: "402",
+        anchorEventId: "401",
+        nominationUpdatedAtMs: 2_000,
+        earliestVoteCreatedAtMs: 1_000,
+      })
+    ).toEqual({ kind: "defer" });
+    expect(
+      selectionVetoEventForEvaluate({
+        currentEventId: "401",
+        anchorEventId: null,
+        nominationUpdatedAtMs: 1_000,
+        earliestVoteCreatedAtMs: 2_000,
+      })
+    ).toEqual({ kind: "use", espnEventId: "401", kickoffSource: "current" });
+  });
+
+  it("pins the current event only while votes exist and the tally has no anchor", () => {
+    expect(
+      planUnanchoredTallyPin({ votesExist: true, anchorEventId: null, eventId: "401" })
+    ).toEqual({ kind: "pin", espnEventId: "401" });
+    expect(
+      planUnanchoredTallyPin({ votesExist: true, anchorEventId: "401", eventId: "402" })
+    ).toEqual({ kind: "skip" });
+    expect(
+      planUnanchoredTallyPin({ votesExist: false, anchorEventId: null, eventId: "401" })
+    ).toEqual({ kind: "skip" });
+  });
+
+  it("restores spread, teams, and names from the pre-swap selection", () => {
+    expect(
+      nominationGameRestorePatch(
+        {
+          espnEventId: "401",
+          kickoff: "saturday",
+          spread: 3.5,
+          spreadTeamId: "333",
+          homeTeamId: "333",
+          homeTeamName: "Georgia",
+          homeTeamAbbreviation: "UGA",
+          awayTeamId: "61",
+          awayTeamName: "Alabama",
+          awayTeamAbbreviation: "ALA",
+        },
+        "401",
+        "saturday"
+      )
+    ).toEqual({
+      espnEventId: "401",
+      spread: 3.5,
+      spreadTeamId: "333",
+      homeTeamId: "333",
+      homeTeamName: "Georgia",
+      homeTeamAbbreviation: "UGA",
+      homeTeamLogoURL: null,
+      awayTeamId: "61",
+      awayTeamName: "Alabama",
+      awayTeamAbbreviation: "ALA",
+      awayTeamLogoURL: null,
+      kickoff: "saturday",
+    });
   });
 
   it("follows the tally anchor when the stored event and the update disagree", () => {
