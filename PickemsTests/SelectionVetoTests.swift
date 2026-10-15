@@ -326,7 +326,7 @@ struct SelectionVetoAnchorUITests {
         }
         let tapped = try #require(top)
         #expect(tapped.accessibilityIdentifier == topId)
-        #expect(tapControl(tapped))
+        #expect(tapRow(tapped, in: host.view))
 
         var alert = presentedAlert(in: window)
         if alert == nil {
@@ -423,15 +423,29 @@ private func waitForVetoAnchors(in root: UIView, count: Int) async throws -> [Se
     return anchors
 }
 
+/// Taps the Veto button for the anchor's row. The anchor itself does not receive hits.
 @MainActor
-private func tapControl(_ view: UIView) -> Bool {
-    var current: UIView? = view
+private func tapRow(_ anchor: UIView, in root: UIView) -> Bool {
+    let buttonId = anchor.accessibilityIdentifier.map {
+        $0.replacingOccurrences(of: "selection-veto-", with: "selection-veto-button-")
+    }
+    if let buttonId,
+       let button = uiViews(in: root).first(where: { $0.accessibilityIdentifier == buttonId }) {
+        if activate(button) { return true }
+    }
+    var current: UIView? = anchor
     while let candidate = current {
-        if let control = candidate as? UIControl {
-            control.sendActions(for: .touchUpInside)
-            return true
-        }
+        if activate(candidate) { return true }
         current = candidate.superview
+    }
+    return false
+}
+
+@MainActor
+private func activate(_ view: UIView) -> Bool {
+    if let control = view as? UIControl {
+        control.sendActions(for: .touchUpInside)
+        return true
     }
     return view.accessibilityActivate()
 }

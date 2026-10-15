@@ -61,10 +61,13 @@ final class SelectionVetoConfirmAnchorView: UIView {
             preferredStyle: .actionSheet
         )
         let confirm = onConfirm
-        let run = {
+        // The action box stores `() -> Void`. A trailing `Task` would make this
+        // closure return `Task<Void, Never>` and fail to compile.
+        let run: () -> Void = {
             Task { @MainActor in
                 confirm()
             }
+            return
         }
         objc_setAssociatedObject(
             alert,
