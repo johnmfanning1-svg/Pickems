@@ -79,8 +79,12 @@ jobs:
           fi
           git fetch --depth=1 origin "$before"
           echo "Files changed since $before:"
-          git diff --name-only "$before" "${{ github.sha }}"
-          if git diff --name-only "$before" "${{ github.sha }}" | grep -Eq '^(firebase/firestore\.rules|firebase/firestore\.indexes\.json|firebase/storage\.rules|firebase/functions/|firebase/firebase\.json|scripts/deploy-firebase\.sh)'; then
+          changed="$RUNNER_TEMP/changed-files.txt"
+          git diff --name-only "$before" "${{ github.sha }}" > "$changed"
+          cat "$changed"
+          # Grep the file. `git diff | grep -q` returns 141 under pipefail
+          # when a matching path is not the last line, which skips the deploy.
+          if grep -Eq '^(firebase/firestore\.rules|firebase/firestore\.indexes\.json|firebase/storage\.rules|firebase/functions/|firebase/firebase\.json|scripts/deploy-firebase\.sh)' "$changed"; then
             echo "deploy=true" >> "$GITHUB_OUTPUT"
           else
             echo "deploy=false" >> "$GITHUB_OUTPUT"
