@@ -108,7 +108,7 @@ struct SelectionVetoTests {
 
     @Test func settingsFooterNamesTheCap() {
         #expect(SelectionVetoPolicy.settingsFooter(memberCount: 4).contains("3"))
-        #expect(SelectionVetoPolicy.settingsFooter(memberCount: 1).contains("another member"))
+        #expect(SelectionVetoPolicy.settingsFooter(memberCount: 1).contains("other member"))
     }
 
     @Test func selectionVetoPushOpensThatGame() {
