@@ -134,7 +134,7 @@ private enum SelectionVetoPopoverRetain {
     static var key: UInt8 = 0
 }
 
-private final class SelectionVetoPopoverDelegate: NSObject, UIPopoverPresentationControllerDelegate {
+final class SelectionVetoPopoverDelegate: NSObject, UIPopoverPresentationControllerDelegate {
     /// Keep the popover on iPhone so it stays attached to the tapped Veto button.
     func adaptivePresentationStyle(for controller: UIPresentationController) -> UIModalPresentationStyle {
         .none

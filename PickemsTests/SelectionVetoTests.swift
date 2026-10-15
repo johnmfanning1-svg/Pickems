@@ -204,16 +204,17 @@ struct SelectionVetoTests {
         #expect(popover.permittedArrowDirections.contains(.down))
         #expect(alert.actions.contains { $0.title == "Veto" && $0.style == .destructive })
         #expect(alert.actions.contains { $0.title == "Cancel" && $0.style == .cancel })
-
+        let delegate = try #require(popover.delegate as? SelectionVetoPopoverDelegate)
         let presentation = UIPresentationController(
             presentedViewController: UIViewController(),
             presenting: UIViewController()
         )
-        let adapted = popover.delegate?.adaptivePresentationStyle(
-            for: presentation,
-            traitCollection: UITraitCollection(horizontalSizeClass: .compact)
+        #expect(
+            delegate.adaptivePresentationStyle(
+                for: presentation,
+                traitCollection: UITraitCollection(horizontalSizeClass: .compact)
+            ) == .none
         )
-        #expect(adapted == .none)
 
         let sources = Set(anchors.compactMap { anchor -> ObjectIdentifier? in
             guard let view = anchor.makeAlert().popoverPresentationController?.sourceView else { return nil }
