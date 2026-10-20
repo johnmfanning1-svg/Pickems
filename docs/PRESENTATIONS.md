@@ -10,6 +10,12 @@ and UIKit dismisses whatever that level is showing.
    `@State` on the screen root (outside `Form`, `List`, `ForEach`, and `if`).
    Children call `present` or flip a binding the parent owns.
 2. Route ids are stored at tap time, never derived from live data.
+   The route value carries everything the sheet renders (the carousel week,
+   the deadline edit). Do not mirror that payload in a second `@State` or
+   re-read `currentWeek` inside the sheet content. `sheet(item:)` can present
+   before that sibling state is visible, and the sheet then shows an empty
+   state ("No Active Week", 3.6.6). Keep `id` stable so a later week-field
+   change does not dismiss the sheet.
 3. Reusable components (`*Button`, `*Row`, `*Card`, `*Board`) do not own sheets.
    They set `HelpPresenter.modal`, injected by `pickemsEnvironment` → `presentsHelp()`.
 4. Never bind one presentation to state shared by two mounted views.
@@ -38,8 +44,10 @@ Section { /* rows */ }
 
 ## Adding a case
 
-- Settings: add a `CommissionerSheet` case, its `id`, and a `routeContent` branch.
-  Rows call `present(.theCase)`.
+- Settings: add a `CommissionerSheetRequest` case and a `CommissionerSheet` case
+  (payload on the case, stable `id`), a `routeContent` branch, and a
+  `CommissionerDeadlinePresentation.route` arm. Rows call `present` with the
+  carousel week when the sheet needs one.
 - Tab-root prompts: add an `AppSheet` case and a branch in `AppSheetHost`.
   Pass `.ifIdle` when the prompt must not replace an open sheet.
 - Help or share from a button: add a `ScreenModal` case and a branch in
