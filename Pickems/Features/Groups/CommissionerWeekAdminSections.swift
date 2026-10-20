@@ -5,8 +5,8 @@ struct CommissionerWeekAdminSections: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
 
-    let present: (CommissionerSheet) -> Void
-    let requestReopenSelections: () -> Void
+    let present: (CommissionerSheetRequest) -> Void
+    let requestReopenSelections: (WeekSummary) -> Void
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var week: WeekSummary? { appState.groupService.currentWeek }
@@ -87,7 +87,7 @@ struct CommissionerWeekAdminSections: View {
                     closedSelectionDeadlineLabel(week)
                     if WeekTransition.canReopenSelections(week) {
                         Button("Reopen Selections") {
-                            requestReopenSelections()
+                            requestReopenSelections(week)
                         }
                         .listRowBackground(PickemsColors.cardBackground)
                     }
@@ -137,7 +137,7 @@ struct CommissionerWeekAdminSections: View {
                 ),
                 hint: "Opens each member's Selections to change them."
             ) {
-                present(.selections)
+                present(.selections(week))
             }
         }
         if canShowSlate(week) {
@@ -147,7 +147,7 @@ struct CommissionerWeekAdminSections: View {
                 summary: CommissionerAdminSummary.slate(gameCount: appState.pickService.displaySlateGames.count),
                 hint: "Opens the slate to edit spreads or remove a Selection."
             ) {
-                present(.slate)
+                present(.slate(week))
             }
         }
     }
@@ -175,29 +175,29 @@ struct CommissionerWeekAdminSections: View {
         switch SelectionDeadlineDisplayResolver.resolve(week: week) {
         case .open:
             if let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: week) {
-                selectionDeadlineEditor(summary: summary, systemImage: "clock")
+                selectionDeadlineEditor(summary: summary, systemImage: "clock", week: week)
             }
         case .locked:
             if let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: week) {
-                selectionDeadlineEditor(summary: summary, systemImage: "lock")
+                selectionDeadlineEditor(summary: summary, systemImage: "lock", week: week)
             }
         case .needsDeadline:
             if promptsToSetSelectionDeadline(week) {
-                setSelectionDeadlineButton
+                setSelectionDeadlineButton(week)
             }
         case nil:
             EmptyView()
         }
     }
 
-    private func selectionDeadlineEditor(summary: String, systemImage: String) -> some View {
+    private func selectionDeadlineEditor(summary: String, systemImage: String, week: WeekSummary) -> some View {
         CommissionerAdminRow(
             title: "Selection Deadline",
             systemImage: systemImage,
             summary: summary,
             hint: "Opens the Selection deadline editor."
         ) {
-            present(.selectionDeadline)
+            present(.selectionDeadline(week))
         }
     }
 
@@ -218,9 +218,9 @@ struct CommissionerWeekAdminSections: View {
         ) == .selections
     }
 
-    private var setSelectionDeadlineButton: some View {
+    private func setSelectionDeadlineButton(_ week: WeekSummary) -> some View {
         Button("Set Selection Deadline") {
-            present(.selectionDeadline)
+            present(.selectionDeadline(week))
         }
         .listRowBackground(PickemsColors.cardBackground)
     }
@@ -228,13 +228,13 @@ struct CommissionerWeekAdminSections: View {
     @ViewBuilder
     private func pickemsDeadlineRow(_ week: WeekSummary) -> some View {
         if week.status == .locked {
-            reopenPickemsButton
+            reopenPickemsButton(week)
         } else if week.isRollingLock {
             rollingPickemsDeadlineButton(week)
         } else if let summary = pickemsDeadlineSummary(week) {
-            pickemsDeadlineAdminRow(summary)
+            pickemsDeadlineAdminRow(summary, week: week)
         } else {
-            setPickemsDeadlineButton
+            setPickemsDeadlineButton(week)
         }
     }
 
@@ -243,34 +243,34 @@ struct CommissionerWeekAdminSections: View {
         return CommissionerAdminSummary.deadlineValue(week.pickDeadline, locked: locked)
     }
 
-    private func pickemsDeadlineAdminRow(_ summary: String) -> some View {
+    private func pickemsDeadlineAdminRow(_ summary: String, week: WeekSummary) -> some View {
         CommissionerAdminRow(
             title: "Pickems Deadline",
             systemImage: "lock",
             summary: summary,
             hint: "Opens the Pickems deadline editor to change, extend, or unlock it."
         ) {
-            present(.pickDeadline)
+            present(.pickDeadline(week))
         }
     }
 
-    private var reopenPickemsButton: some View {
+    private func reopenPickemsButton(_ week: WeekSummary) -> some View {
         Button("Reopen Pickems") {
-            present(.pickDeadline)
+            present(.pickDeadline(week))
         }
         .listRowBackground(PickemsColors.cardBackground)
     }
 
     private func rollingPickemsDeadlineButton(_ week: WeekSummary) -> some View {
         Button(rollingPickDeadlineButtonTitle(week)) {
-            present(.pickDeadline)
+            present(.pickDeadline(week))
         }
         .listRowBackground(PickemsColors.cardBackground)
     }
 
-    private var setPickemsDeadlineButton: some View {
+    private func setPickemsDeadlineButton(_ week: WeekSummary) -> some View {
         Button("Set Pickems Deadline") {
-            present(.pickDeadline)
+            present(.pickDeadline(week))
         }
         .listRowBackground(PickemsColors.cardBackground)
     }
@@ -325,7 +325,7 @@ struct CommissionerWeekAdminSections: View {
 
     @ViewBuilder
     private var tiesSection: some View {
-        if ScoringEngine.canShowCommissionerTieBreak(
+        if let week, ScoringEngine.canShowCommissionerTieBreak(
             week: week,
             games: appState.pickService.slateGames,
             tieBreaker: appState.groupService.selectedGroup?.rules.tieBreaker ?? .headToHead
@@ -337,7 +337,7 @@ struct CommissionerWeekAdminSections: View {
                 Section {
                     ForEach(groups, id: \.tieGroupId) { group in
                         Button {
-                            present(.rankTies(TieRankDraft(entries: group)))
+                            present(.rankTies(TieRankDraft(entries: group), week))
                         } label: {
                             HStack(alignment: .center, spacing: 12) {
                                 VStack(alignment: .leading, spacing: 4) {

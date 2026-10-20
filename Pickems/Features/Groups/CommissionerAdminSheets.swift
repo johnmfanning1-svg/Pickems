@@ -89,30 +89,26 @@ private struct CommissionerAdminSheetChrome<Content: View>: View {
 struct CommissionerSelectionsAdminSheet: View {
     @Environment(AppState.self) private var appState
 
-    private var week: WeekSummary? { appState.groupService.currentWeek }
+    /// Week chip that opened this sheet. Not `currentWeek`, which can be nil on the presentation frame.
+    let week: WeekSummary
+    let groupId: String
 
     private var selectionsPerMember: Int {
-        let weekValue: Int = week?.selectionsPerMember ?? 0
+        let weekValue: Int = week.selectionsPerMember
         if weekValue > 0 { return weekValue }
         return max(appState.groupService.selectedGroup?.rules.selectionsPerMember ?? 1, 1)
     }
 
     var body: some View {
         CommissionerAdminSheetChrome(title: "Selections") {
-            if let week, let groupId = appState.groupService.selectedGroup?.id {
-                Section {
-                    ForEach(appState.groupService.members) { (member: GroupMember) in
-                        memberLink(member, week: week, groupId: groupId)
-                    }
-                } header: {
-                    Text(week.displayLabel)
-                } footer: {
-                    Text("Tap a member to change their Selections. Counts are games submitted versus the weekly requirement.")
+            Section {
+                ForEach(appState.groupService.members) { (member: GroupMember) in
+                    memberLink(member, week: week, groupId: groupId)
                 }
-            } else {
-                Text("No active week.")
-                    .foregroundStyle(PickemsColors.textSecondary)
-                    .listRowBackground(PickemsColors.cardBackground)
+            } header: {
+                Text(week.displayLabel)
+            } footer: {
+                Text("Tap a member to change their Selections. Counts are games submitted versus the weekly requirement.")
             }
         }
     }
@@ -148,9 +144,11 @@ struct CommissionerSlateSheet: View {
     @Environment(AppState.self) private var appState
     @State private var spreadEditGame: SlateGame?
 
+    /// Week chip that opened this sheet. Not `currentWeek`, which can be nil on the presentation frame.
+    let week: WeekSummary
+
     private var picksVM: PicksViewModel { appState.picksViewModel }
-    private var week: WeekSummary? { appState.groupService.currentWeek }
-    private var showsSpreads: Bool { appState.selectedPickMode.showsSpreads }
+    private var showsSpreads: Bool { appState.pickMode(for: week).showsSpreads }
 
     var body: some View {
         CommissionerAdminSheetChrome(title: "Slate") {
@@ -164,7 +162,7 @@ struct CommissionerSlateSheet: View {
     @ViewBuilder
     private var slateSection: some View {
         let games: [SlateGame] = appState.pickService.displaySlateGames
-        if let week, !games.isEmpty {
+        if !games.isEmpty {
             Section {
                 ForEach(games) { (game: SlateGame) in
                     gameRow(game, week: week)

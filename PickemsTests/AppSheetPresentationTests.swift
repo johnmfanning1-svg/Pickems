@@ -63,19 +63,26 @@ struct AppSheetPresentationTests {
     }
 
     @Test func commissionerSheetIdentitiesAreStableAndUnique() {
+        let week8 = commissionerWeek(id: "2026-W8", number: 8)
+        let week9 = commissionerWeek(id: "2026-W9", number: 9)
+        let selection8 = CommissionerDeadlinePresentation.selectionEdit(settingsGroupId: "league", week: week8)
+        let selection9 = CommissionerDeadlinePresentation.selectionEdit(settingsGroupId: "league", week: week9)
+        let pick8 = CommissionerDeadlinePresentation.pickEdit(settingsGroupId: "league", week: week8)
         let routes: [CommissionerSheet] = [
-            .selectionDeadline,
-            .pickDeadline,
+            .selectionDeadline(selection8),
+            .pickDeadline(pick8),
             .adminGameBrowse,
             .members,
-            .selections,
-            .slate
+            .selections(week8),
+            .slate(week8)
         ]
         let ids = routes.map(\.id)
         #expect(Set(ids).count == ids.count)
-        #expect(CommissionerSheet.selectionDeadline.id == "selectionDeadline")
-        #expect(CommissionerSheet.pickDeadline.id == CommissionerSheet.pickDeadline.id)
-        #expect(CommissionerSheet.selections.id != CommissionerSheet.slate.id)
+        #expect(CommissionerSheet.selectionDeadline(selection8).id == "selectionDeadline")
+        #expect(CommissionerSheet.selectionDeadline(selection8).id == CommissionerSheet.selectionDeadline(selection9).id)
+        #expect(CommissionerSheet.pickDeadline(pick8).id == CommissionerSheet.pickDeadline(pick8).id)
+        #expect(CommissionerSheet.selections(week8).id == CommissionerSheet.selections(week9).id)
+        #expect(CommissionerSheet.selections(week8).id != CommissionerSheet.slate(week8).id)
 
         let amy = StandingEntry(
             id: "a",
@@ -99,12 +106,29 @@ struct AppSheetPresentationTests {
             rank: 1,
             isTied: true
         )
-        let forward = CommissionerSheet.rankTies(TieRankDraft(entries: [amy, bo]))
-        let reversed = CommissionerSheet.rankTies(TieRankDraft(entries: [bo, amy]))
+        let capture8 = selection8.capture
+        let capture9 = selection9.capture
+        let forward = CommissionerSheet.rankTies(TieRankDraft(entries: [amy, bo]), capture8)
+        let reversed = CommissionerSheet.rankTies(TieRankDraft(entries: [bo, amy]), capture9)
         #expect(forward.id == reversed.id)
         #expect(forward.id == "rankTies.a|b")
-        #expect(forward.id != CommissionerSheet.slate.id)
+        #expect(forward.id != CommissionerSheet.slate(week8).id)
         #expect(!ids.contains(forward.id))
+    }
+
+    private func commissionerWeek(id: String, number: Int) -> WeekSummary {
+        WeekSummary(
+            id: id,
+            seasonYear: 2026,
+            weekNumber: number,
+            status: .selection,
+            slateSize: 8,
+            selectionMode: .member,
+            selectionsPerMember: 1,
+            lockedAt: nil,
+            pickDeadline: nil,
+            nominationCount: 0
+        )
     }
 
     @Test func replaceRemovesTheGameBeingSwapped() {

@@ -19,13 +19,9 @@ struct CommissionerSettingsView: View {
     @State private var isUpdatingCode = false
     @State private var identityError: String?
     @State private var route: CommissionerSheet?
-    @State private var showReopenSelectionsConfirm = false
     /// League and week frozen when Reopen Selections was tapped.
+    /// The alert is presented from this value (`presenting:`), not a second flag.
     @State private var reopenSelectionsTarget: DeadlineEditCapture?
-    /// League and week frozen when the Selection deadline editor opened.
-    @State private var selectionDeadlineEdit: SelectionDeadlineEdit?
-    /// League and week frozen when the Pickems deadline editor opened.
-    @State private var pickDeadlineEdit: PickDeadlineEdit?
     @State private var scoringSwitch: CommissionerScoringSwitch
     @State private var isSwitchingToRolling = false
     @State private var rollingPromptWeek: WeekSummary?
@@ -80,8 +76,8 @@ struct CommissionerSettingsView: View {
     private var settingsForm: some View {
         Form {
             CommissionerWeekAdminSections(
-                present: { (r: CommissionerSheet) in presentCommissionerSheet(r) },
-                requestReopenSelections: { presentReopenSelectionsConfirm() }
+                present: { (request: CommissionerSheetRequest) in presentCommissionerSheet(request) },
+                requestReopenSelections: { (week: WeekSummary) in presentReopenSelectionsConfirm(week) }
             )
             leagueIdentitySection
             membersRowSection
@@ -366,12 +362,22 @@ struct CommissionerSettingsView: View {
             }
     }
 
+    private var reopenSelectionsPresented: Binding<Bool> {
+        Binding(
+            get: { reopenSelectionsTarget != nil },
+            set: { (isPresented: Bool) in if !isPresented { reopenSelectionsTarget = nil } }
+        )
+    }
+
     private var settingsFormWithPromptAlerts: some View {
         settingsForm
             .modifier(scoringPromptAlert)
-            .alert("Reopen Selections?", isPresented: $showReopenSelectionsConfirm) {
+            .alert(
+                "Reopen Selections?",
+                isPresented: reopenSelectionsPresented,
+                presenting: reopenSelectionsTarget
+            ) { (target: DeadlineEditCapture) in
                 Button("Reopen Selections") {
-                    guard let target = reopenSelectionsTarget else { return }
                     let write = target.writeTarget(
                         selectedGroupId: appState.groupService.selectedGroup?.id,
                         selectedWeekId: appState.groupService.currentWeek?.id
@@ -383,7 +389,7 @@ struct CommissionerSettingsView: View {
                     )
                 }
                 Button("Cancel", role: .cancel) {}
-            } message: {
+            } message: { (_: DeadlineEditCapture) in
                 Text("Members can add and remove Selections again. Pickems close until you open the week.")
             }
     }
@@ -410,54 +416,48 @@ struct CommissionerSettingsView: View {
 
     @ViewBuilder
     private func routeContent(_ r: CommissionerSheet) -> some View {
+        // The sheet item is the only week. A sibling `@State` edit is nil on the
+        // first frame of `sheet(item:)` and used to show "No Active Week".
         switch r {
-        case .selectionDeadline:
-            if let selectionDeadlineEdit {
-                selectionDeadlineSheet(selectionDeadlineEdit)
-            } else {
-                missingDeadlineTarget
-            }
-        case .pickDeadline:
-            if let pickDeadlineEdit {
-                pickDeadlineSheet(pickDeadlineEdit)
-            } else {
-                missingDeadlineTarget
-            }
+        case .selectionDeadline(let edit):
+            selectionDeadlineSheet(
+                CommissionerDeadlinePresentation.presentedSelectionEdit(on: r, siblingEdit: nil) ?? edit
+            )
+        case .pickDeadline(let edit):
+            pickDeadlineSheet(
+                CommissionerDeadlinePresentation.presentedPickEdit(on: r, siblingEdit: nil) ?? edit
+            )
         case .adminGameBrowse:
             adminGameBrowseSheet
         case .members:
             membersSheet
-        case .selections:
-            selectionsAdminSheet
-        case .slate:
-            slateAdminSheet
-        case .rankTies(let draft):
-            rankTiesSheet(draft)
+        case .selections(let week):
+            selectionsAdminSheet(week)
+        case .slate(let week):
+            slateAdminSheet(week)
+        case .rankTies(let draft, let capture):
+            rankTiesSheet(draft, capture: capture)
         }
     }
 
-    private var selectionsAdminSheet: some View {
-        CommissionerSelectionsAdminSheet()
+    private func selectionsAdminSheet(_ week: WeekSummary) -> some View {
+        CommissionerSelectionsAdminSheet(week: week, groupId: group.id)
             .pickemsEnvironment(appState)
     }
 
-    private var slateAdminSheet: some View {
-        CommissionerSlateSheet()
+    private func slateAdminSheet(_ week: WeekSummary) -> some View {
+        CommissionerSlateSheet(week: week)
             .pickemsEnvironment(appState)
     }
 
-    private func rankTiesSheet(_ draft: TieRankDraft) -> some View {
+    private func rankTiesSheet(_ draft: TieRankDraft, capture: DeadlineEditCapture) -> some View {
         CommissionerRankTiesSheet(
-            weekLabel: appState.groupService.currentWeek?.displayLabel ?? "This week",
+            weekLabel: capture.weekLabel,
             entries: draft.entries
         ) { (orderedIds: [String]) in
-            guard let groupId = appState.groupService.selectedGroup?.id,
-                  let weekId = appState.groupService.currentWeek?.id else {
-                throw GroupService.GroupError.groupNotFound
-            }
             try await appState.groupService.resolveTieGroup(
-                groupId: groupId,
-                weekId: weekId,
+                groupId: capture.groupId,
+                weekId: capture.weekId,
                 orderedUserIds: orderedIds
             )
         }
@@ -496,35 +496,30 @@ struct CommissionerSettingsView: View {
         let week = displayedWeek(groupId: groupId, weekId: weekId)
         switch target.kind {
         case .selections:
-            selectionDeadlineEdit = SelectionDeadlineEdit(
-                capture: deadlineCapture(groupId: groupId, weekId: weekId, week: week),
-                initialDeadline: week?.selectionDeadline
+            route = CommissionerDeadlinePresentation.pendingSelection(
+                settingsGroupId: groupId,
+                weekId: weekId,
+                displayedWeek: week
             )
-            route = .selectionDeadline
         case .pickems:
             guard let week else { return }
-            pickDeadlineEdit = makePickDeadlineEdit(groupId: groupId, week: week)
-            route = .pickDeadline
+            route = .pickDeadline(
+                CommissionerDeadlinePresentation.pickEdit(settingsGroupId: groupId, week: week)
+            )
         }
     }
 
-    private func presentCommissionerSheet(_ sheet: CommissionerSheet) {
-        switch sheet {
-        case .selectionDeadline:
-            guard let edit = makeSelectionDeadlineEdit() else { return }
-            selectionDeadlineEdit = edit
-        case .pickDeadline:
-            guard let edit = makePickDeadlineEdit() else { return }
-            pickDeadlineEdit = edit
-        default:
-            break
-        }
+    private func presentCommissionerSheet(_ request: CommissionerSheetRequest) {
+        guard let sheet = CommissionerDeadlinePresentation.route(
+            for: request,
+            settingsGroupId: group.id,
+            selectedGroupId: appState.groupService.selectedGroup?.id
+        ) else { return }
         route = sheet
     }
 
-    private func presentReopenSelectionsConfirm() {
+    private func presentReopenSelectionsConfirm(_ week: WeekSummary) {
         guard appState.groupService.selectedGroup?.id == group.id,
-              let week = appState.groupService.currentWeek,
               WeekTransition.canReopenSelections(week) else { return }
         reopenSelectionsTarget = DeadlineEditCapture(
             groupId: group.id,
@@ -532,7 +527,6 @@ struct CommissionerSettingsView: View {
             weekLabel: week.displayLabel,
             isRollingLock: week.isRollingLock
         )
-        showReopenSelectionsConfirm = true
     }
 
     /// Week fields for display only. Nil when the on-screen league is no longer `groupId`,
@@ -545,42 +539,6 @@ struct CommissionerSettingsView: View {
         }
         guard service.availableWeeksBelong(to: groupId) else { return nil }
         return service.availableWeeks.first { $0.id == weekId }
-    }
-
-    private func makeSelectionDeadlineEdit() -> SelectionDeadlineEdit? {
-        guard appState.groupService.selectedGroup?.id == group.id,
-              let week = appState.groupService.currentWeek else { return nil }
-        return SelectionDeadlineEdit(
-            capture: deadlineCapture(groupId: group.id, weekId: week.id, week: week),
-            initialDeadline: week.selectionDeadline
-        )
-    }
-
-    private func makePickDeadlineEdit() -> PickDeadlineEdit? {
-        guard appState.groupService.selectedGroup?.id == group.id,
-              let week = appState.groupService.currentWeek else { return nil }
-        return makePickDeadlineEdit(groupId: group.id, week: week)
-    }
-
-    private func makePickDeadlineEdit(groupId: String, week: WeekSummary) -> PickDeadlineEdit {
-        let initialDeadline: Date? = week.isRollingLock
-            ? (week.remainingLockAt ?? week.effectiveWeekLockAt ?? week.pickDeadline)
-            : week.pickDeadline
-        return PickDeadlineEdit(
-            capture: deadlineCapture(groupId: groupId, weekId: week.id, week: week),
-            weekStatus: week.status,
-            initialDeadline: initialDeadline,
-            isPastDeadline: WeekTransition.arePicksFullyLocked(week)
-        )
-    }
-
-    private func deadlineCapture(groupId: String, weekId: String, week: WeekSummary?) -> DeadlineEditCapture {
-        DeadlineEditCapture(
-            groupId: groupId,
-            weekId: weekId,
-            weekLabel: week?.displayLabel ?? "This week",
-            isRollingLock: week?.isRollingLock ?? false
-        )
     }
 
     private func selectionDeadlineSheet(_ edit: SelectionDeadlineEdit) -> some View {
@@ -653,22 +611,6 @@ struct CommissionerSettingsView: View {
                 unlockMemberPicks: unlock,
                 appState: appState
             )
-        }
-        .pickemsEnvironment(appState)
-    }
-
-    private var missingDeadlineTarget: some View {
-        NavigationStack {
-            ContentUnavailableView(
-                "No Active Week",
-                systemImage: "calendar",
-                description: Text("Open Commissioner Settings again after a week is selected.")
-            )
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { route = nil }
-                }
-            }
         }
         .pickemsEnvironment(appState)
     }
