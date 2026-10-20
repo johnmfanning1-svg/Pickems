@@ -164,12 +164,18 @@ jobs:
           mkdir -p "$key_dir"
           chmod 700 "$key_dir"
           umask 077
-          if printf '%s' "$ASC_KEY_P8" | grep -q -- '-----BEGIN PRIVATE KEY-----'; then
+          # Grep a file, not a pipe. `printf | grep -q` returns 141 under
+          # pipefail when the header matches (grep exits, printf gets
+          # SIGPIPE), so a real PEM key is sent down the base64 path.
+          probe="$key_dir/key-probe.txt"
+          printf '%s\n' "$ASC_KEY_P8" > "$probe"
+          if grep -F -q -- '-----BEGIN PRIVATE KEY-----' "$probe"; then
             # Raw PEM. Also tolerate a single-line value with literal \n escapes.
-            printf '%s\n' "$ASC_KEY_P8" | perl -pe 's/\\n/\n/g' > "$key_path"
+            perl -pe 's/\\n/\n/g' "$probe" > "$key_path"
           else
-            printf '%s' "$ASC_KEY_P8" | tr -d ' \r\n' | base64 --decode > "$key_path"
+            tr -d ' \r\n' < "$probe" | base64 --decode > "$key_path"
           fi
+          rm -f "$probe"
           if ! grep -q -- '-----BEGIN PRIVATE KEY-----' "$key_path" || ! grep -q -- '-----END PRIVATE KEY-----' "$key_path"; then
             rm -f "$key_path"
             echo "::error::ASC_KEY_P8 is neither a PEM .p8 nor base64 of one."
@@ -288,7 +294,9 @@ jobs:
             }
           tail -n 20 "$RUNNER_TEMP/logs/export.log"
           ls -la "$RUNNER_TEMP/export"
-          ipa=$(find "$RUNNER_TEMP/export" -maxdepth 1 -name '*.ipa' | head -n 1)
+          # `find | head -n 1` SIGPIPEs find under pipefail once head exits.
+          find "$RUNNER_TEMP/export" -maxdepth 1 -name '*.ipa' > "$RUNNER_TEMP/ipa-list.txt"
+          ipa=$(head -n 1 "$RUNNER_TEMP/ipa-list.txt")
           if [ -z "$ipa" ]; then
             echo "::error::Export produced no .ipa"
             exit 1
@@ -301,21 +309,45 @@ jobs:
           work="$RUNNER_TEMP/ipa-check"
           rm -rf "$work"; mkdir -p "$work"
           unzip -q "$IPA_PATH" -d "$work"
-          app=$(find "$work/Payload" -maxdepth 1 -name '*.app' | head -n 1)
+          # Do not pipe into `grep -q` or `head -n 1`. Those readers exit at
+          # the first match; under pipefail the writer gets SIGPIPE (141)
+          # and a present entitlement is reported missing. Run 38757048369
+          # failed this way on aps-environment ("echo: write error: Broken pipe").
+          find "$work/Payload" -maxdepth 1 -name '*.app' > "$work/apps.txt"
+          app=$(head -n 1 "$work/apps.txt")
           status=0
+          : > "$work/app-entitlements.txt"
           for b in "$app" "$app"/PlugIns/*.appex; do
             [ -d "$b" ] || continue
-            auth=$(codesign -dvv "$b" 2>&1 | grep '^Authority=' | head -n 1 || true)
-            ents=$(codesign -d --entitlements - --xml "$b" 2>/dev/null | plutil -p - 2>/dev/null || true)
+            codesign -dvv "$b" > "$work/codesign.txt" 2>&1 || true
+            auth=$(grep '^Authority=' "$work/codesign.txt" || true)
+            auth=${auth%%$'\n'*}
+            if codesign -d --entitlements - --xml "$b" > "$work/entitlements.xml" 2>/dev/null \
+              && plutil -p "$work/entitlements.xml" > "$work/entitlements.txt" 2>/dev/null; then
+              :
+            else
+              : > "$work/entitlements.txt"
+            fi
             echo "== $(basename "$b"): $auth"
-            echo "$ents"
+            cat "$work/entitlements.txt"
             case "$auth" in *"Apple Distribution"*|*"iPhone Distribution"*) ;; *) echo "::error::$(basename "$b") not distribution-signed"; status=1;; esac
-            case "$(basename "$b")" in
+            base=$(basename "$b")
+            if [ "$b" = "$app" ]; then
+              cp "$work/entitlements.txt" "$work/app-entitlements.txt"
+            fi
+            case "$base" in
               Pickems.app|PickemsWidget*.appex)
-                echo "$ents" | grep -q 'group.FannypackInc.Pickems' || { echo "::error::$(basename "$b") missing app group entitlement"; status=1; } ;;
+                if ! grep -F -q -- 'group.FannypackInc.Pickems' "$work/entitlements.txt"; then
+                  echo "::error::$base missing app group entitlement"
+                  status=1
+                fi
+                ;;
             esac
           done
-          echo "$(codesign -d --entitlements - --xml "$app" 2>/dev/null | plutil -p - 2>/dev/null)" | grep -q 'aps-environment' || { echo "::error::Pickems.app missing aps-environment"; status=1; }
+          if ! grep -F -q -- 'aps-environment' "$work/app-entitlements.txt"; then
+            echo "::error::Pickems.app missing aps-environment"
+            status=1
+          fi
           exit $status
 
       - name: Upload to TestFlight
