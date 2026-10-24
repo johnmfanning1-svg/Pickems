@@ -46,7 +46,7 @@ struct SpreadLineCopyTests {
         let message = SpreadLineCopy.infoMessage(locked: "LSU -7.5", live: "LSU -7.0", isFinal: false)
         #expect(
             message
-                == "Your pick is graded at LSU -7.5, the line when picks locked. Vegas has since moved it to LSU -7.0. That's for reference only and doesn't change your result."
+                == "Your pick locked at LSU -7.5. Current line: LSU -7.0 — for reference only; it doesn't change your pick."
         )
     }
 
@@ -54,8 +54,13 @@ struct SpreadLineCopyTests {
         let message = SpreadLineCopy.infoMessage(locked: "LSU -7.5", live: "LSU -7.0", isFinal: true)
         #expect(
             message
-                == "Your pick is graded at LSU -7.5, the line when picks locked. The line closed at LSU -7.0. That's for reference only and doesn't change your result."
+                == "Your pick locked at LSU -7.5. Closing line: LSU -7.0 — for reference only; it doesn't change your pick."
         )
+    }
+
+    @Test func infoAccessibilityHintMatchesCaptionWording() {
+        #expect(SpreadLineCopy.infoAccessibilityHint(isFinal: false) == "Explains the locked and current line.")
+        #expect(SpreadLineCopy.infoAccessibilityHint(isFinal: true) == "Explains the locked and closing line.")
     }
 
     @Test func infoMessageNilWhenLineUnchanged() {
@@ -66,7 +71,7 @@ struct SpreadLineCopyTests {
     @Test func pickEmWordingInInfoMessage() {
         let message = SpreadLineCopy.infoMessage(locked: "ALA -0.0", live: "ALA -3.0", isFinal: false)
         #expect(message?.contains("ALA even (pick'em)") == true)
-        #expect(message?.contains("Vegas has since moved it to ALA -3.0") == true)
+        #expect(message?.contains("Current line: ALA -3.0") == true)
         #expect(
             SpreadLineCopy.referenceCaption(locked: "ALA -0.0", live: "ALA -3.0", isFinal: false)
                 == "Current line: ALA -3.0"
@@ -89,7 +94,7 @@ struct SpreadLineCopyTests {
         let message = SpreadLineCopy.infoMessage(locked: "LSU -7.5", live: "ALA -3.0", isFinal: false)
         #expect(
             message
-                == "Your pick is graded at LSU -7.5, the line when picks locked. Vegas has since moved it to ALA -3.0. That's for reference only and doesn't change your result."
+                == "Your pick locked at LSU -7.5. Current line: ALA -3.0 — for reference only; it doesn't change your pick."
         )
         let label = SpreadLineCopy.accessibilityLabel(
             locked: "LSU -7.5",
@@ -112,11 +117,11 @@ struct SpreadLineCopyTests {
                 == "Current line: ALA PK"
         )
         let toPickEm = SpreadLineCopy.infoMessage(locked: "LSU -7.5", live: "ALA -0.0", isFinal: true)
-        #expect(toPickEm?.contains("The line closed at ALA PK.") == true)
+        #expect(toPickEm?.contains("Closing line: ALA PK") == true)
 
         let fromPickEm = SpreadLineCopy.infoMessage(locked: "OSU -0.0", live: "ALA -3.0", isFinal: false)
         #expect(fromPickEm?.contains("OSU even (pick'em)") == true)
-        #expect(fromPickEm?.contains("Vegas has since moved it to ALA -3.0") == true)
+        #expect(fromPickEm?.contains("Current line: ALA -3.0") == true)
 
         let label = SpreadLineCopy.accessibilityLabel(
             locked: "LSU -7.5",

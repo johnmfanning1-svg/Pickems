@@ -46,19 +46,22 @@ enum SpreadLineCopy {
     }
 
     /// Popover copy when the market line has moved away from the locked pick line.
+    /// Kept to ~3 short lines: locked pick, current/closing reference, no grading change.
     static func infoMessage(locked: String, live: String, isFinal: Bool) -> String? {
         guard let live = liveReference(locked: locked, live: live),
               let movedDisplay = referenceDisplay(from: live) else {
             return nil
         }
         let graded = gradedPhrase(locked)
-        let movement: String
-        if isFinal {
-            movement = "The line closed at \(movedDisplay)."
-        } else {
-            movement = "Vegas has since moved it to \(movedDisplay)."
-        }
-        return "Your pick is graded at \(graded), the line when picks locked. \(movement) That's for reference only and doesn't change your result."
+        let prefix = isFinal ? "Closing line" : "Current line"
+        return "Your pick locked at \(graded). \(prefix): \(movedDisplay) — for reference only; it doesn't change your pick."
+    }
+
+    /// VoiceOver hint for the Line info button; matches Current vs Closing caption wording.
+    static func infoAccessibilityHint(isFinal: Bool) -> String {
+        isFinal
+            ? "Explains the locked and closing line."
+            : "Explains the locked and current line."
     }
 
     /// VoiceOver: e.g. `Locked line LSU minus 7.5. Current line ALA minus 3.0.`
