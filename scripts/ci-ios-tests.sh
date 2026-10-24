@@ -34,11 +34,11 @@ rc=$?
 set -e
 # Counts come from the .xcresult bundle (Swift Testing and XCTest alike),
 # not from grepping test.log.
-# Floor on passed + expected failures. This head runs 504 tests
-# (499 on the previous head, plus present/stack, leave-window dismiss,
-# dismissPresentedPopover, onDismissed notification, and dismantleUIView);
+# Floor on passed + expected failures. This head runs 507 tests
+# (499 on the previous head, plus presenter-walk, present skip/proceed,
+# dismiss seam, willMove dismiss, dismantleUIView, and notifyDismissed x2);
 # keep this 2 below that count and BUMP IT as tests are added.
-MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-502}"
+MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-505}"
 grep -iE "error:|Test case .* failed|\*\* TEST" "$OUT/logs/test.log" | tail -n 200 || true
 summary="$OUT/logs/test-summary.json"
 if ! xcrun xcresulttool get test-results summary --path "$OUT/TestResults.xcresult" --format json > "$summary" 2>"$OUT/logs/xcresulttool.err"; then
