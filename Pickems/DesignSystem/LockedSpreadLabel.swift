@@ -7,8 +7,6 @@ struct LockedSpreadLabel: View {
     var isLocked: Bool = true
     /// When true, the second line uses "Closing line"; otherwise "Current line".
     var isFinal: Bool = false
-    /// Static share images omit the tappable info control.
-    var showsInfoButton: Bool = true
     var font: Font = .caption2.weight(.semibold)
     var lockedColor: Color = PickemsColors.textSecondary
 
@@ -27,17 +25,27 @@ struct LockedSpreadLabel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .center, spacing: 6) {
-                Text(lockedText)
-                    .font(font)
-                    .foregroundStyle(lockedColor)
-                    .accessibilityHidden(true)
+                // Combined locked-line label; info button stays its own element so VoiceOver can open it.
+                HStack(alignment: .center, spacing: 6) {
+                    Text(lockedText)
+                        .font(font)
+                        .foregroundStyle(lockedColor)
 
-                if isLocked {
-                    lockedPill
-                        .accessibilityHidden(true)
+                    if isLocked {
+                        lockedPill
+                    }
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    SpreadLineCopy.accessibilityLabel(
+                        locked: lockedText,
+                        live: liveText,
+                        isLocked: isLocked,
+                        isFinal: isFinal
+                    )
+                )
 
-                if showsInfoButton, let infoMessage {
+                if let infoMessage {
                     infoButton(message: infoMessage)
                 }
             }
@@ -49,15 +57,6 @@ struct LockedSpreadLabel: View {
                     .accessibilityHidden(true)
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            SpreadLineCopy.accessibilityLabel(
-                locked: lockedText,
-                live: liveText,
-                isLocked: isLocked,
-                isFinal: isFinal
-            )
-        )
     }
 
     private var lockedPill: some View {
@@ -85,7 +84,7 @@ struct LockedSpreadLabel: View {
                 .contentShape(Rectangle().inset(by: -13))
         }
         .buttonStyle(.borderless)
-        .accessibilityLabel("About locked and current lines")
+        .accessibilityLabel("Line info")
         .accessibilityHint("Explains which line your pick is graded on")
         .popover(isPresented: $showingInfo, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
             Text(message)
