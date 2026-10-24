@@ -5,6 +5,8 @@ import UIKit
 @MainActor
 final class AnchoredInfoPopoverTrigger {
     var fireImpl: (() -> Void)?
+    /// Called after the popover finishes dismissing so VoiceOver can return to the (i) button.
+    var onDismissed: (() -> Void)?
 
     func fire() {
         fireImpl?()
@@ -18,6 +20,17 @@ final class AnchoredInfoPopoverTrigger {
 final class AnchoredInfoPopoverAnchorView: UIView {
     var message = ""
     var maxWidth: CGFloat = 290
+    var onDismissed: (() -> Void)?
+
+    /// Weak handle so we can dismiss when this anchor leaves the window or is dismantled.
+    private(set) weak var presentedController: AnchoredInfoPopoverController?
+
+    /// Test seam: override presenter resolution without a real key window.
+    var resolvePresenter: (() -> UIViewController?)?
+    /// Test seam: capture presentation instead of calling UIKit `present`.
+    var presentContent: ((AnchoredInfoPopoverController, Bool) -> Void)?
+    /// Test seam: capture dismiss instead of calling UIKit `dismiss`.
+    var dismissHandler: ((AnchoredInfoPopoverController, Bool, (() -> Void)?) -> Void)?
 
     func makeContentController() -> AnchoredInfoPopoverController {
         let controller = AnchoredInfoPopoverController(message: message, maxWidth: maxWidth)
@@ -26,9 +39,79 @@ final class AnchoredInfoPopoverAnchorView: UIView {
     }
 
     func present(animated: Bool = true) {
-        guard window != nil else { return }
-        guard let presenter = pickemsTopPresenter(), presenter.presentedViewController == nil else { return }
-        presenter.present(makeContentController(), animated: animated)
+        let presenter: UIViewController?
+        if let resolvePresenter {
+            presenter = resolvePresenter()
+        } else {
+            guard window != nil else { return }
+            presenter = pickemsTopPresenter()
+        }
+        guard let presenter else { return }
+        // The presenter walk would otherwise treat an open info bubble as `top`, whose
+        // `presentedViewController` is nil — stacking a second bubble on the first.
+        if presenter is AnchoredInfoPopoverController {
+            return
+        }
+        guard presenter.presentedViewController == nil else { return }
+
+        let content = makeContentController()
+        content.onDismissed = { [weak self] in
+            self?.handlePopoverDismissed()
+        }
+        presentedController = content
+        if let presentContent {
+            presentContent(content, animated)
+        } else {
+            presenter.present(content, animated: animated)
+        }
+    }
+
+    /// Dismisses any bubble this anchor presented (row recycle / dismantle / leave window).
+    func dismissPresentedPopover(animated: Bool = false, completion: (() -> Void)? = nil) {
+        guard let presented = presentedController else {
+            completion?()
+            return
+        }
+        // Leaving the hierarchy — do not bounce VoiceOver onto a recycled/gone control.
+        presented.onDismissed = nil
+        presentedController = nil
+        if let dismissHandler {
+            dismissHandler(presented, animated, completion)
+            return
+        }
+        guard let presenter = presented.presentingViewController else {
+            completion?()
+            return
+        }
+        presenter.dismiss(animated: animated, completion: completion)
+    }
+
+    /// Binds a controller as if `present` had succeeded (in-memory tests).
+    func attachPresentedForTesting(_ controller: AnchoredInfoPopoverController) {
+        controller.onDismissed = { [weak self] in
+            self?.handlePopoverDismissed()
+        }
+        presentedController = controller
+    }
+
+    /// Dismiss while still attached so the popover `sourceView` stays valid.
+    override func willMove(toWindow newWindow: UIWindow?) {
+        super.willMove(toWindow: newWindow)
+        if newWindow == nil {
+            dismissPresentedPopover(animated: false)
+        }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil {
+            dismissPresentedPopover(animated: false)
+        }
+    }
+
+    private func handlePopoverDismissed() {
+        presentedController = nil
+        onDismissed?()
     }
 }
 
@@ -49,6 +132,18 @@ enum AnchoredInfoPopover {
         popover.permittedArrowDirections = [.up, .down]
         popover.delegate = delegate
     }
+
+    /// Walks a presented-VC chain the same way production `present()` resolves its presenter.
+    static func topPresenter(startingAt start: UIViewController) -> UIViewController? {
+        var top = start
+        while let next = top.presentedViewController, !next.isBeingDismissed {
+            top = next
+        }
+        if top.isBeingDismissed {
+            return top.presentingViewController
+        }
+        return top
+    }
 }
 
 /// Scrollable, Dynamic-Type-aware message sized to its content (capped for tall accessibility sizes).
@@ -59,9 +154,12 @@ final class AnchoredInfoPopoverController: UIViewController {
 
     let message: String
     let maxWidth: CGFloat
+    /// Invoked once when this popover finishes dismissing (tap outside, swipe, etc.).
+    var onDismissed: (() -> Void)?
 
     private let scrollView = UIScrollView()
     private let label = UILabel()
+    private(set) var didNotifyDismissed = false
 
     init(message: String, maxWidth: CGFloat = defaultMaxWidth) {
         self.message = message
@@ -140,6 +238,14 @@ final class AnchoredInfoPopoverController: UIViewController {
         recalculatePreferredContentSize()
     }
 
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        // Covers presenter-driven dismiss and interactive dismiss; notify at most once.
+        if isBeingDismissed || presentingViewController == nil || view.window == nil {
+            notifyDismissedIfNeeded()
+        }
+    }
+
     func recalculatePreferredContentSize() {
         let maxHeight = Self.defaultMaxHeight(in: view.window)
         let size = Self.fittingContentSize(
@@ -193,6 +299,22 @@ final class AnchoredInfoPopoverController: UIViewController {
         // Keep the bubble in the safe area; scroll inside if Dynamic Type needs more.
         return max(120, usable * 0.45)
     }
+
+    func notifyDismissedIfNeeded() {
+        guard !didNotifyDismissed else { return }
+        didNotifyDismissed = true
+        let callback = onDismissed
+        onDismissed = nil
+        // Hierarchy dismiss clears `onDismissed` first — nothing to restore focus to,
+        // so skip the layoutChanged post on that path.
+        guard let callback else { return }
+        if UIAccessibility.isVoiceOverRunning {
+            UIAccessibility.post(notification: .layoutChanged, argument: nil)
+            DispatchQueue.main.async { callback() }
+        } else {
+            callback()
+        }
+    }
 }
 
 private enum AnchoredInfoPopoverRetain {
@@ -211,6 +333,11 @@ private final class AnchoredInfoPopoverDelegate: NSObject, UIPopoverPresentation
     ) -> UIModalPresentationStyle {
         .none
     }
+
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        (presentationController.presentedViewController as? AnchoredInfoPopoverController)?
+            .notifyDismissedIfNeeded()
+    }
 }
 
 /// Invisible UIView behind a SwiftUI control; its bounds are the popover `sourceView`.
@@ -218,6 +345,8 @@ struct AnchoredInfoPopoverAnchor: UIViewRepresentable {
     var message: String
     var maxWidth: CGFloat = AnchoredInfoPopoverController.defaultMaxWidth
     var trigger: AnchoredInfoPopoverTrigger
+    /// Restores VoiceOver to the SwiftUI (i) button after dismiss (anchor itself is a11y-hidden).
+    var onDismissed: (() -> Void)? = nil
 
     func makeUIView(context: Context) -> AnchoredInfoPopoverAnchorView {
         let view = AnchoredInfoPopoverAnchorView()
@@ -231,9 +360,16 @@ struct AnchoredInfoPopoverAnchor: UIViewRepresentable {
     func updateUIView(_ uiView: AnchoredInfoPopoverAnchorView, context: Context) {
         uiView.message = message
         uiView.maxWidth = maxWidth
+        uiView.onDismissed = onDismissed
+        trigger.onDismissed = onDismissed
         trigger.fireImpl = { [weak uiView] in
             uiView?.present()
         }
+    }
+
+    static func dismantleUIView(_ uiView: AnchoredInfoPopoverAnchorView, coordinator: ()) {
+        uiView.dismissPresentedPopover(animated: false)
+        uiView.onDismissed = nil
     }
 
     func sizeThatFits(
@@ -254,14 +390,8 @@ private extension UIView {
         } else {
             start = enclosingViewController()
         }
-        guard var top = start else { return nil }
-        while let next = top.presentedViewController, !next.isBeingDismissed {
-            top = next
-        }
-        if top.isBeingDismissed {
-            return top.presentingViewController
-        }
-        return top
+        guard let start else { return nil }
+        return AnchoredInfoPopover.topPresenter(startingAt: start)
     }
 
     func enclosingViewController() -> UIViewController? {
