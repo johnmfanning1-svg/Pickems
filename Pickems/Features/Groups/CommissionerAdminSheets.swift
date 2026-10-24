@@ -189,7 +189,9 @@ struct CommissionerSlateSheet: View {
                 LockedSpreadLabel(
                     lockedText: game.favoriteSpreadDisplay,
                     liveText: picksVM.livePickCards[game.espnEventId]?.liveSpreadLabel,
-                    isLocked: WeekTransition.isSpreadLocked(game, week: week)
+                    isLocked: WeekTransition.isSpreadLocked(game, week: week),
+                    isFinal: game.status == .final
+                        || picksVM.livePickCards[game.espnEventId]?.status == .final
                 )
             }
             HStack {

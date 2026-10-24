@@ -151,7 +151,7 @@ enum SlateGameDecoding {
         return (espn.spread, espn.spreadTeamId)
     }
 
-    /// Parenthetical movement. Updates even after the graded line is frozen.
+    /// Market-line movement shown as Current / Closing line. Updates after the graded line is frozen.
     static func liveSpreadUpdate(
         existing: SlateGame,
         espn: SlateGame

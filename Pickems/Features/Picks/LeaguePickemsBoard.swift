@@ -40,7 +40,12 @@ struct LeaguePickemsBoard: View {
     }
 
     private var headerHeight: CGFloat { isDense ? 32 : 44 }
-    private var rowHeight: CGFloat { isDense ? (isExpandedLayout ? 48 : 44) : 76 }
+    private var rowHeight: CGFloat {
+        if pickMode.showsSpreads {
+            return isDense ? (isExpandedLayout ? 64 : 58) : 88
+        }
+        return isDense ? (isExpandedLayout ? 48 : 44) : 76
+    }
 
     private var columns: [GroupMember] {
         members.sorted { lhs, rhs in
@@ -154,7 +159,7 @@ struct LeaguePickemsBoard: View {
         VStack(alignment: .leading, spacing: 4) {
             if pickMode.showsSpreads {
                 Text("* Favored team — the spread applies to this team.")
-                Text("The lock is the Pickems line used for scoring. The number in parentheses is ESPN’s live line, for reference.")
+                Text("Locked is the Pickems line used for scoring. Current / Closing line is Vegas for reference only.")
             } else {
                 Text("Pick the outright winner. A tied game is a push.")
             }
@@ -288,10 +293,6 @@ struct LeaguePickemsBoard: View {
             status: status,
             compactFinal: isDense
         )
-        let spreadCaption = SpreadLineCopy.caption(
-            locked: game.favoriteSpreadDisplay,
-            live: live?.liveSpreadLabel
-        )
         return VStack(alignment: .leading, spacing: isDense ? 1 : 2) {
             Text(matchup)
                 .font((isDense ? Font.caption2 : Font.caption).weight(.semibold))
@@ -299,31 +300,19 @@ struct LeaguePickemsBoard: View {
                 .lineLimit(isDense ? 1 : 2)
                 .minimumScaleFactor(0.7)
             if pickMode.showsSpreads {
-                if isDense {
-                    HStack(alignment: .firstTextBaseline, spacing: 3) {
-                        Image(systemName: "lock.fill")
-                            .font(.caption2)
-                            .foregroundStyle(PickemsColors.textSecondary)
-                            .accessibilityHidden(true)
-                        Text("\(spreadCaption) · \(statusLine)")
-                            .font(.caption2)
-                            .foregroundStyle(status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                    }
-                } else {
-                    LockedSpreadLabel(
-                        lockedText: game.favoriteSpreadDisplay,
-                        liveText: live?.liveSpreadLabel,
-                        isLocked: true
-                    )
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-                    Text(statusLine)
-                        .font(.caption2)
-                        .foregroundStyle(status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
-                        .lineLimit(1)
-                }
+                LockedSpreadLabel(
+                    lockedText: game.favoriteSpreadDisplay,
+                    liveText: live?.liveSpreadLabel,
+                    isLocked: true,
+                    isFinal: status == .final,
+                    font: (isDense ? Font.caption2 : Font.caption).weight(.semibold)
+                )
+                .lineLimit(isDense ? 3 : 4)
+                .minimumScaleFactor(0.75)
+                Text(statusLine)
+                    .font(.caption2)
+                    .foregroundStyle(status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
+                    .lineLimit(1)
             } else {
                 Text(statusLine)
                     .font(.caption2)
@@ -356,7 +345,8 @@ struct LeaguePickemsBoard: View {
                 SpreadLineCopy.accessibilityLabel(
                     locked: game.favoriteSpreadDisplay,
                     live: live?.liveSpreadLabel,
-                    isLocked: true
+                    isLocked: true,
+                    isFinal: status == .final
                 )
             )
         }

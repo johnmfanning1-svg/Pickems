@@ -595,7 +595,7 @@ actor ESPNService {
         return espnGame.spreadDisplayLabel
     }
 
-    /// ESPN's current line, shown next to a locked Pickems line for reference.
+    /// ESPN's current line, shown as Current / Closing line next to a locked Pickems line.
     nonisolated static func liveSpreadLabel(espnGame: ESPNGame, isSlateGame: Bool) -> String? {
         guard isSlateGame else { return nil }
         return espnGame.spreadDisplayLabel

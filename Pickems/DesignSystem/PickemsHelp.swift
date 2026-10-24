@@ -36,7 +36,7 @@ enum PickemsHelp {
         tips: [
             "Your Slate highlights games on your slate this week.",
             "Green checkmarks mean your Pickem won.",
-            "A lock next to a spread is the Pickems line used for scoring. The number in parentheses is ESPN’s live line, for reference.",
+            "A Locked pill marks the Pickems line used for scoring. Current / Closing line is Vegas for reference only — tap the info button for details.",
             "Straight Up leagues hide the line on slate games — scoring is the outright winner."
         ]
     )
@@ -100,7 +100,7 @@ enum PickemsHelp {
             "Before lock, this screen shows a countdown — picks stay hidden.",
             "On a rolling-lock league, each game's row unlocks on the chart at that game's kickoff.",
             "An asterisk next to a team means that team is favored — the spread applies to them.",
-            "A lock is the Pickems line. The number in parentheses is ESPN’s live line, for reference.",
+            "A Locked pill is the Pickems line used for scoring. Current / Closing line is Vegas for reference only.",
             "Tap the expand arrows to view the chart fullscreen in landscape.",
             "Comfortable and Dense control how much of the chart fits on screen.",
             "Your column stays pinned next to Game while you scroll other members.",
@@ -189,7 +189,7 @@ enum PickemsHelp {
         message: "Pick the team you think will cover the point spread — not necessarily who wins outright.",
         tips: [
             "Example: Ohio State -7 means OSU must win by more than 7.",
-            "A lock marks the Pickems line. The number in parentheses is ESPN’s live line, for reference — scoring uses the locked line.",
+            "A Locked pill marks the Pickems line used for scoring. Current / Closing line is Vegas for reference only — tap the info button for details.",
             "Tap a selected team to clear that Pickem. The Selection (the game) stays on the slate.",
             "A push (exact spread) is neither a win nor a loss.",
             "You must make a Pickem on every open slate game before submitting.",
