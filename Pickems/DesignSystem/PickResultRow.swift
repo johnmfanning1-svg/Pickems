@@ -5,6 +5,7 @@ struct PickResultRow: View {
     let pickedTeamId: String?
     var showSpread: Bool = true
     var liveSpreadLabel: String? = nil
+    var isFinal: Bool = false
     var homeRank: Int? = nil
     var awayRank: Int? = nil
     var pickMode: PickMode = .ats
@@ -29,6 +30,7 @@ struct PickResultRow: View {
                         lockedText: game.favoriteSpreadDisplay,
                         liveText: liveSpreadLabel,
                         isLocked: true,
+                        isFinal: isFinal || game.status == .final,
                         font: .caption.weight(.semibold),
                         lockedColor: theme.accent
                     )

@@ -301,7 +301,7 @@ struct SlateGame: Codable, Identifiable, Equatable {
     /// Graded copy captured when this game locks. Nil on games locked before the field existed.
     var lockedSpread: Double? = nil
     var lockedSpreadTeamId: String? = nil
-    /// ESPN line shown in parentheses. Never used for grading.
+    /// ESPN market line shown as Current / Closing line. Never used for grading.
     var liveSpread: Double? = nil
     var liveSpreadTeamId: String? = nil
     var kickoff: Date
@@ -318,7 +318,7 @@ struct SlateGame: Codable, Identifiable, Equatable {
         case final
     }
 
-    /// Line used for scoring and the lock icon. `lockedSpread` wins once the game has frozen.
+    /// Line used for scoring and the Locked pill. `lockedSpread` wins once the game has frozen.
     var gradingLine: (spread: Double, teamId: String) {
         // Same test as the server's hasLockedSpread: a non-finite locked line is
         // ignored and grading falls back to the live line.

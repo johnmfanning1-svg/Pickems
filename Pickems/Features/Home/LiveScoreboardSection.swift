@@ -46,7 +46,8 @@ struct LiveGameRow: View {
                                 LockedSpreadLabel(
                                     lockedText: spread,
                                     liveText: card.liveSpreadLabel,
-                                    isLocked: true
+                                    isLocked: true,
+                                    isFinal: card.status == .final
                                 )
                                 .multilineTextAlignment(.center)
                             } else {
@@ -112,7 +113,8 @@ struct LiveGameRow: View {
                     SpreadLineCopy.accessibilityLabel(
                         locked: spread,
                         live: card.liveSpreadLabel,
-                        isLocked: true
+                        isLocked: true,
+                        isFinal: card.status == .final
                     )
                 )
             } else {

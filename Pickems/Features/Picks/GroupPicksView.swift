@@ -400,6 +400,8 @@ struct GroupPicksView: View {
                         pickedTeamId: pick?.picks[game.id],
                         showSpread: appState.selectedPickMode.showsSpreads,
                         liveSpreadLabel: appState.picksViewModel.livePickCards[game.espnEventId]?.liveSpreadLabel,
+                        isFinal: appState.picksViewModel.livePickCards[game.espnEventId]?.status == .final
+                            || game.status == .final,
                         homeRank: appState.picksViewModel.teamRanks.rank(for: game.homeTeamId),
                         awayRank: appState.picksViewModel.teamRanks.rank(for: game.awayTeamId),
                         pickMode: appState.selectedPickMode
@@ -457,6 +459,7 @@ struct GroupPicksView: View {
                                             lockedText: nominationSpreadLabel(nom),
                                             liveText: liveSpreadText(forEventId: nom.espnEventId),
                                             isLocked: true,
+                                            isFinal: appState.picksViewModel.livePickCards[nom.espnEventId]?.status == .final,
                                             font: .caption.weight(.bold),
                                             lockedColor: theme.accent
                                         )

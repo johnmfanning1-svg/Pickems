@@ -59,9 +59,10 @@ struct GamePickRow: View {
                             lockedText: game.favoriteSpreadDisplay,
                             liveText: liveCard?.liveSpreadLabel,
                             isLocked: true,
+                            isFinal: (liveCard?.status ?? game.status) == .final,
                             font: .caption.weight(.semibold)
                         )
-                        .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity, alignment: .center)
                         .multilineTextAlignment(.center)
                     }
 
