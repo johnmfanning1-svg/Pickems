@@ -10,7 +10,7 @@ struct LockedSpreadLabel: View {
     var font: Font = .caption2.weight(.semibold)
     var lockedColor: Color = PickemsColors.textSecondary
 
-    @State private var showingInfo = false
+    @State private var infoTrigger = AnchoredInfoPopoverTrigger()
 
     private var referenceCaption: String? {
         guard isLocked else { return nil }
@@ -74,7 +74,7 @@ struct LockedSpreadLabel: View {
     private func infoButton(message: String) -> some View {
         Button {
             PickemsHaptics.lightImpact()
-            showingInfo = true
+            infoTrigger.fire()
         } label: {
             Image(systemName: "info.circle")
                 .font(.caption.weight(.semibold))
@@ -85,15 +85,10 @@ struct LockedSpreadLabel: View {
         }
         .buttonStyle(.borderless)
         .accessibilityLabel("Line info")
-        .accessibilityHint("Explains the locked and current line.")
-        .popover(isPresented: $showingInfo, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(PickemsColors.textPrimary)
-                .padding()
-                .frame(maxWidth: 280, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .presentationCompactAdaptation(.popover)
+        .accessibilityHint(SpreadLineCopy.infoAccessibilityHint(isFinal: isFinal))
+        .background {
+            AnchoredInfoPopoverAnchor(message: message, trigger: infoTrigger)
+                .allowsHitTesting(false)
         }
     }
 }
