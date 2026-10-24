@@ -293,12 +293,21 @@ struct LeaguePickemsBoard: View {
             status: status,
             compactFinal: isDense
         )
+        // `.contain` so VoiceOver can reach LockedSpreadLabel's "Line info" button.
+        // Matchup Text carries matchup + favored + status; the spread chip keeps its own children.
+        let summary = gameAccessibilityLabel(
+            game: game,
+            matchup: matchup,
+            live: live,
+            status: status
+        )
         return VStack(alignment: .leading, spacing: isDense ? 1 : 2) {
             Text(matchup)
                 .font((isDense ? Font.caption2 : Font.caption).weight(.semibold))
                 .foregroundStyle(PickemsColors.textPrimary)
                 .lineLimit(isDense ? 1 : 2)
                 .minimumScaleFactor(0.7)
+                .accessibilityLabel(summary)
             if pickMode.showsSpreads {
                 LockedSpreadLabel(
                     lockedText: game.favoriteSpreadDisplay,
@@ -313,20 +322,16 @@ struct LeaguePickemsBoard: View {
                     .font(.caption2)
                     .foregroundStyle(status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
                     .lineLimit(1)
+                    .accessibilityHidden(true)
             } else {
                 Text(statusLine)
                     .font(.caption2)
                     .foregroundStyle(status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
                     .lineLimit(1)
+                    .accessibilityHidden(true)
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(gameAccessibilityLabel(
-            game: game,
-            matchup: matchup,
-            live: live,
-            status: status
-        ))
+        .accessibilityElement(children: .contain)
     }
 
     private func gameAccessibilityLabel(
@@ -340,16 +345,7 @@ struct LeaguePickemsBoard: View {
             let name = side == .home ? game.homeTeamAbbreviation : game.awayTeamAbbreviation
             parts.append("\(name) is favored — the spread applies to this team")
         }
-        if pickMode.showsSpreads {
-            parts.append(
-                SpreadLineCopy.accessibilityLabel(
-                    locked: game.favoriteSpreadDisplay,
-                    live: live?.liveSpreadLabel,
-                    isLocked: true,
-                    isFinal: status == .final
-                )
-            )
-        }
+        // Spread line copy comes from LockedSpreadLabel so its "Line info" button stays reachable.
         parts.append(
             gameStatusLine(game: game, live: live, status: status, compactKickoff: false)
         )

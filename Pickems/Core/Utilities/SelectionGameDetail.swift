@@ -98,6 +98,15 @@ struct SelectionGameDetail: Equatable {
         )
     }
 
+    /// Live card status wins when present; ESPN scoreboard is only a fallback.
+    /// Same precedence as `GroupPicksView.selectionGameDetail`.
+    static func resolvedStatus(
+        live: SlateGame.GameStatus?,
+        espn: SlateGame.GameStatus?
+    ) -> SlateGame.GameStatus {
+        live ?? espn ?? .scheduled
+    }
+
     /// Canceled, postponed, suspended, and delayed replace both the kickoff and `Final`.
     static func disruptionHeadline(_ statusLabel: String?) -> String? {
         guard let statusLabel else { return nil }

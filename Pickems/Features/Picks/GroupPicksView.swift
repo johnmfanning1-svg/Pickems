@@ -578,13 +578,13 @@ struct GroupPicksView: View {
     }
 
     /// Prefer the live card; fall back to the ESPN scoreboard the way `selectionGameDetail` does.
+    /// A non-final live card must win over a final ESPN status (same as `resolvedStatus`).
     private func nominationIsFinal(_ nom: Nomination) -> Bool {
         let live = appState.picksViewModel.livePickCards[nom.espnEventId]
-        if live?.status == .final { return true }
         let espn = appState.picksViewModel.espnGames.first {
             $0.espnEventId == nom.espnEventId || $0.id == nom.espnEventId
         }
-        return espn?.status == .final
+        return SelectionGameDetail.resolvedStatus(live: live?.status, espn: espn?.status) == .final
     }
 
     /// Kickoff comes from the saved Selection. Network, records, and live/final
@@ -596,7 +596,7 @@ struct GroupPicksView: View {
         }
         return SelectionGameDetail.make(
             kickoff: nom.kickoff,
-            status: live?.status ?? espn?.status ?? .scheduled,
+            status: SelectionGameDetail.resolvedStatus(live: live?.status, espn: espn?.status),
             awayScore: live?.awayScore ?? espn?.awayScore,
             homeScore: live?.homeScore ?? espn?.homeScore,
             broadcastLabel: live?.broadcastLabel ?? espn?.broadcastLabel,

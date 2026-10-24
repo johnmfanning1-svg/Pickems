@@ -85,7 +85,7 @@ struct LockedSpreadLabel: View {
         }
         .buttonStyle(.borderless)
         .accessibilityLabel("Line info")
-        .accessibilityHint("Explains which line your pick is graded on")
+        .accessibilityHint("Explains the locked and current line.")
         .popover(isPresented: $showingInfo, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
             Text(message)
                 .font(.subheadline)

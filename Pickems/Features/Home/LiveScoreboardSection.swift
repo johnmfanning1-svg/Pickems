@@ -5,6 +5,8 @@ struct LiveGameRow: View {
     @Environment(\.themePalette) private var theme
 
     var body: some View {
+        // `.contain` so VoiceOver can reach LockedSpreadLabel's "Line info" button.
+        // Away column carries the row summary; the spread chip keeps its own children.
         PickemsCard {
             VStack(spacing: 12) {
                 HStack(spacing: 12) {
@@ -15,6 +17,8 @@ struct LiveGameRow: View {
                         score: card.awayScore,
                         caption: "Away"
                     )
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(accessibilityLabel)
 
                     VStack(spacing: 4) {
                         if card.status == .scheduled {
@@ -29,6 +33,7 @@ struct LiveGameRow: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(PickemsColors.textSecondary)
                             .multilineTextAlignment(.center)
+                            .accessibilityHidden(true)
                         } else {
                             Text(card.homeClockLine)
                                 .font(.subheadline.weight(.semibold))
@@ -36,11 +41,13 @@ struct LiveGameRow: View {
                                 .multilineTextAlignment(.center)
                                 .minimumScaleFactor(0.8)
                                 .lineLimit(2)
+                                .accessibilityHidden(true)
                         }
                         Text(GameKickoffLine.networkLabel(card.broadcastLabel))
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(PickemsColors.textSecondary)
                             .multilineTextAlignment(.center)
+                            .accessibilityHidden(true)
                         if let spread = card.spreadLabel {
                             if card.isSlateGame {
                                 LockedSpreadLabel(
@@ -54,6 +61,7 @@ struct LiveGameRow: View {
                                 Text(spread)
                                     .font(.caption2)
                                     .foregroundStyle(PickemsColors.textSecondary)
+                                    .accessibilityHidden(true)
                             }
                         }
                         if card.isSlateGame, let pick = card.userPickTeamAbbreviation {
@@ -63,6 +71,7 @@ struct LiveGameRow: View {
                                 pickResultIcon
                             }
                             .foregroundStyle(pickResultColor)
+                            .accessibilityHidden(true)
                         }
                     }
                     .frame(minWidth: 80)
@@ -74,11 +83,11 @@ struct LiveGameRow: View {
                         score: card.homeScore,
                         caption: "Home"
                     )
+                    .accessibilityHidden(true)
                 }
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityElement(children: .contain)
     }
 
     private var accessibilityLabel: String {
@@ -107,19 +116,9 @@ struct LiveGameRow: View {
             parts.append(card.homeClockLine)
         }
         parts.append(GameKickoffLine.networkLabel(card.broadcastLabel))
-        if let spread = card.spreadLabel {
-            if card.isSlateGame {
-                parts.append(
-                    SpreadLineCopy.accessibilityLabel(
-                        locked: spread,
-                        live: card.liveSpreadLabel,
-                        isLocked: true,
-                        isFinal: card.status == .final
-                    )
-                )
-            } else {
-                parts.append(spread)
-            }
+        // Slate spread copy comes from LockedSpreadLabel so its "Line info" button stays reachable.
+        if let spread = card.spreadLabel, !card.isSlateGame {
+            parts.append(spread)
         }
         if card.isSlateGame, let pick = card.userPickTeamAbbreviation {
             parts.append("Your pick: \(pick)")
