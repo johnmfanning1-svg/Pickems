@@ -134,6 +134,22 @@ struct SelectionGameDetailTests {
         #expect(withoutScore.phase == .final)
     }
 
+    @Test func resolvedStatusPrefersLiveCardOverEspnFinal() {
+        // A non-final live card must win — same precedence as selectionGameDetail /
+        // nominationIsFinal. ESPN final alone must not override an in-progress live card.
+        #expect(
+            SelectionGameDetail.resolvedStatus(live: .inProgress, espn: .final) == .inProgress
+        )
+        #expect(
+            SelectionGameDetail.resolvedStatus(live: .inProgress, espn: .final) != .final
+        )
+        #expect(SelectionGameDetail.resolvedStatus(live: .final, espn: .inProgress) == .final)
+        #expect(SelectionGameDetail.resolvedStatus(live: nil, espn: .final) == .final)
+        #expect(SelectionGameDetail.resolvedStatus(live: nil, espn: .inProgress) == .inProgress)
+        #expect(SelectionGameDetail.resolvedStatus(live: nil, espn: nil) == .scheduled)
+        #expect(SelectionGameDetail.resolvedStatus(live: .scheduled, espn: .final) == .scheduled)
+    }
+
     private var newYork: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/New_York")!
