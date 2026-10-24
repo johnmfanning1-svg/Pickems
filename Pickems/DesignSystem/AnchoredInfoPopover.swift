@@ -50,16 +50,27 @@ final class AnchoredInfoPopoverAnchorView: UIView {
     }
 
     /// Dismisses any bubble this anchor presented (row recycle / dismantle / leave window).
-    func dismissPresentedPopover(animated: Bool = false) {
-        guard let presented = presentedController,
-              presented.presentingViewController != nil else {
-            presentedController = nil
+    func dismissPresentedPopover(animated: Bool = false, completion: (() -> Void)? = nil) {
+        guard let presented = presentedController else {
+            completion?()
             return
         }
         // Leaving the hierarchy — do not bounce VoiceOver onto a recycled/gone control.
         presented.onDismissed = nil
-        presented.dismiss(animated: animated)
         presentedController = nil
+        guard let presenter = presented.presentingViewController else {
+            completion?()
+            return
+        }
+        presenter.dismiss(animated: animated, completion: completion)
+    }
+
+    /// Dismiss while still attached so the popover `sourceView` stays valid.
+    override func willMove(toWindow newWindow: UIWindow?) {
+        super.willMove(toWindow: newWindow)
+        if newWindow == nil {
+            dismissPresentedPopover(animated: false)
+        }
     }
 
     override func didMoveToWindow() {
@@ -186,11 +197,19 @@ final class AnchoredInfoPopoverController: UIViewController {
         recalculatePreferredContentSize()
     }
 
+    override func dismiss(animated flag: Bool, completion: (() -> Void)? = nil) {
+        super.dismiss(animated: flag) { [weak self] in
+            self?.notifyDismissedIfNeeded()
+            completion?()
+        }
+    }
+
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
-        // Covers programmatic dismiss and interactive dismiss; notify at most once.
-        guard isBeingDismissed || presentingViewController == nil else { return }
-        notifyDismissedIfNeeded()
+        // Covers presenter-driven dismiss and interactive dismiss; notify at most once.
+        if isBeingDismissed || presentingViewController == nil || view.window == nil {
+            notifyDismissedIfNeeded()
+        }
     }
 
     func recalculatePreferredContentSize() {
@@ -252,11 +271,13 @@ final class AnchoredInfoPopoverController: UIViewController {
         didNotifyDismissed = true
         let callback = onDismissed
         onDismissed = nil
-        // UIKit popover teardown leaves VO on the dismissed chrome; announce the change.
-        // Callback (AccessibilityFocusState on the SwiftUI (i)) runs next so it wins focus —
-        // the UIKit anchor is accessibilityElementsHidden and must not be the target.
-        UIAccessibility.post(notification: .layoutChanged, argument: nil)
-        DispatchQueue.main.async {
+        // UIKit popover teardown leaves VO on the dismissed chrome. Announce the change,
+        // then restore focus to the SwiftUI (i) via AccessibilityFocusState — the UIKit
+        // anchor is accessibilityElementsHidden and must not be the VO target.
+        if UIAccessibility.isVoiceOverRunning {
+            UIAccessibility.post(notification: .layoutChanged, argument: nil)
+            DispatchQueue.main.async { callback?() }
+        } else {
             callback?()
         }
     }

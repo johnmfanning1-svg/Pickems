@@ -78,136 +78,138 @@ struct AnchoredInfoPopoverTests {
         #expect(capped.height == 40)
         #expect(uncapped.height > capped.height)
     }
+}
 
+/// Window-hierarchy coverage for `present()`, the presenter-walk re-present guard, and dismissal.
+/// Serialized so parallel MainActor tests do not fight over the key window.
+@Suite(.serialized)
+@MainActor
+struct AnchoredInfoPopoverPresentationTests {
     @Test func presentUsesRootPresenterAndDoesNotStackSecondBubble() async throws {
-        let harness = try AnchoredInfoPopoverWindowHarness()
-        defer { harness.tearDown() }
+        try await withPopoverHarness { harness in
+            let first = harness.installAnchor(
+                frame: CGRect(x: 40, y: 120, width: 44, height: 44),
+                message: "First bubble"
+            )
+            let second = harness.installAnchor(
+                frame: CGRect(x: 40, y: 200, width: 44, height: 44),
+                message: "Second bubble"
+            )
 
-        let first = harness.installAnchor(
-            frame: CGRect(x: 40, y: 120, width: 44, height: 44),
-            message: "First bubble"
-        )
-        let second = harness.installAnchor(
-            frame: CGRect(x: 40, y: 200, width: 44, height: 44),
-            message: "Second bubble"
-        )
+            first.present(animated: false)
+            let presented = try await harness.requirePresentedPopover()
+            #expect(presented.message == "First bubble")
+            #expect(
+                presented.popoverPresentationController?.sourceView.map(ObjectIdentifier.init)
+                    == ObjectIdentifier(first)
+            )
 
-        first.present(animated: false)
-        try await waitUntil {
-            harness.host.presentedViewController is AnchoredInfoPopoverController
+            // Presenter walk lands on the open bubble; re-present must skip, not stack.
+            second.present(animated: false)
+            first.present(animated: false)
+            try await Task.sleep(nanoseconds: 100_000_000)
+
+            #expect(harness.host.presentedViewController.map(ObjectIdentifier.init) == ObjectIdentifier(presented))
+            #expect(presented.presentedViewController == nil)
+            #expect(!(harness.host.presentedViewController?.presentedViewController is AnchoredInfoPopoverController))
         }
-
-        let presented = try #require(harness.host.presentedViewController as? AnchoredInfoPopoverController)
-        #expect(presented.message == "First bubble")
-        #expect(presented.popoverPresentationController?.sourceView.map(ObjectIdentifier.init) == ObjectIdentifier(first))
-
-        // Presenter walk lands on the open bubble; re-present must skip, not stack.
-        second.present(animated: false)
-        first.present(animated: false)
-        try await Task.sleep(nanoseconds: 50_000_000)
-
-        #expect(harness.host.presentedViewController.map(ObjectIdentifier.init) == ObjectIdentifier(presented))
-        #expect(presented.presentedViewController == nil)
-        #expect(!(harness.host.presentedViewController?.presentedViewController is AnchoredInfoPopoverController))
     }
 
     @Test func dismissesWhenAnchorLeavesWindow() async throws {
-        let harness = try AnchoredInfoPopoverWindowHarness()
-        defer { harness.tearDown() }
+        try await withPopoverHarness { harness in
+            let anchor = harness.installAnchor(
+                frame: CGRect(x: 40, y: 120, width: 44, height: 44),
+                message: "Leaves window"
+            )
+            anchor.present(animated: false)
+            _ = try await harness.requirePresentedPopover()
 
-        let anchor = harness.installAnchor(
-            frame: CGRect(x: 40, y: 120, width: 44, height: 44),
-            message: "Leaves window"
-        )
-        anchor.present(animated: false)
-        try await waitUntil {
-            harness.host.presentedViewController is AnchoredInfoPopoverController
+            anchor.removeFromSuperview()
+            try await harness.waitUntilDismissed()
+            #expect(harness.host.presentedViewController == nil)
         }
-        #expect(harness.host.presentedViewController is AnchoredInfoPopoverController)
-
-        anchor.removeFromSuperview()
-        try await waitUntil {
-            harness.host.presentedViewController == nil
-        }
-        #expect(harness.host.presentedViewController == nil)
     }
 
     @Test func dismissPresentedPopoverClearsBubbleWithoutStacking() async throws {
-        let harness = try AnchoredInfoPopoverWindowHarness()
-        defer { harness.tearDown() }
+        try await withPopoverHarness { harness in
+            let anchor = harness.installAnchor(
+                frame: CGRect(x: 40, y: 120, width: 44, height: 44),
+                message: "Manual dismiss"
+            )
+            anchor.present(animated: false)
+            _ = try await harness.requirePresentedPopover()
 
-        let anchor = harness.installAnchor(
-            frame: CGRect(x: 40, y: 120, width: 44, height: 44),
-            message: "Manual dismiss"
-        )
-        anchor.present(animated: false)
-        try await waitUntil {
-            harness.host.presentedViewController is AnchoredInfoPopoverController
-        }
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                anchor.dismissPresentedPopover(animated: false) {
+                    cont.resume()
+                }
+            }
+            try await harness.waitUntilDismissed()
+            #expect(harness.host.presentedViewController == nil)
 
-        anchor.dismissPresentedPopover(animated: false)
-        try await waitUntil {
-            harness.host.presentedViewController == nil
+            // After clearing, a fresh present works again.
+            anchor.present(animated: false)
+            let again = try await harness.requirePresentedPopover()
+            #expect(again.message == "Manual dismiss")
         }
-        #expect(harness.host.presentedViewController == nil)
-
-        // After clearing, a fresh present works again.
-        anchor.present(animated: false)
-        try await waitUntil {
-            harness.host.presentedViewController is AnchoredInfoPopoverController
-        }
-        let again = try #require(harness.host.presentedViewController as? AnchoredInfoPopoverController)
-        #expect(again.message == "Manual dismiss")
     }
 
     @Test func interactiveDismissNotifiesOnDismissed() async throws {
-        let harness = try AnchoredInfoPopoverWindowHarness()
-        defer { harness.tearDown() }
+        try await withPopoverHarness { harness in
+            var dismissCount = 0
+            let anchor = harness.installAnchor(
+                frame: CGRect(x: 40, y: 120, width: 44, height: 44),
+                message: "Focus return"
+            )
+            anchor.onDismissed = { dismissCount += 1 }
 
-        var dismissCount = 0
-        let anchor = harness.installAnchor(
-            frame: CGRect(x: 40, y: 120, width: 44, height: 44),
-            message: "Focus return"
-        )
-        anchor.onDismissed = { dismissCount += 1 }
+            anchor.present(animated: false)
+            let presented = try await harness.requirePresentedPopover()
 
-        anchor.present(animated: false)
-        try await waitUntil {
-            harness.host.presentedViewController is AnchoredInfoPopoverController
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                presented.dismiss(animated: false) {
+                    cont.resume()
+                }
+            }
+            try await waitUntil { dismissCount == 1 }
+            try await harness.waitUntilDismissed()
+
+            #expect(dismissCount == 1)
+            #expect(harness.host.presentedViewController == nil)
         }
-        let presented = try #require(harness.host.presentedViewController as? AnchoredInfoPopoverController)
-
-        // Simulate tap-outside / programmatic dismiss (viewDidDisappear → onDismissed).
-        presented.dismiss(animated: false)
-        try await waitUntil { dismissCount == 1 }
-        try await waitUntil { harness.host.presentedViewController == nil }
-
-        #expect(dismissCount == 1)
-        #expect(harness.host.presentedViewController == nil)
     }
 
     @Test func dismantleUIViewDismissesPresentedBubble() async throws {
-        let harness = try AnchoredInfoPopoverWindowHarness()
-        defer { harness.tearDown() }
+        try await withPopoverHarness { harness in
+            let anchor = harness.installAnchor(
+                frame: CGRect(x: 40, y: 120, width: 44, height: 44),
+                message: "Dismantle"
+            )
+            anchor.present(animated: false)
+            _ = try await harness.requirePresentedPopover()
 
-        let anchor = harness.installAnchor(
-            frame: CGRect(x: 40, y: 120, width: 44, height: 44),
-            message: "Dismantle"
-        )
-        anchor.present(animated: false)
-        try await waitUntil {
-            harness.host.presentedViewController is AnchoredInfoPopoverController
+            AnchoredInfoPopoverAnchor.dismantleUIView(anchor, coordinator: ())
+            try await harness.waitUntilDismissed()
+            #expect(harness.host.presentedViewController == nil)
         }
-
-        AnchoredInfoPopoverAnchor.dismantleUIView(anchor, coordinator: ())
-        try await waitUntil {
-            harness.host.presentedViewController == nil
-        }
-        #expect(harness.host.presentedViewController == nil)
     }
 }
 
 // MARK: - Test helpers
+
+@MainActor
+private func withPopoverHarness(
+    _ body: (AnchoredInfoPopoverWindowHarness) async throws -> Void
+) async throws {
+    let harness = try await AnchoredInfoPopoverWindowHarness.make()
+    do {
+        try await body(harness)
+        await harness.tearDown()
+    } catch {
+        await harness.tearDown()
+        throw error
+    }
+}
 
 @MainActor
 private final class AnchoredInfoPopoverWindowHarness {
@@ -215,7 +217,14 @@ private final class AnchoredInfoPopoverWindowHarness {
     let host: UIViewController
     private let previousKey: UIWindow?
 
-    init() throws {
+    static func make() async throws -> AnchoredInfoPopoverWindowHarness {
+        let harness = AnchoredInfoPopoverWindowHarness()
+        // Let the window become key before presenting popovers.
+        try await Task.sleep(nanoseconds: 50_000_000)
+        return harness
+    }
+
+    private init() {
         let host = UIViewController()
         host.view.backgroundColor = .systemBackground
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
@@ -237,8 +246,25 @@ private final class AnchoredInfoPopoverWindowHarness {
         return anchor
     }
 
-    func tearDown() {
-        host.dismiss(animated: false)
+    func requirePresentedPopover() async throws -> AnchoredInfoPopoverController {
+        try await waitUntil {
+            host.presentedViewController is AnchoredInfoPopoverController
+        }
+        return try #require(host.presentedViewController as? AnchoredInfoPopoverController)
+    }
+
+    func waitUntilDismissed() async throws {
+        try await waitUntil { host.presentedViewController == nil }
+    }
+
+    func tearDown() async {
+        if host.presentedViewController != nil {
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                host.dismiss(animated: false) {
+                    cont.resume()
+                }
+            }
+        }
         window.isHidden = true
         window.rootViewController = nil
         if let previousKey, previousKey !== window {
@@ -249,9 +275,9 @@ private final class AnchoredInfoPopoverWindowHarness {
 
 @MainActor
 private func waitUntil(
-    timeoutNanoseconds: UInt64 = 2_000_000_000,
+    timeoutNanoseconds: UInt64 = 5_000_000_000,
     pollNanoseconds: UInt64 = 20_000_000,
-    _ condition: () -> Bool
+    _ condition: @MainActor () -> Bool
 ) async throws {
     let deadline = DispatchTime.now() + .nanoseconds(Int(timeoutNanoseconds))
     while DispatchTime.now() < deadline {
