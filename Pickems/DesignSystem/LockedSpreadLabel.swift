@@ -11,6 +11,7 @@ struct LockedSpreadLabel: View {
     var lockedColor: Color = PickemsColors.textSecondary
 
     @State private var infoTrigger = AnchoredInfoPopoverTrigger()
+    @AccessibilityFocusState private var infoButtonFocused: Bool
 
     private var referenceCaption: String? {
         guard isLocked else { return nil }
@@ -86,9 +87,17 @@ struct LockedSpreadLabel: View {
         .buttonStyle(.borderless)
         .accessibilityLabel("Line info")
         .accessibilityHint(SpreadLineCopy.infoAccessibilityHint(isFinal: isFinal))
+        .accessibilityFocused($infoButtonFocused)
         .background {
-            AnchoredInfoPopoverAnchor(message: message, trigger: infoTrigger)
-                .allowsHitTesting(false)
+            AnchoredInfoPopoverAnchor(
+                message: message,
+                trigger: infoTrigger,
+                onDismissed: {
+                    // Anchor view is accessibility-hidden; move VO back to this button.
+                    infoButtonFocused = true
+                }
+            )
+            .allowsHitTesting(false)
         }
     }
 }
