@@ -459,7 +459,7 @@ struct GroupPicksView: View {
                                             lockedText: nominationSpreadLabel(nom),
                                             liveText: liveSpreadText(forEventId: nom.espnEventId),
                                             isLocked: true,
-                                            isFinal: appState.picksViewModel.livePickCards[nom.espnEventId]?.status == .final,
+                                            isFinal: nominationIsFinal(nom),
                                             font: .caption.weight(.bold),
                                             lockedColor: theme.accent
                                         )
@@ -575,6 +575,16 @@ struct GroupPicksView: View {
         guard let card = appState.picksViewModel.livePickCards[espnEventId] else { return nil }
         if card.isSlateGame { return card.liveSpreadLabel }
         return card.spreadLabel
+    }
+
+    /// Prefer the live card; fall back to the ESPN scoreboard the way `selectionGameDetail` does.
+    private func nominationIsFinal(_ nom: Nomination) -> Bool {
+        let live = appState.picksViewModel.livePickCards[nom.espnEventId]
+        if live?.status == .final { return true }
+        let espn = appState.picksViewModel.espnGames.first {
+            $0.espnEventId == nom.espnEventId || $0.id == nom.espnEventId
+        }
+        return espn?.status == .final
     }
 
     /// Kickoff comes from the saved Selection. Network, records, and live/final

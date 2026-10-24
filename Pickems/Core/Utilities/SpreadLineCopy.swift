@@ -25,33 +25,43 @@ enum SpreadLineCopy {
         return magnitude < 0 ? "-\(formatted)" : "+\(formatted)"
     }
 
-    /// `Current line: -7.0` / `Closing line: -7.0`, or `nil` when omitted.
+    /// Market line shown in captions / info copy. Always keeps the team token when
+    /// present so a flipped favorite (`LSU -7.5` → `ALA -3.0`) still names the side.
+    static func referenceDisplay(from label: String) -> String? {
+        guard let value = lineValue(from: label) else { return nil }
+        if let team = teamAbbreviation(in: label), !team.isEmpty {
+            return "\(team) \(value)"
+        }
+        return value
+    }
+
+    /// `Current line: LSU -7.0` / `Closing line: ALA -3.0`, or `nil` when omitted.
     static func referenceCaption(locked: String, live: String?, isFinal: Bool) -> String? {
         guard let live = liveReference(locked: locked, live: live),
-              let value = lineValue(from: live) else {
+              let display = referenceDisplay(from: live) else {
             return nil
         }
         let prefix = isFinal ? "Closing line" : "Current line"
-        return "\(prefix): \(value)"
+        return "\(prefix): \(display)"
     }
 
     /// Popover copy when the market line has moved away from the locked pick line.
     static func infoMessage(locked: String, live: String, isFinal: Bool) -> String? {
         guard let live = liveReference(locked: locked, live: live),
-              let movedValue = lineValue(from: live) else {
+              let movedDisplay = referenceDisplay(from: live) else {
             return nil
         }
         let graded = gradedPhrase(locked)
         let movement: String
         if isFinal {
-            movement = "The line closed at \(movedValue)."
+            movement = "The line closed at \(movedDisplay)."
         } else {
-            movement = "Vegas has since moved it to \(movedValue)."
+            movement = "Vegas has since moved it to \(movedDisplay)."
         }
         return "Your pick is graded at \(graded), the line when picks locked. \(movement) That's for reference only and doesn't change your result."
     }
 
-    /// VoiceOver: e.g. `Locked line LSU minus 7.5. Current line minus 7.0.`
+    /// VoiceOver: e.g. `Locked line LSU minus 7.5. Current line ALA minus 3.0.`
     static func accessibilityLabel(
         locked: String,
         live: String?,
@@ -64,10 +74,9 @@ enum SpreadLineCopy {
         } else {
             parts.append("Spread \(spokenLabel(locked))")
         }
-        if let live = liveReference(locked: locked, live: live),
-           let value = lineValue(from: live) {
+        if let live = liveReference(locked: locked, live: live) {
             let prefix = isFinal ? "Closing line" : "Current line"
-            parts.append("\(prefix) \(spokenValue(value))")
+            parts.append("\(prefix) \(spokenLabel(live))")
         }
         return parts.joined(separator: ". ") + "."
     }
@@ -100,17 +109,6 @@ enum SpreadLineCopy {
             return "\(team) \(spokenNumber)"
         }
         return spokenNumber
-    }
-
-    private static func spokenValue(_ value: String) -> String {
-        if value == "PK" { return "pick'em" }
-        if value.hasPrefix("-") {
-            return "minus \(String(value.dropFirst()))"
-        }
-        if value.hasPrefix("+") {
-            return "plus \(String(value.dropFirst()))"
-        }
-        return value
     }
 
     private static func teamAbbreviation(in label: String) -> String? {
