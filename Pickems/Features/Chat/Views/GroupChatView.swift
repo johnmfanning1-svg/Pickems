@@ -3,7 +3,7 @@ import SwiftUI
 /// Group chat feed plus composer. One Firestore listener owns the newest 50
 /// messages; older pages load on demand from the top of the thread.
 struct GroupChatView: View {
-    let group: PickemGroup
+    let groupId: String
 
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
@@ -14,6 +14,13 @@ struct GroupChatView: View {
     @AppStorage("chat.guidelines.acknowledged") private var didAcknowledgeGuidelines = false
 
     private var chat: ChatService { appState.chatService }
+
+    private var leagueName: String {
+        if let selected = appState.groupService.selectedGroup, selected.id == groupId {
+            return selected.name
+        }
+        return appState.groupService.groups.first { $0.id == groupId }?.name ?? "your league"
+    }
 
     private var messages: [ChatMessage] { chat.visibleMessages }
 
@@ -52,21 +59,21 @@ struct GroupChatView: View {
                 .pickemsEnvironment(appState)
         }
         .sheet(isPresented: $showBlockedUsers) {
-            ChatBlockedUsersSheet(group: group)
+            ChatBlockedUsersSheet()
                 .pickemsEnvironment(appState)
         }
-        .task(id: group.id) {
+        .task(id: groupId) {
             guard let userId = appState.currentUserId else { return }
             await chat.refreshRemoteConfig()
             chat.loadLocalModerationState(userId: userId)
-            chat.observe(groupId: group.id, userId: userId)
-            await chat.loadMuteState(groupId: group.id, userId: userId)
-            await chat.markRead(groupId: group.id, userId: userId)
+            chat.observe(groupId: groupId, userId: userId)
+            await chat.loadMuteState(groupId: groupId, userId: userId)
+            await chat.markRead(groupId: groupId, userId: userId)
         }
         .onDisappear {
             guard let userId = appState.currentUserId else { return }
-            let groupId = group.id
-            Task { await appState.chatService.markRead(groupId: groupId, userId: userId) }
+            let leavingGroupId = groupId
+            Task { await appState.chatService.markRead(groupId: leavingGroupId, userId: userId) }
             appState.chatService.stopObserving()
         }
     }
@@ -120,7 +127,7 @@ struct GroupChatView: View {
                     ContentUnavailableView(
                         "No Messages Yet",
                         systemImage: "bubble.left.and.bubble.right",
-                        description: Text("Start the smack talk — everyone in \(group.name) will see it.")
+                        description: Text("Start the smack talk — everyone in \(leagueName) will see it.")
                     )
                 }
             }
@@ -240,7 +247,7 @@ struct GroupChatView: View {
         Task {
             await appState.chatService.send(
                 text: text,
-                groupId: group.id,
+                groupId: groupId,
                 weekId: appState.groupService.currentWeek?.id,
                 author: author
             )
@@ -255,7 +262,7 @@ struct GroupChatView: View {
                 guard let userId = appState.currentUserId else { return }
                 let muted = !chat.isMuted
                 Task {
-                    await appState.chatService.setMuted(muted, groupId: group.id, userId: userId)
+                    await appState.chatService.setMuted(muted, groupId: groupId, userId: userId)
                 }
             } label: {
                 Label(
@@ -284,8 +291,6 @@ struct GroupChatView: View {
 
 /// Lets a member undo a block — Guideline 1.2 expects blocking to be reversible.
 private struct ChatBlockedUsersSheet: View {
-    let group: PickemGroup
-
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 

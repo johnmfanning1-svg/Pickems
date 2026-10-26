@@ -12,15 +12,19 @@ struct AppSheetHostModifier: ViewModifier {
         @Bindable var appState = appState
         content
             .onChange(of: appState.groupService.selectedGroup?.id, initial: true) { (_: String?, _: String?) in
-                rememberSettingsGroup()
+                rememberSettingsGroup(settingsOpen: appState.presentedSheet == .commissionerSettings)
+            }
+            .onChange(of: appState.presentedSheet) { (_: AppSheet?, _: AppSheet?) in
+                rememberSettingsGroup(settingsOpen: appState.presentedSheet == .commissionerSettings)
             }
             .sheet(
                 item: presentedSheetBinding,
                 onDismiss: {
                     appState.picksViewModel.selectionBrowseIntent = .own
-                    if appState.groupService.selectedGroup == nil {
-                        retainedSettingsGroup = nil
-                    }
+                    // Sheet is gone. Follow the live league again, or drop the pin
+                    // when nothing is selected so the next open cannot revive a
+                    // league the member already left.
+                    rememberSettingsGroup(settingsOpen: false)
                 }
             ) { (sheet: AppSheet) in
                 appSheetContent(sheet)
@@ -38,9 +42,18 @@ struct AppSheetHostModifier: ViewModifier {
         )
     }
 
-    private func rememberSettingsGroup() {
-        if let group = appState.groupService.selectedGroup {
-            retainedSettingsGroup = group
+    /// While Settings are open, a pin for another league stays put. A nil
+    /// flicker does not clear it. Once Settings are closed, the pin follows
+    /// the live selection (including clearing it).
+    private func rememberSettingsGroup(settingsOpen: Bool) {
+        guard let live = appState.groupService.selectedGroup else {
+            if !settingsOpen {
+                retainedSettingsGroup = nil
+            }
+            return
+        }
+        if !settingsOpen || retainedSettingsGroup == nil || retainedSettingsGroup?.id == live.id {
+            retainedSettingsGroup = live
         }
     }
 
@@ -82,19 +95,29 @@ struct AppSheetHostModifier: ViewModifier {
         }
     }
 
-    /// Prefer the live league. Fall back to the last one so a nil flicker
-    /// keeps the same `CommissionerSettingsView` identity.
-    private var settingsGroup: PickemGroup? {
-        appState.groupService.selectedGroup ?? retainedSettingsGroup
+    /// Identity is the league id, not the `PickemGroup` value. A listener
+    /// snapshot used to rebuild Settings and dismiss every sheet on it.
+    private var settingsGroupId: String? {
+        CommissionerSheetStability.presenterGroupId(
+            liveGroupId: appState.groupService.selectedGroup?.id,
+            retainedGroupId: retainedSettingsGroup?.id
+        )
     }
 
     @ViewBuilder
     private var commissionerSettingsSheet: some View {
-        if let group = settingsGroup {
-            CommissionerSettingsView(group: group)
+        if let groupId = settingsGroupId {
+            CommissionerSettingsView(groupId: groupId, seed: seedGroup(for: groupId))
         } else {
             missingSettingsLeague
         }
+    }
+
+    private func seedGroup(for groupId: String) -> PickemGroup {
+        if let retained = retainedSettingsGroup, retained.id == groupId { return retained }
+        if let live = appState.groupService.selectedGroup, live.id == groupId { return live }
+        if let listed = appState.groupService.groups.first(where: { $0.id == groupId }) { return listed }
+        return CommissionerSheetStability.placeholderGroup(id: groupId)
     }
 
     private var missingSettingsLeague: some View {

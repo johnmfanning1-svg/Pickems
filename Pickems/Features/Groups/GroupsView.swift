@@ -25,28 +25,8 @@ struct GroupsView: View {
                     } else {
                         groupPicker
 
-                        if let group = appState.groupService.selectedGroup {
-                            totalsHero(group)
-
-                            LeaderboardView(scope: leaderboardScopeBinding)
-
-                            thisWeekCard(group)
-
-                            primaryActions(group)
-
-                            manageSection(group)
-
-                            DynastySectionView()
-                                .padding(.horizontal)
-
-                            SocialShareCard(
-                                group: group,
-                                standings: appState.groupService.standings,
-                                includeInviteCode: group.canShareInvite(
-                                    asCommissioner: appState.isCommissioner
-                                )
-                            )
-                            .padding(.horizontal)
+                        if let groupId = appState.groupService.selectedGroup?.id {
+                            selectedLeagueContent(resolvedGroup(groupId))
                         }
                     }
                 }
@@ -104,6 +84,43 @@ struct GroupsView: View {
                 recordManualLeaderboardScope(newScope)
             }
         )
+    }
+
+    /// Branch identity is the league id. `if let group = selectedGroup` rebuilt
+    /// this stack on every snapshot and popped Chat.
+    @ViewBuilder
+    private func selectedLeagueContent(_ group: PickemGroup) -> some View {
+        totalsHero(group)
+
+        LeaderboardView(scope: leaderboardScopeBinding)
+
+        thisWeekCard(group)
+
+        primaryActions(group)
+
+        manageSection(group)
+
+        DynastySectionView()
+            .padding(.horizontal)
+
+        SocialShareCard(
+            group: group,
+            standings: appState.groupService.standings,
+            includeInviteCode: group.canShareInvite(
+                asCommissioner: appState.isCommissioner
+            )
+        )
+        .padding(.horizontal)
+    }
+
+    private func resolvedGroup(_ groupId: String) -> PickemGroup {
+        if let selected = appState.groupService.selectedGroup, selected.id == groupId {
+            return selected
+        }
+        if let listed = appState.groupService.groups.first(where: { $0.id == groupId }) {
+            return listed
+        }
+        return CommissionerSheetStability.placeholderGroup(id: groupId)
     }
 
     private func recordManualLeaderboardScope(_ newScope: LeaderboardScope.Scope) {
@@ -389,7 +406,7 @@ struct GroupsView: View {
                 .buttonStyle(.plain)
                 .accessibilityHint("View league members and season records")
 
-                GroupChatEntryButton(group: group)
+                GroupChatEntryButton(groupId: group.id)
 
                 NavigationLink {
                     RivalryView()

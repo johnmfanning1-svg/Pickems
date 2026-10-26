@@ -5,7 +5,10 @@ struct CommissionerSettingsView: View {
     @Environment(\.themePalette) private var theme
     @Environment(\.dismiss) private var dismiss
 
-    let group: PickemGroup
+    /// Pinned for this presentation. Snapshots update `group`; they do not
+    /// change this id, so `@State` route survives a Firestore refresh.
+    let groupId: String
+    @State private var fallbackGroup: PickemGroup
     @State private var rules: GroupRules
     @State private var isPublic: Bool
     @State private var commissionerOnlyInvites: Bool
@@ -19,6 +22,10 @@ struct CommissionerSettingsView: View {
     @State private var isUpdatingCode = false
     @State private var identityError: String?
     @State private var route: CommissionerSheet?
+    /// Manage Pickems push. Ids only — a member snapshot must not pop it.
+    @State private var picksRoute: CommissionerPicksRoute?
+    @State private var capturedPicksMember: GroupMember?
+    @State private var capturedPicksWeek: WeekSummary?
     /// League and week frozen when Reopen Selections was tapped.
     /// The alert is presented from this value (`presenting:`), not a second flag.
     @State private var reopenSelectionsTarget: DeadlineEditCapture?
@@ -30,20 +37,25 @@ struct CommissionerSettingsView: View {
 
     @FocusState private var codeFieldFocused: Bool
 
-    init(group: PickemGroup) {
-        self.group = group
-        _rules = State(initialValue: group.rules)
-        _isPublic = State(initialValue: group.isPublic)
-        _commissionerOnlyInvites = State(initialValue: group.commissionerOnlyInvites == true)
-        _groupName = State(initialValue: group.name)
+    init(groupId: String, seed: PickemGroup) {
+        self.groupId = groupId
+        _fallbackGroup = State(initialValue: seed)
+        _rules = State(initialValue: seed.rules)
+        _isPublic = State(initialValue: seed.isPublic)
+        _commissionerOnlyInvites = State(initialValue: seed.commissionerOnlyInvites == true)
+        _groupName = State(initialValue: seed.name)
         _scoringSwitch = State(initialValue: CommissionerScoringSwitch())
     }
 
-    private var liveGroup: PickemGroup {
-        appState.groupService.selectedGroup?.id == group.id
-            ? (appState.groupService.selectedGroup ?? group)
-            : group
+    /// Live league when it is still this presentation. Otherwise the last
+    /// copy we had, so a nil flicker cannot blank the form.
+    private var group: PickemGroup {
+        if let live = appState.groupService.selectedGroup, live.id == groupId { return live }
+        if let listed = appState.groupService.groups.first(where: { $0.id == groupId }) { return listed }
+        return fallbackGroup
     }
+
+    private var liveGroup: PickemGroup { group }
 
     private var seasonYearToClose: Int {
         appState.groupService.cfbWeek?.seasonYear
@@ -67,7 +79,29 @@ struct CommissionerSettingsView: View {
     // reasonable time" in Release archives after the rolling-lock section landed.
     var body: some View {
         NavigationStack {
-            settingsFormWithSheets
+            settingsFormWithSeasonAlerts
+                .navigationDestination(item: $picksRoute) { (route: CommissionerPicksRoute) in
+                    managePicksDestination(route)
+                }
+                .task { await openPendingDeadlineEditor() }
+                .task { await loadCommissionerWeekContext() }
+                .onChange(of: groupId) { (previous: String, next: String) in
+                    route = CommissionerSheetStability.routeAfterGroupRefresh(
+                        route: route,
+                        previousGroupId: previous,
+                        groupId: next
+                    )
+                    picksRoute = CommissionerSheetStability.routeAfterGroupRefresh(
+                        route: picksRoute,
+                        previousGroupId: previous,
+                        groupId: next
+                    )
+                }
+        }
+        // On the stack, not the alert chain. Several `.alert`s on the same
+        // view as `.sheet` dismiss the sheet when a listener refreshes them.
+        .sheet(item: $route) { (r: CommissionerSheet) in
+            routeContent(r)
         }
     }
 
@@ -77,7 +111,12 @@ struct CommissionerSettingsView: View {
         Form {
             CommissionerWeekAdminSections(
                 present: { (request: CommissionerSheetRequest) in presentCommissionerSheet(request) },
-                requestReopenSelections: { (week: WeekSummary) in presentReopenSelectionsConfirm(week) }
+                requestReopenSelections: { (week: WeekSummary) in presentReopenSelectionsConfirm(week) },
+                managePicks: { (member: GroupMember, week: WeekSummary) in
+                    capturedPicksMember = member
+                    capturedPicksWeek = week
+                    picksRoute = CommissionerPicksRoute(memberId: member.id, weekId: week.id)
+                }
             )
             leagueIdentitySection
             membersRowSection
@@ -405,13 +444,36 @@ struct CommissionerSettingsView: View {
 
     // MARK: - Sheets
 
-    private var settingsFormWithSheets: some View {
-        settingsFormWithSeasonAlerts
-            .sheet(item: $route) { (r: CommissionerSheet) in
-                routeContent(r)
-            }
-            .task { await openPendingDeadlineEditor() }
-            .task { await loadCommissionerWeekContext() }
+    @ViewBuilder
+    private func managePicksDestination(_ route: CommissionerPicksRoute) -> some View {
+        if let member = picksMember(route.memberId), let week = picksWeek(route.weekId) {
+            CommissionerManagePicksSheet(
+                member: member,
+                week: week,
+                groupId: groupId,
+                slateGames: appState.pickService.slateGames
+            )
+            .pickemsEnvironment(appState)
+        } else {
+            ContentUnavailableView(
+                "Pickems Unavailable",
+                systemImage: "person.crop.circle.badge.exclamationmark",
+                description: Text("That member or week is no longer in this league.")
+            )
+        }
+    }
+
+    private func picksMember(_ memberId: String) -> GroupMember? {
+        if let live = appState.groupService.members.first(where: { $0.id == memberId }) { return live }
+        if capturedPicksMember?.id == memberId { return capturedPicksMember }
+        return nil
+    }
+
+    private func picksWeek(_ weekId: String) -> WeekSummary? {
+        if capturedPicksWeek?.id == weekId { return capturedPicksWeek }
+        if appState.groupService.currentWeek?.id == weekId { return appState.groupService.currentWeek }
+        guard appState.groupService.availableWeeksBelong(to: groupId) else { return nil }
+        return appState.groupService.availableWeeks.first { $0.id == weekId }
     }
 
     @ViewBuilder
@@ -465,9 +527,7 @@ struct CommissionerSettingsView: View {
     }
 
     private func loadCommissionerWeekContext() async {
-        if let groupId = appState.groupService.selectedGroup?.id {
-            await appState.groupService.loadAvailableWeeks(groupId: groupId)
-        }
+        await appState.groupService.loadAvailableWeeks(groupId: groupId)
         await appState.picksViewModel.ensureTeamRanks(appState: appState)
     }
 
@@ -478,8 +538,7 @@ struct CommissionerSettingsView: View {
     private func openPendingDeadlineEditor() async {
         guard let target = appState.pendingDeadlineEditor else { return }
         appState.pendingDeadlineEditor = nil
-        guard target.matches(groupId: group.id) else { return }
-        let groupId = group.id
+        guard target.matches(groupId: groupId) else { return }
         let service = appState.groupService
         if let weekId = target.weekId,
            service.selectedGroup?.id == groupId,
@@ -512,7 +571,7 @@ struct CommissionerSettingsView: View {
     private func presentCommissionerSheet(_ request: CommissionerSheetRequest) {
         guard let sheet = CommissionerDeadlinePresentation.route(
             for: request,
-            settingsGroupId: group.id,
+            settingsGroupId: groupId,
             selectedGroupId: appState.groupService.selectedGroup?.id
         ) else { return }
         route = sheet
@@ -920,4 +979,12 @@ struct CommissionerSettingsView: View {
         }
     }
 
+}
+
+/// Manage Pickems push. The id is week + member, not the member value, so a
+/// roster refresh cannot pop the editor.
+struct CommissionerPicksRoute: Identifiable, Hashable {
+    var memberId: String
+    var weekId: String
+    var id: String { "\(weekId)|\(memberId)" }
 }

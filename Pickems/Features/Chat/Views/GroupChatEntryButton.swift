@@ -4,7 +4,7 @@ import SwiftUI
 /// unread badge, `NavigationLink`, and the `appConfig/live.chatEnabled` check,
 /// so Lane D can drop it into the actions grid without any wiring.
 struct GroupChatEntryButton: View {
-    let group: PickemGroup
+    let groupId: String
 
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
@@ -13,14 +13,14 @@ struct GroupChatEntryButton: View {
     var body: some View {
         if appState.chatService.chatEnabled {
             NavigationLink {
-                GroupChatView(group: group)
+                GroupChatView(groupId: groupId)
             } label: {
                 label
             }
             .buttonStyle(.plain)
             .accessibilityLabel(accessibilityLabel)
             .accessibilityHint("Open league chat")
-            .task(id: group.id) {
+            .task(id: groupId) {
                 await refreshBadge()
             }
         }
@@ -65,6 +65,6 @@ struct GroupChatEntryButton: View {
         guard let userId = appState.currentUserId else { return }
         await appState.chatService.refreshRemoteConfig()
         appState.chatService.loadLocalModerationState(userId: userId)
-        unreadCount = await appState.chatService.unreadCount(groupId: group.id, userId: userId)
+        unreadCount = await appState.chatService.unreadCount(groupId: groupId, userId: userId)
     }
 }

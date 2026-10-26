@@ -93,6 +93,11 @@ struct CommissionerSelectionsAdminSheet: View {
     let week: WeekSummary
     let groupId: String
 
+    /// Member id for the pushed editor. The row's `NavigationLink` used to pop
+    /// whenever the members listener replaced the row.
+    @State private var managingMemberId: String?
+    @State private var capturedMember: GroupMember?
+
     private var selectionsPerMember: Int {
         let weekValue: Int = week.selectionsPerMember
         if weekValue > 0 { return weekValue }
@@ -103,24 +108,28 @@ struct CommissionerSelectionsAdminSheet: View {
         CommissionerAdminSheetChrome(title: "Selections") {
             Section {
                 ForEach(appState.groupService.members) { (member: GroupMember) in
-                    memberLink(member, week: week, groupId: groupId)
+                    memberLink(member)
                 }
             } header: {
                 Text(week.displayLabel)
             } footer: {
                 Text("Tap a member to change their Selections. Counts are games submitted versus the weekly requirement.")
             }
+            .navigationDestination(item: $managingMemberId) { (memberId: String) in
+                selectionsDestination(memberId)
+            }
         }
     }
 
-    private func memberLink(_ member: GroupMember, week: WeekSummary, groupId: String) -> some View {
+    private func memberLink(_ member: GroupMember) -> some View {
         let progress = SubmissionRoster.selectionProgress(
             nominations: appState.pickService.nominations,
             memberId: member.id,
             perMember: selectionsPerMember
         )
-        return NavigationLink {
-            CommissionerManageSelectionsSheet(member: member, week: week, groupId: groupId)
+        return Button {
+            capturedMember = member
+            managingMemberId = member.id
         } label: {
             CommissionerMemberProgressRow(
                 name: member.displayName,
@@ -130,11 +139,39 @@ struct CommissionerSelectionsAdminSheet: View {
                 unitName: "Selections"
             )
         }
+        .buttonStyle(.plain)
         .accessibilityLabel(
             "\(member.displayName), \(progress.made) of \(progress.total) Selections, \(progress.status.label). Manage Selections."
         )
         .listRowBackground(PickemsColors.cardBackground)
     }
+
+    @ViewBuilder
+    private func selectionsDestination(_ memberId: String) -> some View {
+        if let member = memberForSelections(memberId) {
+            CommissionerManageSelectionsSheet(member: member, week: week, groupId: groupId)
+                .pickemsEnvironment(appState)
+        } else {
+            ContentUnavailableView(
+                "Member Unavailable",
+                systemImage: "person.crop.circle.badge.exclamationmark",
+                description: Text("That member is no longer in this league.")
+            )
+        }
+    }
+
+    private func memberForSelections(_ memberId: String) -> GroupMember? {
+        if let live = appState.groupService.members.first(where: { $0.id == memberId }) { return live }
+        if capturedMember?.id == memberId { return capturedMember }
+        return nil
+    }
+}
+
+/// Spread sheet identity. `id` is the game id, so a slate refresh that
+/// replaces the `SlateGame` value does not dismiss the editor.
+struct SlateSpreadEdit: Identifiable {
+    var game: SlateGame
+    var id: String { game.id }
 }
 
 // MARK: - Slate
@@ -142,7 +179,7 @@ struct CommissionerSelectionsAdminSheet: View {
 /// Was the inline "This Week's Slate" section, plus the spread editor sheet.
 struct CommissionerSlateSheet: View {
     @Environment(AppState.self) private var appState
-    @State private var spreadEditGame: SlateGame?
+    @State private var spreadEdit: SlateSpreadEdit?
 
     /// Week chip that opened this sheet. Not `currentWeek`, which can be nil on the presentation frame.
     let week: WeekSummary
@@ -154,8 +191,13 @@ struct CommissionerSlateSheet: View {
         CommissionerAdminSheetChrome(title: "Slate") {
             slateSection
         }
-        .sheet(item: $spreadEditGame) { (game: SlateGame) in
-            spreadEditorSheet(for: game)
+        .sheet(item: $spreadEdit) { (edit: SlateSpreadEdit) in
+            spreadEditorSheet(
+                for: SlateSpreadPresentation.game(
+                    captured: edit.game,
+                    liveGames: appState.pickService.displaySlateGames
+                )
+            )
         }
     }
 
@@ -196,7 +238,7 @@ struct CommissionerSlateSheet: View {
             }
             HStack {
                 if showsSpreads && !WeekTransition.isSpreadLocked(game, week: week) {
-                    Button("Edit Spread") { spreadEditGame = game }
+                    Button("Edit Spread") { spreadEdit = SlateSpreadEdit(game: game) }
                 }
                 if !week.skipsSelection {
                     Spacer()
