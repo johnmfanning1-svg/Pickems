@@ -152,6 +152,9 @@ describe("planRollingSwitch", () => {
     expect(codeOf(() => planRollingSwitch({ ...base, callerUid: "member", callerIsAdmin: false }))).toBe(
       "permission-denied"
     );
+    expect(codeOf(() => planRollingSwitch({ ...base, callerUid: "oc", callerIsAdmin: false }))).toBe(
+      "permission-denied"
+    );
     expect(
       codeOf(() => planRollingSwitch({ ...base, callerUid: "someone", callerIsAdmin: true }))
     ).toBeUndefined();

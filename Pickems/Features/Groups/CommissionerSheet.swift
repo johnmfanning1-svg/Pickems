@@ -17,6 +17,7 @@ enum CommissionerSheet: Identifiable, Equatable {
     case selections(WeekSummary)
     case slate(WeekSummary)
     case rankTies(TieRankDraft, DeadlineEditCapture)
+    case coordinators(LeagueCoordinatorRole)
 
     var id: String {
         switch self {
@@ -34,6 +35,8 @@ enum CommissionerSheet: Identifiable, Equatable {
             return "slate"
         case .rankTies(let draft, _):
             return "rankTies.\(draft.id)"
+        case .coordinators(let role):
+            return "coordinators.\(role.rawValue)"
         }
     }
 }

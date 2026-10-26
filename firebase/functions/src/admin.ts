@@ -25,13 +25,14 @@ import {
 } from "./scoring";
 import { isRollingLock } from "./pickLock";
 import { rejectedPickIds, type GameLockInput } from "./spreadLock";
+import { assertWeekOperator, coordinatorsAfterCommissionerTransfer } from "./coordinators";
 
 /**
  * Callable surface for the web admin portal (Lane J).
  *
- * Every function here is gated on the `admin` custom claim and appends an
- * `adminAudit` entry, so the portal can never take a privileged action that
- * leaves no trail. Scoring always routes through ./scoring so the portal and
+ * Portal callables are gated on the `admin` custom claim and append an
+ * `adminAudit` entry. `adminSetWeekStatus` also accepts the commissioner or a
+ * current coordinator. Scoring always routes through ./scoring so the portal and
  * `lockAndScoreWeeks` can never disagree.
  */
 
@@ -163,9 +164,19 @@ export const setAdminRole = onCall(async (request) => {
   };
 });
 
-/** Force a week status transition and/or set the pick deadline. */
+/**
+ * Force a week status transition and/or set the pick deadline.
+ * Super admins, the commissioner, and a current coordinator may call this.
+ */
 export const adminSetWeekStatus = onCall(async (request) => {
-  const actor = requireSuperAdmin(request);
+  const auth = request.auth;
+  if (!auth) {
+    throw new HttpsError("unauthenticated", "Sign in required.");
+  }
+  const actor: Actor = {
+    uid: auth.uid,
+    email: (auth.token.email as string | undefined) ?? null,
+  };
   const data = (request.data ?? {}) as {
     groupId?: string;
     weekId?: string;
@@ -178,6 +189,13 @@ export const adminSetWeekStatus = onCall(async (request) => {
   if (!WEEK_STATUSES.includes(status)) {
     throw new HttpsError("invalid-argument", `\`status\` must be one of ${WEEK_STATUSES.join(", ")}.`);
   }
+
+  const groupSnap = await db().collection("groups").doc(groupId).get();
+  assertWeekOperator({
+    callerUid: auth.uid,
+    callerIsAdmin: auth.token.admin === true,
+    group: groupSnap.exists ? groupSnap.data() : undefined,
+  });
 
   const snap = await requireWeek(groupId, weekId);
   const before = snap.data() ?? {};
@@ -404,9 +422,16 @@ export const adminTransferCommissioner = onCall(async (request) => {
     throw new HttpsError("failed-precondition", "The new commissioner must already be a member.");
   }
   const previousCommissionerId = (group.commissionerId as string | undefined) ?? null;
+  const coordinatorPatch = coordinatorsAfterCommissionerTransfer(group, userId);
 
   const batch = db().batch();
-  batch.update(groupRef, { commissionerId: userId });
+  const groupPatch: Record<string, unknown> = { commissionerId: userId };
+  if (coordinatorPatch.action === "delete") {
+    groupPatch.coordinators = FieldValue.delete();
+  } else if (coordinatorPatch.action === "set") {
+    groupPatch.coordinators = coordinatorPatch.value;
+  }
+  batch.update(groupRef, groupPatch);
   batch.set(groupRef.collection("members").doc(userId), { role: "commissioner" }, { merge: true });
   if (previousCommissionerId && previousCommissionerId !== userId) {
     batch.set(

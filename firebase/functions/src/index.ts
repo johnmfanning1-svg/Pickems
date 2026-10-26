@@ -113,6 +113,9 @@ export { detectShockTweets, runDetectShockTweets } from "./shockTweets";
 export { setRollingLock } from "./rollingLock";
 export { setLeaguePickMode } from "./leaguePickMode";
 
+// OC / DC appointment pushes, and cleanup when a seat holder leaves the roster.
+export { onCoordinatorRolesChanged } from "./coordinators";
+
 /** When a week flips to picking, materialize nominations into games if needed. */
 export const onWeekStatusChange = onDocumentUpdated(
   "groups/{groupId}/weeks/{weekId}",

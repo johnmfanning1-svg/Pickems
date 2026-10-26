@@ -308,7 +308,7 @@ final class PicksViewModel {
                 game: games[0],
                 rules: rules,
                 week: week,
-                isCommissioner: appState.isCommissioner,
+                isCommissioner: appState.canOperateWeek,
                 userId: user.id
             )
             return SelectionBrowseSaveResult(
@@ -359,20 +359,18 @@ final class PicksViewModel {
                 rules: rules,
                 week: week,
                 memberIds: group.memberIds,
-                isCommissioner: appState.isCommissioner
+                isCommissioner: appState.canOperateWeek
             )
         }
     }
 
     private func usesCommissionerGameWrite(week: WeekSummary, appState: AppState) -> Bool {
+        guard appState.canOperateWeek else { return false }
         let selectionMode = week.selectionMode
-        let commissionerFill =
-            appState.isCommissioner
-            && (
-                (selectionMode == .member && week.isSelectionDeadlinePassed)
-                || week.status == .picking
-            )
-        return selectionMode == .commissioner || commissionerFill
+        let operatorFill =
+            (selectionMode == .member && week.isSelectionDeadlinePassed)
+            || week.status == .picking
+        return selectionMode == .commissioner || operatorFill
     }
 
     func saveDraft(appState: AppState) {
@@ -655,7 +653,7 @@ final class PicksViewModel {
                     nomination: nomination,
                     rules: rules,
                     week: week,
-                    isCommissioner: appState.isCommissioner,
+                    isCommissioner: appState.canOperateWeek,
                     userId: userId
                 )
                 let eventId = nomination.espnEventId

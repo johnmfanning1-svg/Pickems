@@ -65,6 +65,10 @@ describe("planLeaguePickModeSwitch: access", () => {
   it("lets an admin change any league", () => {
     expect(codeOf(() => plan({ callerUid: "support", callerIsAdmin: true }))).toBeUndefined();
   });
+
+  it("rejects a coordinator", () => {
+    expect(codeOf(() => plan({ callerUid: "oc" }))).toBe("permission-denied");
+  });
 });
 
 describe("planLeaguePickModeSwitch: apply to this week and going forward", () => {

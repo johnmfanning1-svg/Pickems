@@ -6,6 +6,7 @@ struct LeaderboardRow: View {
     var streak: Int = 0
     var isPerfectSaturday: Bool = false
     var isCommissioner: Bool = false
+    var coordinatorRole: LeagueCoordinatorRole? = nil
     var showsDisclosure: Bool = false
     /// Keep the chevron's width even when the chevron is hidden so records line up with tappable rows.
     var reservesDisclosureSpace: Bool = false
@@ -53,6 +54,9 @@ struct LeaderboardRow: View {
                             .foregroundStyle(theme.accent)
                             .accessibilityLabel("Commissioner")
                     }
+                    if let coordinatorRole {
+                        LeagueRoleBadge(role: coordinatorRole)
+                    }
                 }
                 HStack(spacing: 6) {
                     if entry.isTied {
@@ -93,7 +97,8 @@ struct LeaderboardRow: View {
     private var accessibilityLabel: String {
         let record = recordAccessibilityPhrase
         let tied = entry.isTied ? ", tied for rank" : ""
-        let role = isCommissioner ? ", commissioner" : ""
+        let coordinator = coordinatorRole.map { ", \($0.title)" } ?? ""
+        let role = (isCommissioner ? ", commissioner" : "") + coordinator
         return "Rank \(entry.rank), \(entry.displayName)\(role), \(record), \(accessibilitySecondary)\(tied)"
     }
 

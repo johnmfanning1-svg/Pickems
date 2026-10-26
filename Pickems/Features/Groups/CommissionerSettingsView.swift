@@ -27,6 +27,7 @@ struct CommissionerSettingsView: View {
     @State private var rollingPromptWeek: WeekSummary?
     @State private var rollingStatus: String?
     @State private var rollingError: String?
+    @State private var coordinatorError: String?
 
     @FocusState private var codeFieldFocused: Bool
 
@@ -79,31 +80,45 @@ struct CommissionerSettingsView: View {
                 present: { (request: CommissionerSheetRequest) in presentCommissionerSheet(request) },
                 requestReopenSelections: { (week: WeekSummary) in presentReopenSelectionsConfirm(week) }
             )
-            leagueIdentitySection
-            membersRowSection
-            CommissionerScoringSection(groupId: group.id, rules: $rules, model: scoringSwitch)
-            slateConfigurationSection
-            pickemsLockSection
-            tiesSection
-            visibilitySection
-            dynastySection
+            if appState.isCommissioner {
+                CoordinatorSettingsSection(
+                    group: liveGroup,
+                    errorMessage: coordinatorError,
+                    onPick: { role in route = .coordinators(role) }
+                )
+                leagueIdentitySection
+                membersRowSection
+                CommissionerScoringSection(groupId: group.id, rules: $rules, model: scoringSwitch)
+                slateConfigurationSection
+                pickemsLockSection
+                tiesSection
+                visibilitySection
+                dynastySection
+            }
         }
         .scrollContentBackground(.hidden)
         .pickemsScreenBackground()
-        .navigationTitle("Commissioner Settings")
+        .navigationTitle(appState.isCommissioner ? "Commissioner Settings" : "Week Operations")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { settingsToolbar }
     }
 
     @ToolbarContentBuilder
     private var settingsToolbar: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            Button("Cancel") { dismiss() }
-        }
-        ToolbarItem(placement: .confirmationAction) {
-            Button("Save") { save() }
-                .fontWeight(.semibold)
-                .disabled(isSaving)
+        if appState.isCommissioner {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") { save() }
+                    .fontWeight(.semibold)
+                    .disabled(isSaving)
+            }
+        } else {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { dismiss() }
+                    .fontWeight(.semibold)
+            }
         }
     }
 
@@ -437,6 +452,41 @@ struct CommissionerSettingsView: View {
             slateAdminSheet(week)
         case .rankTies(let draft, let capture):
             rankTiesSheet(draft, capture: capture)
+        case .coordinators(let role):
+            coordinatorPicker(role)
+        }
+    }
+
+    private func coordinatorPicker(_ role: LeagueCoordinatorRole) -> some View {
+        let roster = appState.groupService.membersGroupId == group.id
+            ? appState.groupService.members
+            : []
+        return CoordinatorMemberPicker(
+            role: role,
+            group: liveGroup,
+            members: roster
+        ) { userId in
+            appoint(role, userId: userId)
+        }
+        .pickemsEnvironment(appState)
+    }
+
+    private func appoint(_ role: LeagueCoordinatorRole, userId: String) {
+        coordinatorError = nil
+        Task {
+            do {
+                try await appState.groupService.setCoordinator(
+                    groupId: group.id,
+                    role: role,
+                    userId: userId
+                )
+                route = nil
+                PickemsHaptics.success()
+            } catch {
+                coordinatorError = UserFacingError.message(for: error, context: .write) ?? error.localizedDescription
+                route = nil
+                PickemsHaptics.warning()
+            }
         }
     }
 

@@ -91,7 +91,7 @@ enum DeepLinkRouter {
         switch type {
         case "week_scored", "deadline_reminder", "deadline_locked", "pickems_open":
             return .openPickems(groupId: groupId)
-        case "deadline_passed", "season_closed", "chat_message":
+        case "deadline_passed", "season_closed", "chat_message", "coordinator_role":
             return .openLeagues(groupId: groupId)
         case "set_selection_deadline":
             return .openSelectionDeadline(groupId: groupId)

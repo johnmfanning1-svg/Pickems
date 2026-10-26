@@ -634,9 +634,7 @@ final class GroupService {
               group.id == groupId else {
             throw GroupError.groupNotFound
         }
-        guard group.commissionerId == Auth.auth().currentUser?.uid else {
-            throw GroupError.notCommissioner
-        }
+        try requireWeekOperator(group)
 
         try await db.week(groupId: groupId, weekId: weekId).updateData(
             WeekTransition.toSelectionUpdates()
@@ -1177,7 +1175,10 @@ final class GroupService {
 
         let previousCommissionerId = group.commissionerId
 
-        try await db.collection("groups").document(groupId).updateData(["commissionerId": toUserId])
+        var ownershipUpdate: [String: Any] = ["commissionerId": toUserId]
+        let nextCoordinators = LeagueRolePolicy.clearing(toUserId, group: group, commissionerId: toUserId)
+        ownershipUpdate.merge(Self.coordinatorFields(from: group.coordinators, to: nextCoordinators)) { _, new in new }
+        try await db.collection("groups").document(groupId).updateData(ownershipUpdate)
         try await db.collection("groups").document(groupId)
             .collection("members").document(toUserId)
             .updateData(["role": GroupMember.MemberRole.commissioner.rawValue])
@@ -1187,6 +1188,7 @@ final class GroupService {
 
         if var group = groups.first(where: { $0.id == groupId }) {
             group.commissionerId = toUserId
+            group.coordinators = nextCoordinators.isEmpty ? nil : nextCoordinators
             if let idx = groups.firstIndex(where: { $0.id == groupId }) {
                 groups[idx] = group
             }
@@ -1379,17 +1381,24 @@ final class GroupService {
         guard group.memberIds.contains(userId) else { return }
 
         let updatedIds = group.memberIds.filter { $0 != userId }
+        var rosterUpdate: [String: Any] = ["memberIds": updatedIds]
+        var groupAfterRemoval = group
+        groupAfterRemoval.memberIds = updatedIds
+        let nextCoordinators = LeagueRolePolicy.clearing(userId, group: groupAfterRemoval)
+        rosterUpdate.merge(Self.coordinatorFields(from: group.coordinators, to: nextCoordinators)) { _, new in new }
         await deleteJoinTicket(groupId: groupId, userId: userId)
-        try await db.collection("groups").document(groupId).updateData(["memberIds": updatedIds])
+        try await db.collection("groups").document(groupId).updateData(rosterUpdate)
         try await db.collection("groups").document(groupId)
             .collection("members").document(userId).delete()
 
         if var g = selectedGroup, g.id == groupId {
             g.memberIds = updatedIds
+            g.coordinators = nextCoordinators.isEmpty ? nil : nextCoordinators
             selectedGroup = g
         }
         if let idx = groups.firstIndex(where: { $0.id == groupId }) {
             groups[idx].memberIds = updatedIds
+            groups[idx].coordinators = nextCoordinators.isEmpty ? nil : nextCoordinators
         }
         members.removeAll { $0.id == userId }
         if group.isPublic {
@@ -1633,9 +1642,8 @@ final class GroupService {
         let group = selectedGroup?.id == groupId
             ? selectedGroup
             : groups.first(where: { $0.id == groupId })
-        guard let group, group.commissionerId == Auth.auth().currentUser?.uid else {
-            throw GroupError.notCommissioner
-        }
+        guard let group else { throw GroupError.groupNotFound }
+        try requireWeekOperator(group)
         guard Set(orderedUserIds).count >= 2 else { return }
 
         let currentOrder: [String]
@@ -2202,6 +2210,56 @@ final class GroupService {
         }
     }
 
+    /// Commissioner appoints, replaces, or clears one coordinator seat.
+    func setCoordinator(groupId: String, role: LeagueCoordinatorRole, userId: String?) async throws {
+        guard let group = groups.first(where: { $0.id == groupId }) ?? selectedGroup,
+              group.id == groupId else {
+            throw GroupError.groupNotFound
+        }
+        guard group.commissionerId == Auth.auth().currentUser?.uid else {
+            throw GroupError.notCommissioner
+        }
+        let next = try LeagueRolePolicy.assign(role, userId: userId, group: group)
+        let fields = Self.coordinatorFields(from: group.coordinators, to: next)
+        guard !fields.isEmpty else { return }
+        try await db.collection("groups").document(groupId).updateData(fields)
+        applyCoordinatorsLocally(groupId: groupId, coordinators: next.isEmpty ? nil : next)
+    }
+
+    private func requireWeekOperator(_ group: PickemGroup) throws {
+        guard let uid = Auth.auth().currentUser?.uid else { throw GroupError.signInRequired }
+        guard LeagueRolePolicy.role(of: uid, in: group).canOperateWeek else {
+            throw GroupError.notWeekOperator
+        }
+    }
+
+    private func applyCoordinatorsLocally(groupId: String, coordinators: LeagueCoordinators?) {
+        if var group = selectedGroup, group.id == groupId {
+            group.coordinators = coordinators
+            selectedGroup = group
+        }
+        if let idx = groups.firstIndex(where: { $0.id == groupId }) {
+            groups[idx].coordinators = coordinators
+        }
+    }
+
+    private static func coordinatorFields(
+        from current: LeagueCoordinators?,
+        to next: LeagueCoordinators
+    ) -> [String: Any] {
+        switch LeagueRolePolicy.mapWrite(from: current, to: next) {
+        case .unchanged:
+            return [:]
+        case .deleteField:
+            return ["coordinators": FieldValue.delete()]
+        case .replace(let oc, let dc):
+            var map: [String: Any] = [:]
+            if let oc { map["oc"] = oc }
+            if let dc { map["dc"] = dc }
+            return ["coordinators": map]
+        }
+    }
+
     private func generateInviteCode() -> String {
         let chars = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
         var result = ""
@@ -2231,6 +2289,7 @@ final class GroupService {
         case cannotRemoveCommissioner
         case groupNotFound
         case notCommissioner
+        case notWeekOperator
         case cannotLeaveAsSoleCommissioner
         case seasonAlreadyClosed
         case noMembersToArchive
@@ -2246,6 +2305,7 @@ final class GroupService {
             case .cannotRemoveCommissioner: return "You can't remove yourself as commissioner. Transfer the role or delete the league."
             case .groupNotFound: return "Group not found."
             case .notCommissioner: return "Only the commissioner can do that."
+            case .notWeekOperator: return "Only the commissioner or a coordinator can do that."
             case .cannotLeaveAsSoleCommissioner: return "Transfer commissioner to someone else before leaving, or delete the league if you're the only member."
             case .seasonAlreadyClosed: return "That season is already archived."
             case .noMembersToArchive: return "No members to archive for this season."

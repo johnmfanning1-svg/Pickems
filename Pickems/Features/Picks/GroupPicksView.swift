@@ -224,7 +224,7 @@ struct GroupPicksView: View {
                     .font(.caption)
                     .foregroundStyle(PickemsColors.textSecondary)
                 if isNominatingPhase,
-                   appState.isCommissioner,
+                   appState.canOperateWeek,
                    selectionMode == .member,
                    week.map({ WeekTransition.commissionerCanManageSelections($0) }) ?? false {
                     Text("Expand a member to remove, replace, or add their Selections.")
@@ -308,6 +308,9 @@ struct GroupPicksView: View {
                                     .font(.caption.weight(.bold))
                                     .foregroundStyle(theme.accent)
                                     .accessibilityLabel("Commissioner")
+                            }
+                            if let seat = appState.groupService.selectedGroup?.coordinatorRole(for: member.id) {
+                                LeagueRoleBadge(role: seat)
                             }
                         }
                         HStack(spacing: 8) {
@@ -418,7 +421,7 @@ struct GroupPicksView: View {
         let noms = nominations.filter { $0.submittedBy == member.id }
         let canRemake = week.map { WeekTransition.canRemakeSelections($0) } ?? false
         let isOwn = member.id == currentUserId
-        let commissionerCanManage = appState.isCommissioner
+        let commissionerCanManage = appState.canOperateWeek
             && (week.map { WeekTransition.commissionerCanManageSelections($0) } ?? false)
         let memberCanRemove = canRemake && isOwn && !appState.pickService.didSubmitNominations
         let canRemove = memberCanRemove || commissionerCanManage
@@ -751,7 +754,7 @@ struct GroupPicksView: View {
     }
 
     private func canRevealPickDetails(for userId: String) -> Bool {
-        userId == currentUserId || appState.isCommissioner
+        userId == currentUserId || appState.canOperateWeek
     }
 }
 
