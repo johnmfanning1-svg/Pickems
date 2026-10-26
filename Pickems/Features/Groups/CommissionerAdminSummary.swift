@@ -50,3 +50,33 @@ enum CommissionerAdminSummary {
         }
     }
 }
+
+/// What the Selection Deadline row in Commissioner Settings should be.
+///
+/// A stored deadline is an editor row (the lock time, or "Locked" once
+/// Selections close). The set-deadline prompt is only the unset case.
+enum CommissionerSelectionDeadlineRow: Equatable {
+    case editor(String)
+    case setPrompt
+    case hidden
+
+    static func resolve(week: WeekSummary, now: Date = Date()) -> Self {
+        switch SelectionDeadlineDisplayResolver.resolve(week: week, now: now) {
+        case .open, .locked:
+            guard let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: week, now: now) else {
+                return .hidden
+            }
+            return .editor(summary)
+        case .needsDeadline:
+            let prompt = WorkspaceDeadlineDisplay.commissionerPrompt(
+                kind: .selections,
+                week: week,
+                isCommissioner: true,
+                now: now
+            )
+            return prompt == .selections ? .setPrompt : .hidden
+        case nil:
+            return .hidden
+        }
+    }
+}

@@ -20,6 +20,10 @@ struct WorkspaceDeadlineSnapshot: Equatable {
     /// Commissioner-only: Pickems are open with no stored lock, so the countdown
     /// is the first-kickoff fallback and asks the commissioner to set one.
     var showSetPickemsDeadlinePrompt: Bool = false
+    /// `week.pickDeadline` is saved. Distinct from the first-kickoff fallback.
+    var hasStoredPickemsDeadline: Bool = false
+    /// Snapshot was built for the commissioner, who may open an editor.
+    var allowsCommissionerEdits: Bool = false
     /// Selections row. Countdown only while `.open`. Nil when the week skips Selections.
     var selectionState: SelectionDeadlineDisplay? = nil
 
@@ -42,12 +46,32 @@ struct WorkspaceDeadlineSnapshot: Equatable {
     }
 
     /// True when the row for `deadline` is asking the commissioner to set it.
-    /// Only those rows are tappable (they open the deadline editor).
+    /// The red "set a deadline" caption uses this. A stored deadline is not a prompt.
     func isPromptingCommissioner(for deadline: WorkspaceDeadlineKind) -> Bool {
         switch deadline {
         case .selections: return showSetSelectionDeadlinePrompt
         case .pickems: return showSetPickemsDeadlinePrompt && pickemsDeadline != nil
         }
+    }
+
+    /// Commissioner tap opens the editor. A stored deadline counts, not only the
+    /// unset prompt. Members never get a tap target.
+    func opensEditor(for kind: WorkspaceDeadlineKind) -> Bool {
+        guard allowsCommissionerEdits else { return false }
+        switch kind {
+        case .selections:
+            if case .open = selectionState, selectionDeadline != nil { return true }
+            return showSetSelectionDeadlinePrompt
+        case .pickems:
+            if hasStoredPickemsDeadline, pickemsDeadline != nil { return true }
+            return showSetPickemsDeadlinePrompt && pickemsDeadline != nil
+        }
+    }
+
+    /// Red "no deadline set" line. Never true once a Pickems deadline is stored,
+    /// even when the row still shows a countdown.
+    var showsUnsetPickemsCaption: Bool {
+        showSetPickemsDeadlinePrompt && !hasStoredPickemsDeadline && pickemsDeadline != nil
     }
 }
 
@@ -96,6 +120,8 @@ enum WorkspaceDeadlineDisplay {
             totalCount: rollingLive ? games.count : 0,
             showSetSelectionDeadlinePrompt: ask == .selections,
             showSetPickemsDeadlinePrompt: ask == .pickems,
+            hasStoredPickemsDeadline: week.pickDeadline != nil,
+            allowsCommissionerEdits: isCommissioner,
             selectionState: selectionState
         )
     }

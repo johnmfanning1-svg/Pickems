@@ -53,9 +53,7 @@ struct WeekDeadlineHeader: View {
     private var pickemsSection: some View {
         if let deadline = snapshot.pickemsDeadline {
             TimelineView(.periodic(from: .now, by: 30)) { context in
-                promptTapTarget(.pickems) {
-                    pickemsRow(deadline: deadline, now: context.date)
-                }
+                pickemsRow(deadline: deadline, now: context.date)
             }
         }
     }
@@ -76,7 +74,15 @@ struct WeekDeadlineHeader: View {
     }
 
     private func isTappable(_ kind: WorkspaceDeadlineKind) -> Bool {
-        onSetDeadline != nil && snapshot.isPromptingCommissioner(for: kind)
+        onSetDeadline != nil && snapshot.opensEditor(for: kind)
+    }
+
+    private func tapAction(_ kind: WorkspaceDeadlineKind) -> (() -> Void)? {
+        guard isTappable(kind), let onSetDeadline else { return nil }
+        return {
+            PickemsHaptics.selection()
+            onSetDeadline(kind)
+        }
     }
 
     /// Wraps a row in a button only while it prompts the commissioner.
@@ -85,11 +91,8 @@ struct WeekDeadlineHeader: View {
         _ kind: WorkspaceDeadlineKind,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        if isTappable(kind), let onSetDeadline {
-            Button {
-                PickemsHaptics.selection()
-                onSetDeadline(kind)
-            } label: {
+        if let action = tapAction(kind) {
+            Button(action: action) label: {
                 content()
                     .contentShape(Rectangle())
             }
@@ -109,7 +112,9 @@ struct WeekDeadlineHeader: View {
             openTitle: "Due \(PickDeadlineCalculator.lockTimeLabel(for: deadline))",
             lockedTitle: "Locked",
             help: PickemsHelp.selectionDeadline,
-            now: now
+            now: now,
+            onTap: tapAction(.selections),
+            tapHint: "Opens the Selection deadline editor."
         )
     }
 
@@ -124,9 +129,13 @@ struct WeekDeadlineHeader: View {
                 lockedTitle: "Pickems locked",
                 help: PickemsHelp.pickDeadline,
                 now: now,
-                rollingDetail: rollingDetail
+                rollingDetail: rollingDetail,
+                onTap: tapAction(.pickems),
+                tapHint: "Opens the Pickems deadline editor."
             )
-            if isTappable(.pickems) {
+            // Only while no Pickems deadline is stored. A saved lock shows the
+            // countdown alone — never the red "set a deadline" line under it.
+            if snapshot.showsUnsetPickemsCaption {
                 Text("No Pickems deadline set yet. Tap to set one.")
                     .font(.caption)
                     .foregroundStyle(PickemsColors.warning)

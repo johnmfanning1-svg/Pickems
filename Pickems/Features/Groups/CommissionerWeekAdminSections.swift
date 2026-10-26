@@ -7,6 +7,9 @@ struct CommissionerWeekAdminSections: View {
 
     let present: (CommissionerSheetRequest) -> Void
     let requestReopenSelections: (WeekSummary) -> Void
+    /// Pickems admin push. The route lives on Settings, not on this row, so a
+    /// member-list snapshot cannot pop the screen.
+    var managePicks: (GroupMember, WeekSummary) -> Void = { _, _ in }
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var week: WeekSummary? { appState.groupService.currentWeek }
@@ -57,9 +60,10 @@ struct CommissionerWeekAdminSections: View {
                 LabeledContent("Status", value: week.status.rawValue.capitalized)
                     .listRowBackground(PickemsColors.cardBackground)
 
-                if week.status == .selection, !week.skipsSelection {
+                if !week.skipsSelection {
                     selectionDeadlineRow(week)
-
+                }
+                if week.status == .selection, !week.skipsSelection {
                     let target = appState.groupService.selectedGroup?.rules.expectedSlateSize(
                         memberCount: max(appState.groupService.selectedGroup?.memberCount ?? 1, 1)
                     ) ?? max(week.slateSize, 1)
@@ -83,14 +87,11 @@ struct CommissionerWeekAdminSections: View {
                         .disabled(uniqueGames == 0)
                         .listRowBackground(PickemsColors.cardBackground)
                     }
-                } else if !week.skipsSelection {
-                    closedSelectionDeadlineLabel(week)
-                    if WeekTransition.canReopenSelections(week) {
-                        Button("Reopen Selections") {
-                            requestReopenSelections(week)
-                        }
-                        .listRowBackground(PickemsColors.cardBackground)
+                } else if !week.skipsSelection, WeekTransition.canReopenSelections(week) {
+                    Button("Reopen Selections") {
+                        requestReopenSelections(week)
                     }
+                    .listRowBackground(PickemsColors.cardBackground)
                 }
 
                 weekManageRows(week)
@@ -172,20 +173,17 @@ struct CommissionerWeekAdminSections: View {
 
     @ViewBuilder
     private func selectionDeadlineRow(_ week: WeekSummary) -> some View {
-        switch SelectionDeadlineDisplayResolver.resolve(week: week) {
-        case .open:
-            if let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: week) {
-                selectionDeadlineEditor(summary: summary, systemImage: "clock", week: week)
-            }
-        case .locked:
-            if let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: week) {
-                selectionDeadlineEditor(summary: summary, systemImage: "lock", week: week)
-            }
-        case .needsDeadline:
-            if promptsToSetSelectionDeadline(week) {
-                setSelectionDeadlineButton(week)
-            }
-        case nil:
+        switch CommissionerSelectionDeadlineRow.resolve(week: week) {
+        case .editor(let summary):
+            let counting = SelectionDeadlineDisplayResolver.resolve(week: week)?.isCountingDown == true
+            selectionDeadlineEditor(
+                summary: summary,
+                systemImage: counting ? "clock" : "lock",
+                week: week
+            )
+        case .setPrompt:
+            setSelectionDeadlineButton(week)
+        case .hidden:
             EmptyView()
         }
     }
@@ -199,23 +197,6 @@ struct CommissionerWeekAdminSections: View {
         ) {
             present(.selectionDeadline(week))
         }
-    }
-
-    @ViewBuilder
-    private func closedSelectionDeadlineLabel(_ week: WeekSummary) -> some View {
-        if case .locked = SelectionDeadlineDisplayResolver.resolve(week: week),
-           let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: week) {
-            LabeledContent("Selection Deadline", value: summary)
-                .listRowBackground(PickemsColors.cardBackground)
-        }
-    }
-
-    private func promptsToSetSelectionDeadline(_ week: WeekSummary) -> Bool {
-        WorkspaceDeadlineDisplay.commissionerPrompt(
-            kind: .selections,
-            week: week,
-            isCommissioner: true
-        ) == .selections
     }
 
     private func setSelectionDeadlineButton(_ week: WeekSummary) -> some View {
@@ -291,13 +272,8 @@ struct CommissionerWeekAdminSections: View {
                     )
                     ForEach(appState.groupService.members) { member in
                         let row = pickemsById[member.id]
-                        NavigationLink {
-                            CommissionerManagePicksSheet(
-                                member: member,
-                                week: week,
-                                groupId: groupId,
-                                slateGames: appState.pickService.slateGames
-                            )
+                        Button {
+                            managePicks(member, week)
                         } label: {
                             CommissionerMemberProgressRow(
                                 name: member.displayName,
@@ -307,6 +283,7 @@ struct CommissionerWeekAdminSections: View {
                                 unitName: "Pickems"
                             )
                         }
+                        .buttonStyle(.plain)
                         .accessibilityLabel(
                             "\(member.displayName), \(row?.made ?? 0) of \(row?.total ?? appState.pickService.slateGames.count) Pickems, \(row?.status.label ?? SubmissionRosterStatus.notStarted.label). Manage Pickems."
                         )
