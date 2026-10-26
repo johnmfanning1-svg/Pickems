@@ -92,7 +92,7 @@ struct WeekDeadlineHeader: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         if let action = tapAction(kind) {
-            Button(action: action) label: {
+            Button(action: action) {
                 content()
                     .contentShape(Rectangle())
             }
