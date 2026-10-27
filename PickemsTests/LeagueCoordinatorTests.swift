@@ -86,6 +86,7 @@ struct LeagueCoordinatorTests {
         #expect(commissioner.appointCoordinators && !coordinator.appointCoordinators && !member.appointCoordinators)
         #expect(commissioner.editLeagueRules && !coordinator.editLeagueRules)
         #expect(commissioner.changeScoringMode && !coordinator.changeScoringMode)
+        #expect(commissioner.changeRollingLock && coordinator.changeRollingLock && !member.changeRollingLock)
         #expect(commissioner.removeMembers && !coordinator.removeMembers)
         #expect(commissioner.deleteLeague && !coordinator.deleteLeague && !member.deleteLeague)
         #expect(commissioner.transferCommissioner && !coordinator.transferCommissioner)

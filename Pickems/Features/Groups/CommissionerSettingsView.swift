@@ -80,6 +80,9 @@ struct CommissionerSettingsView: View {
                 present: { (request: CommissionerSheetRequest) in presentCommissionerSheet(request) },
                 requestReopenSelections: { (week: WeekSummary) in presentReopenSelectionsConfirm(week) }
             )
+            if appState.canOperateWeek, !appState.isCommissioner {
+                coordinatorPickLockSection
+            }
             if appState.isCommissioner {
                 CoordinatorSettingsSection(
                     group: liveGroup,
@@ -171,6 +174,44 @@ struct CommissionerSettingsView: View {
     }
 
     // MARK: - Pickems Lock
+
+    /// Coordinators get the lock toggle only. Late picks and the rest of the
+    /// league rules stay on the commissioner form.
+    private var coordinatorPickLockSection: some View {
+        Section {
+            if liveGroup.rules.pickDeadline.isRolling {
+                LabeledContent("Lock mode", value: DeadlinePolicy.rolling.lockModeDisplayName)
+                    .listRowBackground(PickemsColors.cardBackground)
+                switchToFirstKickoffButton
+            } else {
+                LabeledContent("Lock mode", value: DeadlinePolicy.firstKickoff.lockModeDisplayName)
+                    .listRowBackground(PickemsColors.cardBackground)
+                switchToRollingButton
+            }
+            rollingFeedbackRows
+        } header: {
+            sectionHeader("Pickems Lock", help: PickemsHelp.pickDeadline)
+        } footer: {
+            Text(pickemsLockFooter)
+        }
+    }
+
+    private var switchToFirstKickoffButton: some View {
+        AnchoredActionConfirm(
+            title: "Switch to first kickoff?",
+            message: "The whole slate will lock at the earliest kickoff starting next week. This week stays as it is.",
+            confirmTitle: "Switch",
+            destructive: false,
+            onConfirm: { switchToFirstKickoff() }
+        ) {
+            Text("Switch to First Kickoff")
+                .font(.subheadline.weight(.semibold))
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(theme.accent)
+        .disabled(isSwitchingToRolling)
+        .listRowBackground(PickemsColors.cardBackground)
+    }
 
     private var pickemsLockSection: some View {
         Section {
@@ -834,6 +875,25 @@ struct CommissionerSettingsView: View {
             performRollingSwitch(applyTo: nil, note: RollingLockSwitch.allGamesStartedNote)
         case .notInProgress:
             performRollingSwitch(applyTo: nil)
+        }
+    }
+
+    private func switchToFirstKickoff() {
+        rollingError = nil
+        rollingStatus = nil
+        isSwitchingToRolling = true
+        Task {
+            defer { isSwitchingToRolling = false }
+            do {
+                try await appState.groupService.switchToFirstKickoffLock(groupId: group.id)
+                rules.pickDeadline = .firstKickoff
+                rollingStatus = "First kickoff is on. It starts when next week opens."
+                PickemsHaptics.success()
+            } catch {
+                rollingError = UserFacingError.message(for: error, context: .write)
+                    ?? "Couldn't switch the pick lock. Try again."
+                PickemsHaptics.warning()
+            }
         }
     }
 

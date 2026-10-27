@@ -2503,4 +2503,43 @@ describe("coordinator roles", () => {
       })
     );
   });
+
+  it("lets a coordinator toggle rolling lock and no other league rule", async () => {
+    await appointBoth();
+    const ocRef = doc(testEnv.authenticatedContext(MEMBER).firestore(), "groups", GROUP_ID);
+    await assertSucceeds(updateDoc(ocRef, { "rules.pickDeadline": "rolling" }));
+    await assertSucceeds(updateDoc(ocRef, { "rules.pickDeadline": "firstKickoff" }));
+    await assertFails(updateDoc(ocRef, { "rules.pickDeadline": "custom" }));
+
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await updateDoc(doc(db, "groups", GROUP_ID), {
+        coordinators: { oc: MEMBER },
+        rules: {
+          selectionMode: "member",
+          selectionsPerMember: 3,
+          slateSize: 12,
+          pickDeadline: "firstKickoff",
+          tieBreaker: "commissionerOverride",
+          customDeadlineHour: 18,
+          customDeadlineMinute: 0,
+          allowConfidencePick: false,
+          allowLatePicks: false,
+          latePickPenaltyWins: 1,
+          pickMode: "ats",
+          vetoEnabled: false,
+          vetoVotesNeeded: 1,
+        },
+      });
+    });
+    await assertSucceeds(updateDoc(ocRef, { "rules.pickDeadline": "rolling" }));
+    const saved = await assertSucceeds(getDoc(ocRef));
+    expect(saved.data().rules.pickDeadline).toBe("rolling");
+    expect(saved.data().rules.pickMode).toBe("ats");
+    await assertFails(updateDoc(ocRef, { "rules.pickMode": "straightUp" }));
+    await assertFails(updateDoc(ocRef, { "rules.allowLatePicks": true }));
+    await assertFails(updateDoc(ocRef, { name: "Taken", "rules.pickDeadline": "firstKickoff" }));
+    const memberRef = doc(testEnv.authenticatedContext(OTHER_MEMBER).firestore(), "groups", GROUP_ID);
+    await assertFails(updateDoc(memberRef, { "rules.pickDeadline": "firstKickoff" }));
+  });
 });

@@ -693,6 +693,22 @@ service cloud.firestore {
         || vetoVotesNeededInBounds();
     }
 
+    // Rolling lock on/off. Coordinators may change only `rules.pickDeadline`
+    // between first kickoff and rolling. Every other league rule stays put.
+    function rollingLockChangeOk() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['rules'])
+        && request.resource.data.keys().hasAll(['rules'])
+        && request.resource.data.rules is map
+        && request.resource.data.rules.pickDeadline in ['firstKickoff', 'rolling']
+        && (
+          (!resource.data.keys().hasAny(['rules']) || resource.data.rules == null)
+            ? request.resource.data.rules.keys().hasOnly(['pickDeadline'])
+            : (resource.data.rules is map
+                && request.resource.data.rules.diff(resource.data.rules).affectedKeys().hasOnly(['pickDeadline']))
+        );
+    }
+
     match /groups/{groupId} {
       // Non-members must not read inviteCode or the roster. Join looks up
       // inviteCodes/{code} (the code the user typed) and then writes a ticket.
@@ -709,7 +725,8 @@ service cloud.firestore {
         && coordinatorsPresentOk(request.resource.data);
       allow update: if isJoiningGroup(groupId)
         || isLeavingGroup()
-        || (isCommissioner(groupId) && vetoVotesNeededChangeInBounds() && coordinatorsChangeOk());
+        || (isCommissioner(groupId) && vetoVotesNeededChangeInBounds() && coordinatorsChangeOk())
+        || (isCoordinator(groupId) && rollingLockChangeOk() && vetoVotesNeededChangeInBounds());
       // Commissioners write nested `rules` including `pickMode` (`ats` | `straightUp`).
       // Missing pickMode is treated as ats by iOS and Cloud Functions.
       // Per-week modes live on `weeks/{id}.pickMode` and win over the league value.

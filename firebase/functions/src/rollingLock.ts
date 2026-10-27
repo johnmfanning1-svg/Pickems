@@ -7,11 +7,13 @@ import {
 } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
+import { classifyLeagueCaller, weekOperationAllowed } from "./coordinators";
 import { isRollingLock, kickoffMillis } from "./pickLock";
 
 /**
- * Commissioner switch to rolling pick lock, optionally applied to the week in
- * progress. Mirrors the hand repair done for Core 4 OG 2026-W5 on 2026-10-02:
+ * Commissioner or coordinator switch to rolling pick lock, optionally applied
+ * to the week in progress. Mirrors the hand repair done for Core 4 OG 2026-W5
+ * on 2026-10-02:
  *
  * - `groups/{id}.rules.pickDeadline` = "rolling" (every call).
  * - With `applyToCurrentWeek`, one atomic week update: `pickLockMode`
@@ -27,6 +29,8 @@ import { isRollingLock, kickoffMillis } from "./pickLock";
 
 export interface RollingGroupData {
   commissionerId?: unknown;
+  memberIds?: unknown;
+  coordinators?: unknown;
   rules?: { pickDeadline?: unknown } | null;
 }
 
@@ -97,8 +101,12 @@ export function planRollingSwitch(input: {
   if (!group) {
     throw new HttpsError("not-found", "League not found.");
   }
-  if (!callerIsAdmin && group.commissionerId !== callerUid) {
-    throw new HttpsError("permission-denied", "Only the commissioner can change the pick lock.");
+  const kind = classifyLeagueCaller({ callerUid, callerIsAdmin, group });
+  if (!weekOperationAllowed(kind)) {
+    throw new HttpsError(
+      "permission-denied",
+      "Only the commissioner or a coordinator can change the pick lock."
+    );
   }
 
   const rulesNeedUpdate = !isRollingLock(group.rules?.pickDeadline);

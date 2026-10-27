@@ -129,6 +129,7 @@ enum LeagueActorRole: Equatable, Sendable {
                 appointCoordinators: true,
                 editLeagueRules: true,
                 changeScoringMode: true,
+                changeRollingLock: true,
                 removeMembers: true,
                 deleteLeague: true,
                 transferCommissioner: true,
@@ -140,6 +141,7 @@ enum LeagueActorRole: Equatable, Sendable {
                 appointCoordinators: false,
                 editLeagueRules: false,
                 changeScoringMode: false,
+                changeRollingLock: true,
                 removeMembers: false,
                 deleteLeague: false,
                 transferCommissioner: false,
@@ -151,6 +153,7 @@ enum LeagueActorRole: Equatable, Sendable {
                 appointCoordinators: false,
                 editLeagueRules: false,
                 changeScoringMode: false,
+                changeRollingLock: false,
                 removeMembers: false,
                 deleteLeague: false,
                 transferCommissioner: false,
@@ -166,6 +169,7 @@ struct LeaguePermissions: Equatable, Sendable {
     var appointCoordinators: Bool
     var editLeagueRules: Bool
     var changeScoringMode: Bool
+    var changeRollingLock: Bool
     var removeMembers: Bool
     var deleteLeague: Bool
     var transferCommissioner: Bool

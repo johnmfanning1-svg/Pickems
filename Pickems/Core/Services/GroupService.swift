@@ -1424,16 +1424,21 @@ final class GroupService {
         )
     }
 
-    /// Commissioner switch to rolling lock through the `setRollingLock` callable.
-    /// The server checks the caller, sets `rules.pickDeadline`, and — when
-    /// `applyToCurrentWeek` — moves that week to rolling in one transaction.
-    /// Returns true when the week itself was switched.
+    /// Commissioner or coordinator switch to rolling lock through the
+    /// `setRollingLock` callable. The server checks the caller, sets
+    /// `rules.pickDeadline`, and — when `applyToCurrentWeek` — moves that week
+    /// to rolling in one transaction. Returns true when the week itself was switched.
     @discardableResult
     func switchToRollingLock(
         groupId: String,
         weekId: String?,
         applyToCurrentWeek: Bool
     ) async throws -> Bool {
+        guard let group = groups.first(where: { $0.id == groupId }) ?? selectedGroup,
+              group.id == groupId else {
+            throw GroupError.groupNotFound
+        }
+        try requireWeekOperator(group)
         var payload: [String: Any] = [
             "groupId": groupId,
             "applyToCurrentWeek": applyToCurrentWeek,
@@ -1451,6 +1456,30 @@ final class GroupService {
         }
         let weekChanged: Bool? = result["weekChanged"] as? Bool
         return weekChanged ?? false
+    }
+
+    /// Switch the league back to first-kickoff lock. Takes effect when the next
+    /// week opens. Coordinators can do this; the write touches only `rules.pickDeadline`.
+    func switchToFirstKickoffLock(groupId: String) async throws {
+        guard let group = groups.first(where: { $0.id == groupId }) ?? selectedGroup,
+              group.id == groupId else {
+            throw GroupError.groupNotFound
+        }
+        try requireWeekOperator(group)
+        try await db.collection("groups").document(groupId).updateData([
+            "rules.pickDeadline": DeadlinePolicy.firstKickoff.rawValue
+        ])
+        applyPickDeadlineLocally(groupId: groupId, pickDeadline: .firstKickoff)
+    }
+
+    private func applyPickDeadlineLocally(groupId: String, pickDeadline: DeadlinePolicy) {
+        if var group = selectedGroup, group.id == groupId {
+            group.rules.pickDeadline = pickDeadline
+            selectedGroup = group
+        }
+        if let idx = groups.firstIndex(where: { $0.id == groupId }) {
+            groups[idx].rules.pickDeadline = pickDeadline
+        }
     }
 
     /// Commissioner change of league type through the `setLeaguePickMode` callable.
