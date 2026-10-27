@@ -1732,6 +1732,10 @@ final class PickService {
         case .selection:
             break
         }
+        if let game = slateGames.first(where: { $0.id == gameId }),
+           SelectionKickoffGate.hasKickedOff(game) {
+            throw PickError.cannotModifyLockedSlate
+        }
         let weekRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
         try await weekRef.collection("games").document(gameId).delete()

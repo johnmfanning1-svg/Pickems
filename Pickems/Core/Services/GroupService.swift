@@ -503,6 +503,9 @@ final class GroupService {
             for game in games {
                 let slate = game.toSlateGame()
                 if !existingIds.contains(slate.espnEventId) {
+                    // A game that has already kicked off cannot be created.
+                    // Rules reject that write for every client, including the commissioner.
+                    if SelectionKickoffGate.hasKickedOff(slate) { continue }
                     try await gamesRef.document(slate.espnEventId).setData(from: slate)
                 } else if let existing = existingByEventId[slate.espnEventId] {
                     let spreadLocked = WeekTransition.isSpreadLocked(existing.game, week: week)
@@ -1069,8 +1072,13 @@ final class GroupService {
     private func removeMemberFromGroup(group: PickemGroup, userId: String) async throws {
         let groupId = group.id
         let updatedIds = group.memberIds.filter { $0 != userId }
+        var rosterUpdate: [String: Any] = ["memberIds": updatedIds]
+        var groupAfterLeave = group
+        groupAfterLeave.memberIds = updatedIds
+        let nextCoordinators = LeagueRolePolicy.clearing(userId, group: groupAfterLeave)
+        rosterUpdate.merge(Self.coordinatorFields(from: group.coordinators, to: nextCoordinators)) { _, new in new }
         await deleteJoinTicket(groupId: groupId, userId: userId)
-        try await db.collection("groups").document(groupId).updateData(["memberIds": updatedIds])
+        try await db.collection("groups").document(groupId).updateData(rosterUpdate)
         try await db.collection("groups").document(groupId)
             .collection("members").document(userId).delete()
 

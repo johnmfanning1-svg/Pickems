@@ -67,7 +67,19 @@ describe("planLeaguePickModeSwitch: access", () => {
   });
 
   it("rejects a coordinator", () => {
-    expect(codeOf(() => plan({ callerUid: "oc" }))).toBe("permission-denied");
+    expect(
+      codeOf(() =>
+        plan({
+          callerUid: "oc",
+          group: {
+            commissionerId: "comm",
+            memberIds: ["comm", "oc", "member"],
+            coordinators: { oc: "oc" },
+            rules: { pickMode: "ats" },
+          },
+        })
+      )
+    ).toBe("permission-denied");
   });
 });
 

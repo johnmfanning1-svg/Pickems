@@ -121,6 +121,7 @@ service cloud.firestore {
         && request.auth.uid in request.resource.data.memberIds
         && !(request.auth.uid in resource.data.memberIds)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
+        && !callerHoldsCoordinatorSeat(resource.data)
         && freshJoinTicket(groupId);
     }
 
@@ -147,11 +148,57 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/inviteCodes/$(code)).data.groupId == groupId;
     }
 
+    // A seat is the uid stored in `coordinators.oc` or `coordinators.dc`.
+    // Missing map, a non-map, or any other value is not a seat.
+    function coordinatorSlot(data, key) {
+      return data.keys().hasAny(['coordinators']) && data.coordinators is map
+        ? data.coordinators.get(key, null)
+        : null;
+    }
+
+    function callerHoldsCoordinatorSeat(data) {
+      return coordinatorSlot(data, 'oc') == request.auth.uid
+        || coordinatorSlot(data, 'dc') == request.auth.uid;
+    }
+
+    // Leaving may clear the caller's own seat and nothing else. The other
+    // slot stays. A rejoin while the seat is still stored is denied above,
+    // so an old client that only writes memberIds cannot pick the role back up.
+    function leavePreservesOtherSeat(key) {
+      let beforeSlot = coordinatorSlot(resource.data, key);
+      let afterSlot = coordinatorSlot(request.resource.data, key);
+      return beforeSlot == request.auth.uid ? afterSlot == null : afterSlot == beforeSlot;
+    }
+
+    function leaveCoordinatorsShapeOk() {
+      let data = request.resource.data;
+      return !data.keys().hasAny(['coordinators'])
+        || data.coordinators == null
+        || (data.coordinators is map && data.coordinators.keys().hasOnly(['oc', 'dc']));
+    }
+
+    function leaveClearsOwnSeat() {
+      return callerHoldsCoordinatorSeat(resource.data)
+        && !callerHoldsCoordinatorSeat(request.resource.data)
+        && leavePreservesOtherSeat('oc')
+        && leavePreservesOtherSeat('dc')
+        && leaveCoordinatorsShapeOk();
+    }
+
+    // Diff only after the write is actually a one-member departure. Group-update
+    // denials are already near the expression ceiling.
+    function leaveKeysOk() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['memberIds'])
+        ? true
+        : changed.hasOnly(['memberIds', 'coordinators']) && leaveClearsOwnSeat();
+    }
+
     function isLeavingGroup() {
       return request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1
         && request.auth.uid in resource.data.memberIds
         && !(request.auth.uid in request.resource.data.memberIds)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']);
+        && leaveKeysOk();
     }
 
     // Group read only after a non-rolling deadline has actually passed.
@@ -240,13 +287,14 @@ service cloud.firestore {
         && !changed.hasAny(['pickLockMode', 'weekLockAt', 'gameIds', 'gameKickoffs', 'remainingLockAt']);
     }
 
-    // Members mint missing week docs from the calendar. They must not mint an
-    // open picking week or stamp a lock snapshot / pickDeadline of their own.
-    // Week 0 is the fixed-slate exception the app creates already in `picking`.
+    // Members and coordinators mint the initial week only. They must not mint
+    // an open picking week, stamp a lock snapshot / pickDeadline, or set
+    // per-week pickMode (scoring mode stays commissioner-only). Week 0 is the
+    // fixed-slate exception the app creates already in `picking`.
     function memberWeekCreate(weekId) {
       let data = request.resource.data;
       return data.nominationCount == 0
-        && !data.keys().hasAny(['pickLockMode', 'weekLockAt', 'gameIds', 'gameKickoffs', 'remainingLockAt', 'pickDeadline'])
+        && !data.keys().hasAny(['pickLockMode', 'weekLockAt', 'gameIds', 'gameKickoffs', 'remainingLockAt', 'pickDeadline', 'pickMode'])
         && (
           data.status == 'selection'
           || (data.status == 'picking'
@@ -372,6 +420,35 @@ service cloud.firestore {
     function selectionKeepsGameOrKickoffAhead() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['espnEventId'])
         || selectionKickoffStillAhead();
+    }
+
+    // Once the stored kickoff has passed, the line is frozen for everyone.
+    // Moving that kickoff back into the future would unlock the spread on the
+    // next write, so kickoff is frozen with the spread.
+    function nominationKickoffPassed() {
+      return resource.data.keys().hasAll(['kickoff'])
+        && resource.data.kickoff is timestamp
+        && request.time >= resource.data.kickoff;
+    }
+
+    function nominationLineChangeOk() {
+      return !nominationKickoffPassed()
+        || !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['spread', 'spreadTeamId', 'lockedSpread', 'lockedSpreadTeamId', 'kickoff']);
+    }
+
+    // A new game has to be strictly before kickoff, still pregame, and must
+    // not carry a graded line. Functions stamp lockedSpread; clients do not.
+    function gameCreateOpen() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['kickoff'])
+        && data.kickoff is timestamp
+        && request.time < data.kickoff
+        && (!data.keys().hasAny(['status'])
+            || data.status == null
+            || data.status == 'pre'
+            || data.status == 'scheduled')
+        && !data.keys().hasAny(['lockedSpread', 'lockedSpreadTeamId']);
     }
 
     function memberUpdateKeepsOwner() {
@@ -723,10 +800,14 @@ service cloud.firestore {
         && request.auth.uid in request.resource.data.memberIds
         && vetoVotesNeededInBounds()
         && coordinatorsPresentOk(request.resource.data);
+      // Ternary, not a second ||, so a non-commissioner denial does not also
+      // evaluate the commissioner rules check. Coordinators only reach the
+      // rolling-lock arm.
       allow update: if isJoiningGroup(groupId)
         || isLeavingGroup()
-        || (isCommissioner(groupId) && vetoVotesNeededChangeInBounds() && coordinatorsChangeOk())
-        || (isCoordinator(groupId) && rollingLockChangeOk() && vetoVotesNeededChangeInBounds());
+        || (isCommissioner(groupId)
+            ? vetoVotesNeededChangeInBounds() && coordinatorsChangeOk()
+            : isCoordinator(groupId) && rollingLockChangeOk() && vetoVotesNeededChangeInBounds());
       // Commissioners write nested `rules` including `pickMode` (`ats` | `straightUp`).
       // Missing pickMode is treated as ats by iOS and Cloud Functions.
       // Per-week modes live on `weeks/{id}.pickMode` and win over the league value.
@@ -778,7 +859,10 @@ service cloud.firestore {
 
       match /weeks/{weekId} {
         allow read: if isGroupMember(groupId) || isSuperAdmin();
-        allow create: if canOperateWeek(groupId)
+        // Commissioners (and super admins) may create a week in any shape.
+        // Coordinators mint the same initial week a member can. pickMode and
+        // an already-open picking week are not part of that create.
+        allow create: if isCommissioner(groupId)
           || (isGroupMember(groupId) && memberWeekCreate(weekId));
         // Admins bypass the field-level allow-lists so the portal can repair
         // arbitrary week fields — that is the point of the portal.
@@ -803,6 +887,7 @@ service cloud.firestore {
                 && nominationCreateAllowed(groupId, weekId)
                 && !memberVetoBlocksReselection(groupId, weekId));
           allow update: if isSignedIn()
+            && nominationLineChangeOk()
             && ((canOperateWeek(groupId) && selectionKeepsGameOrKickoffAhead())
               || (resource.data.submittedBy == request.auth.uid
                   && nominationMemberMayEdit(groupId, weekId)
@@ -838,7 +923,13 @@ service cloud.firestore {
 
         match /games/{gameId} {
           allow read: if isGroupMember(groupId) || isSuperAdmin();
-          allow create, delete: if canOperateWeek(groupId);
+          // Super admins can still repair history. Everyone else, including
+          // the commissioner and a coordinator, can only add or remove a game
+          // that has not kicked off, and cannot write lockedSpread on create.
+          allow create: if isSuperAdmin()
+            || (canOperateWeek(groupId) && gameCreateOpen());
+          allow delete: if isSuperAdmin()
+            || (canOperateWeek(groupId) && gameDataOpen(resource.data));
           allow update: if (isSuperAdmin() && superAdminGameUpdate(groupId, weekId))
             || (canOperateWeek(groupId) && commissionerGameUpdate(groupId, weekId));
         }

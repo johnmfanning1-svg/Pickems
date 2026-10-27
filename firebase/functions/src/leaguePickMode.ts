@@ -1,6 +1,7 @@
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
+import { classifyLeagueCaller, leagueAdminAllowed } from "./coordinators";
 import { isPickMode, resolvePickMode, type PickMode } from "./scoring";
 
 /**
@@ -25,6 +26,8 @@ import { isPickMode, resolvePickMode, type PickMode } from "./scoring";
 
 export interface PickModeGroupData {
   commissionerId?: unknown;
+  memberIds?: unknown;
+  coordinators?: unknown;
   rules?: { pickMode?: unknown } | null;
 }
 
@@ -77,7 +80,8 @@ export function planLeaguePickModeSwitch(input: {
   if (!group) {
     throw new HttpsError("not-found", "League not found.");
   }
-  if (!callerIsAdmin && group.commissionerId !== callerUid) {
+  const kind = classifyLeagueCaller({ callerUid, callerIsAdmin, group });
+  if (!leagueAdminAllowed(kind)) {
     throw new HttpsError("permission-denied", "Only the commissioner can change the league type.");
   }
 

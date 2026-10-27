@@ -8,7 +8,7 @@ import {
 } from "firebase-admin/firestore";
 import { onCall, CallableRequest, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
-import { materializeNominations } from "./materialize";
+import { materializeNominations, preservedLinesForStartedGames } from "./materialize";
 import { migrateAllGroupsWeek0Split } from "./week0Split";
 import {
   SlateGameDoc,
@@ -199,6 +199,15 @@ export const adminSetWeekStatus = onCall(async (request) => {
 
   const snap = await requireWeek(groupId, weekId);
   const before = snap.data() ?? {};
+  // Read started games before the status write. materialize uses this when a
+  // game doc is gone, so a nomination edited after kickoff cannot become the
+  // graded line.
+  const gamesBefore = await snap.ref.collection("games").get();
+  const preservedLines = preservedLinesForStartedGames(
+    before,
+    gamesBefore.docs.map((gameDoc) => ({ id: gameDoc.id, data: gameDoc.data() })),
+    Date.now()
+  );
 
   const patch: Record<string, unknown> = { status };
   if (data.pickDeadline !== undefined) {
@@ -227,7 +236,7 @@ export const adminSetWeekStatus = onCall(async (request) => {
   // Mirror the onWeekStatusChange trigger for the selection -> picking hop.
   let materialized: unknown = null;
   if (status === "picking" && before.status === "selection") {
-    materialized = await materializeNominations(groupId, weekId);
+    materialized = await materializeNominations(groupId, weekId, { preservedLines });
   }
 
   await writeAudit(

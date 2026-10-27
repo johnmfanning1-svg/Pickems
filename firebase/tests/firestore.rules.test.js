@@ -849,7 +849,10 @@ describe("commissioner nomination management", () => {
     const snap = await assertSucceeds(getDoc(doc(memberDb, ...path)));
     expect(snap.exists()).toBe(true);
     expect(snap.data().espnEventId).toBe(saved.espnEventId);
-    await assertSucceeds(updateDoc(doc(memberDb, ...path), { spread: 10 }));
+    await assertFails(updateDoc(doc(memberDb, ...path), { spread: 10 }));
+    await assertFails(
+      updateDoc(doc(testEnv.authenticatedContext(COMMISH).firestore(), ...path), { spread: 10 })
+    );
     await assertFails(
       updateDoc(doc(memberDb, ...path), {
         espnEventId: "401000099",
@@ -858,7 +861,7 @@ describe("commissioner nomination management", () => {
     );
     const after = await assertSucceeds(getDoc(doc(memberDb, ...path)));
     expect(after.data().espnEventId).toBe(saved.espnEventId);
-    expect(after.data().spread).toBe(10);
+    expect(after.data().spread).toBe(saved.spread);
   });
 });
 
@@ -2422,9 +2425,33 @@ describe("coordinator roles", () => {
         id: "2026-W11",
         seasonYear: 2026,
         weekNumber: 11,
+        status: "selection",
+        nominationCount: 0,
+        slateSize: 12,
+        selectionMode: "member",
+        selectionsPerMember: 3,
+      })
+    );
+    await assertFails(
+      setDoc(doc(ocDb, "groups", GROUP_ID, "weeks", "2026-W13"), {
+        id: "2026-W13",
+        seasonYear: 2026,
+        weekNumber: 13,
         status: "picking",
         nominationCount: 0,
         pickDeadline: future(),
+        pickMode: "straightUp",
+      })
+    );
+    await assertSucceeds(
+      setDoc(doc(testEnv.authenticatedContext(COMMISH).firestore(), "groups", GROUP_ID, "weeks", "2026-W14"), {
+        id: "2026-W14",
+        seasonYear: 2026,
+        weekNumber: 14,
+        status: "picking",
+        nominationCount: 0,
+        pickDeadline: future(),
+        pickMode: "straightUp",
       })
     );
     await assertFails(
@@ -2541,5 +2568,185 @@ describe("coordinator roles", () => {
     await assertFails(updateDoc(ocRef, { name: "Taken", "rules.pickDeadline": "firstKickoff" }));
     const memberRef = doc(testEnv.authenticatedContext(OTHER_MEMBER).firestore(), "groups", GROUP_ID);
     await assertFails(updateDoc(memberRef, { "rules.pickDeadline": "firstKickoff" }));
+  });
+
+  it("freezes a nomination spread after kickoff and blocks game create, delete, and lockedSpread", async () => {
+    await appointBoth();
+    const past = new Date(Date.now() - 60 * 1000);
+    const ocDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const commishDb = testEnv.authenticatedContext(COMMISH).firestore();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await updateDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID), { status: "selection" });
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "played"), {
+        id: "played",
+        submittedBy: OTHER_MEMBER,
+        submitterName: OTHER_MEMBER,
+        espnEventId: "401000099",
+        spread: 3.5,
+        spreadTeamId: "333",
+        kickoff: past,
+        createdAt: new Date(),
+      });
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "games", "started"), {
+        id: "started",
+        espnEventId: "started",
+        kickoff: past,
+        status: "scheduled",
+        spread: 3.5,
+        spreadTeamId: "333",
+      });
+    });
+    const played = (db) => doc(db, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "played");
+    await assertFails(updateDoc(played(ocDb), { spread: 14 }));
+    await assertFails(updateDoc(played(commishDb), { spread: 14, spreadTeamId: "61" }));
+    await assertFails(updateDoc(played(ocDb), { kickoff: future() }));
+    const openNom = doc(ocDb, "groups", GROUP_ID, "weeks", WEEK_ID, "nominations", "open");
+    await assertSucceeds(
+      setDoc(openNom, {
+        id: "open",
+        submittedBy: OTHER_MEMBER,
+        submitterName: OTHER_MEMBER,
+        espnEventId: "401000100",
+        spread: 3.5,
+        spreadTeamId: "333",
+        kickoff: future(),
+        createdAt: new Date(),
+      })
+    );
+    await assertSucceeds(updateDoc(openNom, { spread: 6 }));
+
+    await assertFails(
+      setDoc(doc(ocDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", "late"), {
+        id: "late",
+        kickoff: past,
+        status: "scheduled",
+        spread: 9,
+      })
+    );
+    await assertFails(
+      setDoc(doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", "late-commish"), {
+        id: "late-commish",
+        kickoff: past,
+        status: "scheduled",
+      })
+    );
+    await assertFails(
+      setDoc(doc(ocDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", "graded"), {
+        id: "graded",
+        kickoff: future(),
+        status: "scheduled",
+        lockedSpread: 7,
+        lockedSpreadTeamId: "333",
+      })
+    );
+    const fresh = doc(ocDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", "fresh");
+    await assertSucceeds(
+      setDoc(fresh, { id: "fresh", kickoff: future(), status: "scheduled", spread: 3 })
+    );
+    await assertSucceeds(deleteDoc(fresh));
+    await assertFails(deleteDoc(doc(ocDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", "started")));
+    await assertFails(deleteDoc(doc(commishDb, "groups", GROUP_ID, "weeks", WEEK_ID, "games", "started")));
+    await assertFails(
+      setDoc(doc(ocDb, "groups", GROUP_ID, "weeks", WEEK_ID, "gameLock", "current"), {
+        kickoffs: {},
+        liveIds: [],
+      })
+    );
+  });
+
+  it("does not let a coordinator operate the same week id in another league", async () => {
+    await appointBoth();
+    const weekId = "2026-W7";
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, "groups", GROUP_ID, "weeks", weekId), {
+        id: weekId,
+        seasonYear: 2026,
+        weekNumber: 7,
+        status: "picking",
+        nominationCount: 0,
+      });
+      await setDoc(doc(db, "groups", "other-league"), {
+        id: "other-league",
+        name: "Other",
+        inviteCode: "OTHER1",
+        commissionerId: COMMISH,
+        memberIds: [COMMISH, MEMBER],
+      });
+      await setDoc(doc(db, "groups", "other-league", "weeks", weekId), {
+        id: weekId,
+        seasonYear: 2026,
+        weekNumber: 7,
+        status: "picking",
+        nominationCount: 0,
+      });
+    });
+    const ocDb = testEnv.authenticatedContext(MEMBER).firestore();
+    await assertSucceeds(
+      updateDoc(doc(ocDb, "groups", GROUP_ID, "weeks", weekId), { pickDeadline: future() })
+    );
+    await assertFails(
+      updateDoc(doc(ocDb, "groups", "other-league", "weeks", weekId), { pickDeadline: future() })
+    );
+    await assertFails(
+      setDoc(doc(ocDb, "groups", "other-league", "weeks", weekId, "gameLock", "current"), {
+        kickoffs: {},
+      })
+    );
+    await assertFails(
+      setDoc(doc(ocDb, "groups", GROUP_ID, "weeks", weekId, "games", "late"), {
+        id: "late",
+        kickoff: new Date(Date.now() - 60 * 1000),
+        status: "scheduled",
+      })
+    );
+  });
+
+  it("clears a coordinator seat on leave and blocks a rejoin that would restore it", async () => {
+    await appointBoth();
+    const memberDb = testEnv.authenticatedContext(MEMBER).firestore();
+    const group = doc(memberDb, "groups", GROUP_ID);
+
+    await assertFails(
+      updateDoc(group, {
+        memberIds: arrayRemove(MEMBER),
+        coordinators: deleteField(),
+      })
+    );
+
+    await assertSucceeds(updateDoc(group, { memberIds: arrayRemove(MEMBER) }));
+    await assertSucceeds(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "joinTickets", MEMBER), {
+        code: "ABC123",
+        createdAt: serverTimestamp(),
+      })
+    );
+    await assertFails(updateDoc(group, { memberIds: arrayUnion(MEMBER) }));
+
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "groups", GROUP_ID), {
+        memberIds: [COMMISH, MEMBER, OTHER_MEMBER],
+        coordinators: { oc: MEMBER, dc: OTHER_MEMBER },
+      });
+    });
+    await assertSucceeds(
+      updateDoc(group, {
+        memberIds: arrayRemove(MEMBER),
+        coordinators: { dc: OTHER_MEMBER },
+      })
+    );
+    await assertSucceeds(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "joinTickets", MEMBER), {
+        code: "ABC123",
+        createdAt: serverTimestamp(),
+      })
+    );
+    await assertSucceeds(updateDoc(group, { memberIds: arrayUnion(MEMBER) }));
+    const saved = await assertSucceeds(getDoc(group));
+    expect(saved.data().coordinators).toEqual({ dc: OTHER_MEMBER });
+    await assertFails(
+      updateDoc(doc(memberDb, "groups", GROUP_ID, "weeks", WEEK_ID), { pickDeadline: future() })
+    );
   });
 });
