@@ -105,6 +105,7 @@ struct CommissionerDeadlinePresentationTests {
             .pickDeadline(carousel),
             .selections(carousel),
             .slate(carousel),
+            .adminGameBrowse(carousel),
             .rankTies(TieRankDraft(entries: [member("a")]), carousel)
         ]
         for request in requests {

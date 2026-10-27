@@ -26,7 +26,7 @@ struct GroupsView: View {
                         groupPicker
 
                         if let groupId = appState.groupService.selectedGroup?.id {
-                            selectedLeagueContent(resolvedGroup(groupId))
+                            selectedLeagueContent(groupId)
                         }
                     }
                 }
@@ -89,7 +89,14 @@ struct GroupsView: View {
     /// Branch identity is the league id. `if let group = selectedGroup` rebuilt
     /// this stack on every snapshot and popped Chat.
     @ViewBuilder
-    private func selectedLeagueContent(_ group: PickemGroup) -> some View {
+    private func selectedLeagueContent(_ groupId: String) -> some View {
+        if let group = appState.groupService.selectedGroup, group.id == groupId {
+            leagueDetails(group)
+        }
+    }
+
+    @ViewBuilder
+    private func leagueDetails(_ group: PickemGroup) -> some View {
         totalsHero(group)
 
         LeaderboardView(scope: leaderboardScopeBinding)
@@ -111,16 +118,6 @@ struct GroupsView: View {
             )
         )
         .padding(.horizontal)
-    }
-
-    private func resolvedGroup(_ groupId: String) -> PickemGroup {
-        if let selected = appState.groupService.selectedGroup, selected.id == groupId {
-            return selected
-        }
-        if let listed = appState.groupService.groups.first(where: { $0.id == groupId }) {
-            return listed
-        }
-        return CommissionerSheetStability.placeholderGroup(id: groupId)
     }
 
     private func recordManualLeaderboardScope(_ newScope: LeaderboardScope.Scope) {

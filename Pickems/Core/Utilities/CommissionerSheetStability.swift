@@ -51,9 +51,96 @@ enum CommissionerSheetStability {
 
 /// Spread editor content while the slate listener replaces `SlateGame` values.
 enum SlateSpreadPresentation {
-    /// The live game wins when it is still on the slate. Otherwise the game
-    /// captured at tap stays, so the editor is not torn down for a refresh.
-    static func game(captured: SlateGame, liveGames: [SlateGame]) -> SlateGame {
-        liveGames.first { $0.id == captured.id } ?? captured
+    /// The live game wins when it is still on this league's slate. A slate that
+    /// belongs to another league is ignored — week and game ids are shared.
+    /// Otherwise the game captured at tap stays.
+    static func game(captured: SlateGame, liveGames: [SlateGame], liveBelongsToLeague: Bool) -> SlateGame {
+        guard liveBelongsToLeague else { return captured }
+        return liveGames.first { $0.id == captured.id } ?? captured
+    }
+}
+
+/// Commissioner Settings reads and writes for one league, the one the sheet
+/// was opened on. Week ids (`2026-W7`) are the same in every league.
+enum CommissionerPinnedLeague {
+    /// Close Settings when the member is looking at a different league.
+    /// A nil live id is a listener flicker and must leave Settings up.
+    static func shouldDismiss(settingsOpen: Bool, pinnedGroupId: String?, liveGroupId: String?) -> Bool {
+        guard settingsOpen, let pinnedGroupId, let liveGroupId else { return false }
+        return pinnedGroupId != liveGroupId
+    }
+
+    /// The pinned league from the copies we still have. Never the live
+    /// selection when that selection is a different league.
+    static func group(
+        id pinnedGroupId: String,
+        selected: PickemGroup?,
+        listed: [PickemGroup],
+        fallback: PickemGroup?
+    ) -> PickemGroup? {
+        if let selected, selected.id == pinnedGroupId { return selected }
+        if let listed = listed.first(where: { $0.id == pinnedGroupId }) { return listed }
+        if let fallback, fallback.id == pinnedGroupId { return fallback }
+        return nil
+    }
+
+    /// Live week first, then this league's chip list, then the week captured
+    /// at tap. `current` is used only when its observer is still the pin.
+    static func week(
+        pinnedGroupId: String,
+        weekId: String,
+        captured: WeekSummary?,
+        current: WeekSummary?,
+        currentGroupId: String?,
+        available: [WeekSummary],
+        availableBelongsToPin: Bool
+    ) -> WeekSummary? {
+        if currentGroupId == pinnedGroupId, let current, current.id == weekId {
+            return current
+        }
+        if availableBelongsToPin, let listed = available.first(where: { $0.id == weekId }) {
+            return listed
+        }
+        if let captured, captured.id == weekId {
+            return captured
+        }
+        return nil
+    }
+
+    /// Live slate only while the pick listener is on this league. After a
+    /// switch, the games captured at tap stay with the pinned save.
+    static func slate(
+        pinnedGroupId: String,
+        observingGroupId: String?,
+        live: [SlateGame],
+        captured: [SlateGame]
+    ) -> [SlateGame] {
+        if observingGroupId == pinnedGroupId { return live }
+        return captured
+    }
+}
+
+/// Spread editor draft versus a later slate snapshot.
+enum SpreadDraftRefresh {
+    struct Draft: Equatable {
+        var spread: Double
+        var favoriteIsHome: Bool
+        var didEdit: Bool
+    }
+
+    /// Unedited drafts follow the server line. An edit the commissioner
+    /// already made stays put.
+    static func afterServerLine(_ draft: Draft, spread: Double, favoriteIsHome: Bool) -> Draft {
+        guard !draft.didEdit else { return draft }
+        var next = draft
+        next.spread = abs(spread)
+        next.favoriteIsHome = favoriteIsHome
+        return next
+    }
+
+    /// True when the commissioner has edited and the slate line has since moved.
+    static func showsLineChangedWarning(draft: Draft, serverSpread: Double, serverFavoriteIsHome: Bool) -> Bool {
+        guard draft.didEdit else { return false }
+        return draft.spread != abs(serverSpread) || draft.favoriteIsHome != serverFavoriteIsHome
     }
 }

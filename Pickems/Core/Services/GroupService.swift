@@ -13,6 +13,9 @@ final class GroupService {
     var membersGroupId: String?
     var standings: GroupStandings?
     var currentWeek: WeekSummary?
+    /// League `currentWeek` is being observed for. Week ids are shared, so a
+    /// matching id is not enough to treat `currentWeek` as this league.
+    var currentWeekGroupId: String? { observedGroupId }
     /// Weeks available for the selected group (Picks tab week bar). Ascending by season/week.
     var availableWeeks: [WeekSummary] = []
     /// League `availableWeeks` was loaded for. Week ids are shared across leagues,

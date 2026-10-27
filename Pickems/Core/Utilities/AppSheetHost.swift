@@ -11,7 +11,14 @@ struct AppSheetHostModifier: ViewModifier {
     func body(content: Content) -> some View {
         @Bindable var appState = appState
         content
-            .onChange(of: appState.groupService.selectedGroup?.id, initial: true) { (_: String?, _: String?) in
+            .onChange(of: appState.groupService.selectedGroup?.id, initial: true) { (_: String?, liveId: String?) in
+                if CommissionerPinnedLeague.shouldDismiss(
+                    settingsOpen: appState.presentedSheet == .commissionerSettings,
+                    pinnedGroupId: retainedSettingsGroup?.id,
+                    liveGroupId: liveId
+                ) {
+                    appState.dismissSheet()
+                }
                 rememberSettingsGroup(settingsOpen: appState.presentedSheet == .commissionerSettings)
             }
             .onChange(of: appState.presentedSheet) { (_: AppSheet?, _: AppSheet?) in

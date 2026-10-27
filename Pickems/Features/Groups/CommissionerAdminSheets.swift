@@ -92,6 +92,9 @@ struct CommissionerSelectionsAdminSheet: View {
     /// Week chip that opened this sheet. Not `currentWeek`, which can be nil on the presentation frame.
     let week: WeekSummary
     let groupId: String
+    /// Rules and roster of the pinned league, not whatever is selected now.
+    let rules: GroupRules
+    let memberIds: [String]
 
     /// Member id for the pushed editor. The row's `NavigationLink` used to pop
     /// whenever the members listener replaced the row.
@@ -101,13 +104,18 @@ struct CommissionerSelectionsAdminSheet: View {
     private var selectionsPerMember: Int {
         let weekValue: Int = week.selectionsPerMember
         if weekValue > 0 { return weekValue }
-        return max(appState.groupService.selectedGroup?.rules.selectionsPerMember ?? 1, 1)
+        return max(rules.selectionsPerMember, 1)
+    }
+
+    private var pinnedMembers: [GroupMember] {
+        guard appState.groupService.membersGroupId == groupId else { return [] }
+        return appState.groupService.members
     }
 
     var body: some View {
         CommissionerAdminSheetChrome(title: "Selections") {
             Section {
-                ForEach(appState.groupService.members) { (member: GroupMember) in
+                ForEach(pinnedMembers) { (member: GroupMember) in
                     memberLink(member)
                 }
             } header: {
@@ -122,8 +130,11 @@ struct CommissionerSelectionsAdminSheet: View {
     }
 
     private func memberLink(_ member: GroupMember) -> some View {
+        let nominations = appState.pickService.observingGroupId == groupId
+            ? appState.pickService.nominations
+            : []
         let progress = SubmissionRoster.selectionProgress(
-            nominations: appState.pickService.nominations,
+            nominations: nominations,
             memberId: member.id,
             perMember: selectionsPerMember
         )
@@ -149,7 +160,13 @@ struct CommissionerSelectionsAdminSheet: View {
     @ViewBuilder
     private func selectionsDestination(_ memberId: String) -> some View {
         if let member = memberForSelections(memberId) {
-            CommissionerManageSelectionsSheet(member: member, week: week, groupId: groupId)
+            CommissionerManageSelectionsSheet(
+                member: member,
+                week: week,
+                groupId: groupId,
+                rules: rules,
+                memberIds: memberIds
+            )
                 .pickemsEnvironment(appState)
         } else {
             ContentUnavailableView(
@@ -161,7 +178,10 @@ struct CommissionerSelectionsAdminSheet: View {
     }
 
     private func memberForSelections(_ memberId: String) -> GroupMember? {
-        if let live = appState.groupService.members.first(where: { $0.id == memberId }) { return live }
+        if appState.groupService.membersGroupId == groupId,
+           let live = appState.groupService.members.first(where: { $0.id == memberId }) {
+            return live
+        }
         if capturedMember?.id == memberId { return capturedMember }
         return nil
     }
@@ -183,6 +203,8 @@ struct CommissionerSlateSheet: View {
 
     /// Week chip that opened this sheet. Not `currentWeek`, which can be nil on the presentation frame.
     let week: WeekSummary
+    let groupId: String
+    let rules: GroupRules
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var showsSpreads: Bool { appState.pickMode(for: week).showsSpreads }
@@ -195,7 +217,8 @@ struct CommissionerSlateSheet: View {
             spreadEditorSheet(
                 for: SlateSpreadPresentation.game(
                     captured: edit.game,
-                    liveGames: appState.pickService.displaySlateGames
+                    liveGames: appState.pickService.displaySlateGames,
+                    liveBelongsToLeague: appState.pickService.observingGroupId == groupId
                 )
             )
         }
@@ -203,7 +226,9 @@ struct CommissionerSlateSheet: View {
 
     @ViewBuilder
     private var slateSection: some View {
-        let games: [SlateGame] = appState.pickService.displaySlateGames
+        let games: [SlateGame] = appState.pickService.observingGroupId == groupId
+            ? appState.pickService.displaySlateGames
+            : []
         if !games.isEmpty {
             Section {
                 ForEach(games) { (game: SlateGame) in
@@ -264,13 +289,15 @@ struct CommissionerSlateSheet: View {
     }
 
     private func removeSlateItem(_ game: SlateGame, week: WeekSummary) {
-        if let live = appState.pickService.slateGames.first(where: {
+        let slateBelongs = appState.pickService.observingGroupId == groupId
+        if slateBelongs, let live = appState.pickService.slateGames.first(where: {
             $0.id == game.id || $0.espnEventId == game.espnEventId
         }) {
-            picksVM.removeCommissionerGame(live, week: week, appState: appState)
-        } else if let nom = appState.pickService.nominations.first(where: { $0.espnEventId == game.espnEventId }) {
-            let rules: GroupRules = appState.groupService.selectedGroup?.rules ?? .default
-            picksVM.removeNomination(nom, rules: rules, appState: appState)
+            picksVM.removeCommissionerGame(live, groupId: groupId, week: week, appState: appState)
+        } else if slateBelongs, let nom = appState.pickService.nominations.first(where: { $0.espnEventId == game.espnEventId }) {
+            picksVM.removeNomination(nom, groupId: groupId, week: week, rules: rules, appState: appState)
+        } else {
+            picksVM.removeCommissionerGame(game, groupId: groupId, week: week, appState: appState)
         }
     }
 
@@ -280,6 +307,8 @@ struct CommissionerSlateSheet: View {
                 game,
                 spread: spread,
                 spreadTeamId: spreadTeamId,
+                groupId: groupId,
+                week: week,
                 appState: appState
             )
         }

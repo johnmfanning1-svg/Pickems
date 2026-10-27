@@ -26,6 +26,7 @@ struct CommissionerSettingsView: View {
     @State private var picksRoute: CommissionerPicksRoute?
     @State private var capturedPicksMember: GroupMember?
     @State private var capturedPicksWeek: WeekSummary?
+    @State private var capturedPicksSlate: [SlateGame] = []
     /// League and week frozen when Reopen Selections was tapped.
     /// The alert is presented from this value (`presenting:`), not a second flag.
     @State private var reopenSelectionsTarget: DeadlineEditCapture?
@@ -110,11 +111,13 @@ struct CommissionerSettingsView: View {
     private var settingsForm: some View {
         Form {
             CommissionerWeekAdminSections(
+                group: group,
                 present: { (request: CommissionerSheetRequest) in presentCommissionerSheet(request) },
                 requestReopenSelections: { (week: WeekSummary) in presentReopenSelectionsConfirm(week) },
-                managePicks: { (member: GroupMember, week: WeekSummary) in
+                managePicks: { (member: GroupMember, week: WeekSummary, slate: [SlateGame]) in
                     capturedPicksMember = member
                     capturedPicksWeek = week
+                    capturedPicksSlate = slate
                     picksRoute = CommissionerPicksRoute(memberId: member.id, weekId: week.id)
                 }
             )
@@ -451,7 +454,12 @@ struct CommissionerSettingsView: View {
                 member: member,
                 week: week,
                 groupId: groupId,
-                slateGames: appState.pickService.slateGames
+                slateGames: CommissionerPinnedLeague.slate(
+                    pinnedGroupId: groupId,
+                    observingGroupId: appState.pickService.observingGroupId,
+                    live: appState.pickService.slateGames,
+                    captured: capturedPicksSlate
+                )
             )
             .pickemsEnvironment(appState)
         } else {
@@ -464,16 +472,25 @@ struct CommissionerSettingsView: View {
     }
 
     private func picksMember(_ memberId: String) -> GroupMember? {
-        if let live = appState.groupService.members.first(where: { $0.id == memberId }) { return live }
+        if appState.groupService.membersGroupId == groupId,
+           let live = appState.groupService.members.first(where: { $0.id == memberId }) {
+            return live
+        }
         if capturedPicksMember?.id == memberId { return capturedPicksMember }
         return nil
     }
 
     private func picksWeek(_ weekId: String) -> WeekSummary? {
-        if capturedPicksWeek?.id == weekId { return capturedPicksWeek }
-        if appState.groupService.currentWeek?.id == weekId { return appState.groupService.currentWeek }
-        guard appState.groupService.availableWeeksBelong(to: groupId) else { return nil }
-        return appState.groupService.availableWeeks.first { $0.id == weekId }
+        let service = appState.groupService
+        return CommissionerPinnedLeague.week(
+            pinnedGroupId: groupId,
+            weekId: weekId,
+            captured: capturedPicksWeek,
+            current: service.currentWeek,
+            currentGroupId: service.currentWeekGroupId,
+            available: service.availableWeeks,
+            availableBelongsToPin: service.availableWeeksBelong(to: groupId)
+        )
     }
 
     @ViewBuilder
@@ -489,8 +506,8 @@ struct CommissionerSettingsView: View {
             pickDeadlineSheet(
                 CommissionerDeadlinePresentation.presentedPickEdit(on: r, siblingEdit: nil) ?? edit
             )
-        case .adminGameBrowse:
-            adminGameBrowseSheet
+        case .adminGameBrowse(let week):
+            adminGameBrowseSheet(week)
         case .members:
             membersSheet
         case .selections(let week):
@@ -503,12 +520,12 @@ struct CommissionerSettingsView: View {
     }
 
     private func selectionsAdminSheet(_ week: WeekSummary) -> some View {
-        CommissionerSelectionsAdminSheet(week: week, groupId: group.id)
+        CommissionerSelectionsAdminSheet(week: week, groupId: groupId, rules: group.rules, memberIds: group.memberIds)
             .pickemsEnvironment(appState)
     }
 
     private func slateAdminSheet(_ week: WeekSummary) -> some View {
-        CommissionerSlateSheet(week: week)
+        CommissionerSlateSheet(week: week, groupId: groupId, rules: group.rules)
             .pickemsEnvironment(appState)
     }
 
@@ -592,12 +609,15 @@ struct CommissionerSettingsView: View {
     /// so a switch cannot supply another league's deadline as the editor seed.
     private func displayedWeek(groupId: String, weekId: String) -> WeekSummary? {
         let service = appState.groupService
-        guard service.selectedGroup?.id == groupId else { return nil }
-        if service.currentWeek?.id == weekId {
-            return service.currentWeek
-        }
-        guard service.availableWeeksBelong(to: groupId) else { return nil }
-        return service.availableWeeks.first { $0.id == weekId }
+        return CommissionerPinnedLeague.week(
+            pinnedGroupId: groupId,
+            weekId: weekId,
+            captured: nil,
+            current: service.currentWeek,
+            currentGroupId: service.currentWeekGroupId,
+            available: service.availableWeeks,
+            availableBelongsToPin: service.availableWeeksBelong(to: groupId)
+        )
     }
 
     private func selectionDeadlineSheet(_ edit: SelectionDeadlineEdit) -> some View {
@@ -674,11 +694,17 @@ struct CommissionerSettingsView: View {
         .pickemsEnvironment(appState)
     }
 
-    private var adminGameBrowseSheet: some View {
-        GameBrowseView(
+    private func adminGameBrowseSheet(_ week: WeekSummary) -> some View {
+        let pinned = group
+        return GameBrowseView(
             seedGames: appState.picksViewModel.espnGames
         ) { games in
-            try await appState.picksViewModel.saveBrowseSelections(games, appState: appState)
+            try await appState.picksViewModel.saveBrowseSelections(
+                games,
+                group: pinned,
+                week: week,
+                appState: appState
+            )
         }
         .pickemsEnvironment(appState)
     }
@@ -825,10 +851,12 @@ struct CommissionerSettingsView: View {
     private var rollingCandidateWeeks: [WeekSummary] {
         let service = appState.groupService
         var weeks: [WeekSummary] = []
-        if let current = service.currentWeek {
+        if service.currentWeekGroupId == groupId, let current = service.currentWeek {
             weeks.append(current)
         }
-        weeks.append(contentsOf: service.availableWeeks)
+        if service.availableWeeksBelong(to: groupId) {
+            weeks.append(contentsOf: service.availableWeeks)
+        }
         return weeks
     }
 

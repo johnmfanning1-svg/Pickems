@@ -53,6 +53,8 @@ final class PickService {
     private var observedGroupId: String?
     /// Week the live pick listeners are attached to. Views hide stale lists when this lags `currentWeek`.
     private(set) var observedWeekId: String?
+    /// League the slate, nominations, and submissions belong to.
+    var observingGroupId: String? { observedGroupId }
     /// True after the games listener has delivered a snapshot for `observedWeekId`.
     private(set) var didLoadSlateGames = false
     /// True after nominations have been delivered for `observedWeekId`.

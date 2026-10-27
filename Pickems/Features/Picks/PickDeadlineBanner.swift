@@ -197,12 +197,12 @@ struct DeadlineHeroRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             countdownControl
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(accessibilityLabel)
+                .modifier(DeadlineRowTapAccessibility(onTap: onTap, hint: tapHint))
 
             HelpInfoButton(topic: help, size: .subheadline)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityLabel)
-        .modifier(DeadlineRowTapAccessibility(onTap: onTap, hint: tapHint))
     }
 
     @ViewBuilder
