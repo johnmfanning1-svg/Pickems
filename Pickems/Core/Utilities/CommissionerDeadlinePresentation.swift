@@ -8,7 +8,7 @@ import Foundation
 enum CommissionerSheetRequest: Equatable {
     case selectionDeadline(WeekSummary)
     case pickDeadline(WeekSummary)
-    case adminGameBrowse
+    case adminGameBrowse(WeekSummary)
     case members
     case selections(WeekSummary)
     case slate(WeekSummary)
@@ -23,15 +23,17 @@ enum CommissionerSheetRequest: Equatable {
 /// appeared for the current or a future week.
 enum CommissionerDeadlinePresentation {
     /// Nil when the carousel week belongs to a different league than this
-    /// Settings screen. Members and game browse do not need a week.
+    /// Settings screen. Members do not need a week. Game browse carries the
+    /// week chip so the save is not `currentWeek` from another league.
     static func route(
         for request: CommissionerSheetRequest,
         settingsGroupId: String,
         selectedGroupId: String?
     ) -> CommissionerSheet? {
         switch request {
-        case .adminGameBrowse:
-            return .adminGameBrowse
+        case .adminGameBrowse(let week):
+            guard selectedGroupId == settingsGroupId else { return nil }
+            return .adminGameBrowse(week)
         case .members:
             return .members
         case .selectionDeadline(let week):

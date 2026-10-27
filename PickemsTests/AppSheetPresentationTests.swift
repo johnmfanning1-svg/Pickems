@@ -71,7 +71,7 @@ struct AppSheetPresentationTests {
         let routes: [CommissionerSheet] = [
             .selectionDeadline(selection8),
             .pickDeadline(pick8),
-            .adminGameBrowse,
+            .adminGameBrowse(week8),
             .members,
             .selections(week8),
             .slate(week8)

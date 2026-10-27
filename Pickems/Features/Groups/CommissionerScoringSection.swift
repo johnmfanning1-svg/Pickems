@@ -215,19 +215,29 @@ struct CommissionerScoringSection: View {
         return service.groups.first { $0.id == groupId }?.rules.pickMode ?? rules.pickMode
     }
 
-    /// The league's current week: the calendar week when loaded, else the observed week.
+    /// The pinned league's week. A shared week id on another league does not count.
     private var leagueWeek: WeekSummary? {
         let service = appState.groupService
-        guard let activeId = service.cfbWeek.map({ CFBWeekSync.weekId(for: $0) }) else {
-            return service.currentWeek
-        }
-        if service.currentWeek?.id == activeId { return service.currentWeek }
-        return service.availableWeeks.first { $0.id == activeId } ?? service.currentWeek
+        let activeId = service.cfbWeek.map { CFBWeekSync.weekId(for: $0) }
+        let weekId = activeId ?? service.currentWeek?.id ?? ""
+        guard !weekId.isEmpty else { return nil }
+        return CommissionerPinnedLeague.week(
+            pinnedGroupId: groupId,
+            weekId: weekId,
+            captured: nil,
+            current: service.currentWeek,
+            currentGroupId: service.currentWeekGroupId,
+            available: service.availableWeeks,
+            availableBelongsToPin: service.availableWeeksBelong(to: groupId)
+        )
     }
 
     /// Selections made on the league week (nominations or commissioner-added games).
     private var selectionsMade: Int {
-        guard let week = leagueWeek, week.id == appState.groupService.currentWeek?.id else { return 0 }
+        guard let week = leagueWeek,
+              appState.groupService.currentWeekGroupId == groupId,
+              week.id == appState.groupService.currentWeek?.id,
+              appState.pickService.observingGroupId == groupId else { return 0 }
         let nominations: Int = appState.pickService.nominations.count
         let slate: Int = appState.pickService.slateGames.count
         return nominations + slate

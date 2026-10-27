@@ -285,7 +285,21 @@ final class PicksViewModel {
     ) async throws -> SelectionBrowseSaveResult {
         guard let group = appState.groupService.selectedGroup,
               let week = appState.groupService.currentWeek,
-              let user = appState.authService.currentUser else {
+              appState.groupService.currentWeekGroupId == group.id else {
+            throw PickService.PickError.unauthorized
+        }
+        return try await saveBrowseSelections(games, group: group, week: week, appState: appState)
+    }
+
+    /// `group` and `week` are the league the editor was opened on. Callers must
+    /// not pass the live selection after a league switch — week ids are shared.
+    func saveBrowseSelections(
+        _ games: [ESPNGame],
+        group: PickemGroup,
+        week: WeekSummary,
+        appState: AppState
+    ) async throws -> SelectionBrowseSaveResult {
+        guard let user = appState.authService.currentUser else {
             throw PickService.PickError.unauthorized
         }
         let empty = SelectionBrowseSaveResult(
@@ -483,24 +497,23 @@ final class PicksViewModel {
         }
     }
 
-    func lockSlateEarly(appState: AppState) {
-        guard let group = appState.groupService.selectedGroup,
-              let week = appState.groupService.currentWeek else { return }
+    func openWeekWithCurrentSlate(
+        groupId: String,
+        week: WeekSummary,
+        rules: GroupRules,
+        appState: AppState
+    ) {
         Task {
             do {
                 try await appState.pickService.openWeekWithCurrentSlate(
-                    groupId: group.id,
+                    groupId: groupId,
                     weekId: week.id,
-                    rules: group.rules
+                    rules: rules
                 )
             } catch {
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }
         }
-    }
-
-    func openWeekWithCurrentSlate(appState: AppState) {
-        lockSlateEarly(appState: appState)
     }
 
     func reopenSelections(groupId: String, weekId: String, appState: AppState) {
@@ -646,11 +659,22 @@ final class PicksViewModel {
     func removeNomination(_ nomination: Nomination, rules: GroupRules, appState: AppState) {
         guard let group = appState.groupService.selectedGroup,
               let week = appState.groupService.currentWeek,
-              let userId = appState.currentUserId else { return }
+              appState.groupService.currentWeekGroupId == group.id else { return }
+        removeNomination(nomination, groupId: group.id, week: week, rules: rules, appState: appState)
+    }
+
+    func removeNomination(
+        _ nomination: Nomination,
+        groupId: String,
+        week: WeekSummary,
+        rules: GroupRules,
+        appState: AppState
+    ) {
+        guard let userId = appState.currentUserId else { return }
         Task {
             do {
                 try await appState.pickService.removeNomination(
-                    groupId: group.id,
+                    groupId: groupId,
                     weekId: week.id,
                     nomination: nomination,
                     rules: rules,
@@ -670,12 +694,16 @@ final class PicksViewModel {
         }
     }
 
-    func removeCommissionerGame(_ game: SlateGame, week: WeekSummary, appState: AppState) {
-        guard let group = appState.groupService.selectedGroup else { return }
+    func removeCommissionerGame(
+        _ game: SlateGame,
+        groupId: String,
+        week: WeekSummary,
+        appState: AppState
+    ) {
         Task {
             do {
                 try await appState.pickService.removeCommissionerGame(
-                    groupId: group.id,
+                    groupId: groupId,
                     weekId: week.id,
                     gameId: game.id,
                     week: week
@@ -690,14 +718,19 @@ final class PicksViewModel {
         }
     }
 
-    func updateSpread(_ game: SlateGame, spread: Double, spreadTeamId: String, appState: AppState) {
-        guard let group = appState.groupService.selectedGroup,
-              let week = appState.groupService.currentWeek else { return }
+    func updateSpread(
+        _ game: SlateGame,
+        spread: Double,
+        spreadTeamId: String,
+        groupId: String,
+        week: WeekSummary,
+        appState: AppState
+    ) {
         guard !WeekTransition.isSpreadLocked(game, week: week) else { return }
         Task {
             do {
                 try await appState.pickService.updateGameSpread(
-                    groupId: group.id,
+                    groupId: groupId,
                     weekId: week.id,
                     game: game,
                     spread: spread,
