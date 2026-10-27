@@ -108,7 +108,12 @@ struct CommissionerWeekAdminSections: View {
                         .listRowBackground(PickemsColors.cardBackground)
                     } else {
                         Button("Open Week Early") {
-                            picksVM.lockSlateEarly(appState: appState)
+                            picksVM.openWeekWithCurrentSlate(
+                                groupId: groupId,
+                                week: week,
+                                rules: group.rules,
+                                appState: appState
+                            )
                         }
                         .disabled(uniqueGames == 0)
                         .listRowBackground(PickemsColors.cardBackground)
