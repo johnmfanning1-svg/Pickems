@@ -11,6 +11,13 @@ extension AppState {
         return group.commissionerId == userId
     }
 
+    /// Commissioner or a current OC/DC. Week controls use this; league ownership stays `isCommissioner`.
+    var canOperateWeek: Bool {
+        guard let group = groupService.selectedGroup,
+              let userId = currentUserId else { return false }
+        return LeagueRolePolicy.role(of: userId, in: group).canOperateWeek
+    }
+
     var selectedPickMode: PickMode {
         pickMode(for: groupService.currentWeek)
     }

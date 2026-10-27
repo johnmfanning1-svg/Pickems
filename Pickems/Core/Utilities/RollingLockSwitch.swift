@@ -1,8 +1,8 @@
 import Foundation
 
-/// Commissioner "Switch to rolling lock". The write itself is the
-/// `setRollingLock` callable (`firebase/functions/src/rollingLock.ts`); this
-/// decides whether to ask "Apply to current week?" and holds the copy.
+/// "Switch to rolling lock" for the commissioner or a coordinator. The write
+/// itself is the `setRollingLock` callable (`firebase/functions/src/rollingLock.ts`);
+/// this decides whether to ask "Apply to current week?" and holds the copy.
 enum RollingLockSwitch {
     enum CurrentWeekPhase: Equatable {
         /// No week in progress: change the league setting, no prompt.

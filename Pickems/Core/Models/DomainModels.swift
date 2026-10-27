@@ -102,6 +102,8 @@ struct PickemGroup: Codable, Identifiable, Equatable {
     var isPublic: Bool = false
     /// Private-league lock so only the commissioner can share the invite. Nil/missing means off.
     var commissionerOnlyInvites: Bool? = nil
+    /// Appointed OC / DC. Nil or missing means this league has no coordinators.
+    var coordinators: LeagueCoordinators? = nil
 
     var memberCount: Int { memberIds.count }
 

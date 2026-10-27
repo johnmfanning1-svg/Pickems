@@ -59,11 +59,10 @@ final class AppState {
         presentedSheet = nil
     }
 
-    /// Opens Commissioner Settings straight into the Selection or Pickems deadline
-    /// editor for `target`. Only for the commissioner of the selected league;
-    /// anyone else gets nothing (the prompt rows are commissioner-only anyway).
+    /// Opens week settings straight into the Selection or Pickems deadline
+    /// editor for `target`. Commissioner or a current coordinator; anyone else gets nothing.
     func openCommissionerDeadlineEditor(_ target: CommissionerDeadlineTarget) {
-        guard isCommissioner, let groupId = groupService.selectedGroup?.id,
+        guard canOperateWeek, let groupId = groupService.selectedGroup?.id,
               target.matches(groupId: groupId) else { return }
         pendingDeadlineEditor = target
         present(.commissionerSettings)

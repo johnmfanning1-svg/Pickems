@@ -41,6 +41,7 @@ struct MemberListView: View {
                         MemberRow(
                             member: member,
                             isCommissioner: member.id == commissionerId,
+                            coordinatorRole: appState.groupService.selectedGroup?.coordinatorRole(for: member.id),
                             career: appState.groupService.careerRecord(for: member.id)
                         )
                     }
@@ -123,6 +124,7 @@ struct MemberRow: View {
     @Environment(\.themePalette) private var theme
     let member: GroupMember
     let isCommissioner: Bool
+    var coordinatorRole: LeagueCoordinatorRole? = nil
     var career: CareerRecord? = nil
 
     var body: some View {
@@ -151,6 +153,9 @@ struct MemberRow: View {
                             .background(theme.accent.opacity(0.25))
                             .foregroundStyle(theme.accent)
                             .clipShape(Capsule())
+                    }
+                    if let coordinatorRole {
+                        LeagueRoleBadge(role: coordinatorRole)
                     }
                     if let titles = career?.titles, titles > 0 {
                         Label("\(titles)", systemImage: "crown.fill")
@@ -186,7 +191,8 @@ struct MemberRow: View {
     }
 
     private var accessibilityLabel: String {
-        let role = isCommissioner ? ", commissioner" : ""
+        let coordinator = coordinatorRole.map { ", \($0.title)" } ?? ""
+        let role = (isCommissioner ? ", commissioner" : "") + coordinator
         var label = "\(member.displayName)\(role). Season record \(member.seasonWins) wins, \(member.seasonLosses) losses. Batting average \(String(format: "%.3f", member.battingAverage))"
         if let career {
             label += ". Career \(career.recordLabel), \(career.titles) titles"

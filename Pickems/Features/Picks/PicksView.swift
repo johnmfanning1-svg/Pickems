@@ -329,7 +329,7 @@ struct PicksView: View {
     private func selectionPhase(week: WeekSummary) -> some View {
         let rules = appState.groupService.selectedGroup?.rules ?? .default
         let mode = week.selectionMode
-        if mode == .commissioner && appState.isCommissioner {
+        if mode == .commissioner && appState.canOperateWeek {
             commissionerSelectionUI(week: week, rules: rules)
         } else if mode == .member {
             memberNominationUI(week: week, rules: rules)
@@ -364,7 +364,7 @@ struct PicksView: View {
             }
             .padding(.horizontal)
 
-            Text("Games are listed by person below. Edit spreads in Commissioner Settings.")
+            Text("Games are listed by person below. Edit spreads from the slate tools.")
                 .font(.caption)
                 .foregroundStyle(PickemsColors.textSecondary)
                 .padding(.horizontal)
@@ -398,7 +398,7 @@ struct PicksView: View {
                 help: PickemsHelp.nominations
             )
 
-            if deadlinePassed, !appState.isCommissioner {
+            if deadlinePassed, !appState.canOperateWeek {
                 EmptyView()
             } else if atLimit {
                 nominationSubmitSection(userNoms: userNoms, perMember: perMember, week: week)
@@ -462,7 +462,7 @@ struct PicksView: View {
             snapshot: WorkspaceDeadlineDisplay.snapshot(
                 kind: kind == .selections ? .selections : .pickems,
                 week: week,
-                isCommissioner: appState.isCommissioner,
+                isCommissioner: appState.canOperateWeek,
                 games: games
             ),
             onSetDeadline: { (deadline: WorkspaceDeadlineKind) in

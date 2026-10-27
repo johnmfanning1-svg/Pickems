@@ -253,7 +253,8 @@ struct HomeView: View {
                         LeaderboardRow(
                             entry: entry,
                             showWeekly: true,
-                            isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId
+                            isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
+                            coordinatorRole: appState.groupService.selectedGroup?.coordinatorRole(for: entry.id)
                         )
                             .padding(.horizontal)
                     }
@@ -366,7 +367,7 @@ struct HomeView: View {
             : picks.keys.filter { !ineligible.contains($0) }.count
         return HomeCTAResolver.resolve(
             week: week,
-            isCommissioner: appState.isCommissioner,
+            isCommissioner: appState.canOperateWeek,
             didSubmitNominations: appState.pickService.didSubmitNominations,
             userNominationCount: userNoms,
             pickCount: pickCount,

@@ -12,7 +12,7 @@ export async function sendToUser(
   userId: string,
   title: string,
   body: string,
-  type: PushType,
+  type: string,
   extra: Record<string, string> = {},
   member?: MemberPushPrefFields,
   presentation?: PushPresentation
@@ -69,7 +69,7 @@ export async function sendToUsers(
   userIds: string[],
   title: string,
   body: string,
-  type: PushType,
+  type: string,
   extra: Record<string, string> = {}
 ): Promise<void> {
   let membersById = new Map<string, MemberPushPrefFields>();

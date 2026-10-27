@@ -162,6 +162,23 @@ struct NotificationDeepLinkTests {
         #expect(DeepLinkRouter.parse(url: URL(string: "pickems://pickems")!) == .openPickems(groupId: nil))
     }
 
+    @Test func coordinatorRolePushOpensTheLeague() {
+        let action = DeepLinkRouter.parseNotification(userInfo: [
+            "type": "coordinator_role",
+            "groupId": groupId,
+            "role": "oc",
+            "change": "appointed",
+        ])
+        #expect(action == .openLeagues(groupId: groupId))
+        #expect(
+            NotificationLaunch.resolve(
+                action: action!,
+                groupsLoaded: true,
+                memberGroupIds: [groupId]
+            ) == nil
+        )
+    }
+
     @Test func gameDetailSheetIdentityFollowsTheGame() {
         #expect(AppSheet.gameDetail(gameId: "g1").id == "gameDetail.g1")
         #expect(AppSheet.gameDetail(gameId: "g1").id != AppSheet.gameDetail(gameId: "g2").id)

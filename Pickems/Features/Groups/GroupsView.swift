@@ -147,7 +147,7 @@ struct GroupsView: View {
 
     private func presentPendingCommissionerSettings(_ pending: Bool) {
         guard pending else { return }
-        if appState.isCommissioner, appState.groupService.selectedGroup != nil {
+        if appState.canOperateWeek, appState.groupService.selectedGroup != nil {
             appState.present(.commissionerSettings)
         } else {
             appState.pendingDeadlineEditor = nil
@@ -580,6 +580,14 @@ struct GroupsView: View {
                         ) {
                             appState.present(.commissionerSettings)
                         }
+                    } else if appState.canOperateWeek {
+                        manageRow(
+                            title: "Week Operations",
+                            systemImage: "calendar.badge.clock",
+                            hint: "Set deadlines, open the week, and handle the slate"
+                        ) {
+                            appState.present(.commissionerSettings)
+                        }
                     }
 
                     manageNavRow(
@@ -806,6 +814,7 @@ struct LeaderboardView: View {
                 entry: entry,
                 showWeekly: showWeekly,
                 isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
+                coordinatorRole: appState.groupService.selectedGroup?.coordinatorRole(for: entry.id),
                 canCompare: entry.id != appState.currentUserId,
                 leaderWins: leaderWins
             )
@@ -902,6 +911,7 @@ struct FullLeaderboardView: View {
                 entry: entry,
                 showWeekly: showWeekly,
                 isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
+                coordinatorRole: appState.groupService.selectedGroup?.coordinatorRole(for: entry.id),
                 canCompare: entry.id != appState.currentUserId,
                 leaderWins: leaderWins
             )
@@ -913,6 +923,7 @@ private struct LeaderboardStandingRow: View {
     let entry: StandingEntry
     let showWeekly: Bool
     let isCommissioner: Bool
+    var coordinatorRole: LeagueCoordinatorRole? = nil
     let canCompare: Bool
     var leaderWins: Int? = nil
 
@@ -926,6 +937,7 @@ private struct LeaderboardStandingRow: View {
                         entry: entry,
                         showWeekly: showWeekly,
                         isCommissioner: isCommissioner,
+                        coordinatorRole: coordinatorRole,
                         showsDisclosure: true,
                         leaderWins: leaderWins
                     )
@@ -937,6 +949,7 @@ private struct LeaderboardStandingRow: View {
                     entry: entry,
                     showWeekly: showWeekly,
                     isCommissioner: isCommissioner,
+                    coordinatorRole: coordinatorRole,
                     reservesDisclosureSpace: true,
                     leaderWins: leaderWins
                 )

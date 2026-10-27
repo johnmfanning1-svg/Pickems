@@ -65,6 +65,22 @@ describe("planLeaguePickModeSwitch: access", () => {
   it("lets an admin change any league", () => {
     expect(codeOf(() => plan({ callerUid: "support", callerIsAdmin: true }))).toBeUndefined();
   });
+
+  it("rejects a coordinator", () => {
+    expect(
+      codeOf(() =>
+        plan({
+          callerUid: "oc",
+          group: {
+            commissionerId: "comm",
+            memberIds: ["comm", "oc", "member"],
+            coordinators: { oc: "oc" },
+            rules: { pickMode: "ats" },
+          },
+        })
+      )
+    ).toBe("permission-denied");
+  });
 });
 
 describe("planLeaguePickModeSwitch: apply to this week and going forward", () => {

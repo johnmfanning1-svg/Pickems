@@ -142,7 +142,7 @@ describe("planRollingSwitch", () => {
     expect(plan.week?.needsUpdate).toBe(false);
   });
 
-  it("refuses non-commissioners and allows super admins", () => {
+  it("refuses members and allows a current coordinator or a super admin", () => {
     const base = {
       nowMs: friday820pm,
       group: commissioner,
@@ -152,6 +152,34 @@ describe("planRollingSwitch", () => {
     expect(codeOf(() => planRollingSwitch({ ...base, callerUid: "member", callerIsAdmin: false }))).toBe(
       "permission-denied"
     );
+    expect(codeOf(() => planRollingSwitch({ ...base, callerUid: "oc", callerIsAdmin: false }))).toBe(
+      "permission-denied"
+    );
+    const withSeats = {
+      ...commissioner,
+      memberIds: ["comm", "oc", "dc", "member"],
+      coordinators: { oc: "oc", dc: "dc" },
+    };
+    expect(
+      codeOf(() =>
+        planRollingSwitch({ ...base, callerUid: "oc", callerIsAdmin: false, group: withSeats })
+      )
+    ).toBeUndefined();
+    expect(
+      codeOf(() =>
+        planRollingSwitch({ ...base, callerUid: "dc", callerIsAdmin: false, group: withSeats })
+      )
+    ).toBeUndefined();
+    expect(
+      codeOf(() =>
+        planRollingSwitch({
+          ...base,
+          callerUid: "gone",
+          callerIsAdmin: false,
+          group: { ...withSeats, coordinators: { oc: "gone" } },
+        })
+      )
+    ).toBe("permission-denied");
     expect(
       codeOf(() => planRollingSwitch({ ...base, callerUid: "someone", callerIsAdmin: true }))
     ).toBeUndefined();
