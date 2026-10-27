@@ -34,11 +34,10 @@ rc=$?
 set -e
 # Counts come from the .xcresult bundle (Swift Testing and XCTest alike),
 # not from grepping test.log.
-# Floor on passed + expected failures. This head runs 522 tests
-# (507 on the previous head, plus the coordinator role matrix and the
-# coordinator_role deep link). Keep this 2 below that count and BUMP IT
-# as tests are added.
-MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-520}"
+# Floor on passed + expected failures. Main ran 533 tests after #120; this branch adds
+# the coordinator role tests on top. Keep the floor at main's value (531) until CI
+# reports the merged count, then BUMP IT.
+MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-531}"
 grep -iE "error:|Test case .* failed|\*\* TEST" "$OUT/logs/test.log" | tail -n 200 || true
 summary="$OUT/logs/test-summary.json"
 if ! xcrun xcresulttool get test-results summary --path "$OUT/TestResults.xcresult" --format json > "$summary" 2>"$OUT/logs/xcresulttool.err"; then

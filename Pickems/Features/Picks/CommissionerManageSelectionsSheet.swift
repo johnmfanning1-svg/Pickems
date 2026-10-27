@@ -8,6 +8,9 @@ struct CommissionerManageSelectionsSheet: View {
     let member: GroupMember
     let week: WeekSummary
     let groupId: String
+    /// Pinned league. Not `selectedGroup`, which can be a different league with the same week id.
+    let rules: GroupRules
+    let memberIds: [String]
 
     @State private var showBrowse = false
     @State private var replacing: Nomination?
@@ -15,7 +18,8 @@ struct CommissionerManageSelectionsSheet: View {
     @State private var errorMessage: String?
 
     private var nominations: [Nomination] {
-        appState.pickService.nominations.filter { $0.submittedBy == member.id }
+        guard appState.pickService.observingGroupId == groupId else { return [] }
+        return appState.pickService.nominations.filter { $0.submittedBy == member.id }
     }
 
     private var perMember: Int {
@@ -150,10 +154,15 @@ struct CommissionerManageSelectionsSheet: View {
     }
 
     private func remove(_ nomination: Nomination) {
-        guard let rules = appState.groupService.selectedGroup?.rules else { return }
         isWorking = true
         errorMessage = nil
-        appState.picksViewModel.removeNomination(nomination, rules: rules, appState: appState)
+        appState.picksViewModel.removeNomination(
+            nomination,
+            groupId: groupId,
+            week: week,
+            rules: rules,
+            appState: appState
+        )
         isWorking = false
         PickemsHaptics.success()
     }
@@ -162,7 +171,6 @@ struct CommissionerManageSelectionsSheet: View {
         if let message = ScheduledGameEligibility.selectionRejectionMessage(for: games) {
             throw PickService.PickError.gameDisrupted(message)
         }
-        let rules = appState.groupService.selectedGroup?.rules ?? .default
         if let replacing {
             guard let game = games.first else {
                 return SelectionBrowseSaveResult(
@@ -201,7 +209,7 @@ struct CommissionerManageSelectionsSheet: View {
             },
             rules: rules,
             week: week,
-            memberIds: appState.groupService.selectedGroup?.memberIds ?? [],
+            memberIds: memberIds,
             isCommissioner: true
         )
         return result

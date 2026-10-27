@@ -224,6 +224,64 @@ struct WorkspaceDeadlineDisplayTests {
         #expect(snapshot.totalCount == 2)
     }
 
+    @Test func storedSelectionDeadlineOpensEditorWithoutPrompt() {
+        let due = now.addingTimeInterval(3600)
+        let week = week(status: .selection, selectionDeadline: due)
+        let commissioner = WorkspaceDeadlineDisplay.snapshot(
+            kind: .selections, week: week, isCommissioner: true, games: [], now: now
+        )
+        let member = WorkspaceDeadlineDisplay.snapshot(
+            kind: .selections, week: week, isCommissioner: false, games: [], now: now
+        )
+        #expect(commissioner.opensEditor(for: .selections))
+        #expect(!commissioner.isPromptingCommissioner(for: .selections))
+        #expect(!commissioner.opensEditor(for: .pickems))
+        #expect(!member.opensEditor(for: .selections))
+        #expect(commissioner.selectionDeadline == due)
+    }
+
+    @Test func storedPickemsDeadlineOpensEditorWithoutUnsetCaption() {
+        let lock = now.addingTimeInterval(3600)
+        let week = week(status: .picking, pickDeadline: lock)
+        let snapshot = WorkspaceDeadlineDisplay.snapshot(
+            kind: .pickems, week: week, isCommissioner: true, games: [], now: now
+        )
+        #expect(snapshot.hasStoredPickemsDeadline)
+        #expect(snapshot.opensEditor(for: .pickems))
+        #expect(!snapshot.showSetPickemsDeadlinePrompt)
+        #expect(!snapshot.showsUnsetPickemsCaption)
+        #expect(!snapshot.isPromptingCommissioner(for: .pickems))
+    }
+
+    @Test func unsetPickemsDeadlineStillPromptsAndOpensEditor() {
+        let games = [game(id: "thu", kickoff: now.addingTimeInterval(3600))]
+        let week = week(status: .picking)
+        let snapshot = WorkspaceDeadlineDisplay.snapshot(
+            kind: .pickems, week: week, isCommissioner: true, games: games, now: now
+        )
+        #expect(!snapshot.hasStoredPickemsDeadline)
+        #expect(snapshot.pickemsDeadline != nil)
+        #expect(snapshot.showSetPickemsDeadlinePrompt)
+        #expect(snapshot.showsUnsetPickemsCaption)
+        #expect(snapshot.opensEditor(for: .pickems))
+    }
+
+    @Test func lockedSelectionsDoNotOpenHeaderEditor() {
+        let due = now.addingTimeInterval(-3600)
+        let week = week(status: .picking, selectionDeadline: due)
+        let snapshot = WorkspaceDeadlineDisplay.snapshot(
+            kind: .selections, week: week, isCommissioner: true, games: [], now: now
+        )
+        #expect(snapshot.selectionState?.isCountingDown == false)
+        if case .locked(let copy) = snapshot.selectionState {
+            #expect(copy.title == "Locked")
+        } else {
+            Issue.record("locked selections must use the lock-banner copy")
+        }
+        #expect(!snapshot.opensEditor(for: .selections))
+        #expect(!snapshot.isPromptingCommissioner(for: .selections))
+    }
+
     @Test func scoredWeekStillShowsBothDeadlines() {
         let selectionDue = now.addingTimeInterval(-48 * 3600)
         let pickLock = now.addingTimeInterval(-24 * 3600)

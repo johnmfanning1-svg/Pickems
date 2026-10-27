@@ -92,35 +92,55 @@ struct CommissionerSelectionsAdminSheet: View {
     /// Week chip that opened this sheet. Not `currentWeek`, which can be nil on the presentation frame.
     let week: WeekSummary
     let groupId: String
+    /// Rules and roster of the pinned league, not whatever is selected now.
+    let rules: GroupRules
+    let memberIds: [String]
+
+    /// Member id for the pushed editor. The row's `NavigationLink` used to pop
+    /// whenever the members listener replaced the row.
+    @State private var managingMemberId: String?
+    @State private var capturedMember: GroupMember?
 
     private var selectionsPerMember: Int {
         let weekValue: Int = week.selectionsPerMember
         if weekValue > 0 { return weekValue }
-        return max(appState.groupService.selectedGroup?.rules.selectionsPerMember ?? 1, 1)
+        return max(rules.selectionsPerMember, 1)
+    }
+
+    private var pinnedMembers: [GroupMember] {
+        guard appState.groupService.membersGroupId == groupId else { return [] }
+        return appState.groupService.members
     }
 
     var body: some View {
         CommissionerAdminSheetChrome(title: "Selections") {
             Section {
-                ForEach(appState.groupService.members) { (member: GroupMember) in
-                    memberLink(member, week: week, groupId: groupId)
+                ForEach(pinnedMembers) { (member: GroupMember) in
+                    memberLink(member)
                 }
             } header: {
                 Text(week.displayLabel)
             } footer: {
                 Text("Tap a member to change their Selections. Counts are games submitted versus the weekly requirement.")
             }
+            .navigationDestination(item: $managingMemberId) { (memberId: String) in
+                selectionsDestination(memberId)
+            }
         }
     }
 
-    private func memberLink(_ member: GroupMember, week: WeekSummary, groupId: String) -> some View {
+    private func memberLink(_ member: GroupMember) -> some View {
+        let nominations = appState.pickService.observingGroupId == groupId
+            ? appState.pickService.nominations
+            : []
         let progress = SubmissionRoster.selectionProgress(
-            nominations: appState.pickService.nominations,
+            nominations: nominations,
             memberId: member.id,
             perMember: selectionsPerMember
         )
-        return NavigationLink {
-            CommissionerManageSelectionsSheet(member: member, week: week, groupId: groupId)
+        return Button {
+            capturedMember = member
+            managingMemberId = member.id
         } label: {
             CommissionerMemberProgressRow(
                 name: member.displayName,
@@ -130,11 +150,48 @@ struct CommissionerSelectionsAdminSheet: View {
                 unitName: "Selections"
             )
         }
+        .buttonStyle(.plain)
         .accessibilityLabel(
             "\(member.displayName), \(progress.made) of \(progress.total) Selections, \(progress.status.label). Manage Selections."
         )
         .listRowBackground(PickemsColors.cardBackground)
     }
+
+    @ViewBuilder
+    private func selectionsDestination(_ memberId: String) -> some View {
+        if let member = memberForSelections(memberId) {
+            CommissionerManageSelectionsSheet(
+                member: member,
+                week: week,
+                groupId: groupId,
+                rules: rules,
+                memberIds: memberIds
+            )
+                .pickemsEnvironment(appState)
+        } else {
+            ContentUnavailableView(
+                "Member Unavailable",
+                systemImage: "person.crop.circle.badge.exclamationmark",
+                description: Text("That member is no longer in this league.")
+            )
+        }
+    }
+
+    private func memberForSelections(_ memberId: String) -> GroupMember? {
+        if appState.groupService.membersGroupId == groupId,
+           let live = appState.groupService.members.first(where: { $0.id == memberId }) {
+            return live
+        }
+        if capturedMember?.id == memberId { return capturedMember }
+        return nil
+    }
+}
+
+/// Spread sheet identity. `id` is the game id, so a slate refresh that
+/// replaces the `SlateGame` value does not dismiss the editor.
+struct SlateSpreadEdit: Identifiable {
+    var game: SlateGame
+    var id: String { game.id }
 }
 
 // MARK: - Slate
@@ -142,10 +199,12 @@ struct CommissionerSelectionsAdminSheet: View {
 /// Was the inline "This Week's Slate" section, plus the spread editor sheet.
 struct CommissionerSlateSheet: View {
     @Environment(AppState.self) private var appState
-    @State private var spreadEditGame: SlateGame?
+    @State private var spreadEdit: SlateSpreadEdit?
 
     /// Week chip that opened this sheet. Not `currentWeek`, which can be nil on the presentation frame.
     let week: WeekSummary
+    let groupId: String
+    let rules: GroupRules
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var showsSpreads: Bool { appState.pickMode(for: week).showsSpreads }
@@ -154,14 +213,22 @@ struct CommissionerSlateSheet: View {
         CommissionerAdminSheetChrome(title: "Slate") {
             slateSection
         }
-        .sheet(item: $spreadEditGame) { (game: SlateGame) in
-            spreadEditorSheet(for: game)
+        .sheet(item: $spreadEdit) { (edit: SlateSpreadEdit) in
+            spreadEditorSheet(
+                for: SlateSpreadPresentation.game(
+                    captured: edit.game,
+                    liveGames: appState.pickService.displaySlateGames,
+                    liveBelongsToLeague: appState.pickService.observingGroupId == groupId
+                )
+            )
         }
     }
 
     @ViewBuilder
     private var slateSection: some View {
-        let games: [SlateGame] = appState.pickService.displaySlateGames
+        let games: [SlateGame] = appState.pickService.observingGroupId == groupId
+            ? appState.pickService.displaySlateGames
+            : []
         if !games.isEmpty {
             Section {
                 ForEach(games) { (game: SlateGame) in
@@ -196,7 +263,7 @@ struct CommissionerSlateSheet: View {
             }
             HStack {
                 if showsSpreads && !WeekTransition.isSpreadLocked(game, week: week) {
-                    Button("Edit Spread") { spreadEditGame = game }
+                    Button("Edit Spread") { spreadEdit = SlateSpreadEdit(game: game) }
                 }
                 if !week.skipsSelection {
                     Spacer()
@@ -222,13 +289,15 @@ struct CommissionerSlateSheet: View {
     }
 
     private func removeSlateItem(_ game: SlateGame, week: WeekSummary) {
-        if let live = appState.pickService.slateGames.first(where: {
+        let slateBelongs = appState.pickService.observingGroupId == groupId
+        if slateBelongs, let live = appState.pickService.slateGames.first(where: {
             $0.id == game.id || $0.espnEventId == game.espnEventId
         }) {
-            picksVM.removeCommissionerGame(live, week: week, appState: appState)
-        } else if let nom = appState.pickService.nominations.first(where: { $0.espnEventId == game.espnEventId }) {
-            let rules: GroupRules = appState.groupService.selectedGroup?.rules ?? .default
-            picksVM.removeNomination(nom, rules: rules, appState: appState)
+            picksVM.removeCommissionerGame(live, groupId: groupId, week: week, appState: appState)
+        } else if slateBelongs, let nom = appState.pickService.nominations.first(where: { $0.espnEventId == game.espnEventId }) {
+            picksVM.removeNomination(nom, groupId: groupId, week: week, rules: rules, appState: appState)
+        } else {
+            picksVM.removeCommissionerGame(game, groupId: groupId, week: week, appState: appState)
         }
     }
 
@@ -238,6 +307,8 @@ struct CommissionerSlateSheet: View {
                 game,
                 spread: spread,
                 spreadTeamId: spreadTeamId,
+                groupId: groupId,
+                week: week,
                 appState: appState
             )
         }

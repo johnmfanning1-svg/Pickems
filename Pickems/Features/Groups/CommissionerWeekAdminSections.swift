@@ -5,16 +5,39 @@ struct CommissionerWeekAdminSections: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
 
+    /// League this Settings screen was opened on. Live week, slate, and members
+    /// are read only while their listeners are still on this id.
+    let group: PickemGroup
     let present: (CommissionerSheetRequest) -> Void
     let requestReopenSelections: (WeekSummary) -> Void
+    /// Pickems admin push. The route lives on Settings, not on this row, so a
+    /// member-list snapshot cannot pop the screen.
+    var managePicks: (GroupMember, WeekSummary, [SlateGame]) -> Void = { _, _, _ in }
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
-    private var week: WeekSummary? { appState.groupService.currentWeek }
+    private var groupId: String { group.id }
+    private var week: WeekSummary? {
+        guard appState.groupService.currentWeekGroupId == groupId else { return nil }
+        return appState.groupService.currentWeek
+    }
+    private var pinnedMembers: [GroupMember] {
+        guard appState.groupService.membersGroupId == groupId else { return [] }
+        return appState.groupService.members
+    }
+    private var pinnedSlate: [SlateGame] {
+        CommissionerPinnedLeague.slate(
+            pinnedGroupId: groupId,
+            observingGroupId: appState.pickService.observingGroupId,
+            live: appState.pickService.slateGames,
+            captured: []
+        )
+    }
+    private var pinnedNominations: [Nomination] {
+        guard appState.pickService.observingGroupId == groupId else { return [] }
+        return appState.pickService.nominations
+    }
     private var uniqueGames: Int {
-        Set(
-            appState.pickService.nominations.map(\.espnEventId)
-                + appState.pickService.slateGames.map(\.espnEventId)
-        ).count
+        Set(pinnedNominations.map(\.espnEventId) + pinnedSlate.map(\.espnEventId)).count
     }
 
     var body: some View {
@@ -24,7 +47,8 @@ struct CommissionerWeekAdminSections: View {
     }
 
     private var displayedWeeks: [WeekSummary] {
-        appState.groupService.availableWeeks
+        guard appState.groupService.availableWeeksBelong(to: groupId) else { return [] }
+        return appState.groupService.availableWeeks
     }
 
     private var activeESPNWeekId: String? {
@@ -57,40 +81,48 @@ struct CommissionerWeekAdminSections: View {
                 LabeledContent("Status", value: week.status.rawValue.capitalized)
                     .listRowBackground(PickemsColors.cardBackground)
 
-                if week.status == .selection, !week.skipsSelection {
+                if !week.skipsSelection {
                     selectionDeadlineRow(week)
-
-                    let target = appState.groupService.selectedGroup?.rules.expectedSlateSize(
-                        memberCount: max(appState.groupService.selectedGroup?.memberCount ?? 1, 1)
-                    ) ?? max(week.slateSize, 1)
+                }
+                if week.status == .selection, !week.skipsSelection {
+                    let target = group.rules.expectedSlateSize(
+                        memberCount: max(group.memberCount, 1)
+                    )
                     if week.isSelectionDeadlinePassed {
                         if uniqueGames < target {
                             Button("Fill Remaining Games") {
                                 appState.picksViewModel.selectionBrowseIntent = .own
-                                present(.adminGameBrowse)
+                                present(.adminGameBrowse(week))
                             }
                             .listRowBackground(PickemsColors.cardBackground)
                         }
                         Button("Open With \(uniqueGames) Game\(uniqueGames == 1 ? "" : "s")") {
-                            picksVM.openWeekWithCurrentSlate(appState: appState)
+                            picksVM.openWeekWithCurrentSlate(
+                                groupId: groupId,
+                                week: week,
+                                rules: group.rules,
+                                appState: appState
+                            )
                         }
                         .disabled(uniqueGames == 0)
                         .listRowBackground(PickemsColors.cardBackground)
                     } else {
                         Button("Open Week Early") {
-                            picksVM.lockSlateEarly(appState: appState)
+                            picksVM.openWeekWithCurrentSlate(
+                                groupId: groupId,
+                                week: week,
+                                rules: group.rules,
+                                appState: appState
+                            )
                         }
                         .disabled(uniqueGames == 0)
                         .listRowBackground(PickemsColors.cardBackground)
                     }
-                } else if !week.skipsSelection {
-                    closedSelectionDeadlineLabel(week)
-                    if WeekTransition.canReopenSelections(week) {
-                        Button("Reopen Selections") {
-                            requestReopenSelections(week)
-                        }
-                        .listRowBackground(PickemsColors.cardBackground)
+                } else if !week.skipsSelection, WeekTransition.canReopenSelections(week) {
+                    Button("Reopen Selections") {
+                        requestReopenSelections(week)
                     }
+                    .listRowBackground(PickemsColors.cardBackground)
                 }
 
                 weekManageRows(week)
@@ -115,13 +147,18 @@ struct CommissionerWeekAdminSections: View {
     // MARK: - Selections / Slate rows
 
     private var canManageSelections: Bool {
-        guard let week, appState.groupService.selectedGroup?.id != nil else { return false }
+        guard let week else { return false }
         return WeekTransition.commissionerCanManageSelections(week) && week.selectionMode == .member
     }
 
     private func canShowSlate(_ week: WeekSummary) -> Bool {
-        !appState.pickService.displaySlateGames.isEmpty
+        !pinnedDisplaySlate.isEmpty
             && (WeekTransition.isSlateEditable(week) || week.status == .selection)
+    }
+
+    private var pinnedDisplaySlate: [SlateGame] {
+        guard appState.pickService.observingGroupId == groupId else { return [] }
+        return appState.pickService.displaySlateGames
     }
 
     @ViewBuilder
@@ -131,8 +168,8 @@ struct CommissionerWeekAdminSections: View {
                 title: "Selections",
                 systemImage: "checklist",
                 summary: CommissionerAdminSummary.selections(
-                    memberIds: appState.groupService.members.map(\.id),
-                    nominations: appState.pickService.nominations,
+                    memberIds: pinnedMembers.map(\.id),
+                    nominations: pinnedNominations,
                     perMember: selectionsPerMember
                 ),
                 hint: "Opens each member's Selections to change them."
@@ -144,7 +181,7 @@ struct CommissionerWeekAdminSections: View {
             CommissionerAdminRow(
                 title: "Slate",
                 systemImage: "list.bullet.rectangle",
-                summary: CommissionerAdminSummary.slate(gameCount: appState.pickService.displaySlateGames.count),
+                summary: CommissionerAdminSummary.slate(gameCount: pinnedDisplaySlate.count),
                 hint: "Opens the slate to edit spreads or remove a Selection."
             ) {
                 present(.slate(week))
@@ -172,20 +209,17 @@ struct CommissionerWeekAdminSections: View {
 
     @ViewBuilder
     private func selectionDeadlineRow(_ week: WeekSummary) -> some View {
-        switch SelectionDeadlineDisplayResolver.resolve(week: week) {
-        case .open:
-            if let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: week) {
-                selectionDeadlineEditor(summary: summary, systemImage: "clock", week: week)
-            }
-        case .locked:
-            if let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: week) {
-                selectionDeadlineEditor(summary: summary, systemImage: "lock", week: week)
-            }
-        case .needsDeadline:
-            if promptsToSetSelectionDeadline(week) {
-                setSelectionDeadlineButton(week)
-            }
-        case nil:
+        switch CommissionerSelectionDeadlineRow.resolve(week: week) {
+        case .editor(let summary):
+            let counting = SelectionDeadlineDisplayResolver.resolve(week: week)?.isCountingDown == true
+            selectionDeadlineEditor(
+                summary: summary,
+                systemImage: counting ? "clock" : "lock",
+                week: week
+            )
+        case .setPrompt:
+            setSelectionDeadlineButton(week)
+        case .hidden:
             EmptyView()
         }
     }
@@ -199,23 +233,6 @@ struct CommissionerWeekAdminSections: View {
         ) {
             present(.selectionDeadline(week))
         }
-    }
-
-    @ViewBuilder
-    private func closedSelectionDeadlineLabel(_ week: WeekSummary) -> some View {
-        if case .locked = SelectionDeadlineDisplayResolver.resolve(week: week),
-           let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: week) {
-            LabeledContent("Selection Deadline", value: summary)
-                .listRowBackground(PickemsColors.cardBackground)
-        }
-    }
-
-    private func promptsToSetSelectionDeadline(_ week: WeekSummary) -> Bool {
-        WorkspaceDeadlineDisplay.commissionerPrompt(
-            kind: .selections,
-            week: week,
-            isCommissioner: true
-        ) == .selections
     }
 
     private func setSelectionDeadlineButton(_ week: WeekSummary) -> some View {
@@ -281,37 +298,34 @@ struct CommissionerWeekAdminSections: View {
             Section {
                 pickemsDeadlineRow(week)
 
-                if let groupId = appState.groupService.selectedGroup?.id {
-                    let pickemsById = Dictionary(
-                        uniqueKeysWithValues: SubmissionRoster.rows(
-                            members: appState.groupService.members,
-                            submissions: appState.pickService.submissions,
-                            slateSize: appState.pickService.slateGames.count
-                        ).map { ($0.id, $0) }
-                    )
-                    ForEach(appState.groupService.members) { member in
-                        let row = pickemsById[member.id]
-                        NavigationLink {
-                            CommissionerManagePicksSheet(
-                                member: member,
-                                week: week,
-                                groupId: groupId,
-                                slateGames: appState.pickService.slateGames
-                            )
-                        } label: {
-                            CommissionerMemberProgressRow(
-                                name: member.displayName,
-                                made: row?.made ?? 0,
-                                total: row?.total ?? appState.pickService.slateGames.count,
-                                status: row?.status ?? .notStarted,
-                                unitName: "Pickems"
-                            )
-                        }
-                        .accessibilityLabel(
-                            "\(member.displayName), \(row?.made ?? 0) of \(row?.total ?? appState.pickService.slateGames.count) Pickems, \(row?.status.label ?? SubmissionRosterStatus.notStarted.label). Manage Pickems."
+                let submissions = appState.pickService.observingGroupId == groupId
+                    ? appState.pickService.submissions
+                    : []
+                let pickemsById = Dictionary(
+                    uniqueKeysWithValues: SubmissionRoster.rows(
+                        members: pinnedMembers,
+                        submissions: submissions,
+                        slateSize: pinnedSlate.count
+                    ).map { ($0.id, $0) }
+                )
+                ForEach(pinnedMembers) { member in
+                    let row = pickemsById[member.id]
+                    Button {
+                        managePicks(member, week, pinnedSlate)
+                    } label: {
+                        CommissionerMemberProgressRow(
+                            name: member.displayName,
+                            made: row?.made ?? 0,
+                            total: row?.total ?? pinnedSlate.count,
+                            status: row?.status ?? .notStarted,
+                            unitName: "Pickems"
                         )
-                        .listRowBackground(PickemsColors.cardBackground)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(
+                        "\(member.displayName), \(row?.made ?? 0) of \(row?.total ?? pinnedSlate.count) Pickems, \(row?.status.label ?? SubmissionRosterStatus.notStarted.label). Manage Pickems."
+                    )
+                    .listRowBackground(PickemsColors.cardBackground)
                 }
             } header: {
                 Text("Pickems Admin")
@@ -327,8 +341,8 @@ struct CommissionerWeekAdminSections: View {
     private var tiesSection: some View {
         if let week, ScoringEngine.canShowCommissionerTieBreak(
             week: week,
-            games: appState.pickService.slateGames,
-            tieBreaker: appState.groupService.selectedGroup?.rules.tieBreaker ?? .headToHead
+            games: pinnedSlate,
+            tieBreaker: group.rules.tieBreaker
         ) {
             let groups = ScoringEngine.unresolvedWeeklyTieGroups(
                 from: appState.rankedStandings(weekly: true)
@@ -377,7 +391,7 @@ struct CommissionerWeekAdminSections: View {
     private var selectionsPerMember: Int {
         let weekValue = week?.selectionsPerMember ?? 0
         if weekValue > 0 { return weekValue }
-        return max(appState.groupService.selectedGroup?.rules.selectionsPerMember ?? 1, 1)
+        return max(group.rules.selectionsPerMember, 1)
     }
 }
 

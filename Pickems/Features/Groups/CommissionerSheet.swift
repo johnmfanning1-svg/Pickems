@@ -12,7 +12,7 @@ import SwiftUI
 enum CommissionerSheet: Identifiable, Equatable {
     case selectionDeadline(SelectionDeadlineEdit)
     case pickDeadline(PickDeadlineEdit)
-    case adminGameBrowse
+    case adminGameBrowse(WeekSummary)
     case members
     case selections(WeekSummary)
     case slate(WeekSummary)
@@ -25,7 +25,7 @@ enum CommissionerSheet: Identifiable, Equatable {
             return "selectionDeadline"
         case .pickDeadline(_):
             return "pickDeadline"
-        case .adminGameBrowse:
+        case .adminGameBrowse(_):
             return "adminGameBrowse"
         case .members:
             return "members"

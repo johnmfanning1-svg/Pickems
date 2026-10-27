@@ -184,6 +184,10 @@ struct DeadlineHeroRow: View {
     let help: HelpTopic
     var now: Date
     var rollingDetail: String? = nil
+    /// Commissioner tap on this countdown. Nil leaves the row static.
+    /// The help button stays outside the tap target.
+    var onTap: (() -> Void)? = nil
+    var tapHint: String? = nil
     @Environment(\.themePalette) private var theme
 
     private var isPast: Bool {
@@ -191,6 +195,29 @@ struct DeadlineHeroRow: View {
     }
 
     var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            countdownControl
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(accessibilityLabel)
+                .modifier(DeadlineRowTapAccessibility(onTap: onTap, hint: tapHint))
+
+            HelpInfoButton(topic: help, size: .subheadline)
+        }
+    }
+
+    @ViewBuilder
+    private var countdownControl: some View {
+        if let onTap {
+            Button(action: onTap) {
+                countdownBody
+            }
+            .buttonStyle(.plain)
+        } else {
+            countdownBody
+        }
+    }
+
+    private var countdownBody: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: isPast ? "lock.fill" : "clock.fill")
                 .font(.title2)
@@ -221,11 +248,8 @@ struct DeadlineHeroRow: View {
             }
 
             Spacer(minLength: 0)
-
-            HelpInfoButton(topic: help, size: .subheadline)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityLabel)
+        .contentShape(Rectangle())
     }
 
     private var accessibilityLabel: String {
@@ -237,5 +261,21 @@ struct DeadlineHeroRow: View {
             label += ", \(rollingDetail)"
         }
         return label
+    }
+}
+
+/// Adds the button trait only when the countdown itself opens an editor.
+private struct DeadlineRowTapAccessibility: ViewModifier {
+    var onTap: (() -> Void)?
+    var hint: String?
+
+    func body(content: Content) -> some View {
+        if onTap != nil, let hint {
+            content
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(hint)
+        } else {
+            content
+        }
     }
 }

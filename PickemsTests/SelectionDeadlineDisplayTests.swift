@@ -183,6 +183,52 @@ struct SelectionDeadlineDisplayTests {
         }
     }
 
+    @Test func openSelectionDeadlineRowIsEditorNotPrompt() {
+        let due = now.addingTimeInterval(3600)
+        let week = week(status: .selection, selectionDeadline: due)
+        let row = CommissionerSelectionDeadlineRow.resolve(week: week, now: now)
+        let label = CommissionerAdminSummary.deadlineValue(due)
+        #expect(row == .editor(label ?? ""))
+        if case .editor(let summary) = row {
+            #expect(!summary.localizedCaseInsensitiveContains("set a"))
+        } else {
+            Issue.record("stored deadline must be an editor row")
+        }
+    }
+
+    @Test func missingSelectionDeadlineRowIsSetPrompt() {
+        let week = week(status: .selection)
+        #expect(CommissionerSelectionDeadlineRow.resolve(week: week, now: now) == .setPrompt)
+    }
+
+    @Test func lockedSelectionDeadlineRowShowsLockCopy() {
+        let due = now.addingTimeInterval(-3600)
+        let passed = week(status: .picking, selectionDeadline: due)
+        let closed = CommissionerSelectionDeadlineRow.resolve(week: passed, now: now)
+        #expect(closed == .editor("Closed \(PickDeadlineCalculator.lockTimeLabel(for: due))"))
+
+        let early = week(status: .picking, selectionDeadline: now.addingTimeInterval(3600))
+        #expect(CommissionerSelectionDeadlineRow.resolve(week: early, now: now) == .editor("Locked when slate filled"))
+
+        for row in [closed, CommissionerSelectionDeadlineRow.resolve(week: early, now: now)] {
+            if case .editor(let summary) = row {
+                #expect(!summary.localizedCaseInsensitiveContains("set a"))
+            } else {
+                Issue.record("a stored deadline on a locked week must stay an editor row")
+            }
+        }
+    }
+
+    @Test func weekZeroSelectionDeadlineRowIsHidden() {
+        let week = week(
+            status: .picking,
+            weekNumber: 0,
+            selectionDeadline: now.addingTimeInterval(3600),
+            slateSource: CFBWeekCalendar.weekZeroSlateSource
+        )
+        #expect(CommissionerSelectionDeadlineRow.resolve(week: week, now: now) == .hidden)
+    }
+
     @Test func weekZeroHasNoSelectionRow() {
         let week = week(
             status: .picking,
