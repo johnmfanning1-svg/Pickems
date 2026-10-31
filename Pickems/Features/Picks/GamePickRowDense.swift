@@ -103,10 +103,7 @@ struct GamePickRowDense: View {
 
     /// Favorite that should sit next to the line-info button. Nil for pick'em and Straight Up.
     private var favoriteTeamId: String? {
-        guard showsSpread else { return nil }
-        let line = game.gradingLine
-        guard abs(line.spread) > 0 else { return nil }
-        return line.teamId
+        GamePickRowPresentation.favoriteTeamId(game: game, showsSpread: showsSpread)
     }
 
     var body: some View {
@@ -197,13 +194,24 @@ struct GamePickRowDense: View {
             lockedCaption: lockedCaption,
             showsSpread: showsSpread
         )
+        let suffix = GamePickRowPresentation.spreadSuffix(
+            game: game,
+            teamId: teamId,
+            showsSpread: showsSpread
+        )
         let title = GamePickRowPresentation.pillTitle(
             abbreviation: abbreviation,
             rank: rank,
-            spreadSuffix: GamePickRowPresentation.spreadSuffix(
+            spreadSuffix: suffix
+        )
+        let pillLabel = GamePickRowPresentation.densePillAccessibilityLabel(
+            teamLabel: access.label,
+            favoriteLine: GamePickRowPresentation.favoriteLineAccessibilityLabel(
                 game: game,
                 teamId: teamId,
-                showsSpread: showsSpread
+                showsSpread: showsSpread,
+                liveLine: liveCard?.liveSpreadLabel,
+                isFinal: isFinal
             )
         )
         return Button {
@@ -229,7 +237,9 @@ struct GamePickRowDense: View {
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
-        .accessibilityLabel(access.label)
+        // Plain skips the system disabled fade. Comfortable uses the default style, which draws at half opacity.
+        .opacity(isDisabled ? 0.5 : 1)
+        .accessibilityLabel(pillLabel)
         .accessibilityAddTraits(access.isSelected ? [.isSelected] : [])
         .accessibilityHint(access.hint)
     }

@@ -125,12 +125,41 @@ enum GamePickRowPresentation {
         }
     }
 
-    /// Signed Pickems line for the favorite's pill (`-3.5`). Nil for the dog, pick'em, or Straight Up.
-    static func spreadSuffix(game: SlateGame, teamId: String, showsSpread: Bool) -> String? {
+    /// Team the Pickems line applies to. Nil for pick'em, Straight Up, or a missing side.
+    static func favoriteTeamId(game: SlateGame, showsSpread: Bool) -> String? {
         guard showsSpread else { return nil }
         let line = game.gradingLine
-        guard abs(line.spread) > 0, line.teamId == teamId else { return nil }
+        guard abs(line.spread) > 0, !line.teamId.isEmpty else { return nil }
+        return line.teamId
+    }
+
+    /// Signed Pickems line for the favorite's pill (`-3.5`). Nil for the dog, pick'em, or Straight Up.
+    static func spreadSuffix(game: SlateGame, teamId: String, showsSpread: Bool) -> String? {
+        guard favoriteTeamId(game: game, showsSpread: showsSpread) == teamId else { return nil }
         return game.spreadLabel(for: teamId)
+    }
+
+    /// What Comfortable speaks from `LockedSpreadLabel`. Nil unless this team is the favorite.
+    static func favoriteLineAccessibilityLabel(
+        game: SlateGame,
+        teamId: String,
+        showsSpread: Bool,
+        liveLine: String?,
+        isFinal: Bool
+    ) -> String? {
+        guard spreadSuffix(game: game, teamId: teamId, showsSpread: showsSpread) != nil else { return nil }
+        return SpreadLineCopy.accessibilityLabel(
+            locked: game.favoriteSpreadDisplay,
+            live: liveLine,
+            isLocked: true,
+            isFinal: isFinal
+        )
+    }
+
+    /// Dense replaces the visible pill title, so the favorite must still speak the line.
+    static func densePillAccessibilityLabel(teamLabel: String, favoriteLine: String?) -> String {
+        guard let favoriteLine, !favoriteLine.isEmpty else { return teamLabel }
+        return "\(teamLabel). \(favoriteLine)"
     }
 
     static func pillTitle(abbreviation: String, rank: Int?, spreadSuffix: String?) -> String {

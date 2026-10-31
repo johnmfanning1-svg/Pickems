@@ -226,6 +226,55 @@ struct GamePickRowPresentationTests {
 
         #expect(GamePickRowPresentation.pillTitle(abbreviation: "TTU", rank: 13, spreadSuffix: "-3.5") == "#13 TTU -3.5")
         #expect(GamePickRowPresentation.pillTitle(abbreviation: "BAY", rank: nil, spreadSuffix: nil) == "BAY")
+        #expect(GamePickRowPresentation.favoriteTeamId(game: homeFavorite, showsSpread: true) == "home")
+        #expect(GamePickRowPresentation.favoriteTeamId(game: pickEm, showsSpread: true) == nil)
+        #expect(GamePickRowPresentation.favoriteTeamId(game: homeFavorite, showsSpread: false) == nil)
+    }
+
+    @Test func favoritePillAccessibilityIncludesTheSpread() {
+        let slate = game(spread: 3.5, spreadTeamId: "home")
+        let favoriteTeam = GamePickRowPresentation.teamAccessibility(
+            caption: "Home",
+            abbreviation: "UCF",
+            rank: 13,
+            isSelected: true,
+            isDisabled: false,
+            lockedCaption: nil,
+            showsSpread: true
+        )
+        let favoriteLine = GamePickRowPresentation.favoriteLineAccessibilityLabel(
+            game: slate,
+            teamId: "home",
+            showsSpread: true,
+            liveLine: nil,
+            isFinal: false
+        )
+        let favorite = GamePickRowPresentation.densePillAccessibilityLabel(
+            teamLabel: favoriteTeam.label,
+            favoriteLine: favoriteLine
+        )
+        let comfortableLine = SpreadLineCopy.accessibilityLabel(
+            locked: slate.favoriteSpreadDisplay,
+            live: nil,
+            isLocked: true,
+            isFinal: false
+        )
+        #expect(favorite.contains(comfortableLine))
+        #expect(favorite.contains("3.5"))
+        #expect(favorite.contains("Home #13 UCF"))
+
+        let underdog = GamePickRowPresentation.densePillAccessibilityLabel(
+            teamLabel: "Away BAY",
+            favoriteLine: GamePickRowPresentation.favoriteLineAccessibilityLabel(
+                game: slate,
+                teamId: "away",
+                showsSpread: true,
+                liveLine: nil,
+                isFinal: false
+            )
+        )
+        #expect(underdog == "Away BAY")
+        #expect(!underdog.contains("3.5"))
     }
 
     @Test func lineInfoAppearsOnlyWhenTheMarketLineMoved() {
