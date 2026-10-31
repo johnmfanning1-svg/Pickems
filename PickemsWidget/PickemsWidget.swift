@@ -15,11 +15,12 @@ struct PickemsWidgetProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<StandingsEntry>) -> Void) {
-        let snapshot = resolveSnapshot()
         let now = Date()
+        let snapshot = resolveSnapshot()
+        let phase = WidgetPhase.resolve(snapshot: snapshot, now: now)
 
-        if let snapshot, snapshot.showsPreseasonCountdown, let kickoff = snapshot.seasonKickoffAt {
-            // Refresh the countdown about once an hour until kickoff.
+        if case .preseason = phase, let snapshot, let kickoff = snapshot.seasonKickoffAt {
+            // The preseason layout formats a string from the entry date, so keep hourly entries.
             var entries: [StandingsEntry] = []
             for hour in 0..<24 {
                 guard let date = Calendar.current.date(byAdding: .hour, value: hour, to: now),
@@ -34,8 +35,9 @@ struct PickemsWidgetProvider: TimelineProvider {
             return
         }
 
-        let entry = StandingsEntry(date: now, snapshot: snapshot)
-        completion(Timeline(entries: [entry], policy: .after(now.addingTimeInterval(15 * 60))))
+        let dates = WidgetPhase.timelineDates(snapshot: snapshot, phase: phase, now: now)
+        let entries = dates.map { StandingsEntry(date: $0, snapshot: snapshot) }
+        completion(Timeline(entries: entries, policy: .after(WidgetPhase.reloadDate(phase: phase, dates: dates, now: now))))
     }
 
     /// Prefer App Group data; synthesize a kickoff countdown in preseason even before the app publishes.
@@ -113,22 +115,63 @@ extension StandingsSnapshot {
 struct PickemsWidgetEntryView: View {
     var entry: StandingsEntry
     @Environment(\.widgetFamily) private var family
+    @Environment(\.widgetRenderingMode) private var renderingMode
     @ScaledMetric(relativeTo: .largeTitle) private var rankPointSize: CGFloat = 36
+
+    private var phase: WidgetPhase {
+        WidgetPhase.resolve(snapshot: entry.snapshot, now: entry.date)
+    }
+
+    private var deepLink: URL? {
+        WidgetDeepLink.url(phase: phase, snapshot: entry.snapshot)
+    }
+
+    private var linksContent: Bool {
+        switch family {
+        case .systemMedium, .systemLarge, .systemExtraLarge:
+            return true
+        default:
+            return false
+        }
+    }
 
     var body: some View {
         Group {
-            if let snapshot = entry.snapshot {
-                if snapshot.showsPreseasonCountdown, let kickoff = snapshot.seasonKickoffAt {
-                    preseasonContent(snapshot: snapshot, kickoff: kickoff, asOf: entry.date)
-                } else {
-                    content(for: snapshot)
-                }
+            if let deepLink, linksContent {
+                Link(destination: deepLink) { phaseContent }
             } else {
-                emptyState
+                phaseContent
             }
         }
         // Near-black containerBackground: force dark scheme so primary/secondary text stays light in Light Mode.
         .environment(\.colorScheme, .dark)
+        .widgetURL(deepLink)
+    }
+
+    @ViewBuilder
+    private var phaseContent: some View {
+        switch phase {
+        case .empty:
+            emptyState
+        case .preseason:
+            if let snapshot = entry.snapshot, let kickoff = snapshot.seasonKickoffAt {
+                preseasonContent(snapshot: snapshot, kickoff: kickoff, asOf: entry.date)
+            } else {
+                emptyState
+            }
+        case .deadline(let deadline, let kind):
+            if let snapshot = entry.snapshot {
+                DeadlinePhaseView(snapshot: snapshot, deadline: deadline, kind: kind, now: entry.date)
+            }
+        case .scoreboard:
+            if let snapshot = entry.snapshot {
+                ScoreboardPhaseView(snapshot: snapshot, now: entry.date)
+            }
+        case .standings:
+            if let snapshot = entry.snapshot {
+                content(for: snapshot)
+            }
+        }
     }
 
     @ViewBuilder
@@ -307,6 +350,7 @@ struct PickemsWidgetEntryView: View {
                 .foregroundStyle(.primary)
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
+                .widgetAccentable()
             Text("W\(snapshot.weekNumber) · \(snapshot.weeklyRecord)")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.primary)
@@ -342,7 +386,7 @@ struct PickemsWidgetEntryView: View {
                     Text("\(row.weeklyWins)-\(row.weeklyLosses)")
                         .font(.caption.monospacedDigit().weight(isYou ? .bold : .regular))
                 }
-                .foregroundStyle(isYou ? Color.red : Color.primary)
+                .foregroundStyle(youColor(isYou: isYou))
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(rowAccessibilityLabel(row, isYou: isYou, weekly: true))
                 .accessibilityAddTraits(isYou ? [.isSelected] : [])
@@ -379,7 +423,7 @@ struct PickemsWidgetEntryView: View {
                             .font(.caption.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
-                    .foregroundStyle(isYou ? Color.red : Color.primary)
+                    .foregroundStyle(youColor(isYou: isYou))
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(rowAccessibilityLabel(row, isYou: isYou, weekly: true))
                     .accessibilityAddTraits(isYou ? [.isSelected] : [])
@@ -423,6 +467,7 @@ struct PickemsWidgetEntryView: View {
                 .font(.headline.weight(.bold).monospacedDigit())
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
+                .widgetAccentable()
             Text(snapshot.weeklyRecord)
                 .font(.caption2.monospacedDigit())
                 .minimumScaleFactor(0.6)
@@ -437,6 +482,13 @@ struct PickemsWidgetEntryView: View {
 
     private var widgetBackground: Color {
         Color(red: 0.08, green: 0.08, blue: 0.10)
+    }
+
+    private func youColor(isYou: Bool) -> Color {
+        if isYou, renderingMode != .accented {
+            return Color(red: 0.86, green: 0.15, blue: 0.15)
+        }
+        return .primary
     }
 
     private func standingsAccessibilityLabel(_ snapshot: StandingsSnapshot) -> String {
@@ -482,8 +534,8 @@ struct PickemsStandingsWidget: Widget {
         StaticConfiguration(kind: kind, provider: PickemsWidgetProvider()) { entry in
             PickemsWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Pickems Standings")
-        .description("Kickoff countdown now; live group standings once the season starts.")
+        .configurationDisplayName("Pickems")
+        .description("Deadline countdown, live scoreboard, and standings as the week moves.")
         .supportedFamilies([
             .systemSmall,
             .systemMedium,
