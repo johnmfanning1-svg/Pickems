@@ -47,6 +47,25 @@ enum WidgetSnapshotBuilder {
         )
     }
 
+    /// The week is known but its slate is not loaded. Keep the last scoreboard for this
+    /// league and week. A different league or week keeps the fresh (empty) slate.
+    static func carryForward(
+        _ fresh: Extras,
+        previous: StandingsSnapshot?,
+        groupId: String,
+        weekNumber: Int
+    ) -> Extras {
+        guard let previous, previous.groupId == groupId, previous.weekNumber == weekNumber else {
+            return fresh
+        }
+        var carried = fresh
+        carried.selectionsDeadline = previous.selectionsDeadline
+        carried.pickemsDeadline = previous.pickemsDeadline
+        carried.games = previous.games
+        carried.nextLockAt = previous.nextLockAt
+        return carried
+    }
+
     /// Selection is not a Pickems lock. Only a game that has actually started is locked then.
     private static func isSnapshotLocked(game: SlateGame, week: WeekSummary, now: Date) -> Bool {
         if week.status == .selection {

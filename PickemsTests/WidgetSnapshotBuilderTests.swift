@@ -132,6 +132,79 @@ struct WidgetSnapshotBuilderTests {
         #expect(extras.games?.contains { $0.id == "live" } == true)
     }
 
+    @Test func carriesTheSlateForwardForTheSameLeagueAndWeekOnly() {
+        let keptDeadline = now.addingTimeInterval(3_600)
+        let keptLock = now.addingTimeInterval(7_200)
+        let keptGame = StandingsSnapshot.SnapshotGame(
+            id: "sat",
+            awayShortName: "AWAY",
+            homeShortName: "HOME",
+            kickoff: now.addingTimeInterval(-1_800),
+            isLocked: true,
+            isFinal: false,
+            awayScore: 7,
+            homeScore: 10,
+            userPick: "HOME",
+            result: .pending
+        )
+        var previous = StandingsSnapshot(
+            groupId: "league",
+            groupName: "Saturday Crew",
+            weekNumber: 6,
+            seasonYear: 2026,
+            userId: "u",
+            userDisplayName: "You",
+            weeklyWins: 2,
+            weeklyLosses: 1,
+            seasonWins: 10,
+            seasonLosses: 4,
+            rank: 2,
+            totalPlayers: 8,
+            topEntries: [],
+            updatedAt: now
+        )
+        previous.selectionsDeadline = keptDeadline
+        previous.pickemsDeadline = keptLock
+        previous.games = [keptGame]
+        previous.nextLockAt = keptLock
+
+        let fresh = WidgetSnapshotBuilder.Extras(
+            selectionsDeadline: now.addingTimeInterval(99),
+            pickemsDeadline: now.addingTimeInterval(100),
+            rollingLock: true,
+            games: [],
+            nextLockAt: nil
+        )
+
+        let same = WidgetSnapshotBuilder.carryForward(
+            fresh,
+            previous: previous,
+            groupId: "league",
+            weekNumber: 6
+        )
+        #expect(same.games == [keptGame])
+        #expect(same.nextLockAt == keptLock)
+        #expect(same.selectionsDeadline == keptDeadline)
+        #expect(same.pickemsDeadline == keptLock)
+        #expect(same.rollingLock == true)
+
+        let otherLeague = WidgetSnapshotBuilder.carryForward(
+            fresh,
+            previous: previous,
+            groupId: "other",
+            weekNumber: 6
+        )
+        #expect(otherLeague == fresh)
+
+        let otherWeek = WidgetSnapshotBuilder.carryForward(
+            fresh,
+            previous: previous,
+            groupId: "league",
+            weekNumber: 7
+        )
+        #expect(otherWeek == fresh)
+    }
+
     private func week(
         status: WeekStatus,
         weekNumber: Int = 6,
