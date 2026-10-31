@@ -193,6 +193,7 @@ enum PickemsHelp {
             "Tap a selected team to clear that Pickem. The Selection (the game) stays on the slate.",
             "A push (exact spread) is neither a win nor a loss.",
             "You must make a Pickem on every open slate game before submitting.",
+            "Comfortable and Dense control how many game cards fit on this screen.",
         ]
     )
 
@@ -207,6 +208,7 @@ enum PickemsHelp {
                 "A tied game is a push. Missed Pickems still count as a loss.",
                 "Tap a selected team to clear that Pickem. The Selection (the game) stays on the slate.",
                 "You must make a Pickem on every open slate game before submitting.",
+                "Comfortable and Dense control how many game cards fit on this screen.",
             ]
         )
     }
