@@ -158,10 +158,9 @@ enum GamePickRowPresentation {
     }
 
     static func compactTime(_ date: Date, calendar: Calendar) -> String {
-        let raw = date.formatted(
-            Date.FormatStyle(date: .omitted, time: .shortened).calendar(calendar)
-        )
-        return strippingMeridiem(raw)
+        var style = Date.FormatStyle(date: .omitted, time: .shortened)
+        style.calendar = calendar
+        return strippingMeridiem(date.formatted(style))
     }
 
     static func weekdayAbbreviation(_ date: Date, calendar: Calendar) -> String {

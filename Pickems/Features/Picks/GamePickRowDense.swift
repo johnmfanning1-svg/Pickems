@@ -403,8 +403,8 @@ private struct DenseSlatePreview: View {
                     liveCard: sample.liveCard,
                     homeRank: sample.homeRank,
                     awayRank: sample.awayRank,
-                    showsSpread: sample.showsSpread,
                     lockedCaption: sample.lockedCaption,
+                    showsSpread: sample.showsSpread,
                     onSelect: { _ in }
                 )
                 if index < samples.count - 1 {
@@ -632,8 +632,8 @@ private enum GamePickRowPreviewData {
             homeConferenceId: nil,
             awayConferenceId: nil,
             userPickTeamAbbreviation: nil,
-            liveSpreadLabel: movedLine,
-            pickResult: result
+            pickResult: result,
+            liveSpreadLabel: movedLine
         )
     }
 }

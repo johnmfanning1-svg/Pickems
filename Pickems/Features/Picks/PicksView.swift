@@ -538,7 +538,7 @@ struct PicksView: View {
             PickemsGameList(games: games, isDense: cardsAreDense) { game in
                 let gameLocked = WeekTransition.isGameLocked(game, week: week)
                 let pickBlocked = !viewModel.allowsPicks(game)
-                GamePickRowAdaptive(
+                return GamePickRowAdaptive(
                     isDense: cardsAreDense,
                     game: game,
                     selectedTeamId: viewModel.draftPicks[game.id],
