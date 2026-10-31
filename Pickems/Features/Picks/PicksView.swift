@@ -9,6 +9,7 @@ struct PicksView: View {
     var kind: PicksWorkspaceKind = .pickems
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
+    @AppStorage(DensityPicker.pickemsCardsStorageKey) private var cardsAreDense = DensityPicker.pickemsCardsDefaultDense
     @State private var showIncompletePickemsAlert = false
     @State private var incompletePickemsAlertText = ""
     @State private var isRefreshing = false
@@ -509,7 +510,9 @@ struct PicksView: View {
                 title: appState.selectedPickMode.pickemsSectionTitle,
                 subtitle: "Tap a team to pick. Tap again to clear that Pickem — the Selection stays on the slate.",
                 help: PickemsHelp.pickems(for: appState.selectedPickMode)
-            )
+            ) {
+                pickemsDensityPicker
+            }
 
             if appState.pickService.userPick?.isLocked == true {
                 VStack(alignment: .leading, spacing: 8) {
@@ -532,10 +535,11 @@ struct PicksView: View {
                 .padding(.horizontal)
             }
 
-            ForEach(games) { game in
+            PickemsGameList(games: games, isDense: cardsAreDense) { game in
                 let gameLocked = WeekTransition.isGameLocked(game, week: week)
                 let pickBlocked = !viewModel.allowsPicks(game)
-                GamePickRow(
+                GamePickRowAdaptive(
+                    isDense: cardsAreDense,
                     game: game,
                     selectedTeamId: viewModel.draftPicks[game.id],
                     isDisabled: submittedFrozen || picksClosed || gameLocked || pickBlocked,
@@ -567,8 +571,6 @@ struct PicksView: View {
                     }
                     viewModel.saveDraft(appState: appState)
                 }
-                .padding(.horizontal)
-                .id(focusedGameRowId(game.id))
             }
 
             if rolling, WeekTransition.pickemsShouldShowLeagueBoard(week) {
@@ -699,9 +701,21 @@ struct PicksView: View {
             .accessibilityAddTraits(.isButton)
 
             if picksExpanded {
-                VStack(spacing: 8) {
-                    ForEach(appState.pickService.slateGames.sortedByKickoff) { game in
-                        GamePickRow(
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Spacer(minLength: 8)
+                        pickemsDensityPicker
+                    }
+                    .padding(.top, 8)
+                    PickemsGameList(
+                        games: appState.pickService.slateGames.sortedByKickoff,
+                        isDense: cardsAreDense,
+                        comfortableSpacing: 8,
+                        comfortableHorizontalPadding: 4,
+                        denseHorizontalPadding: 0
+                    ) { game in
+                        GamePickRowAdaptive(
+                            isDense: cardsAreDense,
                             game: game,
                             selectedTeamId: viewModel.draftPicks[game.id],
                             isDisabled: true,
@@ -711,13 +725,65 @@ struct PicksView: View {
                             showsSpread: appState.selectedPickMode.showsSpreads,
                             onSelect: { _ in }
                         )
-                        .id(focusedGameRowId(game.id))
                     }
                 }
-                .padding(.top, 8)
-                .padding(.horizontal, 4)
             }
         }
         .padding(.horizontal)
+    }
+
+    private var pickemsDensityPicker: some View {
+        DensityPicker(
+            isDense: $cardsAreDense,
+            accessibilityLabel: "Pickems density",
+            hint: "Dense shows more games on screen. Comfortable shows the larger cards."
+        )
+    }
+}
+
+/// Comfortable cards stay separate. Dense rows share one rounded container with hairline dividers.
+private struct PickemsGameList<Row: View>: View {
+    let games: [SlateGame]
+    var isDense: Bool
+    var comfortableSpacing: CGFloat = 16
+    var comfortableHorizontalPadding: CGFloat = 16
+    var denseHorizontalPadding: CGFloat = 16
+    let row: (SlateGame) -> Row
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var usesDense: Bool {
+        isDense && !dynamicTypeSize.isAccessibilitySize
+    }
+
+    var body: some View {
+        Group {
+            if usesDense {
+                rows
+                    .background(PickemsColors.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+                    .padding(.horizontal, denseHorizontalPadding)
+            } else {
+                rows
+            }
+        }
+        .animation(.snappy, value: usesDense)
+    }
+
+    private var rows: some View {
+        VStack(spacing: usesDense ? 0 : comfortableSpacing) {
+            ForEach(Array(games.enumerated()), id: \.element.id) { index, game in
+                row(game)
+                    .padding(.horizontal, usesDense ? 0 : comfortableHorizontalPadding)
+                    .id(focusedGameRowId(game.id))
+                if usesDense, index < games.count - 1 {
+                    Divider().overlay(Color.white.opacity(0.08))
+                }
+            }
+        }
     }
 }

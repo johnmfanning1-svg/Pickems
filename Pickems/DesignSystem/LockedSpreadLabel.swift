@@ -76,6 +76,9 @@ struct SpreadLineInfoButton: View {
     let message: String
     var isFinal: Bool
     var font: Font = .caption.weight(.semibold)
+    /// Comfortable expands a small glyph to a 44pt hit target. Dense already lives in a 48pt row,
+    /// so it keeps the target inside that row.
+    var containsHitTarget: Bool = false
 
     @State private var infoTrigger = AnchoredInfoPopoverTrigger()
     @AccessibilityFocusState private var infoButtonFocused: Bool
@@ -88,9 +91,8 @@ struct SpreadLineInfoButton: View {
             Image(systemName: "info.circle")
                 .font(font)
                 .foregroundStyle(PickemsColors.textSecondary)
-                // Compact glyph; expand the hit target to at least 44×44 without growing the row.
-                .frame(width: 18, height: 18)
-                .contentShape(Rectangle().inset(by: -13))
+                .frame(width: containsHitTarget ? 32 : 18, height: containsHitTarget ? 44 : 18)
+                .contentShape(Rectangle().inset(by: containsHitTarget ? 0 : -13))
         }
         .buttonStyle(.borderless)
         .accessibilityLabel("Line info")

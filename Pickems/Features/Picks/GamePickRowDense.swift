@@ -1,6 +1,64 @@
 import SwiftUI
 
-/// One compact Pickems row. Comfortable stays `GamePickRow`; this view takes the same inputs.
+/// Comfortable cards, or the compact row when Dense is on.
+/// Accessibility text sizes stay on Comfortable so team names are never crushed.
+struct GamePickRowAdaptive: View {
+    var isDense: Bool
+    let game: SlateGame
+    let selectedTeamId: String?
+    var isDisabled: Bool = false
+    var liveCard: ESPNLiveGameCard? = nil
+    var homeRank: Int? = nil
+    var awayRank: Int? = nil
+    var showConfidenceToggle: Bool = false
+    var isConfidence: Bool = false
+    var onConfidenceToggle: (() -> Void)? = nil
+    var lockedCaption: String? = nil
+    var showsSpread: Bool = true
+    let onSelect: (String) -> Void
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var usesDense: Bool {
+        isDense && !dynamicTypeSize.isAccessibilitySize
+    }
+
+    var body: some View {
+        if usesDense {
+            GamePickRowDense(
+                game: game,
+                selectedTeamId: selectedTeamId,
+                isDisabled: isDisabled,
+                liveCard: liveCard,
+                homeRank: homeRank,
+                awayRank: awayRank,
+                showConfidenceToggle: showConfidenceToggle,
+                isConfidence: isConfidence,
+                onConfidenceToggle: onConfidenceToggle,
+                lockedCaption: lockedCaption,
+                showsSpread: showsSpread,
+                onSelect: onSelect
+            )
+        } else {
+            GamePickRow(
+                game: game,
+                selectedTeamId: selectedTeamId,
+                isDisabled: isDisabled,
+                liveCard: liveCard,
+                homeRank: homeRank,
+                awayRank: awayRank,
+                showConfidenceToggle: showConfidenceToggle,
+                isConfidence: isConfidence,
+                onConfidenceToggle: onConfidenceToggle,
+                lockedCaption: lockedCaption,
+                showsSpread: showsSpread,
+                onSelect: onSelect
+            )
+        }
+    }
+}
+
+/// One compact Pickems row. Same inputs as `GamePickRow`.
 struct GamePickRowDense: View {
     let game: SlateGame
     let selectedTeamId: String?
@@ -119,7 +177,7 @@ struct GamePickRowDense: View {
     @ViewBuilder
     private var lineInfo: some View {
         if let lineInfoMessage {
-            SpreadLineInfoButton(message: lineInfoMessage, isFinal: isFinal)
+            SpreadLineInfoButton(message: lineInfoMessage, isFinal: isFinal, containsHitTarget: true)
         }
     }
 

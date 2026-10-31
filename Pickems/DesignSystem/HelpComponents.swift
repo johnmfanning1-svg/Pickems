@@ -147,32 +147,92 @@ struct HelpInfoButton: View {
     }
 }
 
-struct PickemsSectionHeader: View {
+struct PickemsSectionHeader<Trailing: View>: View {
     let title: String
     var subtitle: String? = nil
     var help: HelpTopic? = nil
+    private let trailing: Trailing
+
+    init(
+        title: String,
+        subtitle: String? = nil,
+        help: HelpTopic? = nil,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.help = help
+        self.trailing = trailing()
+    }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline)
-                    .foregroundStyle(PickemsColors.textPrimary)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(PickemsColors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Spacer(minLength: 8)
-            if let help {
-                HelpInfoButton(topic: help, size: .subheadline)
+        Group {
+            if Trailing.self == EmptyView.self {
+                legacyHeader
+            } else {
+                headerThatFits
             }
         }
         .padding(.horizontal)
         // Keep children separate so the help button remains tappable/accessible.
         .accessibilityElement(children: .contain)
+    }
+
+    /// Unchanged layout for headers that do not carry an accessory.
+    private var legacyHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            titles
+            Spacer(minLength: 8)
+            helpButton
+        }
+    }
+
+    /// Picker on the title row, or under the subtitle when the row is too narrow.
+    private var headerThatFits: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 8) {
+                titles
+                Spacer(minLength: 8)
+                trailing
+                helpButton
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    titles
+                    Spacer(minLength: 8)
+                    helpButton
+                }
+                trailing
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+    }
+
+    private var titles: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(PickemsColors.textPrimary)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var helpButton: some View {
+        if let help {
+            HelpInfoButton(topic: help, size: .subheadline)
+        }
+    }
+}
+
+extension PickemsSectionHeader where Trailing == EmptyView {
+    init(title: String, subtitle: String? = nil, help: HelpTopic? = nil) {
+        self.init(title: title, subtitle: subtitle, help: help, trailing: { EmptyView() })
     }
 }
 
