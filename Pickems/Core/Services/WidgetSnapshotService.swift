@@ -89,6 +89,7 @@ enum WidgetSnapshotService {
             seasonKickoffAt: kickoff
         )
         PickemsAppGroup.save(snapshot)
+        WidgetCenter.shared.reloadTimelines(ofKind: "PickemsStandingsWidget")
         WidgetCenter.shared.reloadAllTimelines()
     }
 
@@ -102,13 +103,15 @@ enum WidgetSnapshotService {
         if group.id == appState.groupService.selectedGroup?.id {
             let ranked = selectedGroupRankedStandings(from: appState, group: group)
             guard let ranked else { return }
+            let week = appState.groupService.currentWeek
             saveStandingsSnapshot(
                 group: group,
                 userId: user.id,
                 userDisplayName: user.displayName,
-                weekNumber: standingsWeekNumber(from: appState, standings: appState.groupService.standings, week: appState.groupService.currentWeek),
-                seasonYear: standingsSeasonYear(from: appState, week: appState.groupService.currentWeek),
-                ranked: ranked
+                weekNumber: standingsWeekNumber(from: appState, standings: appState.groupService.standings, week: week),
+                seasonYear: standingsSeasonYear(from: appState, week: week),
+                ranked: ranked,
+                extras: extras(from: appState, group: group, week: week)
             )
             return
         }
@@ -154,7 +157,13 @@ enum WidgetSnapshotService {
             userDisplayName: userDisplayName,
             weekNumber: standingsWeekNumber(from: appState, standings: fetched.standings, week: fetched.week),
             seasonYear: standingsSeasonYear(from: appState, week: fetched.week),
-            ranked: ranked
+            ranked: ranked,
+            extras: WidgetSnapshotBuilder.extras(
+                week: fetched.week,
+                games: [],
+                picks: [:],
+                pickMode: fetched.week?.resolvedPickMode(leagueMode: group.rules.pickMode) ?? group.rules.pickMode
+            )
         )
     }
 
@@ -202,13 +211,45 @@ enum WidgetSnapshotService {
         )
     }
 
+    /// Games already on screen for this league and week. No extra Firestore read.
+    private static func extras(
+        from appState: AppState,
+        group: PickemGroup,
+        week: WeekSummary?
+    ) -> WidgetSnapshotBuilder.Extras {
+        let slate = loadedSlate(from: appState, group: group, week: week)
+        return WidgetSnapshotBuilder.extras(
+            week: week,
+            games: slate.games,
+            picks: slate.picks,
+            pickMode: week?.resolvedPickMode(leagueMode: group.rules.pickMode) ?? group.rules.pickMode
+        )
+    }
+
+    private static func loadedSlate(
+        from appState: AppState,
+        group: PickemGroup,
+        week: WeekSummary?
+    ) -> (games: [SlateGame], picks: [String: String]) {
+        guard let week,
+              appState.pickService.observingGroupId == group.id,
+              appState.pickService.observedWeekId == week.id else {
+            return ([], [:])
+        }
+        let games = week.status == .selection
+            ? appState.pickService.displaySlateGames
+            : appState.pickService.slateGames
+        return (games, appState.pickService.userPick?.picks ?? [:])
+    }
+
     private static func saveStandingsSnapshot(
         group: PickemGroup,
         userId: String,
         userDisplayName: String,
         weekNumber: Int,
         seasonYear: Int,
-        ranked: [StandingEntry]
+        ranked: [StandingEntry],
+        extras: WidgetSnapshotBuilder.Extras = .empty
     ) {
         let mine = ranked.first(where: { $0.id == userId })
         let snapshot = StandingsSnapshot(
@@ -236,9 +277,16 @@ enum WidgetSnapshotService {
                 )
             },
             updatedAt: Date(),
-            seasonKickoffAt: nil
+            seasonKickoffAt: nil,
+            selectionsDeadline: extras.selectionsDeadline,
+            pickemsDeadline: extras.pickemsDeadline,
+            rollingLock: extras.rollingLock,
+            games: extras.games,
+            nextLockAt: extras.nextLockAt,
+            weekPhaseHint: nil
         )
         PickemsAppGroup.save(snapshot)
+        WidgetCenter.shared.reloadTimelines(ofKind: "PickemsStandingsWidget")
         WidgetCenter.shared.reloadAllTimelines()
     }
 

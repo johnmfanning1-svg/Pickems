@@ -18,6 +18,39 @@ struct StandingsSnapshot: Codable, Equatable {
     var updatedAt: Date
     /// When set and still in the future, the widget shows a kickoff countdown instead of standings.
     var seasonKickoffAt: Date? = nil
+    /// Member nomination deadline while this week is still in Selections.
+    var selectionsDeadline: Date? = nil
+    /// Pickems lock. Usually the first slate kickoff.
+    var pickemsDeadline: Date? = nil
+    /// True when each game locks at its own kickoff.
+    var rollingLock: Bool? = nil
+    /// Scoreboard rows. Nil on snapshots written before this field existed.
+    var games: [SnapshotGame]? = nil
+    /// Earliest still-open kickoff when `rollingLock` is true.
+    var nextLockAt: Date? = nil
+    /// Ignored when choosing a phase. The widget computes that from the fields above.
+    var weekPhaseHint: String? = nil
+
+    struct SnapshotGame: Codable, Equatable, Identifiable {
+        var id: String
+        var awayShortName: String
+        var homeShortName: String
+        var kickoff: Date
+        var isLocked: Bool
+        var isFinal: Bool
+        var awayScore: Int?
+        var homeScore: Int?
+        /// Abbreviation of the team the user picked.
+        var userPick: String?
+        var result: SnapshotPickResult
+    }
+
+    enum SnapshotPickResult: String, Codable, Equatable {
+        case win
+        case loss
+        case push
+        case pending
+    }
 
     struct SnapshotEntry: Codable, Equatable, Identifiable {
         var id: String
