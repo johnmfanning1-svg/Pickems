@@ -37,7 +37,7 @@ set -e
 # Floor on passed + expected failures. #123 reported 573 passed; the dense
 # Pickems rows add 15 tests (588). Keep the floor two below that count so a
 # dropped test fails the job.
-MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-586}"
+MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-587}"
 grep -iE "error:|Test case .* failed|\*\* TEST" "$OUT/logs/test.log" | tail -n 200 || true
 summary="$OUT/logs/test-summary.json"
 if ! xcrun xcresulttool get test-results summary --path "$OUT/TestResults.xcresult" --format json > "$summary" 2>"$OUT/logs/xcresulttool.err"; then
