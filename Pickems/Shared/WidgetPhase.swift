@@ -82,6 +82,35 @@ enum WidgetPhase: Equatable {
         uniqueSorted([now] + boundaryDates(snapshot: snapshot, now: now))
     }
 
+    /// Deadline and standings place an entry on the next deadline or kickoff.
+    /// Scoreboard keeps every later kickoff so the next-lock line can move with them.
+    static func timelineDates(snapshot: StandingsSnapshot?, phase: WidgetPhase, now: Date) -> [Date] {
+        guard let snapshot else { return [now] }
+        switch phase {
+        case .deadline, .standings:
+            if let next = boundaryDates(snapshot: snapshot, now: now).first {
+                return [now, next]
+            }
+            return [now]
+        case .scoreboard:
+            return entryDates(snapshot: snapshot, now: now)
+        case .preseason, .empty:
+            return [now]
+        }
+    }
+
+    /// When to ask WidgetKit for a new timeline. Scoreboard polls for scores.
+    /// Deadline and standings wait until the entry that flips the phase.
+    static func reloadDate(phase: WidgetPhase, dates: [Date], now: Date) -> Date {
+        let scoreboardRefresh = now.addingTimeInterval(15 * 60)
+        switch phase {
+        case .deadline, .standings:
+            return dates.first(where: { $0 > now }) ?? scoreboardRefresh
+        case .scoreboard, .preseason, .empty:
+            return scoreboardRefresh
+        }
+    }
+
     private static func hasStarted(_ game: StandingsSnapshot.SnapshotGame, now: Date) -> Bool {
         game.isFinal || game.isLocked || game.kickoff <= now
     }

@@ -56,6 +56,13 @@ struct WidgetPhaseTests {
         #expect(WidgetPhase.resolve(snapshot: snapshot, now: now) == .scoreboard)
     }
 
+    @Test func kickoffAtThisInstantIsScoreboard() {
+        var snapshot = make()
+        snapshot.pickemsDeadline = now.addingTimeInterval(3_600)
+        snapshot.games = [game(kickoff: now, locked: false, final: false)]
+        #expect(WidgetPhase.resolve(snapshot: snapshot, now: now) == .scoreboard)
+    }
+
     @Test func rollingLockMidWeekIsScoreboard() {
         var snapshot = make()
         snapshot.rollingLock = true
@@ -108,6 +115,31 @@ struct WidgetPhaseTests {
         ]
         #expect(WidgetPhase.boundaryDates(snapshot: snapshot, now: now) == [selections, pickems, kickoff])
         #expect(WidgetPhase.entryDates(snapshot: snapshot, now: now).first == now)
+    }
+
+    @Test func deadlineAndStandingsTimelinesUseTheNextBoundary() {
+        var deadlineSnapshot = make()
+        let deadline = now.addingTimeInterval(3_600)
+        let laterKickoff = now.addingTimeInterval(7_200)
+        deadlineSnapshot.selectionsDeadline = deadline
+        deadlineSnapshot.pickemsDeadline = laterKickoff
+        deadlineSnapshot.games = [game(kickoff: laterKickoff)]
+        let deadlinePhase = WidgetPhase.resolve(snapshot: deadlineSnapshot, now: now)
+        let deadlineDates = WidgetPhase.timelineDates(snapshot: deadlineSnapshot, phase: deadlinePhase, now: now)
+        #expect(deadlinePhase == .deadline(deadline, .selections))
+        #expect(deadlineDates == [now, deadline])
+        #expect(WidgetPhase.reloadDate(phase: deadlinePhase, dates: deadlineDates, now: now) == deadline)
+
+        var standingsSnapshot = make()
+        let kickoff = now.addingTimeInterval(5_000)
+        standingsSnapshot.games = [game(kickoff: kickoff)]
+        let standingsPhase = WidgetPhase.resolve(snapshot: standingsSnapshot, now: now)
+        let standingsDates = WidgetPhase.timelineDates(snapshot: standingsSnapshot, phase: standingsPhase, now: now)
+        #expect(standingsPhase == .standings)
+        #expect(standingsDates == [now, kickoff])
+        #expect(WidgetPhase.reloadDate(phase: standingsPhase, dates: standingsDates, now: now) == kickoff)
+
+        #expect(WidgetPhase.reloadDate(phase: .scoreboard, dates: [now, kickoff], now: now) == now.addingTimeInterval(15 * 60))
     }
 
     @Test func deepLinksUseExistingRoutes() {

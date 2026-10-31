@@ -199,7 +199,7 @@ struct ScoreboardPhaseView: View {
 
     private var rowLimit: Int {
         switch family {
-        case .systemSmall: return 0
+        case .systemSmall: return 2
         case .systemMedium: return 3
         case .systemLarge, .systemExtraLarge: return 8
         default: return 0

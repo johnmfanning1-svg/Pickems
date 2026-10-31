@@ -35,10 +35,9 @@ struct PickemsWidgetProvider: TimelineProvider {
             return
         }
 
-        let dates = snapshot.map { WidgetPhase.entryDates(snapshot: $0, now: now) } ?? [now]
+        let dates = WidgetPhase.timelineDates(snapshot: snapshot, phase: phase, now: now)
         let entries = dates.map { StandingsEntry(date: $0, snapshot: snapshot) }
-        // Scoreboard scores are only as fresh as the last snapshot write. WidgetKit throttles this.
-        completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(15 * 60))))
+        completion(Timeline(entries: entries, policy: .after(WidgetPhase.reloadDate(phase: phase, dates: dates, now: now))))
     }
 
     /// Prefer App Group data; synthesize a kickoff countdown in preseason even before the app publishes.
