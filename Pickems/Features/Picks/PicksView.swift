@@ -777,11 +777,13 @@ private struct PickemsGameList<Row: View>: View {
     private var rows: some View {
         VStack(spacing: usesDense ? 0 : comfortableSpacing) {
             ForEach(Array(games.enumerated()), id: \.element.id) { index, game in
-                row(game)
-                    .padding(.horizontal, usesDense ? 0 : comfortableHorizontalPadding)
-                    .id(focusedGameRowId(game.id))
-                if usesDense, index < games.count - 1 {
-                    Divider().overlay(Color.white.opacity(0.08))
+                VStack(spacing: 0) {
+                    row(game)
+                        .padding(.horizontal, usesDense ? 0 : comfortableHorizontalPadding)
+                        .id(focusedGameRowId(game.id))
+                    if usesDense, index < games.count - 1 {
+                        Divider().overlay(Color.white.opacity(0.08))
+                    }
                 }
             }
         }

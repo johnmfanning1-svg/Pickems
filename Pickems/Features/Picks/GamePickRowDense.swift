@@ -631,6 +631,7 @@ private enum GamePickRowPreviewData {
             awayCuratedRank: kind == .ranked ? 22 : nil,
             homeConferenceId: nil,
             awayConferenceId: nil,
+            userPickTeamAbbreviation: nil,
             liveSpreadLabel: movedLine,
             pickResult: result
         )

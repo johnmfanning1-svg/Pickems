@@ -295,6 +295,7 @@ struct GamePickRowPresentationTests {
             awayCuratedRank: nil,
             homeConferenceId: nil,
             awayConferenceId: nil,
+            userPickTeamAbbreviation: nil,
             pickResult: result
         )
     }

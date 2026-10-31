@@ -167,7 +167,7 @@ struct PickemsSectionHeader<Trailing: View>: View {
 
     var body: some View {
         Group {
-            if Trailing.self == EmptyView.self {
+            if trailing is EmptyView {
                 legacyHeader
             } else {
                 headerThatFits
