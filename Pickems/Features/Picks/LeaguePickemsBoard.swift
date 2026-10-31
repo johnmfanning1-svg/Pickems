@@ -19,7 +19,7 @@ struct LeaguePickemsBoard: View {
     var onExpand: (() -> Void)? = nil
 
     @Environment(\.themePalette) private var theme
-    @AppStorage("leaguePickems.chartIsDense") private var isDense = true
+    @AppStorage(DensityPicker.leagueChartStorageKey) private var isDense = DensityPicker.leagueChartDefaultsDense
 
     private var gameColumnWidth: CGFloat {
         switch (isDense, isExpandedLayout) {
@@ -123,16 +123,11 @@ struct LeaguePickemsBoard: View {
     }
 
     private var densityPicker: some View {
-        Picker("Chart density", selection: $isDense) {
-            Text("Comfortable").tag(false)
-            Text("Dense").tag(true)
-        }
-        .pickerStyle(.segmented)
-        .frame(maxWidth: 210)
-        .labelsHidden()
-        .accessibilityLabel("Chart density")
-        .accessibilityValue(isDense ? "Dense" : "Comfortable")
-        .accessibilityHint("Dense shows more members and games on screen")
+        DensityPicker(
+            isDense: $isDense,
+            accessibilityLabel: "Chart density",
+            hint: "Dense shows more members and games on screen"
+        )
     }
 
     @ViewBuilder
