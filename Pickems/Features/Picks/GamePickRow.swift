@@ -17,11 +17,11 @@ struct GamePickRow: View {
     @Environment(\.themePalette) private var theme
 
     private var resolvedAwayRank: Int? {
-        awayRank ?? liveCard?.awayCuratedRank
+        GamePickRowPresentation.resolvedRank(explicit: awayRank, live: liveCard?.awayCuratedRank)
     }
 
     private var resolvedHomeRank: Int? {
-        homeRank ?? liveCard?.homeCuratedRank
+        GamePickRowPresentation.resolvedRank(explicit: homeRank, live: liveCard?.homeCuratedRank)
     }
 
     var body: some View {
@@ -126,8 +126,7 @@ struct GamePickRow: View {
 
     /// Empty string is treated as no pick so a cleared Pickem can be tapped again.
     private var resolvedSelectedTeamId: String? {
-        guard let selectedTeamId, !selectedTeamId.isEmpty else { return nil }
-        return selectedTeamId
+        GamePickRowPresentation.resolvedSelectedTeamId(selectedTeamId)
     }
 
     private func teamButton(
@@ -138,6 +137,15 @@ struct GamePickRow: View {
         caption: String
     ) -> some View {
         let isSelected = resolvedSelectedTeamId == teamId
+        let access = GamePickRowPresentation.teamAccessibility(
+            caption: caption,
+            abbreviation: name,
+            rank: rank,
+            isSelected: isSelected,
+            isDisabled: isDisabled,
+            lockedCaption: lockedCaption,
+            showsSpread: showsSpread
+        )
         return Button {
             guard !isDisabled else { return }
             PickemsHaptics.selection()
@@ -168,12 +176,8 @@ struct GamePickRow: View {
         }
         .disabled(isDisabled)
         .foregroundStyle(PickemsColors.textPrimary)
-        .accessibilityLabel("\(caption) \(TeamDisplay.rankedLabel(abbreviation: name, rank: rank))")
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-        .accessibilityHint(
-            isDisabled
-                ? (lockedCaption ?? "Pickems are locked")
-                : (isSelected ? "Clear \(name) pick" : "Select \(name) \(showsSpread ? "against the spread" : "to win")")
-        )
+        .accessibilityLabel(access.label)
+        .accessibilityAddTraits(access.isSelected ? [.isSelected] : [])
+        .accessibilityHint(access.hint)
     }
 }
