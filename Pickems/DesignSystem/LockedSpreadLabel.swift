@@ -10,9 +10,6 @@ struct LockedSpreadLabel: View {
     var font: Font = .caption2.weight(.semibold)
     var lockedColor: Color = PickemsColors.textSecondary
 
-    @State private var infoTrigger = AnchoredInfoPopoverTrigger()
-    @AccessibilityFocusState private var infoButtonFocused: Bool
-
     private var referenceCaption: String? {
         guard isLocked else { return nil }
         return SpreadLineCopy.referenceCaption(locked: lockedText, live: liveText, isFinal: isFinal)
@@ -47,7 +44,7 @@ struct LockedSpreadLabel: View {
                 )
 
                 if let infoMessage {
-                    infoButton(message: infoMessage)
+                    SpreadLineInfoButton(message: infoMessage, isFinal: isFinal)
                 }
             }
 
@@ -72,13 +69,24 @@ struct LockedSpreadLabel: View {
             )
     }
 
-    private func infoButton(message: String) -> some View {
+}
+
+/// ⓘ that presents the locked-vs-market line popover, anchored to this control.
+struct SpreadLineInfoButton: View {
+    let message: String
+    var isFinal: Bool
+    var font: Font = .caption.weight(.semibold)
+
+    @State private var infoTrigger = AnchoredInfoPopoverTrigger()
+    @AccessibilityFocusState private var infoButtonFocused: Bool
+
+    var body: some View {
         Button {
             PickemsHaptics.lightImpact()
             infoTrigger.fire()
         } label: {
             Image(systemName: "info.circle")
-                .font(.caption.weight(.semibold))
+                .font(font)
                 .foregroundStyle(PickemsColors.textSecondary)
                 // Compact glyph; expand the hit target to at least 44×44 without growing the row.
                 .frame(width: 18, height: 18)
