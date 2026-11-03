@@ -26,3 +26,5 @@ cp ../../web/assets/select-games.jpg dist/assets/select-games.jpg
 cp ../../web/assets/spread-pickems.jpg dist/assets/spread-pickems.jpg
 cp ../../web/assets/leagues.jpg dist/assets/leagues.jpg
 cp ../../web/assets/signin.jpg dist/assets/signin.jpg
+mkdir -p dist/assets/promo
+cp ../../web/assets/promo/* dist/assets/promo/
