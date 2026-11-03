@@ -54,7 +54,7 @@ def find_version(client: AscClient, version: str) -> dict:
     return v
 
 
-DONE_STATES = ("COMPLETE", "READY", "PROCESSED")
+DONE_STATES = ("COMPLETE", "READY", "PROCESSED", "PREPARE_FOR_SUBMISSION")
 POLL_SECONDS = 15
 POLL_LIMIT = 40 * 60  # Apple can take 30+ minutes to process large images
 
@@ -102,13 +102,22 @@ def upload(client: AscClient, library_id: str, path: Path, ref: str) -> str:
         a = existing.get("attributes") or {}
         state = _image_state(a)
         same = a.get("fileSize") in (None, len(data)) and a.get("fileName") in (None, path.name)
+        if same and (a.get("fileSize") is None or a.get("fileName") is None):
+            log(f"  note: image {existing['id']} has no fileSize/fileName to compare "
+                f"(fileSize={a.get('fileSize')}, fileName={a.get('fileName')}); assuming it matches")
         if same and state != "FAILED" and state not in (None, "AWAITING_UPLOAD"):
             log(f"Reusing existing image {existing['id']} for '{ref}' (state {state})")
-            state = wait_processed(client, existing["id"], path.name)
+            if state not in DONE_STATES:
+                state = wait_processed(client, existing["id"], path.name)
             log(f"Image {existing['id']} {state}")
             return existing["id"]
         log(f"Deleting stale image {existing['id']} for '{ref}' (state {state})")
-        client.request("DELETE", f"/v1/appAssetLibraryImages/{existing['id']}")
+        status, body = client.request("DELETE", f"/v1/appAssetLibraryImages/{existing['id']}",
+                                      allow_status=(404, 409))
+        if status == 409:
+            raise AscFailure(f"Could not delete stale image {existing['id']} for '{ref}' (409): {body}")
+        if status == 404:
+            log(f"  image {existing['id']} was already gone")
     _, body = client.request("POST", "/v1/appAssetLibraryImages", json_body={"data": {
         "type": "appAssetLibraryImages",
         "attributes": {"fileName": path.name, "fileSize": len(data),
