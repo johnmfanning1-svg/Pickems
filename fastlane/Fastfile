@@ -25,6 +25,29 @@ platform :ios do
     )
   end
 
+  desc "Upload App Store screenshots only (replaces existing). No metadata, no binary, no review submission."
+  lane :screenshots do |options|
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_filepath: ENV.fetch("ASC_KEY_PATH")
+    )
+    deliver(
+      api_key: api_key,
+      app_identifier: "FannypackInc.Pickems",
+      app_version: options[:version] || ENV.fetch("ASC_VERSION"),
+      screenshots_path: "./fastlane/screenshots",
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_app_version_update: true,
+      skip_screenshots: false,
+      overwrite_screenshots: true,
+      force: true,
+      submit_for_review: false,
+      run_precheck_before_submit: false
+    )
+  end
+
   desc "Upload a build to TestFlight (Pilot). Archive/signing must already be configured."
   lane :beta do
     # Prefer an already-exported IPA via PILOT_IPA, or build with gym when ready.
