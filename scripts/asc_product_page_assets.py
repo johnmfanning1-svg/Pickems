@@ -72,7 +72,7 @@ def upload(client: AscClient, library_id: str, path: Path, ref: str) -> str:
     attrs = {"uploaded": True}
     client.request("PATCH", f"/v1/appAssetLibraryImages/{image['id']}", json_body={"data": {
         "type": "appAssetLibraryImages", "id": image["id"], "attributes": attrs}})
-    for _ in range(40):
+    for _ in range(150):  # up to ~25 min; ASC processing can be slow
         _, b = client.request("GET", f"/v1/appAssetLibraryImages/{image['id']}")
         a = b["data"]["attributes"]
         state = a.get("state") or (a.get("assetDeliveryState") or {}).get("state")
@@ -80,7 +80,7 @@ def upload(client: AscClient, library_id: str, path: Path, ref: str) -> str:
             break
         if state == "FAILED":
             raise AscFailure(f"{path.name} processing failed: {a}")
-        time.sleep(5)
+        time.sleep(10)
     else:
         raise AscFailure(f"{path.name} did not finish processing (last state {state}).")
     log(f"Uploaded {path.name} -> image {image['id']} ({state})")
