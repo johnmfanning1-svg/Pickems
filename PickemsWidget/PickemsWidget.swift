@@ -1,47 +1,77 @@
 import WidgetKit
 import SwiftUI
+import AppIntents
 
-struct PickemsWidgetProvider: TimelineProvider {
+struct PickemsWidgetProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> StandingsEntry {
-        StandingsEntry(date: Date(), snapshot: .placeholder)
+        StandingsEntry(date: Date(), snapshot: .placeholder, redacted: true)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (StandingsEntry) -> Void) {
+    func snapshot(for configuration: SelectLeagueIntent, in context: Context) async -> StandingsEntry {
         if context.isPreview {
-            completion(StandingsEntry(date: Date(), snapshot: .placeholder))
-            return
+            return StandingsEntry(date: Date(), snapshot: .gallerySample(for: context.family))
         }
-        completion(StandingsEntry(date: Date(), snapshot: resolveSnapshot()))
+        let resolved = resolveSnapshot(for: configuration)
+        return StandingsEntry(
+            date: Date(),
+            snapshot: resolved.snapshot,
+            pendingLeagueName: resolved.pendingLeagueName
+        )
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<StandingsEntry>) -> Void) {
+    func timeline(for configuration: SelectLeagueIntent, in context: Context) async -> Timeline<StandingsEntry> {
         let now = Date()
-        let snapshot = resolveSnapshot()
+        let resolved = resolveSnapshot(for: configuration)
+        let snapshot = resolved.snapshot
         let phase = WidgetPhase.resolve(snapshot: snapshot, now: now)
 
         if case .preseason = phase, let snapshot, let kickoff = snapshot.seasonKickoffAt {
-            // The preseason layout formats a string from the entry date, so keep hourly entries.
-            var entries: [StandingsEntry] = []
-            for hour in 0..<24 {
-                guard let date = Calendar.current.date(byAdding: .hour, value: hour, to: now),
-                      date < kickoff else { break }
-                entries.append(StandingsEntry(date: date, snapshot: snapshot))
+            let plan = WidgetPhase.preseasonTimeline(kickoff: kickoff, now: now)
+            let entries = plan.dates.map {
+                StandingsEntry(date: $0, snapshot: snapshot, pendingLeagueName: resolved.pendingLeagueName)
             }
-            if entries.isEmpty {
-                entries = [StandingsEntry(date: now, snapshot: snapshot)]
-            }
-            let refresh = min(kickoff, entries.last?.date.addingTimeInterval(60 * 60) ?? now.addingTimeInterval(60 * 60))
-            completion(Timeline(entries: entries, policy: .after(refresh)))
-            return
+            return Timeline(entries: entries, policy: .after(plan.reload))
         }
 
         let dates = WidgetPhase.timelineDates(snapshot: snapshot, phase: phase, now: now)
-        let entries = dates.map { StandingsEntry(date: $0, snapshot: snapshot) }
-        completion(Timeline(entries: entries, policy: .after(WidgetPhase.reloadDate(phase: phase, dates: dates, now: now))))
+        let entries = dates.map {
+            StandingsEntry(date: $0, snapshot: snapshot, pendingLeagueName: resolved.pendingLeagueName)
+        }
+        return Timeline(
+            entries: entries,
+            policy: .after(WidgetPhase.reloadDate(phase: phase, dates: dates, now: now))
+        )
+    }
+
+    private func resolveSnapshot(
+        for configuration: SelectLeagueIntent
+    ) -> (snapshot: StandingsSnapshot?, pendingLeagueName: String?) {
+        if let league = configuration.league {
+            PickemsAppGroup.setDisplayGroupId(league.id)
+        }
+        let loaded = loadSnapshot()
+        guard let league = configuration.league else {
+            return (loaded, nil)
+        }
+        if let loaded, loaded.groupId == league.id || loaded.groupId.isEmpty {
+            var copy = loaded
+            if copy.groupId.isEmpty {
+                copy.groupId = league.id
+                copy.groupName = league.name
+            }
+            return (copy, nil)
+        }
+        if CFBSeasonCalendar.isPreseason(), let loaded {
+            var copy = loaded
+            copy.groupId = league.id
+            copy.groupName = league.name
+            return (copy, nil)
+        }
+        return (nil, league.name)
     }
 
     /// Prefer App Group data; synthesize a kickoff countdown in preseason even before the app publishes.
-    private func resolveSnapshot() -> StandingsSnapshot? {
+    private func loadSnapshot() -> StandingsSnapshot? {
         if CFBSeasonCalendar.isPreseason() {
             let kickoff = CFBSeasonCalendar.nextSeasonKickoff()
             if let loaded = PickemsAppGroup.load() {
@@ -54,7 +84,6 @@ struct PickemsWidgetProvider: TimelineProvider {
         }
 
         guard var loaded = PickemsAppGroup.load() else { return nil }
-        // Stale preseason payload after kickoff — don't keep showing the countdown.
         if loaded.seasonKickoffAt != nil {
             loaded.seasonKickoffAt = nil
         }
@@ -66,6 +95,9 @@ struct StandingsEntry: TimelineEntry {
     let date: Date
     /// `nil` when App Group has no published snapshot (real empty state — not demo data).
     let snapshot: StandingsSnapshot?
+    var redacted: Bool = false
+    /// Set when the widget's league is not the one the app last published.
+    var pendingLeagueName: String? = nil
 }
 
 extension StandingsSnapshot {
@@ -114,9 +146,15 @@ extension StandingsSnapshot {
 
 struct PickemsWidgetEntryView: View {
     var entry: StandingsEntry
-    @Environment(\.widgetFamily) private var family
+
+    @Environment(\.widgetFamily) private var systemFamily
+    @Environment(\.widgetFamilyOverride) private var familyOverride
     @Environment(\.widgetRenderingMode) private var renderingMode
-    @ScaledMetric(relativeTo: .largeTitle) private var rankPointSize: CGFloat = 36
+    @Environment(\.showsWidgetContainerBackground) private var systemShowsBackground
+    @Environment(\.showsWidgetBackgroundOverride) private var showsBackgroundOverride
+
+    private var family: WidgetFamily { familyOverride ?? systemFamily }
+    private var showsBackground: Bool { showsBackgroundOverride ?? systemShowsBackground }
 
     private var phase: WidgetPhase {
         WidgetPhase.resolve(snapshot: entry.snapshot, now: entry.date)
@@ -126,7 +164,7 @@ struct PickemsWidgetEntryView: View {
         WidgetDeepLink.url(phase: phase, snapshot: entry.snapshot)
     }
 
-    private var linksContent: Bool {
+    private var rowLinks: Bool {
         switch family {
         case .systemMedium, .systemLarge, .systemExtraLarge:
             return true
@@ -135,58 +173,71 @@ struct PickemsWidgetEntryView: View {
         }
     }
 
+    private var enlarged: Bool { !showsBackground }
+
     var body: some View {
-        Group {
-            if let deepLink, linksContent {
-                Link(destination: deepLink) { phaseContent }
-            } else {
-                phaseContent
-            }
+        let content = phaseContent
+            .redacted(reason: entry.redacted ? .placeholder : [])
+            .widgetURL(rowLinks || family == .accessoryInline ? nil : deepLink)
+        if renderingMode == .fullColor && showsBackground {
+            content.environment(\.colorScheme, .dark)
+        } else {
+            content
         }
-        // Near-black containerBackground: force dark scheme so primary/secondary text stays light in Light Mode.
-        .environment(\.colorScheme, .dark)
-        .widgetURL(deepLink)
     }
 
     @ViewBuilder
     private var phaseContent: some View {
-        switch phase {
-        case .empty:
-            emptyState
-        case .preseason:
-            if let snapshot = entry.snapshot, let kickoff = snapshot.seasonKickoffAt {
-                preseasonContent(snapshot: snapshot, kickoff: kickoff, asOf: entry.date)
-            } else {
+        if family == .accessoryInline {
+            Text(WidgetInlineCopy.text(phase: phase, snapshot: entry.snapshot, now: entry.date))
+                .widgetAccentable()
+                .widgetURL(deepLink)
+                .containerBackground(for: .widget) { Color.clear }
+        } else {
+            switch phase {
+            case .empty:
                 emptyState
-            }
-        case .deadline(let deadline, let kind):
-            if let snapshot = entry.snapshot {
-                DeadlinePhaseView(snapshot: snapshot, deadline: deadline, kind: kind, now: entry.date)
-            }
-        case .scoreboard:
-            if let snapshot = entry.snapshot {
-                ScoreboardPhaseView(snapshot: snapshot, now: entry.date)
-            }
-        case .standings:
-            if let snapshot = entry.snapshot {
-                content(for: snapshot)
+            case .preseason:
+                if let snapshot = entry.snapshot, let kickoff = snapshot.seasonKickoffAt {
+                    preseasonContent(snapshot: snapshot, kickoff: kickoff, asOf: entry.date)
+                } else {
+                    emptyState
+                }
+            case .deadline(let deadline, let kind):
+                if let snapshot = entry.snapshot {
+                    DeadlinePhaseView(
+                        snapshot: snapshot,
+                        deadline: deadline,
+                        kind: kind,
+                        now: entry.date,
+                        linkRows: rowLinks
+                    )
+                }
+            case .scoreboard:
+                if let snapshot = entry.snapshot {
+                    ScoreboardPhaseView(snapshot: snapshot, now: entry.date, linkRows: rowLinks)
+                }
+            case .standings:
+                if let snapshot = entry.snapshot {
+                    standings(snapshot)
+                }
             }
         }
     }
 
     @ViewBuilder
-    private func content(for snapshot: StandingsSnapshot) -> some View {
+    private func standings(_ snapshot: StandingsSnapshot) -> some View {
         switch family {
         case .systemSmall:
-            small(snapshot)
+            smallStandings(snapshot).modifier(HomeWidgetBackground(family: family))
         case .systemLarge, .systemExtraLarge:
-            large(snapshot)
+            largeStandings(snapshot).modifier(HomeWidgetBackground(family: family))
         case .accessoryRectangular:
-            accessoryRectangular(snapshot)
+            rectangularStandings(snapshot).modifier(AccessoryBackground())
         case .accessoryCircular:
-            accessoryCircular(snapshot)
+            circularStandings(snapshot).modifier(AccessoryBackground())
         default:
-            medium(snapshot)
+            mediumStandings(snapshot).modifier(HomeWidgetBackground(family: family))
         }
     }
 
@@ -194,309 +245,269 @@ struct PickemsWidgetEntryView: View {
     private func preseasonContent(snapshot: StandingsSnapshot, kickoff: Date, asOf date: Date) -> some View {
         switch family {
         case .systemSmall:
-            preseasonSmall(snapshot: snapshot, kickoff: kickoff, asOf: date)
+            preseasonHome(snapshot: snapshot, kickoff: kickoff, asOf: date)
+                .modifier(HomeWidgetBackground(family: family))
         case .accessoryCircular:
-            preseasonCircular(kickoff: kickoff, asOf: date)
+            preseasonCircular(kickoff: kickoff)
+                .modifier(AccessoryBackground())
         case .accessoryRectangular:
-            preseasonRectangular(snapshot: snapshot, kickoff: kickoff, asOf: date)
+            preseasonHome(snapshot: snapshot, kickoff: kickoff, asOf: date)
+                .modifier(AccessoryBackground())
         default:
-            preseasonMedium(snapshot: snapshot, kickoff: kickoff, asOf: date)
+            preseasonHome(snapshot: snapshot, kickoff: kickoff, asOf: date)
+                .modifier(HomeWidgetBackground(family: family))
         }
     }
 
+    @ViewBuilder
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let labeled = emptyStack
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(emptyAccessibility)
+        if family == .accessoryCircular || family == .accessoryRectangular {
+            labeled.modifier(AccessoryBackground())
+        } else {
+            labeled.modifier(HomeWidgetBackground(family: family))
+        }
+    }
+
+    private var emptyStack: some View {
+        VStack(alignment: .leading, spacing: WidgetStyle.rowSpacing) {
             Text("Pickems")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.primary)
-            Text("Open Pickems")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-            Text("to see standings")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .containerBackground(for: .widget) {
-            widgetBackground
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Pickems. Open Pickems to see standings.")
-    }
-
-    // MARK: - Preseason countdown
-
-    private func preseasonSmall(snapshot: StandingsSnapshot, kickoff: Date, asOf date: Date) -> some View {
-        let summary = CFBSeasonCalendar.countdownSummary(to: kickoff, from: date)
-        return VStack(alignment: .leading, spacing: 6) {
-            Text(snapshot.groupName)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Text(summary)
-                .font(.system(size: rankPointSize, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
-            Text("Until Kickoff")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.primary)
-            Text(kickoff.formatted(.dateTime.month(.abbreviated).day()))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .containerBackground(for: .widget) {
-            widgetBackground
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(preseasonAccessibilityLabel(snapshot: snapshot, kickoff: kickoff, asOf: date))
-    }
-
-    private func preseasonMedium(snapshot: StandingsSnapshot, kickoff: Date, asOf date: Date) -> some View {
-        let parts = CFBSeasonCalendar.countdown(to: kickoff, from: date)
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(snapshot.groupName)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.primary)
-                Spacer()
-                Text("Kickoff")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            Text("College football is almost here")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-            HStack(spacing: 14) {
-                countdownBlock(value: parts.days, label: "Days")
-                countdownBlock(value: parts.hours, label: "Hours")
-                countdownBlock(value: parts.minutes, label: "Min")
-            }
-            Text("Starts \(kickoff.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .containerBackground(for: .widget) {
-            widgetBackground
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(preseasonAccessibilityLabel(snapshot: snapshot, kickoff: kickoff, asOf: date))
-    }
-
-    private func countdownBlock(value: Int, label: String) -> some View {
-        VStack(spacing: 2) {
-            Text("\(value)")
-                .font(.title2.bold().monospacedDigit())
-                .foregroundStyle(.primary)
-            Text(label)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func preseasonRectangular(snapshot: StandingsSnapshot, kickoff: Date, asOf date: Date) -> some View {
-        let summary = CFBSeasonCalendar.countdownSummary(to: kickoff, from: date)
-        return VStack(alignment: .leading, spacing: 2) {
-            Text(snapshot.groupName)
-                .font(.caption2.weight(.semibold))
-                .lineLimit(1)
-            Text(summary)
-                .font(.headline.weight(.bold))
-                .lineLimit(1)
-            Text("Until Kickoff")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .containerBackground(for: .widget) {
-            AccessoryWidgetBackground()
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(preseasonAccessibilityLabel(snapshot: snapshot, kickoff: kickoff, asOf: date))
-    }
-
-    private func preseasonCircular(kickoff: Date, asOf date: Date) -> some View {
-        let summary = CFBSeasonCalendar.countdownSummary(to: kickoff, from: date)
-        return VStack(spacing: 0) {
-            Text(summary)
-                .font(.caption.weight(.bold).monospacedDigit())
+                .font(WidgetStyle.heroFont(for: family, enlarged: enlarged))
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
-            Text("KO")
-                .font(.caption2)
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
+                .widgetAccentable()
+            if let name = entry.pendingLeagueName {
+                Text(name)
+                    .font(WidgetStyle.titleFont)
+                    .lineLimit(1)
+                Text("Open Pickems to see this league")
+                    .font(WidgetStyle.rowFont)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            } else {
+                Text("Open Pickems to join a league")
+                    .font(WidgetStyle.titleFont)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.7)
+            }
         }
-        .containerBackground(for: .widget) {
-            AccessoryWidgetBackground()
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(summary) until college football kickoff")
     }
 
-    // MARK: - In-season standings
+    private var emptyAccessibility: String {
+        if let name = entry.pendingLeagueName {
+            return "Pickems. Open Pickems to see \(name)."
+        }
+        return "Pickems. Open Pickems to join a league."
+    }
 
-    private func small(_ snapshot: StandingsSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(snapshot.groupName)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Text("#\(snapshot.rank)")
-                .font(.system(size: rankPointSize, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
-                .minimumScaleFactor(0.7)
+    private func preseasonHome(snapshot: StandingsSnapshot, kickoff: Date, asOf date: Date) -> some View {
+        VStack(alignment: .leading, spacing: WidgetStyle.rowSpacing) {
+            WidgetEyebrow(text: snapshot.groupName)
+            Text(kickoff, style: .relative)
+                .font(WidgetStyle.heroFont(for: family, enlarged: enlarged))
+                .minimumScaleFactor(0.5)
                 .lineLimit(1)
                 .widgetAccentable()
-            Text("W\(snapshot.weekNumber) · \(snapshot.weeklyRecord)")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.primary)
-            Text("Season \(snapshot.seasonRecord)")
-                .font(.caption2)
+            Text("Until kickoff")
+                .font(WidgetStyle.titleFont)
+                .lineLimit(1)
+            Text(kickoff.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
+                .font(WidgetStyle.rowFont)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .containerBackground(for: .widget) {
-            widgetBackground
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(preseasonAccessibilityLabel(snapshot: snapshot, kickoff: kickoff, asOf: date))
+    }
+
+    private func preseasonCircular(kickoff: Date) -> some View {
+        VStack(spacing: 0) {
+            Text(kickoff, style: .relative)
+                .font(WidgetStyle.heroFont(for: family, enlarged: enlarged))
+                .minimumScaleFactor(0.4)
+                .lineLimit(1)
+                .widgetAccentable()
+            Text("KO")
+                .font(WidgetStyle.eyebrowFont)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Until college football kickoff")
+    }
+
+    private func smallStandings(_ snapshot: StandingsSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: WidgetStyle.rowSpacing) {
+            WidgetEyebrow(text: snapshot.groupName)
+            if WidgetPhase.isStale(snapshot: snapshot, now: entry.date) {
+                WidgetUpdatedLine(date: snapshot.updatedAt)
+            }
+            rankHero(snapshot)
+            if let back = WidgetStandingsCopy.backOfFirst(snapshot), snapshot.totalPlayers > 0 {
+                Text("of \(snapshot.totalPlayers) · \(back)")
+                    .font(WidgetStyle.rowFont)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            Text("Wk \(snapshot.weekNumber) \(snapshot.weeklyRecord) · Season \(snapshot.seasonRecord)")
+                .font(WidgetStyle.rowFont)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(standingsAccessibilityLabel(snapshot))
     }
 
-    private func medium(_ snapshot: StandingsSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(snapshot.groupName)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.primary)
-                Spacer()
-                Text("Week \(snapshot.weekNumber)")
-                    .font(.caption2)
+    private func mediumStandings(_ snapshot: StandingsSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: WidgetStyle.rowSpacing) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    WidgetEyebrow(text: snapshot.groupName)
+                    Text("Week \(snapshot.weekNumber)")
+                        .font(WidgetStyle.titleFont)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                rankHero(snapshot)
+            }
+            .widgetLink(rowLinks ? WidgetDeepLink.leaderboardURL(snapshot: snapshot) : nil)
+            if let back = WidgetStandingsCopy.backOfFirst(snapshot) {
+                Text(back)
+                    .font(WidgetStyle.rowFont)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             ForEach(snapshot.topEntries.prefix(3)) { row in
-                let isYou = row.id == snapshot.userId
-                HStack {
-                    Text("#\(row.rank) \(row.displayName)")
-                        .font(.caption.weight(isYou ? .bold : .regular))
-                    Spacer()
-                    Text("\(row.weeklyWins)-\(row.weeklyLosses)")
-                        .font(.caption.monospacedDigit().weight(isYou ? .bold : .regular))
-                }
-                .foregroundStyle(youColor(isYou: isYou))
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(rowAccessibilityLabel(row, isYou: isYou, weekly: true))
-                .accessibilityAddTraits(isYou ? [.isSelected] : [])
+                standingsRow(row, snapshot: snapshot, showSeason: false)
             }
-        }
-        .containerBackground(for: .widget) {
-            widgetBackground
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(standingsAccessibilityLabel(snapshot))
-    }
-
-    private func large(_ snapshot: StandingsSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("\(snapshot.groupName) · Week \(snapshot.weekNumber)")
-                .font(.headline)
-                .foregroundStyle(.primary)
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(snapshot.topEntries.prefix(13))) { row in
-                    let isYou = row.id == snapshot.userId
-                    HStack {
-                        Text("#\(row.rank)")
-                            .font(.caption.monospacedDigit().weight(isYou ? .bold : .regular))
-                            .frame(width: 28, alignment: .leading)
-                        Text(row.displayName)
-                            .font(.caption.weight(isYou ? .bold : .regular))
-                            .lineLimit(1)
-                        Spacer(minLength: 8)
-                        Text("\(row.weeklyWins)-\(row.weeklyLosses)")
-                            .font(.caption.monospacedDigit().weight(isYou ? .bold : .regular))
-                        Text("·")
-                            .foregroundStyle(.secondary)
-                        Text("\(row.seasonWins)-\(row.seasonLosses)")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
-                    .foregroundStyle(youColor(isYou: isYou))
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(rowAccessibilityLabel(row, isYou: isYou, weekly: true))
-                    .accessibilityAddTraits(isYou ? [.isSelected] : [])
-                }
+            if WidgetPhase.isStale(snapshot: snapshot, now: entry.date) {
+                WidgetUpdatedLine(date: snapshot.updatedAt)
             }
             Spacer(minLength: 0)
-            Text("You: #\(snapshot.rank) · \(snapshot.weeklyRecord) this week")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-        }
-        .containerBackground(for: .widget) {
-            widgetBackground
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(standingsAccessibilityLabel(snapshot))
     }
 
-    private func accessoryRectangular(_ snapshot: StandingsSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(snapshot.groupName)
-                .font(.caption2.weight(.semibold))
-                .lineLimit(1)
-            Text("#\(snapshot.rank) · \(snapshot.weeklyRecord)")
-                .font(.headline.weight(.bold))
-                .lineLimit(1)
-            Text("Week \(snapshot.weekNumber)")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+    private func largeStandings(_ snapshot: StandingsSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: WidgetStyle.rowSpacing) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    WidgetEyebrow(text: snapshot.groupName)
+                    Text("Week \(snapshot.weekNumber)")
+                        .font(WidgetStyle.titleFont)
+                }
+                Spacer(minLength: 8)
+                rankHero(snapshot)
+            }
+            .widgetLink(WidgetDeepLink.leaderboardURL(snapshot: snapshot))
+            ForEach(snapshot.topEntries.prefix(8)) { row in
+                standingsRow(row, snapshot: snapshot, showSeason: true)
+            }
+            Spacer(minLength: 0)
+            if WidgetPhase.isStale(snapshot: snapshot, now: entry.date) {
+                WidgetUpdatedLine(date: snapshot.updatedAt)
+                WidgetRefreshButton()
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .containerBackground(for: .widget) {
-            AccessoryWidgetBackground()
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(standingsAccessibilityLabel(snapshot))
+    }
+
+    private func rectangularStandings(_ snapshot: StandingsSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            WidgetEyebrow(text: snapshot.groupName)
+            rankHero(snapshot)
+            Text("Week \(snapshot.weekNumber) · \(snapshot.weeklyRecord)")
+                .font(WidgetStyle.rowFont)
+                .lineLimit(1)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(standingsAccessibilityLabel(snapshot))
     }
 
-    private func accessoryCircular(_ snapshot: StandingsSnapshot) -> some View {
+    private func circularStandings(_ snapshot: StandingsSnapshot) -> some View {
         VStack(spacing: 0) {
             Text("#\(snapshot.rank)")
-                .font(.headline.weight(.bold).monospacedDigit())
-                .minimumScaleFactor(0.6)
+                .font(WidgetStyle.heroFont(for: family, enlarged: enlarged))
+                .monospacedDigit()
+                .minimumScaleFactor(0.4)
                 .lineLimit(1)
                 .widgetAccentable()
             Text(snapshot.weeklyRecord)
-                .font(.caption2.monospacedDigit())
-                .minimumScaleFactor(0.6)
+                .font(WidgetStyle.rowFont)
+                .minimumScaleFactor(0.5)
                 .lineLimit(1)
-        }
-        .containerBackground(for: .widget) {
-            AccessoryWidgetBackground()
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(standingsAccessibilityLabel(snapshot))
     }
 
-    private var widgetBackground: Color {
-        Color(red: 0.08, green: 0.08, blue: 0.10)
+    private func rankHero(_ snapshot: StandingsSnapshot) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text("#\(snapshot.rank)")
+                .font(WidgetStyle.heroFont(for: family, enlarged: enlarged))
+                .monospacedDigit()
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+                .widgetAccentable()
+            if let delta = WidgetStandingsCopy.deltaSymbol(rank: snapshot.rank, previousRank: snapshot.previousRank) {
+                Text(delta)
+                    .font(WidgetStyle.titleFont)
+                    .foregroundStyle(WidgetStyle.accented(delta.hasPrefix("▲") ? WidgetStyle.winGreen : WidgetStyle.brandRed, mode: renderingMode))
+                    .widgetAccentable()
+                    .lineLimit(1)
+            }
+        }
     }
 
-    private func youColor(isYou: Bool) -> Color {
-        if isYou, renderingMode != .accented {
-            return Color(red: 0.86, green: 0.15, blue: 0.15)
+    private func standingsRow(
+        _ row: StandingsSnapshot.SnapshotEntry,
+        snapshot: StandingsSnapshot,
+        showSeason: Bool
+    ) -> some View {
+        let isYou = row.id == snapshot.userId
+        return HStack(spacing: 4) {
+            Circle()
+                .fill(isYou ? WidgetStyle.accented(WidgetStyle.brandRed, mode: renderingMode) : Color.clear)
+                .frame(width: 6, height: 6)
+                .widgetAccentable(isYou)
+            Text("#\(row.rank)")
+                .frame(width: 28, alignment: .leading)
+            Text(row.displayName)
+                .fontWeight(isYou ? .bold : .regular)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Text("\(row.weeklyWins)-\(row.weeklyLosses)")
+            if showSeason {
+                Text("·")
+                    .foregroundStyle(.secondary)
+                Text("\(row.seasonWins)-\(row.seasonLosses)")
+                    .foregroundStyle(.secondary)
+            }
         }
-        return .primary
+        .font(WidgetStyle.rowFont)
+        .modifier(YouRowChrome(isYou: isYou))
+        .widgetLink(rowLinks ? WidgetDeepLink.leaderboardURL(snapshot: snapshot) : nil)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(rowAccessibilityLabel(row, isYou: isYou))
+        .accessibilityAddTraits(isYou ? [.isSelected] : [])
     }
 
     private func standingsAccessibilityLabel(_ snapshot: StandingsSnapshot) -> String {
-        let wins = snapshot.weeklyWins
-        let losses = snapshot.weeklyLosses
-        let winWord = wins == 1 ? "win" : "wins"
-        let lossWord = losses == 1 ? "loss" : "losses"
-        return "Week \(snapshot.weekNumber) standings. Rank \(snapshot.rank), \(wins) \(winWord), \(losses) \(lossWord), \(snapshot.groupName)"
+        let winWord = snapshot.weeklyWins == 1 ? "win" : "wins"
+        let lossWord = snapshot.weeklyLosses == 1 ? "loss" : "losses"
+        var text = "Week \(snapshot.weekNumber) standings. Rank \(snapshot.rank), \(snapshot.weeklyWins) \(winWord), \(snapshot.weeklyLosses) \(lossWord), \(snapshot.groupName)"
+        if let delta = WidgetStandingsCopy.deltaSymbol(rank: snapshot.rank, previousRank: snapshot.previousRank) {
+            text += ". Moved \(delta)."
+        }
+        if let back = WidgetStandingsCopy.backOfFirst(snapshot) {
+            text += ". \(back)."
+        }
+        return text
     }
 
     private func preseasonAccessibilityLabel(snapshot: StandingsSnapshot, kickoff: Date, asOf date: Date) -> String {
@@ -505,15 +516,9 @@ struct PickemsWidgetEntryView: View {
         return "\(snapshot.groupName). \(summary) until college football kickoff on \(day)."
     }
 
-    private func rowAccessibilityLabel(
-        _ row: StandingsSnapshot.SnapshotEntry,
-        isYou: Bool,
-        weekly: Bool
-    ) -> String {
-        let wins = weekly ? row.weeklyWins : row.seasonWins
-        let losses = weekly ? row.weeklyLosses : row.seasonLosses
+    private func rowAccessibilityLabel(_ row: StandingsSnapshot.SnapshotEntry, isYou: Bool) -> String {
         let youPrefix = isYou ? "You, " : ""
-        return "\(youPrefix)rank \(row.rank), \(row.displayName), \(wins) to \(losses)"
+        return "\(youPrefix)rank \(row.rank), \(row.displayName), \(row.weeklyWins) to \(row.weeklyLosses)"
     }
 }
 
@@ -531,7 +536,7 @@ struct PickemsStandingsWidget: Widget {
     let kind = "PickemsStandingsWidget"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: PickemsWidgetProvider()) { entry in
+        AppIntentConfiguration(kind: kind, intent: SelectLeagueIntent.self, provider: PickemsWidgetProvider()) { entry in
             PickemsWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Pickems")
@@ -542,6 +547,8 @@ struct PickemsStandingsWidget: Widget {
             .systemLarge,
             .accessoryRectangular,
             .accessoryCircular,
+            .accessoryInline,
         ])
+        .contentMarginsDisabled()
     }
 }

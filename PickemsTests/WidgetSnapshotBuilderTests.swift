@@ -205,6 +205,107 @@ struct WidgetSnapshotBuilderTests {
         #expect(otherWeek == fresh)
     }
 
+    @Test func noPicksYetCountsTheWholeSlate() {
+        let extras = counts(picks: [:], lockedPast: false)
+        #expect(extras.picksMade == 0)
+        #expect(extras.picksTotal == 3)
+    }
+
+    @Test func partialPicksCountOnlyChosenGames() {
+        let extras = counts(picks: ["1": "h"], lockedPast: false)
+        #expect(extras.picksMade == 1)
+        #expect(extras.picksTotal == 3)
+    }
+
+    @Test func allPicksInWhenEveryGameIsChosen() {
+        let extras = counts(picks: ["1": "h", "2": "a", "3": "h"], lockedPast: false)
+        #expect(extras.picksMade == 3)
+        #expect(extras.picksTotal == 3)
+    }
+
+    @Test func lockedGamesStayInThePickTotal() {
+        let extras = counts(picks: ["1": "h"], lockedPast: true)
+        #expect(extras.games?.first?.isLocked == true)
+        #expect(extras.games?.last?.isLocked == false)
+        #expect(extras.picksMade == 1)
+        #expect(extras.picksTotal == 3)
+    }
+
+    @Test func statusTextAndTeamColorsPassThrough() {
+        let kickoff = now.addingTimeInterval(3_600)
+        let extras = WidgetSnapshotBuilder.extras(
+            week: week(status: .picking, pickDeadline: kickoff),
+            games: [
+                slate(
+                    id: "osu",
+                    kickoff: kickoff,
+                    homeTeamId: "194",
+                    homeAbbreviation: "OSU",
+                    awayTeamId: "130",
+                    awayAbbreviation: "MICH"
+                ),
+                slate(id: "final", kickoff: now.addingTimeInterval(-3_600), status: .final, homeScore: 21, awayScore: 14),
+                slate(id: "mystery", kickoff: kickoff, homeTeamId: "nope", homeAbbreviation: "ZZZ", awayTeamId: "nope2", awayAbbreviation: "YYY"),
+            ],
+            picks: [:],
+            pickMode: .straightUp,
+            now: now,
+            statusTextByGameId: ["osu": "Q3 4:12"]
+        )
+        let byId = Dictionary(uniqueKeysWithValues: (extras.games ?? []).map { ($0.id, $0) })
+        #expect(byId["osu"]?.statusText == "Q3 4:12")
+        #expect(byId["osu"]?.homeColorHex == "#BA0C2F")
+        #expect(byId["osu"]?.awayColorHex == "#00274C")
+        #expect(byId["final"]?.statusText == "Final")
+        #expect(byId["mystery"]?.homeColorHex == nil)
+        #expect(byId["mystery"]?.awayColorHex == nil)
+    }
+
+    @Test func previousRankRemembersTheLastMove() {
+        var previous = StandingsSnapshot(
+            groupId: "league",
+            groupName: "Saturday Crew",
+            weekNumber: 6,
+            seasonYear: 2026,
+            userId: "u",
+            userDisplayName: "You",
+            weeklyWins: 4,
+            weeklyLosses: 2,
+            seasonWins: 10,
+            seasonLosses: 4,
+            rank: 5,
+            totalPlayers: 12,
+            topEntries: [],
+            updatedAt: now
+        )
+        #expect(WidgetSnapshotBuilder.previousRank(currentRank: 3, previous: previous, groupId: "league", weekNumber: 6) == 5)
+        previous.rank = 3
+        previous.previousRank = 5
+        #expect(WidgetSnapshotBuilder.previousRank(currentRank: 3, previous: previous, groupId: "league", weekNumber: 6) == 5)
+        #expect(WidgetSnapshotBuilder.previousRank(currentRank: 3, previous: previous, groupId: "other", weekNumber: 6) == nil)
+        #expect(WidgetSnapshotBuilder.previousRank(currentRank: 0, previous: previous, groupId: "league", weekNumber: 6) == nil)
+    }
+
+    private func counts(picks: [String: String], lockedPast: Bool) -> WidgetSnapshotBuilder.Extras {
+        let past = now.addingTimeInterval(-60)
+        let future = now.addingTimeInterval(3_600)
+        return WidgetSnapshotBuilder.extras(
+            week: week(
+                status: .picking,
+                pickDeadline: future,
+                pickLockMode: lockedPast ? .rolling : nil
+            ),
+            games: [
+                slate(id: "1", kickoff: lockedPast ? past : future),
+                slate(id: "2", kickoff: future.addingTimeInterval(60)),
+                slate(id: "3", kickoff: future.addingTimeInterval(120)),
+            ],
+            picks: picks,
+            pickMode: .straightUp,
+            now: now
+        )
+    }
+
     private func week(
         status: WeekStatus,
         weekNumber: Int = 6,
@@ -235,18 +336,22 @@ struct WidgetSnapshotBuilderTests {
         kickoff: Date,
         status: SlateGame.GameStatus = .scheduled,
         homeScore: Int? = nil,
-        awayScore: Int? = nil
+        awayScore: Int? = nil,
+        homeTeamId: String = "h",
+        homeAbbreviation: String = "H",
+        awayTeamId: String = "a",
+        awayAbbreviation: String = "A"
     ) -> SlateGame {
         SlateGame(
             id: id,
             espnEventId: id,
-            homeTeamId: "h",
+            homeTeamId: homeTeamId,
             homeTeamName: "Home",
-            homeTeamAbbreviation: "H",
+            homeTeamAbbreviation: homeAbbreviation,
             homeTeamLogoURL: nil,
-            awayTeamId: "a",
+            awayTeamId: awayTeamId,
             awayTeamName: "Away",
-            awayTeamAbbreviation: "A",
+            awayTeamAbbreviation: awayAbbreviation,
             awayTeamLogoURL: nil,
             spread: 3,
             spreadTeamId: "h",

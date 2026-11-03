@@ -9,6 +9,9 @@ enum WidgetSnapshotService {
     private static var fetchGeneration = 0
 
     static func publish(from appState: AppState) {
+        PickemsAppGroup.saveLeagues(
+            appState.groupService.groups.map { WidgetLeague(id: $0.id, name: $0.name) }
+        )
         dropStaleDisplayPreference(from: appState)
         clearSnapshotIfMembershipLost(from: appState)
 
@@ -238,7 +241,8 @@ enum WidgetSnapshotService {
                 week: week,
                 games: slate.games,
                 picks: slate.picks,
-                pickMode: pickMode
+                pickMode: pickMode,
+                statusTextByGameId: statusTextByGameId(from: appState, games: slate.games)
             )
         }
         let fresh = WidgetSnapshotBuilder.extras(week: week, games: [], picks: [:], pickMode: pickMode)
@@ -267,6 +271,22 @@ enum WidgetSnapshotService {
         return (games, appState.pickService.userPick?.picks ?? [:])
     }
 
+    /// Clock lines already on screen. No extra network read from the widget path.
+    private static func statusTextByGameId(from appState: AppState, games: [SlateGame]) -> [String: String] {
+        let cards = appState.picksViewModel.livePickCards
+        var map: [String: String] = [:]
+        for game in games {
+            let card = cards[game.id] ?? cards[game.espnEventId]
+            guard let card else { continue }
+            let clock = ESPNLiveGameCard.strippingTrailingScore(from: card.statusDetail)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !clock.isEmpty {
+                map[game.id] = clock
+            }
+        }
+        return map
+    }
+
     private static func saveStandingsSnapshot(
         group: PickemGroup,
         userId: String,
@@ -277,6 +297,8 @@ enum WidgetSnapshotService {
         extras: WidgetSnapshotBuilder.Extras = .empty
     ) {
         let mine = ranked.first(where: { $0.id == userId })
+        let rank = mine?.rank ?? 0
+        let prior = PickemsAppGroup.load()
         let snapshot = StandingsSnapshot(
             groupId: group.id,
             groupName: group.name,
@@ -288,7 +310,7 @@ enum WidgetSnapshotService {
             weeklyLosses: mine?.weeklyLosses ?? 0,
             seasonWins: mine?.seasonWins ?? 0,
             seasonLosses: mine?.seasonLosses ?? 0,
-            rank: mine?.rank ?? 0,
+            rank: rank,
             totalPlayers: ranked.count,
             topEntries: ranked.prefix(Self.maxListedEntries).map {
                 .init(
@@ -308,7 +330,15 @@ enum WidgetSnapshotService {
             rollingLock: extras.rollingLock,
             games: extras.games,
             nextLockAt: extras.nextLockAt,
-            weekPhaseHint: nil
+            weekPhaseHint: nil,
+            picksMade: extras.picksMade,
+            picksTotal: extras.picksTotal,
+            previousRank: WidgetSnapshotBuilder.previousRank(
+                currentRank: rank,
+                previous: prior,
+                groupId: group.id,
+                weekNumber: weekNumber
+            )
         )
         PickemsAppGroup.save(snapshot)
         WidgetCenter.shared.reloadTimelines(ofKind: "PickemsStandingsWidget")
