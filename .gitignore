@@ -31,3 +31,5 @@ build/
 .env
 firebase/functions/.env.*
 !firebase/functions/.env.example
+__pycache__/
+*.pyc
