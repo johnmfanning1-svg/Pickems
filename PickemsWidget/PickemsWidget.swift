@@ -46,9 +46,8 @@ struct PickemsWidgetProvider: AppIntentTimelineProvider {
     private func resolveSnapshot(
         for configuration: SelectLeagueIntent
     ) -> (snapshot: StandingsSnapshot?, pendingLeagueName: String?) {
-        if let league = configuration.league {
-            PickemsAppGroup.setDisplayGroupId(league.id)
-        }
+        // Do not write the display preference here: the App Group holds one snapshot,
+        // so two widgets on different leagues would keep overwriting each other.
         let loaded = loadSnapshot()
         guard let league = configuration.league else {
             return (loaded, nil)
@@ -61,8 +60,10 @@ struct PickemsWidgetProvider: AppIntentTimelineProvider {
             }
             return (copy, nil)
         }
-        if CFBSeasonCalendar.isPreseason(), let loaded {
-            var copy = loaded
+        if CFBSeasonCalendar.isPreseason() {
+            // Never relabel another league's snapshot; show a plain countdown for this league.
+            let kickoff = loaded?.seasonKickoffAt ?? CFBSeasonCalendar.nextSeasonKickoff()
+            var copy = StandingsSnapshot.preseasonCountdown(until: kickoff)
             copy.groupId = league.id
             copy.groupName = league.name
             return (copy, nil)
