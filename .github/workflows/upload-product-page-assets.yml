@@ -1,0 +1,46 @@
+name: Upload Product Page Assets
+
+# Uploads fastlane/product-page/header-B-3840x1646.png (Header) and
+# search-A-3840x2560.png (Search Results) through the App Store Connect
+# Asset Library and places them on every localization of an editable version.
+# Never submits for review. dry_run (default) is read-only.
+# Secrets: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Editable App Store version (for example 3.6.12)"
+        required: true
+        type: string
+      dry_run:
+        description: "Read-only check (untick to upload and place)"
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upload-product-page-assets
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check PyJWT cryptography requests
+      - name: Upload and place product page assets
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_VERSION: ${{ inputs.version }}
+          ASC_DRY_RUN: ${{ inputs.dry_run }}
+        run: python3 scripts/asc_product_page_assets.py
