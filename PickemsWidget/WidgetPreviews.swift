@@ -11,13 +11,17 @@ extension StandingsSnapshot {
         )
         snapshot.selectionsDeadline = Date().addingTimeInterval(18 * 3_600 + 24 * 60)
         snapshot.pickemsDeadline = Date().addingTimeInterval(42 * 3_600)
+        snapshot.picksMade = 7
+        snapshot.picksTotal = 10
         return snapshot
     }
 
     static var pickemsDeadlinePreview: StandingsSnapshot {
         var snapshot = previewBase(name: "Saturday Crew", wins: 0, losses: 0, rank: 4)
-        snapshot.pickemsDeadline = Date().addingTimeInterval(6 * 3_600)
-        snapshot.games = [previewGame(index: 0, kickoff: Date().addingTimeInterval(6 * 3_600))]
+        snapshot.pickemsDeadline = Date().addingTimeInterval(2 * 3_600 + 14 * 60)
+        snapshot.picksMade = 7
+        snapshot.picksTotal = 10
+        snapshot.games = [previewGame(index: 0, kickoff: Date().addingTimeInterval(2 * 3_600 + 14 * 60))]
         return snapshot
     }
 
@@ -49,6 +53,7 @@ extension StandingsSnapshot {
             .init(id: "3", displayName: "Christopher Williamson", weeklyWins: 3, weeklyLosses: 3, seasonWins: 25, seasonLosses: 17, rank: 3),
             .init(id: "4", displayName: "Sam", weeklyWins: 2, weeklyLosses: 4, seasonWins: 18, seasonLosses: 20, rank: 4),
         ]
+        snapshot.previousRank = 4
         snapshot.games = [
             previewGame(index: 0, kickoff: Date().addingTimeInterval(-86_400), final: true, result: .win),
             previewGame(index: 1, kickoff: Date().addingTimeInterval(-80_000), final: true, result: .loss),
@@ -100,13 +105,62 @@ extension StandingsSnapshot {
             awayScore: started ? 17 + index : nil,
             homeScore: started ? 21 : nil,
             userPick: index % 2 == 0 ? away : home,
-            result: final || (started && index % 3 == 0) ? (index % 2 == 0 ? .win : .loss) : result
+            result: final || (started && index % 3 == 0) ? (index % 2 == 0 ? .win : .loss) : result,
+            awayColorHex: "#BA0C2F",
+            homeColorHex: "#00274C",
+            statusText: (final || (started && index % 3 == 0)) ? "Final" : (started ? "Q3 4:12" : "Sat 3:30")
         )
+    }
+}
+
+extension StandingsSnapshot {
+    /// Widget gallery snapshot. One sample per family, richer than the redacted placeholder.
+    static func gallerySample(for family: WidgetFamily) -> StandingsSnapshot {
+        switch family {
+        case .systemMedium, .systemLarge, .systemExtraLarge, .accessoryRectangular:
+            return scoreboardPreview
+        default:
+            return pickemsDeadlinePreview
+        }
     }
 }
 
 private func previewEntry(_ snapshot: StandingsSnapshot?) -> StandingsEntry {
     StandingsEntry(date: Date(), snapshot: snapshot)
+}
+
+private struct WidgetModeCanvas: View {
+    var entry: StandingsEntry
+    var family: WidgetFamily
+    var mode: WidgetRenderingMode
+    var showsBackground: Bool = true
+
+    var body: some View {
+        PickemsWidgetEntryView(entry: entry)
+            .environment(\.widgetFamilyOverride, family)
+            .environment(\.widgetRenderingMode, mode)
+            .environment(\.showsWidgetBackgroundOverride, showsBackground)
+            .frame(width: width, height: height)
+            .background(showsBackground && mode == .fullColor ? Color.black : Color.gray.opacity(0.35))
+    }
+
+    private var width: CGFloat {
+        switch family {
+        case .systemSmall: return 170
+        case .systemMedium: return 360
+        case .systemLarge: return 360
+        default: return 170
+        }
+    }
+
+    private var height: CGFloat {
+        switch family {
+        case .systemSmall: return 170
+        case .systemMedium: return 170
+        case .systemLarge: return 376
+        default: return 72
+        }
+    }
 }
 
 #Preview("Deadline · Small", as: .systemSmall) {
@@ -257,4 +311,61 @@ private func previewEntry(_ snapshot: StandingsSnapshot?) -> StandingsEntry {
     PickemsStandingsWidget()
 } timeline: {
     previewEntry(nil)
+}
+
+#Preview("Deadline · Inline", as: .accessoryInline) {
+    PickemsStandingsWidget()
+} timeline: {
+    previewEntry(.pickemsDeadlinePreview)
+}
+
+#Preview("Scoreboard · Inline", as: .accessoryInline) {
+    PickemsStandingsWidget()
+} timeline: {
+    previewEntry(.scoreboardPreview)
+}
+
+#Preview("Standings · Inline", as: .accessoryInline) {
+    PickemsStandingsWidget()
+} timeline: {
+    previewEntry(.standingsPreview)
+}
+
+#Preview("Preseason · Inline", as: .accessoryInline) {
+    PickemsStandingsWidget()
+} timeline: {
+    previewEntry(.preseasonPreview)
+}
+
+#Preview("Empty · Inline", as: .accessoryInline) {
+    PickemsStandingsWidget()
+} timeline: {
+    previewEntry(nil)
+}
+
+#Preview("Placeholder · Small", as: .systemSmall) {
+    PickemsStandingsWidget()
+} timeline: {
+    StandingsEntry(date: Date(), snapshot: .placeholder, redacted: true)
+}
+
+#Preview("Modes · Full color") {
+    WidgetModeCanvas(entry: previewEntry(.pickemsDeadlinePreview), family: .systemSmall, mode: .fullColor)
+}
+
+#Preview("Modes · Accented") {
+    WidgetModeCanvas(entry: previewEntry(.scoreboardPreview), family: .systemMedium, mode: .accented)
+}
+
+#Preview("Modes · Vibrant") {
+    WidgetModeCanvas(entry: previewEntry(.standingsPreview), family: .systemSmall, mode: .vibrant)
+}
+
+#Preview("Modes · StandBy") {
+    WidgetModeCanvas(
+        entry: previewEntry(.pickemsDeadlinePreview),
+        family: .systemSmall,
+        mode: .fullColor,
+        showsBackground: false
+    )
 }

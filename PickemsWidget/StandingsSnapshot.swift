@@ -30,6 +30,12 @@ struct StandingsSnapshot: Codable, Equatable {
     var nextLockAt: Date? = nil
     /// Ignored when choosing a phase. The widget computes that from the fields above.
     var weekPhaseHint: String? = nil
+    /// Games the user has picked. Nil on snapshots written before this field existed.
+    var picksMade: Int? = nil
+    /// Games the user is expected to pick. Nil on older snapshots, which then render as round one.
+    var picksTotal: Int? = nil
+    /// Rank before the latest change. Nil when the widget has not seen a different rank.
+    var previousRank: Int? = nil
 
     struct SnapshotGame: Codable, Equatable, Identifiable {
         var id: String
@@ -43,6 +49,11 @@ struct StandingsSnapshot: Codable, Equatable {
         /// Abbreviation of the team the user picked.
         var userPick: String?
         var result: SnapshotPickResult
+        /// Team primary color, when the app already has it. Nil falls back to a neutral bar.
+        var awayColorHex: String? = nil
+        var homeColorHex: String? = nil
+        /// Clock or state, e.g. "Q3 4:12", "Final", "Sat 3:30".
+        var statusText: String? = nil
     }
 
     enum SnapshotPickResult: String, Codable, Equatable {
@@ -71,10 +82,16 @@ struct StandingsSnapshot: Codable, Equatable {
     }
 }
 
+struct WidgetLeague: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var name: String
+}
+
 enum PickemsAppGroup {
     static let suiteName = "group.FannypackInc.Pickems"
     static let standingsKey = "standingsSnapshot"
     static let displayGroupIdKey = "widgetDisplayGroupId"
+    static let leaguesKey = "widgetLeagues"
 
     static var defaults: UserDefaults? {
         UserDefaults(suiteName: suiteName)
@@ -105,5 +122,15 @@ enum PickemsAppGroup {
         } else {
             defaults?.removeObject(forKey: displayGroupIdKey)
         }
+    }
+
+    static func saveLeagues(_ leagues: [WidgetLeague]) {
+        guard let data = try? JSONEncoder().encode(leagues) else { return }
+        defaults?.set(data, forKey: leaguesKey)
+    }
+
+    static func loadLeagues() -> [WidgetLeague] {
+        guard let data = defaults?.data(forKey: leaguesKey) else { return [] }
+        return (try? JSONDecoder().decode([WidgetLeague].self, from: data)) ?? []
     }
 }

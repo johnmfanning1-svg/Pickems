@@ -139,10 +139,14 @@ enum DeepLinkRouter {
         let groupId = parts[0]
         let weekId = parts[2]
         guard !groupId.isEmpty, !weekId.isEmpty else { return nil }
-        if parts.count >= 5, parts[3].lowercased() == "game" {
-            let gameId = parts[4]
-            guard !gameId.isEmpty else { return nil }
-            return .openGame(groupId: groupId, weekId: weekId, gameId: gameId)
+        if parts.count >= 4, parts[3].lowercased() == "game" {
+            if parts.count >= 5 {
+                let gameId = parts[4]
+                if !gameId.isEmpty {
+                    return .openGame(groupId: groupId, weekId: weekId, gameId: gameId)
+                }
+            }
+            return .openWeekPickems(groupId: groupId, weekId: weekId)
         }
         if parts.count >= 4, parts[3].lowercased() == "leaderboard" {
             return .openLeaderboard(groupId: groupId, weekId: weekId)

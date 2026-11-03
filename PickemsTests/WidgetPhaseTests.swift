@@ -207,6 +207,54 @@ struct WidgetPhaseTests {
         #expect(decoded == snapshot)
     }
 
+    @Test func roundTwoFieldsAreOptionalOnOldPayloads() throws {
+        let json = """
+        {
+          "groupId": "g",
+          "groupName": "Saturday Crew",
+          "weekNumber": 3,
+          "seasonYear": 2026,
+          "userId": "u",
+          "userDisplayName": "You",
+          "weeklyWins": 1,
+          "weeklyLosses": 0,
+          "seasonWins": 4,
+          "seasonLosses": 2,
+          "rank": 2,
+          "totalPlayers": 8,
+          "topEntries": [],
+          "updatedAt": 0,
+          "games": [{
+            "id": "g1",
+            "awayShortName": "OSU",
+            "homeShortName": "MICH",
+            "kickoff": 0,
+            "isLocked": false,
+            "isFinal": false,
+            "result": "pending"
+          }]
+        }
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(StandingsSnapshot.self, from: json)
+        #expect(decoded.picksMade == nil)
+        #expect(decoded.picksTotal == nil)
+        #expect(decoded.previousRank == nil)
+        #expect(decoded.games?.first?.awayColorHex == nil)
+        #expect(decoded.games?.first?.homeColorHex == nil)
+        #expect(decoded.games?.first?.statusText == nil)
+
+        var roundTrip = decoded
+        roundTrip.picksMade = 7
+        roundTrip.picksTotal = 10
+        roundTrip.previousRank = 4
+        roundTrip.games?[0].awayColorHex = "#BA0C2F"
+        roundTrip.games?[0].homeColorHex = "#00274C"
+        roundTrip.games?[0].statusText = "Q3 4:12"
+        let data = try JSONEncoder().encode(roundTrip)
+        let again = try JSONDecoder().decode(StandingsSnapshot.self, from: data)
+        #expect(again == roundTrip)
+    }
+
     private func make(groupId: String = "g") -> StandingsSnapshot {
         StandingsSnapshot(
             groupId: groupId,

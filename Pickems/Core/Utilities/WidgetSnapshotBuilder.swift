@@ -10,13 +10,17 @@ enum WidgetSnapshotBuilder {
         var rollingLock: Bool?
         var games: [StandingsSnapshot.SnapshotGame]?
         var nextLockAt: Date?
+        var picksMade: Int? = nil
+        var picksTotal: Int? = nil
 
         static let empty = Extras(
             selectionsDeadline: nil,
             pickemsDeadline: nil,
             rollingLock: nil,
             games: nil,
-            nextLockAt: nil
+            nextLockAt: nil,
+            picksMade: nil,
+            picksTotal: nil
         )
     }
 
@@ -25,7 +29,8 @@ enum WidgetSnapshotBuilder {
         games: [SlateGame],
         picks: [String: String],
         pickMode: PickMode,
-        now: Date = Date()
+        now: Date = Date(),
+        statusTextByGameId: [String: String] = [:]
     ) -> Extras {
         guard let week else { return .empty }
 
@@ -33,8 +38,16 @@ enum WidgetSnapshotBuilder {
             ? week.selectionDeadline
             : nil
         let mapped = games.map {
-            snapshotGame($0, week: week, picks: picks, pickMode: pickMode, now: now)
+            snapshotGame(
+                $0,
+                week: week,
+                picks: picks,
+                pickMode: pickMode,
+                now: now,
+                statusText: statusTextByGameId[$0.id]
+            )
         }
+        let counts = pickCounts(mapped)
         let next: Date? = week.isRollingLock
             ? PickDeadlineCalculator.nextLockDate(week: week, games: games, now: now)
             : nil
@@ -43,8 +56,38 @@ enum WidgetSnapshotBuilder {
             pickemsDeadline: week.pickDeadline,
             rollingLock: week.isRollingLock,
             games: cap(mapped),
-            nextLockAt: next
+            nextLockAt: next,
+            picksMade: counts?.made,
+            picksTotal: counts?.total
         )
+    }
+
+    /// Same league and week, rank actually moved: remember the rank we just left.
+    /// An unchanged rank keeps the last movement so ▲/▼ does not vanish on the next publish.
+    static func previousRank(
+        currentRank: Int,
+        previous: StandingsSnapshot?,
+        groupId: String,
+        weekNumber: Int
+    ) -> Int? {
+        guard currentRank > 0,
+              let previous,
+              previous.groupId == groupId,
+              previous.weekNumber == weekNumber,
+              previous.rank > 0 else { return nil }
+        if previous.rank != currentRank {
+            return previous.rank
+        }
+        return previous.previousRank
+    }
+
+    /// Full slate, not the 12-game widget cap. Locked games stay in the total.
+    static func pickCounts(
+        _ games: [StandingsSnapshot.SnapshotGame]
+    ) -> (made: Int, total: Int)? {
+        guard !games.isEmpty else { return nil }
+        let made = games.filter { trimmedPick($0.userPick) != nil }.count
+        return (made, games.count)
     }
 
     /// The week is known but its slate is not loaded. Keep the last scoreboard for this
@@ -63,6 +106,8 @@ enum WidgetSnapshotBuilder {
         carried.pickemsDeadline = previous.pickemsDeadline
         carried.games = previous.games
         carried.nextLockAt = previous.nextLockAt
+        carried.picksMade = previous.picksMade
+        carried.picksTotal = previous.picksTotal
         return carried
     }
 
@@ -85,7 +130,8 @@ enum WidgetSnapshotBuilder {
         week: WeekSummary,
         picks: [String: String],
         pickMode: PickMode,
-        now: Date
+        now: Date,
+        statusText: String?
     ) -> StandingsSnapshot.SnapshotGame {
         let pickedId = trimmedPick(picks[game.id])
         let pickName: String?
@@ -106,8 +152,35 @@ enum WidgetSnapshotBuilder {
             awayScore: game.awayScore,
             homeScore: game.homeScore,
             userPick: pickName,
-            result: result(game: game, pickedTeamId: pickedId, pickMode: pickMode)
+            result: result(game: game, pickedTeamId: pickedId, pickMode: pickMode),
+            awayColorHex: colorHex(teamId: game.awayTeamId, abbreviation: game.awayTeamAbbreviation),
+            homeColorHex: colorHex(teamId: game.homeTeamId, abbreviation: game.homeTeamAbbreviation),
+            statusText: resolvedStatusText(game: game, override: statusText)
         )
+    }
+
+    private static func colorHex(teamId: String, abbreviation: String) -> String? {
+        if let team = TeamThemeCatalog.team(id: teamId) {
+            return team.primaryHex
+        }
+        return TeamThemeCatalog.teams.first {
+            $0.abbreviation.caseInsensitiveCompare(abbreviation) == .orderedSame
+        }?.primaryHex
+    }
+
+    private static func resolvedStatusText(game: SlateGame, override: String?) -> String? {
+        if let override {
+            let trimmed = override.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        switch game.status {
+        case .final:
+            return "Final"
+        case .inProgress:
+            return "Live"
+        case .scheduled:
+            return game.kickoff.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+        }
     }
 
     private static func result(
