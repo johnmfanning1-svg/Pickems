@@ -15,15 +15,15 @@
   <meta property="og:title" content="CFB Pickems — College football picks with your crew" />
   <meta property="og:description" content="Private college football pick’em leagues. ATS or Straight Up. Live ESPN scores. One-time purchase — always ad-free, no subscriptions." />
   <meta property="og:url" content="https://pickems-fb.web.app/" />
-  <meta property="og:image" content="https://pickems-fb.web.app/assets/home.jpg" />
-  <meta property="og:image:alt" content="Pickems Home screen with Join or Create a league, ESPN headlines, and Top 25 matchups." />
+  <meta property="og:image" content="https://pickems-fb.web.app/assets/promo/hero.png" />
+  <meta property="og:image:alt" content="CFB Pickems on iPhone: weekly picks, live scores, and league standings." />
   <meta property="og:locale" content="en_US" />
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="CFB Pickems — College football picks with your crew" />
   <meta name="twitter:description" content="Private college football pick’em leagues. ATS or Straight Up. Live ESPN scores. One-time purchase — always ad-free." />
-  <meta name="twitter:image" content="https://pickems-fb.web.app/assets/home.jpg" />
+  <meta name="twitter:image" content="https://pickems-fb.web.app/assets/promo/hero.png" />
 
   <!-- Smart App Banner -->
   <meta name="apple-itunes-app" content="app-id=6785697079" />
@@ -414,6 +414,14 @@
       border-color: var(--muted);
     }
 
+    .hero-art { margin: 0.5rem 0 2.5rem; }
+    .hero-art img { display: block; width: 100%; border-radius: 1.1rem; box-shadow: 0 24px 56px rgba(0, 0, 0, 0.45); }
+    .fcards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); margin-bottom: 2.5rem; }
+    .fcard { background: var(--card); border: 1px solid var(--line); border-radius: 0.9rem; overflow: hidden; }
+    .fcard img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+    .fcard figcaption { padding: 0.75rem 0.9rem 0.9rem; color: var(--muted); font-size: 0.9rem; }
+    .fcard figcaption strong { display: block; color: var(--ink); font-size: 1rem; margin-bottom: 0.15rem; }
+
     @keyframes rise {
       from { opacity: 0; transform: translateY(12px); }
       to { opacity: 1; transform: translateY(0); }
@@ -524,6 +532,111 @@ twq('config','rfm1d');
           >
             CFB Pickems promo
           </video>
+        </div>
+      </section>
+
+      <section class="hero-art" aria-label="CFB Pickems on iPhone">
+        <picture>
+          <source type="image/webp" srcset="assets/promo/hero.webp 1600w, assets/promo/hero@2x.webp 3200w" sizes="(min-width: 1120px) 1120px, 100vw" />
+          <img src="assets/promo/hero.png" srcset="assets/promo/hero.png 1600w, assets/promo/hero@2x.png 3200w" sizes="(min-width: 1120px) 1120px, 100vw" width="1600" height="900" fetchpriority="high" decoding="async" alt="CFB Pickems on iPhone: weekly picks, live scores, and league standings." />
+        </picture>
+      </section>
+
+      <section aria-labelledby="cards-title">
+        <h2 id="cards-title">Everything your league needs</h2>
+        <p class="section-lede">Picks, scores, standings, chat, and widgets, all in one app.</p>
+        <div class="fcards">
+          <figure class="fcard">
+            <picture>
+              <source srcset="assets/promo/card-01-pickems.webp" type="image/webp" />
+              <img src="assets/promo/card-01-pickems.png" width="1200" height="900" loading="lazy" decoding="async" alt="Pickems: Tap a side on every game in the weekly slate." />
+            </picture>
+            <figcaption><strong>Pickems</strong> Tap a side on every game in the weekly slate.</figcaption>
+          </figure>
+          <figure class="fcard">
+            <picture>
+              <source srcset="assets/promo/card-02-dense-grid.webp" type="image/webp" />
+              <img src="assets/promo/card-02-dense-grid.png" width="1200" height="900" loading="lazy" decoding="async" alt="Dense grid: Comfortable or Dense cards, your choice." />
+            </picture>
+            <figcaption><strong>Dense grid</strong> Comfortable or Dense cards, your choice.</figcaption>
+          </figure>
+          <figure class="fcard">
+            <picture>
+              <source srcset="assets/promo/card-03-deadlines.webp" type="image/webp" />
+              <img src="assets/promo/card-03-deadlines.png" width="1200" height="900" loading="lazy" decoding="async" alt="Deadlines: Clear lock times so nobody misses a pick." />
+            </picture>
+            <figcaption><strong>Deadlines</strong> Clear lock times so nobody misses a pick.</figcaption>
+          </figure>
+          <figure class="fcard">
+            <picture>
+              <source srcset="assets/promo/card-04-live-scores.webp" type="image/webp" />
+              <img src="assets/promo/card-04-live-scores.png" width="1200" height="900" loading="lazy" decoding="async" alt="Live scores: ESPN scores update as Saturday unfolds." />
+            </picture>
+            <figcaption><strong>Live scores</strong> ESPN scores update as Saturday unfolds.</figcaption>
+          </figure>
+          <figure class="fcard">
+            <picture>
+              <source srcset="assets/promo/card-05-ats-or-straight-up.webp" type="image/webp" />
+              <img src="assets/promo/card-05-ats-or-straight-up.png" width="1200" height="900" loading="lazy" decoding="async" alt="ATS or Straight Up: Commissioners pick the rules for the league." />
+            </picture>
+            <figcaption><strong>ATS or Straight Up</strong> Commissioners pick the rules for the league.</figcaption>
+          </figure>
+          <figure class="fcard">
+            <picture>
+              <source srcset="assets/promo/card-06-standings.webp" type="image/webp" />
+              <img src="assets/promo/card-06-standings.png" width="1200" height="900" loading="lazy" decoding="async" alt="Standings: See where the crew stands, week by week." />
+            </picture>
+            <figcaption><strong>Standings</strong> See where the crew stands, week by week.</figcaption>
+          </figure>
+          <figure class="fcard">
+            <picture>
+              <source srcset="assets/promo/card-07-week-recap.webp" type="image/webp" />
+              <img src="assets/promo/card-07-week-recap.png" width="1200" height="900" loading="lazy" decoding="async" alt="Week recap: Every result, once the games go final." />
+            </picture>
+            <figcaption><strong>Week recap</strong> Every result, once the games go final.</figcaption>
+          </figure>
+          <figure class="fcard">
+            <picture>
+              <source srcset="assets/promo/card-08-league-chat.webp" type="image/webp" />
+              <img src="assets/promo/card-08-league-chat.png" width="1200" height="900" loading="lazy" decoding="async" alt="League chat: Trash talk stays inside the league." />
+            </picture>
+            <figcaption><strong>League chat</strong> Trash talk stays inside the league.</figcaption>
+          </figure>
+          <figure class="fcard">
+            <picture>
+              <source srcset="assets/promo/card-09-commissioner.webp" type="image/webp" />
+              <img src="assets/promo/card-09-commissioner.png" width="1200" height="900" loading="lazy" decoding="async" alt="Commissioner tools: Build the slate and run the league." />
+            </picture>
+            <figcaption><strong>Commissioner tools</strong> Build the slate and run the league.</figcaption>
+          </figure>
+          <figure class="fcard">
+            <picture>
+              <source srcset="assets/promo/card-10-widgets.webp" type="image/webp" />
+              <img src="assets/promo/card-10-widgets.png" width="1200" height="900" loading="lazy" decoding="async" alt="Home Screen widgets: Deadlines, scores, and standings at a glance." />
+            </picture>
+            <figcaption><strong>Home Screen widgets</strong> Deadlines, scores, and standings at a glance.</figcaption>
+          </figure>
+          <figure class="fcard">
+            <picture>
+              <source srcset="assets/promo/card-11-spicy-alerts.webp" type="image/webp" />
+              <img src="assets/promo/card-11-spicy-alerts.png" width="1200" height="900" loading="lazy" decoding="async" alt="Alerts: Know when picks are owed and games kick off." />
+            </picture>
+            <figcaption><strong>Alerts</strong> Know when picks are owed and games kick off.</figcaption>
+          </figure>
+          <figure class="fcard">
+            <picture>
+              <source srcset="assets/promo/card-12-season-history.webp" type="image/webp" />
+              <img src="assets/promo/card-12-season-history.png" width="1200" height="900" loading="lazy" decoding="async" alt="Season history: Look back at past weeks and seasons." />
+            </picture>
+            <figcaption><strong>Season history</strong> Look back at past weeks and seasons.</figcaption>
+          </figure>
+          <figure class="fcard">
+            <picture>
+              <source srcset="assets/promo/card-13-buy-once-ad-free.webp" type="image/webp" />
+              <img src="assets/promo/card-13-buy-once-ad-free.png" width="1200" height="900" loading="lazy" decoding="async" alt="Buy once, ad-free: One purchase. No ads, no subscriptions." />
+            </picture>
+            <figcaption><strong>Buy once, ad-free</strong> One purchase. No ads, no subscriptions.</figcaption>
+          </figure>
         </div>
       </section>
 
