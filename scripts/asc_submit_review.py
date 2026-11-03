@@ -20,6 +20,7 @@ The key, the JWT, and the issuer id are never printed.
 from __future__ import annotations
 
 import base64
+import json
 import os
 import re
 import sys
@@ -300,6 +301,28 @@ def idfa_status_from_response(status: int, body: dict | None) -> str:
     return "not readable"
 
 
+def _format_associated_errors(associated: Any) -> str:
+    """Compact, complete rendering of errors[].meta.associatedErrors."""
+    if not isinstance(associated, dict):
+        return json.dumps(associated, separators=(",", ":"), sort_keys=True)
+    parts: list[str] = []
+    for resource, errs in associated.items():
+        items = errs if isinstance(errs, list) else [errs]
+        for item in items:
+            if isinstance(item, dict):
+                code = str(item.get("code") or "").strip()
+                title = str(item.get("title") or "").strip()
+                detail = str(item.get("detail") or "").strip()
+                text = " - ".join(x for x in (code, title, detail if detail != title else "") if x)
+                extra = {k: v for k, v in item.items() if k not in ("code", "title", "detail", "id", "status")}
+                if extra:
+                    text += " " + json.dumps(extra, separators=(",", ":"), sort_keys=True)
+            else:
+                text = json.dumps(item, separators=(",", ":"))
+            parts.append(f"[{resource}] {text}")
+    return " | ".join(parts) or "{}"
+
+
 def api_error_message(method: str, path: str, status: int, payload: Any) -> str:
     """Readable failure that includes each errors[].detail."""
     path_only = path.split("?", 1)[0]
@@ -321,6 +344,9 @@ def api_error_message(method: str, path: str, status: int, payload: Any) -> str:
                 text = code
             if text:
                 details.append(text)
+            associated = (err.get("meta") or {}).get("associatedErrors") if isinstance(err.get("meta"), dict) else None
+            if associated:
+                details.append("associatedErrors: " + _format_associated_errors(associated))
     prefix = f"{method} {path_only} failed ({status})"
     if details:
         return prefix + ": " + "; ".join(details)
