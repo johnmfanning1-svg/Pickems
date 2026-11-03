@@ -54,8 +54,70 @@ def find_version(client: AscClient, version: str) -> dict:
     return v
 
 
+DONE_STATES = ("COMPLETE", "READY", "PROCESSED", "PREPARE_FOR_SUBMISSION")
+POLL_SECONDS = 15
+POLL_LIMIT = 40 * 60  # Apple can take 30+ minutes to process large images
+
+
+def _image_state(attrs: dict) -> str | None:
+    return attrs.get("state") or (attrs.get("assetDeliveryState") or {}).get("state")
+
+
+def find_existing(client: AscClient, library_id: str, ref: str) -> dict | None:
+    """Return the Asset Library image whose referenceName is ref, if any."""
+    path = f"/v1/appAssetLibraries/{library_id}/images"
+    params: dict | None = {"limit": 200}
+    while path:
+        _, body = client.request("GET", path, params=params, allow_status=(404,))
+        for img in (body or {}).get("data") or []:
+            if (img.get("attributes") or {}).get("referenceName") == ref:
+                return img
+        nxt = ((body or {}).get("links") or {}).get("next")
+        if not nxt:
+            break
+        path, params = nxt.split("https://api.appstoreconnect.apple.com", 1)[-1], None
+    return None
+
+
+def wait_processed(client: AscClient, image_id: str, name: str) -> str:
+    deadline = time.monotonic() + POLL_LIMIT
+    state = None
+    while True:
+        _, b = client.request("GET", f"/v1/appAssetLibraryImages/{image_id}")
+        a = b["data"]["attributes"]
+        state = _image_state(a)
+        if state in DONE_STATES:
+            return state
+        if state == "FAILED":
+            raise AscFailure(f"{name} processing failed: {a}")
+        if time.monotonic() > deadline:
+            raise AscFailure(f"{name} did not finish processing in {POLL_LIMIT // 60} min (last state {state}).")
+        time.sleep(POLL_SECONDS)
+
+
 def upload(client: AscClient, library_id: str, path: Path, ref: str) -> str:
     data = path.read_bytes()
+    existing = find_existing(client, library_id, ref)
+    if existing:
+        a = existing.get("attributes") or {}
+        state = _image_state(a)
+        same = a.get("fileSize") in (None, len(data)) and a.get("fileName") in (None, path.name)
+        if same and (a.get("fileSize") is None or a.get("fileName") is None):
+            log(f"  note: image {existing['id']} has no fileSize/fileName to compare "
+                f"(fileSize={a.get('fileSize')}, fileName={a.get('fileName')}); assuming it matches")
+        if same and state != "FAILED" and state not in (None, "AWAITING_UPLOAD"):
+            log(f"Reusing existing image {existing['id']} for '{ref}' (state {state})")
+            if state not in DONE_STATES:
+                state = wait_processed(client, existing["id"], path.name)
+            log(f"Image {existing['id']} {state}")
+            return existing["id"]
+        log(f"Deleting stale image {existing['id']} for '{ref}' (state {state})")
+        status, body = client.request("DELETE", f"/v1/appAssetLibraryImages/{existing['id']}",
+                                      allow_status=(404, 409))
+        if status == 409:
+            raise AscFailure(f"Could not delete stale image {existing['id']} for '{ref}' (409): {body}")
+        if status == 404:
+            log(f"  image {existing['id']} was already gone")
     _, body = client.request("POST", "/v1/appAssetLibraryImages", json_body={"data": {
         "type": "appAssetLibraryImages",
         "attributes": {"fileName": path.name, "fileSize": len(data),
@@ -69,20 +131,9 @@ def upload(client: AscClient, library_id: str, path: Path, ref: str) -> str:
         r = requests.request(op.get("method", "PUT"), op["url"], data=chunk, headers=headers, timeout=120)
         if r.status_code >= 300:
             raise AscFailure(f"Upload chunk for {path.name} failed: HTTP {r.status_code}")
-    attrs = {"uploaded": True}
     client.request("PATCH", f"/v1/appAssetLibraryImages/{image['id']}", json_body={"data": {
-        "type": "appAssetLibraryImages", "id": image["id"], "attributes": attrs}})
-    for _ in range(150):  # up to ~25 min; ASC processing can be slow
-        _, b = client.request("GET", f"/v1/appAssetLibraryImages/{image['id']}")
-        a = b["data"]["attributes"]
-        state = a.get("state") or (a.get("assetDeliveryState") or {}).get("state")
-        if state in ("COMPLETE", "READY", "PROCESSED"):
-            break
-        if state == "FAILED":
-            raise AscFailure(f"{path.name} processing failed: {a}")
-        time.sleep(10)
-    else:
-        raise AscFailure(f"{path.name} did not finish processing (last state {state}).")
+        "type": "appAssetLibraryImages", "id": image["id"], "attributes": {"uploaded": True}}})
+    state = wait_processed(client, image["id"], path.name)
     log(f"Uploaded {path.name} -> image {image['id']} ({state})")
     return image["id"]
 
@@ -114,6 +165,10 @@ def main() -> int:
                                allow_status=(404,))
         existing = [p["attributes"].get("placementType") for p in ((pl or {}).get("data") or [])]
         log(f"  {loc['attributes']['locale']} existing placements: {existing or 'none'}")
+
+    for _, path, ref in ASSETS:
+        ex = find_existing(client, library_id, ref)
+        log(f"  library image '{ref}': " + (f"{ex['id']} state {_image_state(ex.get('attributes') or {})}" if ex else "none"))
 
     if dry:
         log("DRY RUN: would upload 2 CREATIVE_ASSETS images and place them "
