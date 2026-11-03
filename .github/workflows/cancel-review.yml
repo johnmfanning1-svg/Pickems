@@ -1,0 +1,46 @@
+name: Cancel App Review Submission
+
+# Cancels the open App Store review submission containing the given version
+# (PATCH /v1/reviewSubmissions/{id} canceled=true) so the version returns to an
+# editable state. Does not upload, edit metadata, or resubmit.
+# Uses the same ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8 secrets as submit-review.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Marketing version whose review submission to cancel (for example 3.6.12)"
+        required: true
+        type: string
+      dry_run:
+        description: "Only report what would be canceled (untick to cancel)"
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: submit-review
+  cancel-in-progress: false
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install App Store Connect client dependencies
+        run: python -m pip install --disable-pip-version-check PyJWT cryptography requests
+      - name: Cancel review submission
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_VERSION: ${{ inputs.version }}
+          ASC_DRY_RUN: ${{ inputs.dry_run }}
+        run: python3 scripts/asc_cancel_review.py
