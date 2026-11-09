@@ -96,6 +96,65 @@ struct CelebrationPolicyTests {
         #expect(absorb.seen == ["late"])
     }
 
+    @Test func unsettledFinalIsNotSeenUntilItBecomesAWinMissOrPush() {
+        let unsettled = CelebrationPolicy.ObservedGame(id: "late", isFinal: true, isCorrect: nil, isPush: false)
+        let first = CelebrationPolicy.observe(
+            games: [unsettled],
+            previouslySeen: [],
+            isFirstObservation: true,
+            isForeground: true,
+            absorbCurrentlyFinal: false,
+            winTitle: "Covered"
+        )
+        #expect(first.seen.isEmpty)
+        #expect(first.sheetGameId == nil)
+
+        let watching = CelebrationPolicy.observe(
+            games: [unsettled],
+            previouslySeen: first.seen,
+            isFirstObservation: false,
+            isForeground: true,
+            absorbCurrentlyFinal: false,
+            winTitle: "Covered"
+        )
+        #expect(watching.seen.isEmpty)
+        #expect(watching.inline.isEmpty)
+
+        let absorb = CelebrationPolicy.observe(
+            games: [unsettled],
+            previouslySeen: [],
+            isFirstObservation: false,
+            isForeground: true,
+            absorbCurrentlyFinal: true,
+            winTitle: "Covered"
+        )
+        #expect(absorb.seen.isEmpty)
+
+        let settled = CelebrationPolicy.observe(
+            games: [CelebrationPolicy.ObservedGame(id: "late", isFinal: true, isCorrect: true, isPush: false)],
+            previouslySeen: watching.seen,
+            isFirstObservation: false,
+            isForeground: true,
+            absorbCurrentlyFinal: false,
+            winTitle: "Covered"
+        )
+        #expect(settled.sheetGameId == "late")
+        #expect(settled.inline["late"] == .win(title: "Covered"))
+        #expect(settled.seen == ["late"])
+
+        let loss = CelebrationPolicy.observe(
+            games: [CelebrationPolicy.ObservedGame(id: "grade", isFinal: true, isCorrect: false, isPush: false)],
+            previouslySeen: [],
+            isFirstObservation: false,
+            isForeground: false,
+            absorbCurrentlyFinal: false,
+            winTitle: "Covered"
+        )
+        #expect(loss.seen == ["grade"])
+        #expect(loss.inline.isEmpty)
+        #expect(loss.sheetGameId == nil)
+    }
+
     @Test func hapticIsSuccessOnlyOnAWin() {
         #expect(CelebrationPolicy.haptic(for: .win(title: "Covered")) == .success)
         #expect(CelebrationPolicy.haptic(for: .win(title: "Won")) == .success)
@@ -124,7 +183,12 @@ struct CelebrationPolicyTests {
             isNeutral: false
         )
         #expect(miss?.feedback == CelebrationPolicy.Feedback.none)
-        #expect(miss?.announcement == "Missed, Georgia at Alabama")
+        #expect(miss?.announcement == "Loss, Georgia at Alabama")
+        #expect(
+            miss?.announcement.hasPrefix(
+                GamePickRowPresentation.resultBadgeTitle(.loss, winTitle: "Covered")
+            ) == true
+        )
 
         let alreadyFinal = CelebrationPolicy.watchingEffect(
             wasWatching: false,
@@ -208,6 +272,53 @@ struct CelebrationPolicyTests {
         )
     }
 
+    @Test func weekWinCardStaysHiddenUntilTheResultArrives() {
+        let hidden = CelebrationPolicy.weekWinCard(
+            kind: nil,
+            wins: nil,
+            losses: nil,
+            weekNumber: 8,
+            isPerfect: false,
+            alreadyCelebrated: false,
+            alreadyPresented: false
+        )
+        #expect(hidden == nil)
+
+        let card = CelebrationPolicy.weekWinCard(
+            kind: .champ,
+            wins: 6,
+            losses: 1,
+            weekNumber: 8,
+            isPerfect: false,
+            alreadyCelebrated: false,
+            alreadyPresented: false
+        )
+        #expect(card == CelebrationPolicy.WeekWinCardContent(
+            title: "Week 8 Champ",
+            wins: 6,
+            losses: 1,
+            isPerfect: false
+        ))
+        #expect(CelebrationPolicy.weekWinCard(
+            kind: .champ,
+            wins: 6,
+            losses: 1,
+            weekNumber: 8,
+            isPerfect: false,
+            alreadyCelebrated: true,
+            alreadyPresented: false
+        ) == nil)
+        #expect(CelebrationPolicy.weekWinCard(
+            kind: .coChamp,
+            wins: 6,
+            losses: 1,
+            weekNumber: 8,
+            isPerfect: true,
+            alreadyCelebrated: false,
+            alreadyPresented: true
+        ) == nil)
+    }
+
     @Test func pulseRankHidesAScorelessWeekAndPrefixesATie() {
         let empty = standing(id: "me", rank: 1, tied: false, wins: 0, losses: 0)
         let hidden = PulseRankCopy.display(entry: empty, board: [empty])
@@ -229,6 +340,55 @@ struct CelebrationPolicyTests {
         let solo = PulseRankCopy.display(entry: leader, board: [leader])
         #expect(solo.rankText == "#1")
         #expect(solo.animatableRank == 1)
+    }
+
+    @Test func pulseRankNamesAPushOnlyScorelessWeek() {
+        let empty = standing(id: "me", rank: 1, tied: false, wins: 0, losses: 0)
+        let pushed = PulseRankCopy.display(entry: empty, board: [empty], pushes: 2)
+        #expect(pushed.rankText == "—")
+        #expect(pushed.detailText == "All pushes this week")
+        #expect(pushed.accessibilityRank == "No rank yet")
+        #expect(pushed.animatableRank == nil)
+
+        // Home −7, 24–17 lands on the number. A cover must not be labeled push-only.
+        let pushGame = slateGame(status: .final, homeScore: 24, awayScore: 17)
+        #expect(PulseRankCopy.scorelessPushes(picks: ["1": "home"], games: [pushGame]) == 1)
+        let named = PulseRankCopy.display(
+            entry: empty,
+            board: [empty],
+            pushes: PulseRankCopy.scorelessPushes(picks: ["1": "home"], games: [pushGame])
+        )
+        #expect(named.detailText == "All pushes this week")
+
+        let cover = slateGame(status: .final, homeScore: 28, awayScore: 17)
+        #expect(PulseRankCopy.scorelessPushes(picks: ["1": "home"], games: [cover]) == 0)
+        #expect(PulseRankCopy.scorelessPushes(picks: [:], games: [cover]) == 0)
+    }
+
+    private func slateGame(
+        status: SlateGame.GameStatus,
+        homeScore: Int,
+        awayScore: Int
+    ) -> SlateGame {
+        SlateGame(
+            id: "1",
+            espnEventId: "1",
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: 7,
+            spreadTeamId: "home",
+            kickoff: Date(timeIntervalSince1970: 1_800_000_000),
+            status: status,
+            homeScore: homeScore,
+            awayScore: awayScore,
+            winnerTeamId: "home"
+        )
     }
 
     private func standing(

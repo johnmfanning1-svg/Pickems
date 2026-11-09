@@ -34,9 +34,9 @@ rc=$?
 set -e
 # Counts come from the .xcresult bundle (Swift Testing and XCTest alike),
 # not from grepping test.log.
-# Floor on passed + expected failures. 622 after #141. This Live Activity
-# change adds 17 content and start/end tests. Do not lower this.
-MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-639}"
+# Floor on passed + expected failures. 639 after #147. This follow-up
+# adds 5 tests. Do not lower this.
+MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-644}"
 grep -iE "error:|Test case .* failed|\*\* TEST" "$OUT/logs/test.log" | tail -n 200 || true
 summary="$OUT/logs/test-summary.json"
 if ! xcrun xcresulttool get test-results summary --path "$OUT/TestResults.xcresult" --format json > "$summary" 2>"$OUT/logs/xcresulttool.err"; then

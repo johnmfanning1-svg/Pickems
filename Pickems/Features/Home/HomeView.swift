@@ -339,9 +339,17 @@ struct HomeView: View {
     /// Streak stays off Home. `PlayerSeasonStats` is built by Stats and Rivalry into local
     /// state, and `GroupService` does not keep a copy. Loading it here would add a season of reads.
     private func pulseRank(_ entry: StandingEntry) -> some View {
+        let pick = appState.pickService.userPick
+        let pushes = PulseRankCopy.scorelessPushes(
+            picks: pick?.picks ?? [:],
+            games: appState.pickService.slateGames,
+            confidenceGameId: pick?.confidenceGameId,
+            pickMode: appState.pickMode(for: appState.groupService.currentWeek)
+        )
         let pulse = PulseRankCopy.display(
             entry: entry,
-            board: appState.rankedStandings(weekly: true)
+            board: appState.rankedStandings(weekly: true),
+            pushes: pushes
         )
         return HStack(alignment: .firstTextBaseline) {
             Text(pulse.rankText)
@@ -530,17 +538,30 @@ private struct HomeScoredWeekSection: View {
             }
         }
         .onAppear(perform: revealWeekWinIfNeeded)
+        .onChange(of: weekWinKind) { _, _ in
+            revealWeekWinIfNeeded()
+        }
+        .onChange(of: rankedEntries) { _, _ in
+            revealWeekWinIfNeeded()
+        }
     }
 
     private func revealWeekWinIfNeeded() {
-        guard presentedWeekWin == nil, let kind = weekWinKind, let entry = myEntry else { return }
         let already = CelebrationStore.hasCelebratedWeekWin(groupId: group.id, weekId: week.id)
-        guard CelebrationPolicy.shouldShowWeekWin(kind: kind, alreadyCelebrated: already) else { return }
+        guard let card = CelebrationPolicy.weekWinCard(
+            kind: weekWinKind,
+            wins: myEntry?.weeklyWins,
+            losses: myEntry?.weeklyLosses,
+            weekNumber: week.weekNumber,
+            isPerfect: isPerfectSaturday,
+            alreadyCelebrated: already,
+            alreadyPresented: presentedWeekWin != nil
+        ) else { return }
         presentedWeekWin = PresentedWeekWin(
-            title: kind.title(weekNumber: week.weekNumber),
-            wins: entry.weeklyWins,
-            losses: entry.weeklyLosses,
-            isPerfect: isPerfectSaturday
+            title: card.title,
+            wins: card.wins,
+            losses: card.losses,
+            isPerfect: card.isPerfect
         )
         CelebrationStore.markWeekWinCelebrated(groupId: group.id, weekId: week.id)
     }

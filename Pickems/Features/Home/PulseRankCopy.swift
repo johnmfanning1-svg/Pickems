@@ -10,8 +10,34 @@ enum PulseRankCopy {
         var animatableRank: Int?
     }
 
-    static func display(entry: StandingEntry, board: [StandingEntry]) -> Display {
+    /// Pushes on a 0–0 record. A win or a loss returns 0 so a stale scoreless
+    /// standing is not labeled push-only.
+    static func scorelessPushes(
+        picks: [String: String],
+        games: [SlateGame],
+        confidenceGameId: String? = nil,
+        pickMode: PickMode = .ats
+    ) -> Int {
+        let scored = ScoringEngine.scorePicks(
+            picks: picks,
+            games: games,
+            confidenceGameId: confidenceGameId,
+            pickMode: pickMode
+        )
+        guard scored.wins == 0, scored.losses == 0 else { return 0 }
+        return scored.pushes
+    }
+
+    static func display(entry: StandingEntry, board: [StandingEntry], pushes: Int = 0) -> Display {
         if entry.weeklyWins + entry.weeklyLosses == 0 {
+            if pushes > 0 {
+                return Display(
+                    rankText: "—",
+                    detailText: "All pushes this week",
+                    accessibilityRank: "No rank yet",
+                    animatableRank: nil
+                )
+            }
             return Display(
                 rankText: "—",
                 detailText: "No games final yet",

@@ -140,6 +140,54 @@ struct CommissionerPinFollowupTests {
         }
     }
 
+    @Test func selectionsPerMemberUsesThePinnedRulesWhenTheWeekValueIsZero() {
+        #expect(CommissionerPinnedLeague.selectionsPerMember(weekValue: 4, pinnedRulesValue: 2) == 4)
+        #expect(CommissionerPinnedLeague.selectionsPerMember(weekValue: 0, pinnedRulesValue: 3) == 3)
+        #expect(CommissionerPinnedLeague.selectionsPerMember(weekValue: 0, pinnedRulesValue: 0) == 1)
+        #expect(CommissionerPinnedLeague.selectionsPerMember(weekValue: -1, pinnedRulesValue: 2) == 2)
+    }
+
+    @Test func openPickemsLockInputsIgnoresAnotherLeaguesSlate() {
+        let first = Date(timeIntervalSince1970: 1_800_000_000)
+        let slateKick = Date(timeIntervalSince1970: 1_800_086_400)
+        let nominations = [nomination("e1", kickoff: first)]
+        let slate = [game(id: "game-doc", espnEventId: "e9", kickoff: slateKick)]
+        let pinned = PickService.openPickemsLockInputs(
+            observingGroupId: "pinned",
+            groupId: "pinned",
+            nominations: nominations,
+            slate: slate,
+            weekNominationCount: 4
+        )
+        #expect(pinned.count == 4)
+        #expect(pinned.fallback.map(\.id) == ["e1", "game-doc"])
+        #expect(pinned.fallback.map(\.kickoff) == [first, slateKick])
+
+        let more = (1...6).map { nomination("e\($0)", kickoff: first) }
+        let counted = PickService.openPickemsLockInputs(
+            observingGroupId: "pinned",
+            groupId: "pinned",
+            nominations: more,
+            slate: [],
+            weekNominationCount: 4
+        )
+        #expect(counted.count == 6)
+        #expect(counted.fallback.map(\.id) == ["e1", "e2", "e3", "e4", "e5", "e6"])
+
+        let observers: [String?] = ["other", nil]
+        for observing in observers {
+            let elsewhere = PickService.openPickemsLockInputs(
+                observingGroupId: observing,
+                groupId: "pinned",
+                nominations: nominations,
+                slate: slate,
+                weekNominationCount: 4
+            )
+            #expect(elsewhere.count == nil)
+            #expect(elsewhere.fallback.isEmpty)
+        }
+    }
+
     @Test func activeChipFallsBackOnlyToThePinnedWeek() {
         // `week` is nil when currentWeekGroupId belongs to another league, so
         // the chip fallback is nil instead of that league's week id.

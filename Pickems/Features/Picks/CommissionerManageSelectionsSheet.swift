@@ -41,11 +41,9 @@ struct CommissionerManageSelectionsSheet: View {
     }
 
     private var perMember: Int {
-        max(
-            week.selectionsPerMember > 0
-                ? week.selectionsPerMember
-                : appState.groupService.selectedGroup?.rules.selectionsPerMember ?? 1,
-            1
+        CommissionerPinnedLeague.selectionsPerMember(
+            weekValue: week.selectionsPerMember,
+            pinnedRulesValue: rules.selectionsPerMember
         )
     }
 
