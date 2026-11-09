@@ -4,6 +4,7 @@ import {
   shouldClaimLeadAlert,
   shouldNotifyGameFinal,
   tookTheLeadRecipients,
+  userIdsWithPicks,
   type LeadAlertEntry,
   type LeadAlertGame,
 } from "./leadAlert";
@@ -260,6 +261,169 @@ describe("tookTheLeadRecipients", () => {
         games: [finalGame("G", future)],
       })
     ).toEqual([]);
+  });
+
+  it("does not alert a rolling-lock Thursday 1–0 when most of the roster has no pick doc", () => {
+    // First Thursday final. One member picked it correctly. Everyone else
+    // missed the lock and is an automatic 0–1. That is not a lead yet.
+    const roster = ["U", "V", "W", "X"].map((id, index) => ({
+      id,
+      weeklyWins: index === 0 ? 1 : 0,
+    }));
+    const zeros = roster.map((entry) => ({ id: entry.id, weeklyWins: 0 }));
+    expect(
+      realLead({
+        current: roster,
+        previous: { weekNumber: 6, entries: zeros },
+        pickedUserIds: new Set(["U"]),
+      })
+    ).toEqual([]);
+  });
+
+  it("alerts a rolling-lock Thursday sole leader once at least half the roster has a pick doc", () => {
+    // Same 1–0 board, but half the league has actually picked. One final is enough.
+    const roster = ["U", "V", "W", "X"].map((id, index) => ({
+      id,
+      weeklyWins: index === 0 ? 1 : 0,
+    }));
+    const zeros = roster.map((entry) => ({ id: entry.id, weeklyWins: 0 }));
+    expect(
+      realLead({
+        current: roster,
+        previous: { weekNumber: 6, entries: zeros },
+        pickedUserIds: new Set(["U", "V"]),
+      })
+    ).toEqual(["U"]);
+
+    // 2 of 5 is still most of the roster with no pick doc.
+    const five = ["U", "V", "W", "X", "Y"].map((id, index) => ({
+      id,
+      weeklyWins: index === 0 ? 1 : 0,
+    }));
+    expect(
+      realLead({
+        current: five,
+        previous: {
+          weekNumber: 6,
+          entries: five.map((entry) => ({ id: entry.id, weeklyWins: 0 })),
+        },
+        pickedUserIds: new Set(["U", "V"]),
+      })
+    ).toEqual([]);
+  });
+
+  it("alerts a mid-weekend sole leader when most of the roster has a pick doc", () => {
+    const saturday = Date.parse("2026-10-10T23:40:00.000Z");
+    const thursday = Date.parse("2026-10-09T00:20:00.000Z");
+    const early = Date.parse("2026-10-10T16:00:00.000Z");
+    const late = Date.parse("2026-10-10T20:15:00.000Z");
+    expect(
+      realLead({
+        week: {
+          status: "picking",
+          pickLockMode: "rolling",
+          gameKickoffs: { THU: thursday, SAT1: early, SAT2: late },
+        },
+        current: [
+          { id: "U", weeklyWins: 3 },
+          { id: "V", weeklyWins: 2 },
+          { id: "W", weeklyWins: 1 },
+          { id: "X", weeklyWins: 0 },
+        ],
+        previous: {
+          weekNumber: 6,
+          entries: [
+            { id: "U", weeklyWins: 2 },
+            { id: "V", weeklyWins: 2 },
+            { id: "W", weeklyWins: 1 },
+            { id: "X", weeklyWins: 0 },
+          ],
+        },
+        games: [finalGame("THU", thursday), finalGame("SAT1", early), finalGame("SAT2", late)],
+        changedGameIds: new Set(["SAT2"]),
+        pickedUserIds: new Set(["U", "V", "W"]),
+        nowMs: saturday,
+      })
+    ).toEqual(["U"]);
+  });
+
+  it("does not alert a rolling-lock sole leader when most have no pick doc, even after several finals", () => {
+    const saturday = Date.parse("2026-10-10T23:40:00.000Z");
+    const thursday = Date.parse("2026-10-09T00:20:00.000Z");
+    const early = Date.parse("2026-10-10T16:00:00.000Z");
+    const late = Date.parse("2026-10-10T20:15:00.000Z");
+    expect(
+      realLead({
+        week: {
+          status: "picking",
+          pickLockMode: "rolling",
+          gameKickoffs: { THU: thursday, SAT1: early, SAT2: late },
+        },
+        current: [
+          { id: "U", weeklyWins: 3 },
+          { id: "V", weeklyWins: 0 },
+          { id: "W", weeklyWins: 0 },
+          { id: "X", weeklyWins: 0 },
+        ],
+        previous: {
+          weekNumber: 6,
+          entries: [
+            { id: "U", weeklyWins: 2 },
+            { id: "V", weeklyWins: 0 },
+            { id: "W", weeklyWins: 0 },
+            { id: "X", weeklyWins: 0 },
+          ],
+        },
+        games: [finalGame("THU", thursday), finalGame("SAT1", early), finalGame("SAT2", late)],
+        changedGameIds: new Set(["SAT2"]),
+        pickedUserIds: new Set(["U"]),
+        nowMs: saturday,
+      })
+    ).toEqual([]);
+  });
+
+  it("still alerts a deadline-lock sole leader when most of the roster has no pick doc", () => {
+    expect(
+      realLead({
+        week: {
+          status: "locked",
+          pickLockMode: "firstKickoff",
+          pickDeadline: KICKOFF,
+          gameKickoffs: { G: KICKOFF },
+        },
+        current: [
+          { id: "U", weeklyWins: 1 },
+          { id: "V", weeklyWins: 0 },
+          { id: "W", weeklyWins: 0 },
+          { id: "X", weeklyWins: 0 },
+        ],
+        previous: {
+          weekNumber: 6,
+          entries: [
+            { id: "U", weeklyWins: 0 },
+            { id: "V", weeklyWins: 0 },
+            { id: "W", weeklyWins: 0 },
+            { id: "X", weeklyWins: 0 },
+          ],
+        },
+        pickedUserIds: new Set(["U"]),
+      })
+    ).toEqual(["U"]);
+  });
+});
+
+describe("userIdsWithPicks", () => {
+  it("counts a doc with a team and ignores blanks", () => {
+    expect(
+      userIdsWithPicks([
+        { userId: "U", picks: { G: "HOME" } },
+        { userId: "V", picks: { G: "  " } },
+        { userId: "W", picks: {} },
+        { userId: "X" },
+        { userId: "", picks: { G: "HOME" } },
+        { picks: { G: "HOME" } },
+      ])
+    ).toEqual(new Set(["U"]));
   });
 });
 

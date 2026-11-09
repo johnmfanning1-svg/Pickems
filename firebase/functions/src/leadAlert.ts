@@ -1,4 +1,4 @@
-import { gameIsLocked, kickoffMillis } from "./pickLock";
+import { gameIsLocked, isRollingLock, kickoffMillis } from "./pickLock";
 import { toMillis } from "./scoring";
 
 /**
@@ -9,6 +9,10 @@ import { toMillis } from "./scoring";
  * board is everyone at rank 1. Compare this week's points with this week's
  * previous board. A locked game that goes final can hand someone the lead
  * when a rival drops, even if the new leader's own score did not move.
+ *
+ * On a rolling-lock week the first final can also crown whoever picked that
+ * one game, because everyone else is an automatic miss. Wait until at least
+ * half the roster has a pick before sending that push.
  */
 export interface LeadAlertEntry {
   id: string;
@@ -47,9 +51,17 @@ export function tookTheLeadRecipients(input: {
   games: LeadAlertGame[];
   /** Games whose status or score changed THIS pass. */
   changedGameIds: ReadonlySet<string>;
+  /**
+   * Roster ids with at least one team on this week's pick doc.
+   * `refreshLiveStandings` always passes this, including an empty set when
+   * nobody has picked. Omit it only in a fixture that is not exercising
+   * this guard.
+   */
+  pickedUserIds?: ReadonlySet<string>;
   nowMs: number;
 }): string[] {
-  const { weekNumber, week, current, previous, games, changedGameIds, nowMs } = input;
+  const { weekNumber, week, current, previous, games, changedGameIds, pickedUserIds, nowMs } =
+    input;
   if (week.status !== "picking" && week.status !== "locked") return [];
   if (typeof weekNumber !== "number") return [];
   if (previous == null || previous.weekNumber !== weekNumber) return [];
@@ -57,6 +69,9 @@ export function tookTheLeadRecipients(input: {
 
   const previousEntries = Array.isArray(previous.entries) ? previous.entries : [];
   if (!boardChanged(current, previousEntries)) return [];
+  if (pickedUserIds != null && rollingRosterMostlyUnpicked(week, current, pickedUserIds)) {
+    return [];
+  }
 
   const recipients: string[] = [];
   for (const entry of current) {
@@ -98,6 +113,55 @@ export function shouldNotifyGameFinal(input: {
 }): boolean {
   if (input.finalNotifiedAt != null) return false;
   return input.prevStatus !== "final" && input.nextStatus === "final";
+}
+
+/**
+ * User ids whose pick doc has at least one team. A saved draft counts — those
+ * picks are on the board. A blank doc does not.
+ */
+export function userIdsWithPicks(
+  pickDocs: ReadonlyArray<{ userId?: unknown; picks?: unknown }>
+): Set<string> {
+  const ids = new Set<string>();
+  for (const doc of pickDocs) {
+    if (typeof doc.userId !== "string" || doc.userId.length === 0) continue;
+    if (!pickMapHasTeam(doc.picks)) continue;
+    ids.add(doc.userId);
+  }
+  return ids;
+}
+
+/**
+ * Rolling lock scores a missed Pickem as a loss at kickoff. One correct
+ * Thursday pick is then strictly alone at 1–0 while most of the league has
+ * not picked. That push waits until pick docs are at least half the roster.
+ * Exactly half is enough, so a Thursday lead still notifies once the league
+ * has actually started picking. Deadline-lock weeks are unchanged.
+ */
+function rollingRosterMostlyUnpicked(
+  week: { pickLockMode?: unknown },
+  current: readonly LeadAlertEntry[],
+  pickedUserIds: ReadonlySet<string>
+): boolean {
+  if (!isRollingLock(week.pickLockMode)) return false;
+  const roster = new Set<string>();
+  for (const entry of current) {
+    if (entry.id.length > 0) roster.add(entry.id);
+  }
+  if (roster.size === 0) return false;
+  let picked = 0;
+  for (const id of roster) {
+    if (pickedUserIds.has(id)) picked += 1;
+  }
+  return picked * 2 < roster.size;
+}
+
+function pickMapHasTeam(picks: unknown): boolean {
+  if (picks == null || typeof picks !== "object") return false;
+  for (const value of Object.values(picks as Record<string, unknown>)) {
+    if (typeof value === "string" && value.trim().length > 0) return true;
+  }
+  return false;
 }
 
 /** Sole leader: points on the board, and strictly more wins than every other entry. */
