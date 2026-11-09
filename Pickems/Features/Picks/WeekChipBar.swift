@@ -67,7 +67,7 @@ struct WeekChipBar: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(
-                        isSelected ? Color.clear : Color.white.opacity(0.08),
+                        isSelected ? Color.clear : PickemsColors.hairline,
                         lineWidth: 1
                     )
             )

@@ -18,7 +18,6 @@ struct RootView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
         .background(PickemsAtmosphericBackground(palette: theme))
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }

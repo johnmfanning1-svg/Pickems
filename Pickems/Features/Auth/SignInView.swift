@@ -4,6 +4,7 @@ import AuthenticationServices
 struct SignInView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
+    @Environment(\.colorScheme) private var colorScheme
     @State private var mode: AuthMode = .signIn
     @State private var email = ""
     @State private var password = ""
@@ -48,7 +49,7 @@ struct SignInView: View {
                         }
                     }
                 }
-                .signInWithAppleButtonStyle(.white)
+                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
                 .clipShape(RoundedRectangle(cornerRadius: 12))

@@ -673,7 +673,7 @@ private struct WeekWinBurst: View {
                     let rect = CGRect(x: x - width / 2, y: y - 1.5, width: width, height: 3)
                     var burst = context
                     burst.opacity = 1 - progress
-                    let color = index.isMultiple(of: 2) ? accent : Color.white
+                    let color = index.isMultiple(of: 2) ? accent : PickemsColors.textPrimary
                     burst.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: .color(color))
                 }
             }

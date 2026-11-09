@@ -61,6 +61,24 @@ struct PickemsLiveActivityWidget: Widget {
 
 private struct LiveActivityLockScreen: View {
     let context: ActivityViewContext<PickemsLiveAttributes>
+    @Environment(\.colorScheme) private var systemScheme
+
+    /// Profile choice wins. System follows the lock screen's own appearance.
+    private var scheme: ColorScheme {
+        AppearancePreferenceStore.resolvedColorScheme() ?? systemScheme
+    }
+
+    private var primary: Color {
+        scheme == .dark ? .white : PickemsSurfaces.light.textPrimary.color
+    }
+
+    private var secondary: Color {
+        scheme == .dark ? Color.white.opacity(0.72) : PickemsSurfaces.light.textSecondary.color
+    }
+
+    private var rankInk: Color {
+        scheme == .dark ? Color.white.opacity(0.85) : PickemsSurfaces.light.textSecondary.color
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -68,30 +86,30 @@ private struct LiveActivityLockScreen: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(context.attributes.groupName)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(primary)
                         .lineLimit(1)
                     Text("W\(context.attributes.weekNumber)")
                         .font(.caption2.weight(.medium))
-                        .foregroundStyle(Color.white.opacity(0.72))
+                        .foregroundStyle(secondary)
                 }
                 Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(context.state.recordText)
                         .font(.headline.monospacedDigit().weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(primary)
                     if let rank = context.state.rankText {
                         Text(rank)
                             .font(.caption.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(Color.white.opacity(0.85))
+                            .foregroundStyle(rankInk)
                     }
                 }
             }
-            LiveActivityPickList(picks: context.state.picks, prominent: true)
+            LiveActivityPickList(picks: context.state.picks, prominent: true, scheme: scheme)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .activityBackgroundTint(Color(red: 0.07, green: 0.08, blue: 0.10))
-        .activitySystemActionForegroundColor(.white)
+        .activityBackgroundTint(scheme == .dark ? Color(red: 0.07, green: 0.08, blue: 0.10) : WidgetStyle.canvas(.light))
+        .activitySystemActionForegroundColor(primary)
         .widgetURL(LiveActivityWidgetLink.url(
             groupId: context.attributes.groupId,
             weekId: context.attributes.weekId,
@@ -104,16 +122,22 @@ private struct LiveActivityLockScreen: View {
 private struct LiveActivityPickList: View {
     let picks: [LiveActivityPick]
     let prominent: Bool
+    /// Nil on the Dynamic Island, which stays white on black.
+    var scheme: ColorScheme? = nil
+
+    private var muted: Color {
+        scheme == .light ? PickemsSurfaces.light.textSecondary.color : Color.white.opacity(0.8)
+    }
 
     var body: some View {
         if picks.isEmpty {
             Text("No picks this week")
                 .font(prominent ? .subheadline.weight(.semibold) : .caption.weight(.semibold))
-                .foregroundStyle(Color.white.opacity(0.8))
+                .foregroundStyle(muted)
         } else {
             VStack(alignment: .leading, spacing: prominent ? 6 : 4) {
                 ForEach(picks, id: \.gameId) { pick in
-                    LiveActivityPickRow(pick: pick, prominent: prominent)
+                    LiveActivityPickRow(pick: pick, prominent: prominent, scheme: scheme)
                 }
             }
         }
@@ -123,12 +147,19 @@ private struct LiveActivityPickList: View {
 private struct LiveActivityPickRow: View {
     let pick: LiveActivityPick
     let prominent: Bool
+    var scheme: ColorScheme? = nil
+
+    private var onDark: Bool { scheme != .light }
+
+    private var primary: Color {
+        onDark ? .white : PickemsSurfaces.light.textPrimary.color
+    }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             scoreText
                 .font(prominent ? .subheadline.monospacedDigit() : .caption.monospacedDigit())
-                .foregroundStyle(.white)
+                .foregroundStyle(primary)
                 .lineLimit(1)
             Spacer(minLength: 6)
             Text(trailing)
@@ -158,11 +189,11 @@ private struct LiveActivityPickRow: View {
     private var statusColor: Color {
         switch pick.result {
         case "covering", "won":
-            return Color(red: 0.45, green: 0.92, blue: 0.55)
+            return LiveActivityStatus.positive(onDark: onDark)
         case "trailing", "lost":
-            return Color(red: 1.0, green: 0.55, blue: 0.48)
+            return LiveActivityStatus.negative(onDark: onDark)
         default:
-            return Color.white.opacity(0.75)
+            return onDark ? Color.white.opacity(0.75) : PickemsSurfaces.light.textSecondary.color
         }
     }
 
@@ -171,6 +202,19 @@ private struct LiveActivityPickRow: View {
             return "\(pick.picked) \(left), \(pick.opponent) \(right), \(pick.resultLabel)"
         }
         return "\(pick.picked) versus \(pick.opponent), \(trailing)"
+    }
+}
+
+private enum LiveActivityStatus {
+    private static let coveringOnDark = ColorContrast.RGB(r: 0.45, g: 0.92, b: 0.55)
+    private static let trailingOnDark = ColorContrast.RGB(r: 1.0, g: 0.55, b: 0.48)
+
+    static func positive(onDark: Bool) -> Color {
+        (onDark ? coveringOnDark : ColorContrast.darkenedUntilReadable(coveringOnDark, against: ColorContrast.lightAppBackground)).color
+    }
+
+    static func negative(onDark: Bool) -> Color {
+        (onDark ? trailingOnDark : ColorContrast.darkenedUntilReadable(trailingOnDark, against: ColorContrast.lightAppBackground)).color
     }
 }
 

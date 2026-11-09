@@ -692,7 +692,7 @@ struct PicksView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(PickemsColors.hairlineSubtle, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -766,7 +766,7 @@ private struct PickemsGameList<Row: View>: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            .strokeBorder(PickemsColors.hairline, lineWidth: 1)
                     )
                     .padding(.horizontal, denseHorizontalPadding)
             } else {
@@ -784,7 +784,7 @@ private struct PickemsGameList<Row: View>: View {
                         .padding(.horizontal, usesDense ? 0 : comfortableHorizontalPadding)
                         .id(focusedGameRowId(game.id))
                     if usesDense, index < games.count - 1 {
-                        Divider().overlay(Color.white.opacity(0.08))
+                        Divider().overlay(PickemsColors.hairline)
                     }
                 }
             }

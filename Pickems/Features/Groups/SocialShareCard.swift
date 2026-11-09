@@ -17,7 +17,7 @@ struct SocialShareCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(PickemsColors.hairlineSubtle, lineWidth: 1)
                 )
         }
     }

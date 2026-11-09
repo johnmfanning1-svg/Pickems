@@ -134,6 +134,7 @@ private struct WidgetModeCanvas: View {
     var family: WidgetFamily
     var mode: WidgetRenderingMode
     var showsBackground: Bool = true
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         PickemsWidgetEntryView(entry: entry)
@@ -141,7 +142,7 @@ private struct WidgetModeCanvas: View {
             .environment(\.widgetRenderingMode, mode)
             .environment(\.showsWidgetBackgroundOverride, showsBackground)
             .frame(width: width, height: height)
-            .background(showsBackground && mode == .fullColor ? Color.black : Color.gray.opacity(0.35))
+            .background(showsBackground && mode == .fullColor ? WidgetStyle.canvas(AppearancePreferenceStore.resolvedColorScheme() ?? colorScheme) : Color.gray.opacity(0.35))
     }
 
     private var width: CGFloat {

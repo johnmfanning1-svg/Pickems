@@ -214,7 +214,7 @@ struct LeaguePickemsComparisonView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(
-                        isSelected ? Color.clear : Color.white.opacity(0.08),
+                        isSelected ? Color.clear : PickemsColors.hairline,
                         lineWidth: 1
                     )
             )
@@ -380,7 +380,7 @@ struct LeaguePickemsComparisonView: View {
                     )
                 }
                 Rectangle()
-                    .fill(Color.white.opacity(0.08))
+                    .fill(PickemsColors.hairline)
                     .frame(height: 1)
                     .accessibilityHidden(true)
                 HStack(alignment: .top, spacing: 12) {

@@ -51,7 +51,7 @@ struct HomeLeagueStatusHeader<Footer: View>: View {
             HStack(alignment: .top, spacing: 0) {
                 statColumn(title: "This week", stat: status.week)
                 Rectangle()
-                    .fill(Color.white.opacity(0.08))
+                    .fill(PickemsColors.hairline)
                     .frame(width: 1, height: 44)
                 statColumn(title: "Season", stat: status.season)
             }

@@ -188,7 +188,7 @@ struct PickemsCard<Content: View>: View {
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                    .strokeBorder(PickemsColors.hairlineSubtle, lineWidth: 1)
             )
     }
 }

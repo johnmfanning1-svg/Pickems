@@ -107,13 +107,13 @@ struct LeaguePickemsBoard: View {
                 }
                 VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    keyChip(PickBoardStatus.trailing.label(for: pickMode), fill: PickemsColors.warning, ink: .black)
-                    keyChip(PickBoardStatus.covering.label(for: pickMode), fill: PickemsColors.covering, ink: .white)
-                    keyChip("Won", fill: PickemsColors.success, ink: .black)
+                    keyChip(PickBoardStatus.trailing.label(for: pickMode), fill: PickemsColors.warning, ink: PickemsColors.onWarning)
+                    keyChip(PickBoardStatus.covering.label(for: pickMode), fill: PickemsColors.covering, ink: PickemsColors.onCovering)
+                    keyChip("Won", fill: PickemsColors.success, ink: PickemsColors.onSuccess)
                 }
                 HStack(spacing: 6) {
-                    keyChip("Lost", fill: PickemsColors.lost, ink: .white)
-                    keyChip("Push", fill: PickemsColors.push, ink: .white)
+                    keyChip("Lost", fill: PickemsColors.lost, ink: PickemsColors.onLost)
+                    keyChip("Push", fill: PickemsColors.push, ink: PickemsColors.onPush)
                 }
                 }
             }
@@ -132,11 +132,11 @@ struct LeaguePickemsBoard: View {
 
     @ViewBuilder
     private var keyChips: some View {
-        keyChip(PickBoardStatus.trailing.label(for: pickMode), fill: PickemsColors.warning, ink: .black)
-        keyChip(PickBoardStatus.covering.label(for: pickMode), fill: PickemsColors.covering, ink: .white)
-        keyChip("Won", fill: PickemsColors.success, ink: .black)
-        keyChip("Lost", fill: PickemsColors.lost, ink: .white)
-        keyChip("Push", fill: PickemsColors.push, ink: .white)
+        keyChip(PickBoardStatus.trailing.label(for: pickMode), fill: PickemsColors.warning, ink: PickemsColors.onWarning)
+        keyChip(PickBoardStatus.covering.label(for: pickMode), fill: PickemsColors.covering, ink: PickemsColors.onCovering)
+        keyChip("Won", fill: PickemsColors.success, ink: PickemsColors.onSuccess)
+        keyChip("Lost", fill: PickemsColors.lost, ink: PickemsColors.onLost)
+        keyChip("Push", fill: PickemsColors.push, ink: PickemsColors.onPush)
     }
 
     private func keyChip(_ title: String, fill: Color, ink: Color) -> some View {
@@ -196,7 +196,7 @@ struct LeaguePickemsBoard: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                .strokeBorder(PickemsColors.hairline, lineWidth: 1)
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(
@@ -233,7 +233,7 @@ struct LeaguePickemsBoard: View {
         .overlay(alignment: .trailing) {
             if showsPinDivider {
                 Rectangle()
-                    .fill(Color.white.opacity(0.18))
+                    .fill(PickemsColors.separator)
                     .frame(width: 1)
                     .accessibilityHidden(true)
             }
@@ -494,8 +494,11 @@ private extension PickBoardStatus {
 
     var foreground: Color {
         switch self {
-        case .covering, .lost, .push: return .white
-        case .trailing, .won: return .black
+        case .covering: return PickemsColors.onCovering
+        case .trailing: return PickemsColors.onWarning
+        case .won: return PickemsColors.onSuccess
+        case .lost: return PickemsColors.onLost
+        case .push: return PickemsColors.onPush
         case .none, .pending: return PickemsColors.textPrimary
         }
     }

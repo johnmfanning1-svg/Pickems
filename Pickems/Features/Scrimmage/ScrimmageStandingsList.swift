@@ -70,7 +70,7 @@ private struct ScrimmageStandingRow: View {
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(
-                    isHighlighted ? theme.accent.opacity(0.45) : Color.white.opacity(0.06),
+                    isHighlighted ? theme.accent.opacity(0.45) : PickemsColors.hairlineSubtle,
                     lineWidth: 1
                 )
         )

@@ -5,6 +5,8 @@ import FirebaseCore
 struct PickemsApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appState: AppState
+    @AppStorage(AppearancePreference.storageKey, store: AppearancePreferenceStore.appGroupDefaults)
+    private var appearanceRaw = AppearancePreference.defaultPreference.rawValue
 
     init() {
         // Idempotent with AppDelegate — whichever runs first wins. Must precede AppState
@@ -33,6 +35,12 @@ struct PickemsApp: App {
                     }
                     .onChange(of: appState.authService.currentUser?.favoriteTeamId) { _, _ in
                         appState.appTheme.sync(from: appState.authService.currentUser)
+                    }
+                    .preferredColorScheme(
+                        AppearancePreference.resolve(stored: appearanceRaw).resolvedColorScheme
+                    )
+                    .onChange(of: appearanceRaw) { _, _ in
+                        PickemsTheme.apply(palette: appState.appTheme.palette)
                     }
                     .onOpenURL { url in
                         if let action = DeepLinkRouter.parse(url: url) {

@@ -25,11 +25,30 @@ extension EnvironmentValues {
 
 enum WidgetStyle {
     static let rowSpacing: CGFloat = 6
-    static let brandRed = Color(red: 0.86, green: 0.15, blue: 0.15)
-    static let winGreen = Color(red: 0.20, green: 0.78, blue: 0.35)
-    static let progressGold = Color(red: 0.96, green: 0.76, blue: 0.26)
     static let neutralBar = Color(white: 0.45)
-    static let canvas = Color(red: 0.08, green: 0.08, blue: 0.10)
+
+    static func canvas(_ scheme: ColorScheme) -> Color {
+        surface(\.background, scheme)
+    }
+
+    static func brandRed(_ scheme: ColorScheme) -> Color {
+        surface(\.accent, scheme)
+    }
+
+    static func winGreen(_ scheme: ColorScheme) -> Color {
+        surface(\.success, scheme)
+    }
+
+    static func progressGold(_ scheme: ColorScheme) -> Color {
+        surface(\.progressGold, scheme)
+    }
+
+    private static func surface(
+        _ key: KeyPath<PickemsSurfacePalette, ColorContrast.RGB>,
+        _ scheme: ColorScheme
+    ) -> Color {
+        PickemsSurfaces.palette(for: scheme)[keyPath: key].color
+    }
 
     static func padding(for family: WidgetFamily) -> CGFloat {
         family == .systemSmall ? 14 : 16
@@ -134,6 +153,7 @@ struct HomeWidgetBackground: ViewModifier {
     @Environment(\.widgetRenderingMode) private var renderingMode
     @Environment(\.showsWidgetContainerBackground) private var systemShowsBackground
     @Environment(\.showsWidgetBackgroundOverride) private var showsBackgroundOverride
+    @Environment(\.colorScheme) private var colorScheme
 
     private var showsBackground: Bool { showsBackgroundOverride ?? systemShowsBackground }
 
@@ -149,7 +169,7 @@ struct HomeWidgetBackground: ViewModifier {
                 if !showsBackground || renderingMode != .fullColor {
                     Color.clear
                 } else {
-                    WidgetStyle.canvas
+                    WidgetStyle.canvas(colorScheme)
                 }
             }
     }
@@ -170,6 +190,7 @@ struct YouRowChrome: ViewModifier {
     var isYou: Bool
 
     @Environment(\.widgetRenderingMode) private var renderingMode
+    @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
         content
@@ -178,7 +199,7 @@ struct YouRowChrome: ViewModifier {
             .background {
                 if isYou {
                     Capsule()
-                        .fill(WidgetStyle.accented(WidgetStyle.brandRed, mode: renderingMode).opacity(renderingMode == .fullColor ? 0.22 : 0.18))
+                        .fill(WidgetStyle.accented(WidgetStyle.brandRed(colorScheme), mode: renderingMode).opacity(renderingMode == .fullColor ? 0.22 : 0.18))
                         .widgetAccentable()
                 }
             }

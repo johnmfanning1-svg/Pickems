@@ -14,6 +14,7 @@ struct DeadlinePhaseView: View {
     @Environment(\.showsWidgetContainerBackground) private var systemShowsBackground
     @Environment(\.showsWidgetBackgroundOverride) private var showsBackgroundOverride
     @Environment(\.isLuminanceReduced) private var luminanceReduced
+    @Environment(\.colorScheme) private var colorScheme
 
     private var family: WidgetFamily { familyOverride ?? systemFamily }
     private var showsBackground: Bool { showsBackgroundOverride ?? systemShowsBackground }
@@ -83,7 +84,7 @@ struct DeadlinePhaseView: View {
             if allIn {
                 Text("All picks in ✓")
                     .font(WidgetStyle.heroFont(for: family, enlarged: enlarged))
-                    .foregroundStyle(WidgetStyle.accented(WidgetStyle.winGreen, mode: renderingMode))
+                    .foregroundStyle(WidgetStyle.accented(WidgetStyle.winGreen(colorScheme), mode: renderingMode))
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
                     .widgetAccentable()
@@ -141,7 +142,7 @@ struct DeadlinePhaseView: View {
         if allIn {
             Text("All picks in ✓")
                 .font(WidgetStyle.heroFont(for: family, enlarged: enlarged))
-                .foregroundStyle(WidgetStyle.accented(WidgetStyle.winGreen, mode: renderingMode))
+                .foregroundStyle(WidgetStyle.accented(WidgetStyle.winGreen(colorScheme), mode: renderingMode))
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
                 .widgetAccentable()
@@ -208,7 +209,7 @@ struct DeadlinePhaseView: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.primary.opacity(0.15))
                 Capsule()
-                    .fill(WidgetStyle.accented(WidgetStyle.progressGold, mode: renderingMode))
+                    .fill(WidgetStyle.accented(WidgetStyle.progressGold(colorScheme), mode: renderingMode))
                     .frame(width: max(4, proxy.size.width * fraction))
                     .widgetAccentable()
             }
@@ -364,6 +365,7 @@ struct SnapshotGameLine: View {
     var linked: Bool
 
     @Environment(\.widgetRenderingMode) private var renderingMode
+    @Environment(\.colorScheme) private var colorScheme
 
     private var status: WidgetPickStatus {
         WidgetScoreboard.pickStatus(game, now: now)
@@ -410,7 +412,7 @@ struct SnapshotGameLine: View {
                     .opacity(stale && live ? 0.45 : 1)
             }
         }
-        .foregroundStyle(picked ? WidgetStyle.accented(WidgetStyle.brandRed, mode: renderingMode) : Color.primary)
+        .foregroundStyle(picked ? WidgetStyle.accented(WidgetStyle.brandRed(colorScheme), mode: renderingMode) : Color.primary)
         .widgetAccentable(picked)
     }
 
@@ -425,8 +427,8 @@ struct SnapshotGameLine: View {
 
     private var glyphColor: Color {
         switch status {
-        case .winning, .finalWin: return WidgetStyle.winGreen
-        case .losing, .finalLoss: return WidgetStyle.brandRed
+        case .winning, .finalWin: return WidgetStyle.winGreen(colorScheme)
+        case .losing, .finalLoss: return WidgetStyle.brandRed(colorScheme)
         default: return .secondary
         }
     }
