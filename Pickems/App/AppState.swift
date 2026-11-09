@@ -192,6 +192,7 @@ final class AppState {
         }
 
         await notificationService.saveToken(for: userId)
+        LiveActivityController.resume()
         CrashReport.breadcrumb("session.on_auth_ready_complete", metadata: [
             "gen": "\(generation)",
             "uid": AppEvents.shortUID(userId),
@@ -332,7 +333,11 @@ final class AppState {
     }
 
     func signOut() async throws {
-        if let uid = currentUserId {
+        let uid = currentUserId
+        LiveActivityController.suspend()
+        await LiveActivityController.endAll()
+        await LiveActivityController.drainTokenWrites()
+        if let uid {
             await notificationService.clearStoredToken(for: uid)
         }
         try authService.signOut()

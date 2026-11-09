@@ -20,6 +20,7 @@ import {
 import { espnScoreboardWeek } from "./cfbWeekCalendar";
 import { kickoffsMillisByEspnEventId } from "./selectionCatalog";
 import { sendToUser, sendToUsers } from "./notifications";
+import { pushLiveActivityUpdates } from "./liveActivityPush";
 import { shouldSendDeadlinePush } from "./deadlinePushPrefs";
 import {
   classifyGameFinal,
@@ -613,6 +614,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
 
       let anyFinalizedThisPass = false;
       const changedGameIds = new Set<string>();
+      const scoreChangedGameIds = new Set<string>();
       const updatedGames: SlateGameDoc[] = [];
       const noPickGames: NoPickGame[] = [];
       const lockKickoffs: Record<string, Timestamp> = {};
@@ -707,7 +709,8 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
           patch.liveSpreadTeamId = livePatch.liveSpreadTeamId;
         }
         const spreadWrite = freeze != null || livePatch != null;
-        if (slateGameNeedsWrite(game, nextStatus, parsed) || spreadWrite) {
+        const scoreChanged = slateGameNeedsWrite(game, nextStatus, parsed);
+        if (scoreChanged || spreadWrite) {
           const transitioningToFinal = prevStatus !== "final" && nextStatus === "final";
           let notifyFinal = false;
           if (transitioningToFinal) {
@@ -726,6 +729,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
           } else {
             await gameDoc.ref.update(patch);
           }
+          if (scoreChanged) scoreChangedGameIds.add(game.id);
           changedGameIds.add(game.id);
           if (transitioningToFinal) anyFinalizedThisPass = true;
           if (notifyFinal) {
@@ -809,6 +813,35 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
             anyFinalizedThisPass ? changedGameIds : new Set<string>(),
             now
           );
+        }
+      }
+
+      if (scoreChangedGameIds.size > 0 || allFinal) {
+        const rules = (groupDoc.data()?.rules ?? {}) as {
+          allowLatePicks?: unknown;
+          latePickPenaltyWins?: unknown;
+        };
+        const penalty = rules.latePickPenaltyWins;
+        try {
+          await pushLiveActivityUpdates({
+            groupId,
+            weekId,
+            games: updatedGames,
+            changedGameIds: scoreChangedGameIds,
+            pickMode,
+            dismiss: allFinal,
+            nowMs: now,
+            memberIds,
+            applyLatePenalty: !rolling && rules.allowLatePicks === true,
+            latePickPenaltyWins: typeof penalty === "number" && Number.isFinite(penalty) ? penalty : 0,
+            deadline: week.pickDeadline,
+          });
+        } catch (err) {
+          const code =
+            err && typeof err === "object" && "code" in err
+              ? String((err as { code?: unknown }).code ?? "")
+              : "";
+          logger.error("live activity update failed", { groupId, weekId, code });
         }
       }
     }
