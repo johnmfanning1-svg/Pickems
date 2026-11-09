@@ -58,8 +58,8 @@ struct CoverMomentView: View {
             withAnimation(.spring(response: 0.55, dampingFraction: 0.78)) {
                 appeared = true
             }
-            // Misses stay on the card. This sheet is a win or a cover.
-            if resultTitle != "Missed" {
+            // Losses stay on the card. This sheet is a win or a cover.
+            if resultTitle != "Loss" {
                 PickemsHaptics.success()
             }
         }

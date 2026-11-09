@@ -91,7 +91,7 @@ enum CelebrationPolicy {
         let title: String
         switch inline {
         case .win(let winTitle): title = winTitle
-        case .miss: title = "Missed"
+        case .miss: title = "Loss"
         case .push: title = "Push"
         }
         let link = isNeutral ? "vs" : "at"
@@ -121,8 +121,10 @@ enum CelebrationPolicy {
         )
     }
 
-    /// First look, a return to the foreground, or a background update marks finals as seen and presents nothing.
-    /// A later foreground update presents the first new correct pick and keeps misses inline.
+    /// First look, a return to the foreground, or a background update marks settled
+    /// finals as seen and presents nothing. A final with no win, miss, or push yet
+    /// stays unseen, so it can still celebrate when the grade arrives.
+    /// A later foreground update presents the first new correct pick and keeps losses inline.
     static func observe(
         games: [ObservedGame],
         previouslySeen: Set<String>,
@@ -136,15 +138,15 @@ enum CelebrationPolicy {
         var inline: [String: InlineResult] = [:]
         var sheet: String?
         for game in games where game.isFinal {
-            let isNew = !seen.contains(game.id)
-            seen.insert(game.id)
-            guard isNew, !holdBack else { continue }
             guard let result = inlineResult(
                 isFinal: true,
                 isCorrect: game.isCorrect,
                 isPush: game.isPush,
                 winTitle: winTitle
             ) else { continue }
+            let isNew = !seen.contains(game.id)
+            seen.insert(game.id)
+            guard isNew, !holdBack else { continue }
             inline[game.id] = result
             if sheet == nil, case .win = result {
                 sheet = game.id
@@ -169,6 +171,34 @@ enum CelebrationPolicy {
 
     static func shouldShowWeekWin(kind: WeekWinKind?, alreadyCelebrated: Bool) -> Bool {
         kind != nil && !alreadyCelebrated
+    }
+
+    struct WeekWinCardContent: Equatable {
+        var title: String
+        var wins: Int
+        var losses: Int
+        var isPerfect: Bool
+    }
+
+    /// Card for this user, or nil when the result is not in yet, already showing,
+    /// or already celebrated. A later call can still reveal once `kind` arrives.
+    static func weekWinCard(
+        kind: WeekWinKind?,
+        wins: Int?,
+        losses: Int?,
+        weekNumber: Int,
+        isPerfect: Bool,
+        alreadyCelebrated: Bool,
+        alreadyPresented: Bool
+    ) -> WeekWinCardContent? {
+        guard !alreadyPresented, let kind, let wins, let losses else { return nil }
+        guard shouldShowWeekWin(kind: kind, alreadyCelebrated: alreadyCelebrated) else { return nil }
+        return WeekWinCardContent(
+            title: kind.title(weekNumber: weekNumber),
+            wins: wins,
+            losses: losses,
+            isPerfect: isPerfect
+        )
     }
 
     static func recordLine(wins: Int, losses: Int) -> String {
