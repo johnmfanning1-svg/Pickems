@@ -185,7 +185,7 @@ struct CelebrationPolicyTests {
         #expect(miss?.feedback == CelebrationPolicy.Feedback.none)
         #expect(miss?.announcement == "Loss, Georgia at Alabama")
         #expect(
-            miss?.announcement?.hasPrefix(
+            miss?.announcement.hasPrefix(
                 GamePickRowPresentation.resultBadgeTitle(.loss, winTitle: "Covered")
             ) == true
         )
