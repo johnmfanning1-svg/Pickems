@@ -249,16 +249,19 @@ struct LeaguePickemsBoard: View {
     }
 
     private func memberHeaderCell(_ member: GroupMember) -> some View {
-        Text(columnTitle(for: member))
-            .font((isDense ? Font.caption2 : Font.caption).weight(.bold))
-            .foregroundStyle(PickemsColors.textPrimary)
-            .multilineTextAlignment(.center)
-            .lineLimit(2)
-            .minimumScaleFactor(0.7)
-            .frame(width: fillsAvailableWidth ? nil : pickColumnWidth, height: headerHeight)
-            .frame(maxWidth: fillsAvailableWidth ? .infinity : nil)
-            .background(PickemsColors.cardBackground)
-            .accessibilityLabel(member.displayName)
+        LeagueMemberProfileLink(userId: member.id) {
+            Text(columnTitle(for: member))
+                .font((isDense ? Font.caption2 : Font.caption).weight(.bold))
+                .foregroundStyle(PickemsColors.textPrimary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: fillsAvailableWidth ? nil : pickColumnWidth, height: headerHeight)
+        .frame(maxWidth: fillsAvailableWidth ? .infinity : nil)
+        .background(PickemsColors.cardBackground)
+        .accessibilityLabel(member.displayName)
     }
 
     private func pickRow(for game: SlateGame, members: [GroupMember]) -> some View {

@@ -86,9 +86,7 @@ struct DynastyDetailView: View {
                                 Spacer()
                                 Image(systemName: "trophy.fill")
                                     .foregroundStyle(theme.accent)
-                                Text(archive.championDisplayName ?? "—")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(theme.accent)
+                                championName(archive)
                             }
                             if let champ = archive.finalStandings.first {
                                 Text("Final: \(champ.seasonWins)-\(champ.seasonLosses) · \(archive.weekCount) weeks played")
@@ -111,33 +109,38 @@ struct DynastyDetailView: View {
                         .listRowBackground(PickemsColors.cardBackground)
                 } else {
                     ForEach(careers) { career in
-                        HStack {
-                            InitialsAvatar(
-                                initials: String(career.displayName.prefix(2)).uppercased(),
-                                colorHex: career.avatarColorHex,
-                                size: 40
-                            )
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(career.displayName)
-                                    .font(.headline)
-                                    .foregroundStyle(PickemsColors.textPrimary)
-                                Text("\(career.titles) titles · \(career.seasonsPlayed) seasons")
-                                    .font(.caption)
-                                    .foregroundStyle(PickemsColors.textSecondary)
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text(career.recordLabel)
-                                    .font(.headline.monospacedDigit())
-                                    .foregroundStyle(PickemsColors.textPrimary)
-                                if let best = career.bestFinish {
-                                    Text("Best #\(best)")
-                                        .font(.caption2)
+                        NavigationLink {
+                            LeagueMemberProfileView(userId: career.id)
+                        } label: {
+                            HStack {
+                                InitialsAvatar(
+                                    initials: String(career.displayName.prefix(2)).uppercased(),
+                                    colorHex: career.avatarColorHex,
+                                    size: 40
+                                )
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(career.displayName)
+                                        .font(.headline)
+                                        .foregroundStyle(PickemsColors.textPrimary)
+                                    Text("\(career.titles) titles · \(career.seasonsPlayed) seasons")
+                                        .font(.caption)
                                         .foregroundStyle(PickemsColors.textSecondary)
+                                }
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text(career.recordLabel)
+                                        .font(.headline.monospacedDigit())
+                                        .foregroundStyle(PickemsColors.textPrimary)
+                                    if let best = career.bestFinish {
+                                        Text("Best #\(best)")
+                                            .font(.caption2)
+                                            .foregroundStyle(PickemsColors.textSecondary)
+                                    }
                                 }
                             }
                         }
                         .listRowBackground(PickemsColors.cardBackground)
+                        .accessibilityHint("Opens league profile")
                     }
                 }
             } header: {
@@ -148,5 +151,22 @@ struct DynastyDetailView: View {
         .pickemsScreenBackground()
         .navigationTitle("Dynasty Wall")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private func championName(_ archive: SeasonArchive) -> some View {
+        let name = archive.championDisplayName ?? "—"
+        if let userId = archive.championUserId, !userId.isEmpty {
+            LeagueMemberProfileLink(userId: userId) {
+                Text(name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(theme.accent)
+            }
+            .accessibilityLabel("\(archive.seasonYear.pickemsYearString) champion, \(name)")
+        } else {
+            Text(name)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(theme.accent)
+        }
     }
 }

@@ -49,9 +49,14 @@ struct SubmissionStatusView: View {
         return List {
             Section {
                 ForEach(rows) { row in
-                    rosterRow(row)
-                        .listRowBackground(PickemsColors.cardBackground)
-                        .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+                    NavigationLink {
+                        LeagueMemberProfileView(userId: row.id)
+                    } label: {
+                        rosterRow(row)
+                    }
+                    .listRowBackground(PickemsColors.cardBackground)
+                    .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+                    .accessibilityHint("Opens league profile")
                 }
             } header: {
                 Text("\(submitted) of \(rows.count) submitted")

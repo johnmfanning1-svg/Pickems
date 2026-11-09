@@ -12,6 +12,8 @@ struct LeaderboardRow: View {
     var reservesDisclosureSpace: Bool = false
     /// When set, ranks after first place show games back of this win total instead of batting average.
     var leaderWins: Int? = nil
+    /// Name and avatar push this member's league profile. The record column stays put.
+    var opensProfile: Bool = false
     @Environment(\.themePalette) private var theme
 
     private var recordWins: Int { showWeekly ? entry.weeklyWins : entry.seasonWins }
@@ -27,6 +29,34 @@ struct LeaderboardRow: View {
     }
 
     var body: some View {
+        HStack(spacing: PickemsSpacing.sm) {
+            if opensProfile {
+                LeagueMemberProfileLink(userId: entry.id) {
+                    identity
+                }
+                .accessibilityLabel(accessibilityLabel)
+            } else {
+                identity
+            }
+
+            Spacer(minLength: 8)
+
+            recordColumn
+                .accessibilityHidden(opensProfile)
+
+            if showsDisclosure || reservesDisclosureSpace {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .opacity(showsDisclosure ? 1 : 0)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.vertical, 6)
+        .modifier(LeaderboardRowAccessibility(opensProfile: opensProfile, label: accessibilityLabel))
+    }
+
+    private var identity: some View {
         HStack(spacing: PickemsSpacing.sm) {
             Text("#\(entry.rank)")
                 .font(PickemsTypography.display(18).monospacedDigit())
@@ -48,6 +78,7 @@ struct LeaderboardRow: View {
                     Text(entry.displayName)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(PickemsColors.textPrimary)
+                        .lineLimit(1)
                     if isCommissioner {
                         Image(systemName: "gavel")
                             .font(.caption.weight(.semibold))
@@ -67,31 +98,20 @@ struct LeaderboardRow: View {
                     StreakBadgeView(streak: streak, isPerfect: isPerfectSaturday)
                 }
             }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(recordWins)-\(recordLosses)")
-                    .font(.headline.monospacedDigit())
-                    .foregroundStyle(PickemsColors.textPrimary)
-                Text(secondaryCaption)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(PickemsColors.textSecondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-
-            if showsDisclosure || reservesDisclosureSpace {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(PickemsColors.textSecondary)
-                    .opacity(showsDisclosure ? 1 : 0)
-                    .accessibilityHidden(true)
-            }
         }
-        .padding(.vertical, 6)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var recordColumn: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text("\(recordWins)-\(recordLosses)")
+                .font(.headline.monospacedDigit())
+                .foregroundStyle(PickemsColors.textPrimary)
+            Text(secondaryCaption)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(PickemsColors.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
     }
 
     private var accessibilityLabel: String {
@@ -124,5 +144,20 @@ struct LeaderboardRow: View {
         let back = leaderWins - recordWins
         if back == 0 { return "Even" }
         return "\(back) games back"
+    }
+}
+
+private struct LeaderboardRowAccessibility: ViewModifier {
+    let opensProfile: Bool
+    let label: String
+
+    func body(content: Content) -> some View {
+        if opensProfile {
+            content.accessibilityElement(children: .contain)
+        } else {
+            content
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(label)
+        }
     }
 }

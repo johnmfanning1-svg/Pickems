@@ -38,12 +38,17 @@ struct MemberListView: View {
             } else {
                 Section {
                     ForEach(sortedMembers) { member in
-                        MemberRow(
-                            member: member,
-                            isCommissioner: member.id == commissionerId,
-                            coordinatorRole: appState.groupService.selectedGroup?.coordinatorRole(for: member.id),
-                            career: appState.groupService.careerRecord(for: member.id)
-                        )
+                        NavigationLink {
+                            LeagueMemberProfileView(userId: member.id)
+                        } label: {
+                            MemberRow(
+                                member: member,
+                                isCommissioner: member.id == commissionerId,
+                                coordinatorRole: appState.groupService.selectedGroup?.coordinatorRole(for: member.id),
+                                career: appState.groupService.careerRecord(for: member.id)
+                            )
+                        }
+                        .accessibilityHint("Opens league profile")
                     }
                 } header: {
                     if let group = appState.groupService.selectedGroup {

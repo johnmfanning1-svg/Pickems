@@ -928,33 +928,40 @@ private struct LeaderboardStandingRow: View {
     var leaderWins: Int? = nil
 
     var body: some View {
-        Group {
-            if canCompare {
-                NavigationLink {
-                    LeaguePickemsComparisonView(opponent: entry)
-                } label: {
-                    LeaderboardRow(
-                        entry: entry,
-                        showWeekly: showWeekly,
-                        isCommissioner: isCommissioner,
-                        coordinatorRole: coordinatorRole,
-                        showsDisclosure: true,
-                        leaderWins: leaderWins
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("Compare your Pickems with \(entry.displayName)")
-            } else {
-                LeaderboardRow(
-                    entry: entry,
-                    showWeekly: showWeekly,
-                    isCommissioner: isCommissioner,
-                    coordinatorRole: coordinatorRole,
-                    reservesDisclosureSpace: true,
-                    leaderWins: leaderWins
-                )
-            }
+        HStack(spacing: 0) {
+            LeaderboardRow(
+                entry: entry,
+                showWeekly: showWeekly,
+                isCommissioner: isCommissioner,
+                coordinatorRole: coordinatorRole,
+                showsDisclosure: false,
+                reservesDisclosureSpace: false,
+                leaderWins: leaderWins,
+                opensProfile: true
+            )
+            compareLink
         }
         .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private var compareLink: some View {
+        if canCompare {
+            NavigationLink {
+                LeaguePickemsComparisonView(opponent: entry)
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .frame(width: 28, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Compare Pickems with \(entry.displayName)")
+        } else {
+            Color.clear
+                .frame(width: 28, height: 44)
+                .accessibilityHidden(true)
+        }
     }
 }
