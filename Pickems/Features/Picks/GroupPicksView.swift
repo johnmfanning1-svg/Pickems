@@ -284,25 +284,21 @@ struct GroupPicksView: View {
         let isComm = member.id == commissionerId
 
         VStack(spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    expansion.toggle(member.id, defaultCollapsed: sectionsStartCollapsed)
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    InitialsAvatar(
-                        initials: member.initials,
-                        colorHex: member.avatarColorHex,
-                        imageURL: member.avatarImageURL
-                            ?? (member.id == currentUserId ? appState.authService.currentUser?.avatarImageURL : nil),
-                        size: 32
-                    )
-
-                    VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 10) {
+                LeagueMemberProfileLink(userId: member.id) {
+                    HStack(spacing: 10) {
+                        InitialsAvatar(
+                            initials: member.initials,
+                            colorHex: member.avatarColorHex,
+                            imageURL: member.avatarImageURL
+                                ?? (member.id == currentUserId ? appState.authService.currentUser?.avatarImageURL : nil),
+                            size: 32
+                        )
                         HStack(spacing: 6) {
                             Text(member.displayName)
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(PickemsColors.textPrimary)
+                                .lineLimit(1)
                             if isComm {
                                 Image(systemName: "gavel")
                                     .font(.caption.weight(.bold))
@@ -313,7 +309,16 @@ struct GroupPicksView: View {
                                 LeagueRoleBadge(role: seat)
                             }
                         }
-                        HStack(spacing: 8) {
+                    }
+                }
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        expansion.toggle(member.id, defaultCollapsed: sectionsStartCollapsed)
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
                             Text("\(made)/\(total)")
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(PickemsColors.textSecondary)
@@ -323,32 +328,29 @@ struct GroupPicksView: View {
                                     .foregroundStyle(PickemsColors.warning)
                             }
                         }
+                        Spacer(minLength: 8)
+                        StatusBadge(
+                            text: statusLabel(done: done),
+                            color: done ? PickemsColors.success : PickemsColors.warning
+                        )
+                        Image(systemName: "chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(PickemsColors.textSecondary)
+                            .rotationEffect(.degrees(isCollapsed ? -90 : 0))
                     }
-
-                    Spacer(minLength: 8)
-
-                    StatusBadge(
-                        text: statusLabel(done: done),
-                        color: done ? PickemsColors.success : PickemsColors.warning
-                    )
-
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(PickemsColors.textSecondary)
-                        .rotationEffect(.degrees(isCollapsed ? -90 : 0))
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(PickemsColors.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
-                )
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(statusLabel(done: done)), \(made) of \(total)")
+                .accessibilityHint(isCollapsed ? "Show details" : "Hide details")
             }
-            .buttonStyle(.plain)
-            .accessibilityHint(isCollapsed ? "Show details" : "Hide details")
-            .accessibilityAddTraits(.isButton)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(PickemsColors.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+            )
             if !isCollapsed {
                 VStack(spacing: 8) {
                     memberBody(member: member, pick: pick, done: done)

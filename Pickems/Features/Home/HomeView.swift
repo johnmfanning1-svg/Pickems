@@ -123,7 +123,7 @@ struct HomeView: View {
             }
 
             if let status = leagueStatus {
-                HomeLeagueStatusHeader(status: status) {
+                HomeLeagueStatusHeader(status: status, profileUserId: appState.currentUserId) {
                     homeCallToAction
                 }
                 .padding(.horizontal)
@@ -232,7 +232,8 @@ struct HomeView: View {
                             entry: entry,
                             showWeekly: true,
                             isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
-                            coordinatorRole: appState.groupService.selectedGroup?.coordinatorRole(for: entry.id)
+                            coordinatorRole: appState.groupService.selectedGroup?.coordinatorRole(for: entry.id),
+                            opensProfile: true
                         )
                             .padding(.horizontal)
                     }

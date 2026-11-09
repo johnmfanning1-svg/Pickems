@@ -17,18 +17,19 @@ struct WeekAwardsBanner: View {
                     .font(PickemsTypography.section)
                     .foregroundStyle(PickemsColors.textPrimary)
 
-                awardRow(title: "Sharpshooter", subtitle: "Best W–L", name: name(for: awards.sharpshooterUserId), icon: "scope")
-                awardRow(title: "Heartbreaker", subtitle: "Most near-misses", name: name(for: awards.heartbreakerUserId), icon: "heart.slash")
-                awardRow(title: "Contrarian", subtitle: "Most unique covers", name: name(for: awards.contrarianUserId), icon: "arrow.triangle.branch")
+                awardRow(title: "Sharpshooter", subtitle: "Best W–L", userId: awards.sharpshooterUserId, icon: "scope")
+                awardRow(title: "Heartbreaker", subtitle: "Most near-misses", userId: awards.heartbreakerUserId, icon: "heart.slash")
+                awardRow(title: "Contrarian", subtitle: "Most unique covers", userId: awards.contrarianUserId, icon: "arrow.triangle.branch")
             }
         }
     }
 
-    private func awardRow(title: String, subtitle: String, name: String, icon: String) -> some View {
+    private func awardRow(title: String, subtitle: String, userId: String?, icon: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .foregroundStyle(theme.accent)
                 .frame(width: 24)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
@@ -37,6 +38,21 @@ struct WeekAwardsBanner: View {
                     .foregroundStyle(PickemsColors.textSecondary)
             }
             Spacer()
+            awardName(title: title, userId: userId)
+        }
+    }
+
+    @ViewBuilder
+    private func awardName(title: String, userId: String?) -> some View {
+        let name = name(for: userId)
+        if let userId {
+            LeagueMemberProfileLink(userId: userId) {
+                Text(name)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(theme.accent)
+            }
+            .accessibilityLabel("\(title), \(name)")
+        } else {
             Text(name)
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(theme.accent)

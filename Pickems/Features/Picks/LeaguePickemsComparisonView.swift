@@ -366,8 +366,18 @@ struct LeaguePickemsComparisonView: View {
         return PickemsCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 12) {
-                    playerBlock(title: "You", weekly: youWeekText, season: youSeasonText)
-                    playerBlock(title: opponentShortName, weekly: themWeekText, season: themSeasonText)
+                    playerBlock(
+                        title: "You",
+                        weekly: youWeekText,
+                        season: youSeasonText,
+                        profileUserId: currentUserId
+                    )
+                    playerBlock(
+                        title: opponentShortName,
+                        weekly: themWeekText,
+                        season: themSeasonText,
+                        profileUserId: opponent.id
+                    )
                 }
                 Rectangle()
                     .fill(Color.white.opacity(0.08))
@@ -378,18 +388,45 @@ struct LeaguePickemsComparisonView: View {
                     gapBlock(title: "Season", phrase: seasonPhrase, gamesAhead: seasonGap)
                 }
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(
-                "You \(youWeekText) \(weeklyGapTitle.lowercased()), \(youSeasonText) this season. \(opponent.displayName) \(themWeekText) \(weeklyGapTitle.lowercased()), \(themSeasonText) this season. \(weeklyGapTitle) \(weekPhrase). Season \(seasonPhrase)."
-            )
+            .accessibilityElement(children: .contain)
         }
     }
 
-    private func playerBlock(title: String, weekly: String, season: String) -> some View {
+    @ViewBuilder
+    private func playerBlock(
+        title: String,
+        weekly: String,
+        season: String,
+        profileUserId: String?
+    ) -> some View {
+        if let profileUserId {
+            LeagueMemberProfileLink(userId: profileUserId) {
+                playerBlockBody(title: title, weekly: weekly, season: season, showsChevron: true)
+            }
+            .accessibilityLabel("\(title), \(weekly) this week, \(season) this season")
+        } else {
+            playerBlockBody(title: title, weekly: weekly, season: season, showsChevron: false)
+        }
+    }
+
+    private func playerBlockBody(
+        title: String,
+        weekly: String,
+        season: String,
+        showsChevron: Bool
+    ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(PickemsColors.textSecondary)
+            HStack(spacing: 4) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+                if showsChevron {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .accessibilityHidden(true)
+                }
+            }
             Text(weekly)
                 .font(.headline.monospacedDigit())
                 .foregroundStyle(PickemsColors.textPrimary)
@@ -398,6 +435,8 @@ struct LeaguePickemsComparisonView: View {
                 .foregroundStyle(PickemsColors.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title), \(weekly) this week, \(season) this season")
     }
 
     private func gapBlock(title: String, phrase: String, gamesAhead: Int) -> some View {
