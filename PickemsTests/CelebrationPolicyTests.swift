@@ -123,7 +123,7 @@ struct CelebrationPolicyTests {
             homeName: "Alabama",
             isNeutral: false
         )
-        #expect(miss?.feedback == .none)
+        #expect(miss?.feedback == CelebrationPolicy.Feedback.none)
         #expect(miss?.announcement == "Missed, Georgia at Alabama")
 
         let alreadyFinal = CelebrationPolicy.watchingEffect(
