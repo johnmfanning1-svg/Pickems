@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Redesigned Home: first viewport = brand pulse for this week only.
+/// Home: this league's week at the top, then scores and news.
 struct HomeView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.themePalette) private var theme
@@ -122,6 +122,13 @@ struct HomeView: View {
                 .accessibilityLabel("Pickems")
             }
 
+            if let status = leagueStatus {
+                HomeLeagueStatusHeader(status: status) {
+                    homeCallToAction
+                }
+                .padding(.horizontal)
+            }
+
             if appState.authService.currentUser?.favoriteTeam == nil {
                 Button {
                     appState.present(.favoriteTeam(isOnboardingPrompt: false))
@@ -151,42 +158,14 @@ struct HomeView: View {
                 .accessibilityHint("Opens the favorite team picker")
             }
 
-            if let cfbWeek = viewModel.cfbWeek ?? appState.groupService.cfbWeek {
+            if showsCalendarWeekLabel, let cfbWeek = viewModel.cfbWeek ?? appState.groupService.cfbWeek {
                 Text(cfbWeek.label)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(PickemsColors.textSecondary)
                     .padding(.horizontal)
             }
 
-            if appState.groupService.selectedGroup != nil {
-                PickemsCard {
-                    VStack(alignment: .leading, spacing: PickemsSpacing.sm) {
-                        if let week = appState.groupService.currentWeek {
-                            Text(week.displayLabel)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(PickemsColors.textSecondary)
-                        }
-
-                        if let entry = myStanding {
-                            pulseRank(entry)
-                        }
-
-                        let cta = homeCTA
-                        if let tab = cta.destinationTab {
-                            PrimaryButton(title: cta.title) {
-                                appState.selectedTab = tab
-                            }
-                        } else {
-                            Text(cta.title)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(PickemsColors.textSecondary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            } else {
+            if appState.groupService.selectedGroup == nil {
                 VStack(spacing: PickemsSpacing.sm) {
                     EmptyStateView(
                         icon: "person.3.fill",
@@ -336,41 +315,108 @@ struct HomeView: View {
         .accessibilityHint("Switch, join, or create a league")
     }
 
-    /// Streak stays off Home. `PlayerSeasonStats` is built by Stats and Rivalry into local
-    /// state, and `GroupService` does not keep a copy. Loading it here would add a season of reads.
-    private func pulseRank(_ entry: StandingEntry) -> some View {
+    /// Season rank comes from the standings already on Home. Streak stays off this header:
+    /// `PlayerSeasonStats` is local to Stats and Rivalry, and loading it would add a season of reads.
+    private var leagueStatus: HomeLeagueStatus.Model? {
+        guard let group = appState.groupService.selectedGroup else { return nil }
+        let userId = appState.currentUserId
+        let weeklyBoard = appState.rankedStandings(weekly: true)
+        let seasonBoard = appState.rankedStandings(weekly: false)
+        let week = appState.groupService.currentWeek
+        let slate = appState.pickService.slateGames
         let pick = appState.pickService.userPick
         let pushes = PulseRankCopy.scorelessPushes(
             picks: pick?.picks ?? [:],
-            games: appState.pickService.slateGames,
+            games: slate,
             confidenceGameId: pick?.confidenceGameId,
-            pickMode: appState.pickMode(for: appState.groupService.currentWeek)
+            pickMode: appState.pickMode(for: week)
         )
-        let pulse = PulseRankCopy.display(
-            entry: entry,
-            board: appState.rankedStandings(weekly: true),
-            pushes: pushes
+        return HomeLeagueStatus.make(
+            leagueName: group.name,
+            weekNumber: week?.weekNumber,
+            weekStatus: week?.status,
+            skipsSelection: week?.skipsSelection ?? false,
+            picksFullyLocked: week.map { WeekTransition.arePicksFullyLocked($0) } ?? false,
+            progress: leagueProgress(week: week, slate: slate),
+            weeklyPushes: pushes,
+            weeklyEntry: userId.flatMap { id in weeklyBoard.first { $0.id == id } },
+            weeklyBoard: weeklyBoard,
+            seasonEntry: userId.flatMap { id in seasonBoard.first { $0.id == id } },
+            seasonBoard: seasonBoard
         )
-        return HStack(alignment: .firstTextBaseline) {
-            Text(pulse.rankText)
-                .font(PickemsTypography.rank)
-                .foregroundStyle(theme.accent)
-                .accessibilityLabel(pulse.accessibilityRank)
-                .pulseRankMotion(pulse.animatableRank)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(pulse.detailText)
-                    .font(.subheadline.weight(.semibold).monospacedDigit())
-                Text("Season \(entry.seasonWins)–\(entry.seasonLosses)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(PickemsColors.textSecondary)
-            }
-            Spacer()
-        }
     }
 
-    private var myStanding: StandingEntry? {
-        guard let userId = appState.authService.currentUser?.id else { return nil }
-        return appState.rankedStandings(weekly: true).first { $0.id == userId }
+    /// ESPN's calendar week stays visible when Home has no league, or when it is not this league's week.
+    private var showsCalendarWeekLabel: Bool {
+        guard (viewModel.cfbWeek ?? appState.groupService.cfbWeek) != nil else { return false }
+        guard appState.groupService.selectedGroup != nil else { return true }
+        let calendarWeek = (viewModel.cfbWeek ?? appState.groupService.cfbWeek)?.weekNumber
+        return appState.groupService.currentWeek?.weekNumber != calendarWeek
+    }
+
+    private func leagueProgress(week: WeekSummary?, slate: [SlateGame]) -> HomeLeagueStatus.Progress {
+        let counts = viewerPickCounts(slate: slate)
+        let picksMade = counts.submitted && counts.needed > 0 ? max(counts.made, counts.needed) : counts.made
+        var progress = HomeLeagueStatus.Progress(
+            picksMade: picksMade,
+            picksNeeded: counts.needed,
+            gamesLive: slate.filter { $0.status == .inProgress }.count,
+            gamesFinal: slate.filter { $0.status == .final }.count,
+            gamesOnSlate: slate.count
+        )
+        guard let week, !week.skipsSelection else { return progress }
+        if week.selectionMode == .commissioner, !appState.canOperateWeek {
+            progress.waitingOnSelections = true
+            return progress
+        }
+        if week.selectionMode == .commissioner {
+            let unique = Set(appState.pickService.nominations.map(\.espnEventId)).count
+            let filled = max(unique, slate.count, week.nominationCount)
+            progress.selectionsMade = filled
+            let rulesSlate = appState.groupService.selectedGroup?.rules.slateSize ?? 1
+            progress.selectionsNeeded = week.slateSize > 0 ? week.slateSize : max(1, rulesSlate)
+            return progress
+        }
+        let made: Int
+        if let userId = appState.currentUserId {
+            made = appState.pickService.nominations.filter { $0.submittedBy == userId }.count
+        } else {
+            made = 0
+        }
+        let needed = CommissionerPinnedLeague.selectionsPerMember(
+            weekValue: week.selectionsPerMember,
+            pinnedRulesValue: appState.groupService.selectedGroup?.rules.selectionsPerMember ?? 1
+        )
+        progress.selectionsMade = appState.pickService.didSubmitNominations ? max(made, needed) : made
+        progress.selectionsNeeded = needed
+        return progress
+    }
+
+    private func viewerPickCounts(slate: [SlateGame]) -> (made: Int, needed: Int, submitted: Bool) {
+        let ineligible = Set(slate.filter { !appState.picksViewModel.allowsPicks($0) }.map(\.id))
+        let picks = appState.pickService.userPick?.picks ?? [:]
+        let made = ineligible.isEmpty
+            ? picks.count
+            : picks.keys.filter { !ineligible.contains($0) }.count
+        let needed = max(slate.count - ineligible.count, 0)
+        let submitted = appState.pickService.userPick?.isLocked == true
+        return (made, needed, submitted)
+    }
+
+    @ViewBuilder
+    private var homeCallToAction: some View {
+        let cta = homeCTA
+        if let tab = cta.destinationTab {
+            PrimaryButton(title: cta.title) {
+                appState.selectedTab = tab
+            }
+        } else {
+            Text(cta.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PickemsColors.textSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+        }
     }
 
     private var scoreboardSubtitle: String {
@@ -390,33 +436,17 @@ struct HomeView: View {
         let week = appState.groupService.currentWeek
         let userId = appState.currentUserId
         let userNoms = appState.pickService.nominations.filter { $0.submittedBy == userId }.count
-        let slate = appState.pickService.slateGames
-        let ineligible = Set(slate.filter { !appState.picksViewModel.allowsPicks($0) }.map(\.id))
-        let picks = appState.pickService.userPick?.picks ?? [:]
-        let pickCount = ineligible.isEmpty
-            ? picks.count
-            : picks.keys.filter { !ineligible.contains($0) }.count
+        let counts = viewerPickCounts(slate: appState.pickService.slateGames)
         return HomeCTAResolver.resolve(
             week: week,
             isCommissioner: appState.canOperateWeek,
             didSubmitNominations: appState.pickService.didSubmitNominations,
             userNominationCount: userNoms,
-            pickCount: pickCount,
-            slateCount: slate.count - ineligible.count,
+            pickCount: counts.made,
+            slateCount: counts.needed,
             pickemsLocked: week.map { WeekTransition.arePicksFullyLocked($0) } ?? false,
-            picksSubmitted: appState.pickService.userPick?.isLocked == true
+            picksSubmitted: counts.submitted
         )
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func pulseRankMotion(_ rank: Int?) -> some View {
-        if let rank {
-            self.pickemsRankMotion(trigger: rank)
-        } else {
-            self
-        }
     }
 }
 
