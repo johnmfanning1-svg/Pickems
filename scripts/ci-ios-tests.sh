@@ -34,9 +34,9 @@ rc=$?
 set -e
 # Counts come from the .xcresult bundle (Swift Testing and XCTest alike),
 # not from grepping test.log.
-# Floor on passed + expected failures. 653 after #145. League summary rank
-# copy adds 4 tests. Do not lower this.
-MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-657}"
+# Floor on passed + expected failures. 667 after #146. League summary rank
+# copy adds 4 tests. 667 + 4 = 671. Do not lower this.
+MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-671}"
 grep -iE "error:|Test case .* failed|\*\* TEST" "$OUT/logs/test.log" | tail -n 200 || true
 summary="$OUT/logs/test-summary.json"
 if ! xcrun xcresulttool get test-results summary --path "$OUT/TestResults.xcresult" --format json > "$summary" 2>"$OUT/logs/xcresulttool.err"; then
