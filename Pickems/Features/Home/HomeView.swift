@@ -42,6 +42,7 @@ struct HomeView: View {
             // Title is the league switcher when the user has leagues; brand stays in `heroPulse`.
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                LeagueSearchJoinToolbarItem { appState.present($0) }
                 ToolbarItem(placement: .principal) {
                     groupTitleMenu
                 }
@@ -174,9 +175,9 @@ struct HomeView: View {
                     )
                     HStack(spacing: 12) {
                         Button {
-                            appState.present(.joinGroup)
+                            appState.present(LeagueSearchJoin.sheet)
                         } label: {
-                            Label("Join / Search", systemImage: "magnifyingglass")
+                            Label("Join / Search", systemImage: LeagueSearchJoin.systemImage)
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
@@ -290,9 +291,9 @@ struct HomeView: View {
             }
             Section {
                 Button {
-                    appState.present(.joinGroup)
+                    appState.present(LeagueSearchJoin.sheet)
                 } label: {
-                    Label("Join / Search", systemImage: "magnifyingglass")
+                    Label("Join / Search", systemImage: LeagueSearchJoin.systemImage)
                 }
                 Button {
                     appState.present(.createLeague)
