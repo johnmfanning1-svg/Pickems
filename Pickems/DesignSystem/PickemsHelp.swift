@@ -233,6 +233,7 @@ enum PickemsHelp {
         message: "Your private pick'em league. Switch leagues using the chips at the top. Selections and Pickems live on their own tabs.",
         tips: [
             "Share your invite code so friends can join — unless the commissioner locked invites to themselves.",
+            "The summary card shows This Week and Season on their own rows, each with a record and a rank. A dash means no decided games yet.",
             "Toggle between weekly and season standings.",
             "View League Pickems opens the chart after lock, or a countdown until then.",
             "Week Recap has the recap, awards, and share for any week. Commissioners get a league recap they can tone, edit, and send to League chat.",

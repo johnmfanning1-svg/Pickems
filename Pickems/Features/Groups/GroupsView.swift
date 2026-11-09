@@ -100,9 +100,10 @@ struct GroupsView: View {
     private func leagueDetails(_ group: PickemGroup) -> some View {
         totalsHero(group)
 
-        LeaderboardView(scope: leaderboardScopeBinding)
-
+        // Week progress sits under the summary, above the standings list.
         thisWeekCard(group)
+
+        LeaderboardView(scope: leaderboardScopeBinding)
 
         primaryActions(group)
 
@@ -202,9 +203,31 @@ struct GroupsView: View {
 
     // MARK: - Totals hero
 
-    private var myStanding: StandingEntry? {
-        guard let userId = appState.authService.currentUser?.id else { return nil }
-        return appState.rankedStandings(weekly: true).first { $0.id == userId }
+    private var heroRankCopy: LeagueHeroRankCopy.Display? {
+        guard let userId = appState.currentUserId else { return nil }
+        let weeklyBoard = appState.rankedStandings(weekly: true)
+        let seasonBoard = appState.rankedStandings(weekly: false)
+        guard let weeklyEntry = weeklyBoard.first(where: { $0.id == userId }),
+              let seasonEntry = seasonBoard.first(where: { $0.id == userId }) else { return nil }
+        return LeagueHeroRankCopy.display(
+            weekly: heroMember(weeklyEntry, weeklyScope: true),
+            weeklyBoard: weeklyBoard.map { heroMember($0, weeklyScope: true) },
+            season: heroMember(seasonEntry, weeklyScope: false),
+            seasonBoard: seasonBoard.map { heroMember($0, weeklyScope: false) }
+        )
+    }
+
+    private func heroMember(_ entry: StandingEntry, weeklyScope: Bool) -> LeagueHeroRankCopy.Member {
+        LeagueHeroRankCopy.member(
+            id: entry.id,
+            weeklyWins: entry.weeklyWins,
+            weeklyLosses: entry.weeklyLosses,
+            seasonWins: entry.seasonWins,
+            seasonLosses: entry.seasonLosses,
+            rank: entry.rank,
+            isTied: entry.isTied,
+            weeklyScope: weeklyScope
+        )
     }
 
     private func totalsHero(_ group: PickemGroup) -> some View {
@@ -219,28 +242,29 @@ struct GroupsView: View {
                         .foregroundStyle(PickemsColors.textSecondary)
                 }
 
-                if let entry = myStanding {
-                    HStack(spacing: 0) {
-                        totalsStat(
-                            value: "\(entry.weeklyWins)–\(entry.weeklyLosses)",
-                            label: "This Week"
-                        )
-                        totalsDivider
-                        totalsStat(
-                            value: "\(entry.seasonWins)–\(entry.seasonLosses)",
-                            label: "Season"
-                        )
-                        totalsDivider
-                        totalsStat(
-                            value: "#\(entry.rank)",
-                            label: entry.isTied ? "Rank (T)" : "Rank",
-                            emphasize: true
-                        )
+                if let copy = heroRankCopy {
+                    VStack(spacing: 14) {
+                        HStack(alignment: .top, spacing: 0) {
+                            totalsStat(value: copy.weeklyRecord.value, label: copy.weeklyRecord.label)
+                            totalsDivider
+                            totalsStat(
+                                value: copy.weeklyRank.value,
+                                label: copy.weeklyRank.label,
+                                emphasize: true
+                            )
+                        }
+                        HStack(alignment: .top, spacing: 0) {
+                            totalsStat(value: copy.seasonRecord.value, label: copy.seasonRecord.label)
+                            totalsDivider
+                            totalsStat(
+                                value: copy.seasonRank.value,
+                                label: copy.seasonRank.label,
+                                emphasize: true
+                            )
+                        }
                     }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(
-                        "Week \(entry.weeklyWins) to \(entry.weeklyLosses), season \(entry.seasonWins) to \(entry.seasonLosses), rank \(entry.rank)\(entry.isTied ? ", tied" : "")"
-                    )
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(copy.accessibilityLabel)
                 } else {
                     Text("Standings appear after games are scored.")
                         .font(.subheadline)
@@ -277,9 +301,14 @@ struct GroupsView: View {
                 .font(emphasize ? PickemsTypography.rank : .title3.bold())
                 .foregroundStyle(emphasize ? theme.accent : PickemsColors.textPrimary)
                 .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
             Text(label)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(PickemsColors.textSecondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
     }
