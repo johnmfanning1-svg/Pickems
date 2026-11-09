@@ -15,6 +15,7 @@ struct GamePickRowAdaptive: View {
     var onConfidenceToggle: (() -> Void)? = nil
     var lockedCaption: String? = nil
     var showsSpread: Bool = true
+    var winResultTitle: String = "Covered"
     let onSelect: (String) -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -37,6 +38,7 @@ struct GamePickRowAdaptive: View {
                 onConfidenceToggle: onConfidenceToggle,
                 lockedCaption: lockedCaption,
                 showsSpread: showsSpread,
+                winResultTitle: winResultTitle,
                 onSelect: onSelect
             )
         } else {
@@ -52,6 +54,7 @@ struct GamePickRowAdaptive: View {
                 onConfidenceToggle: onConfidenceToggle,
                 lockedCaption: lockedCaption,
                 showsSpread: showsSpread,
+                winResultTitle: winResultTitle,
                 onSelect: onSelect
             )
         }
@@ -71,10 +74,15 @@ struct GamePickRowDense: View {
     var onConfidenceToggle: (() -> Void)? = nil
     var lockedCaption: String? = nil
     var showsSpread: Bool = true
+    var winResultTitle: String = "Covered"
     let onSelect: (String) -> Void
 
     @Environment(\.themePalette) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var watching = false
+    @State private var bounceToken = 0
+    @State private var successPulse = false
 
     private var resolvedAwayRank: Int? {
         GamePickRowPresentation.resolvedRank(explicit: awayRank, live: liveCard?.awayCuratedRank)
@@ -118,6 +126,61 @@ struct GamePickRowDense: View {
             }
         }
         .accessibilityElement(children: .contain)
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(successPulse ? PickemsColors.success : Color.clear, lineWidth: 1.5)
+                .animation(.easeOut(duration: 0.6), value: successPulse)
+                .allowsHitTesting(false)
+        }
+        .onAppear {
+            watching = displayedStatus != .final
+        }
+        .onChange(of: watch) { old, new in
+            celebrateIfNeeded(from: old, to: new)
+        }
+    }
+
+    private var displayedStatus: SlateGame.GameStatus {
+        liveCard?.status ?? game.status
+    }
+
+    private var watch: GamePickRowPresentation.PickWatch {
+        GamePickRowPresentation.PickWatch(status: displayedStatus, result: liveCard?.pickResult)
+    }
+
+    private func celebrateIfNeeded(
+        from _: GamePickRowPresentation.PickWatch,
+        to new: GamePickRowPresentation.PickWatch
+    ) {
+        if new.status != .final {
+            watching = true
+            return
+        }
+        guard watching, let result = new.result, result != .pending else { return }
+        guard let effect = CelebrationPolicy.watchingEffect(
+            wasWatching: true,
+            becameFinal: true,
+            result: result,
+            winTitle: winResultTitle,
+            awayName: game.awayTeamName,
+            homeName: game.homeTeamName,
+            isNeutral: game.isNeutralSite
+        ) else {
+            watching = false
+            return
+        }
+        watching = false
+        AccessibilityNotification.Announcement(effect.announcement).post()
+        guard effect.feedback == .success else { return }
+        PickemsHaptics.success()
+        if !reduceMotion {
+            bounceToken += 1
+        }
+        successPulse = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            successPulse = false
+        }
     }
 
     private var singleLine: some View {
@@ -227,13 +290,24 @@ struct GamePickRowDense: View {
                 .frame(minHeight: 44)
                 .foregroundStyle(PickemsColors.textPrimary)
                 .background(
-                    isSelected ? theme.accent.opacity(0.3) : Color.clear,
+                    isSelected ? theme.accent.opacity(0.22) : Color.clear,
                     in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(isSelected ? theme.accent : Color.white.opacity(0.14), lineWidth: isSelected ? 2 : 1)
+                        .strokeBorder(isSelected ? theme.accent : Color.white.opacity(0.14), lineWidth: isSelected ? 1.5 : 1)
                 )
+                .overlay(alignment: .topTrailing) {
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(theme.accent)
+                            .padding(.top, 1)
+                            .padding(.trailing, 1)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .animation(.snappy(duration: 0.2), value: isSelected)
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
@@ -254,7 +328,7 @@ struct GamePickRowDense: View {
             switch column {
             case .scheduled(let time):
                 Text(time)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption.weight(.semibold).monospacedDigit())
                     .foregroundStyle(PickemsColors.textSecondary)
             case .locked(let time):
                 Image(systemName: "lock.fill")
@@ -262,15 +336,15 @@ struct GamePickRowDense: View {
                     .foregroundStyle(PickemsColors.textSecondary)
                     .accessibilityHidden(true)
                 Text(time)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption.weight(.semibold).monospacedDigit())
                     .foregroundStyle(PickemsColors.textSecondary)
             case .live(let score, let period):
                 Text(liveStatusText(score: score, period: period))
-                    .font(.caption.weight(.bold))
+                    .font(.caption.weight(.bold).monospacedDigit())
                     .foregroundStyle(PickemsColors.warning)
             case .final(let label, let result):
                 Text(label)
-                    .font(.caption.weight(.bold))
+                    .font(.caption.weight(.bold).monospacedDigit())
                     .foregroundStyle(PickemsColors.textPrimary)
                 if let result {
                     resultIcon(result)
@@ -305,11 +379,12 @@ struct GamePickRowDense: View {
         case .win:
             Image(systemName: "checkmark.circle.fill")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(PickemsColors.success)
+                .foregroundStyle(GamePickRowPresentation.pickResultTone(result).color)
+                .symbolEffect(.bounce, value: reduceMotion ? 0 : bounceToken)
         case .loss:
             Image(systemName: "xmark.circle.fill")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(theme.accent)
+                .foregroundStyle(GamePickRowPresentation.pickResultTone(result).color)
         case .push:
             Image(systemName: "minus.circle.fill")
                 .font(.caption.weight(.semibold))
@@ -380,7 +455,7 @@ struct GamePickRowDense: View {
 
 #Preview("Comfortable 22 games") {
     ScrollView {
-        VStack(spacing: 16) {
+        VStack(spacing: 10) {
             ForEach(GamePickRowPreviewData.slate(count: 22)) { sample in
                 GamePickRow(
                     game: sample.game,

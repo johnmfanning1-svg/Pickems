@@ -169,11 +169,21 @@ struct SecondaryButton: View {
 }
 
 struct PickemsCard<Content: View>: View {
-    @ViewBuilder let content: Content
+    private let padding: EdgeInsets
+    private let content: Content
+
+    /// Uniform 16pt padding matches the previous `.padding()` default.
+    init(
+        padding: EdgeInsets = EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16),
+        @ViewBuilder content: () -> Content
+    ) {
+        self.padding = padding
+        self.content = content()
+    }
 
     var body: some View {
         content
-            .padding()
+            .padding(padding)
             .background(PickemsColors.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(

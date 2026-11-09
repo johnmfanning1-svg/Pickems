@@ -1,5 +1,16 @@
 import SwiftUI
 
+extension GamePickRowPresentation.PickResultTone {
+    var color: Color {
+        switch self {
+        case .success: return PickemsColors.success
+        case .lost: return PickemsColors.lost
+        case .secondary: return PickemsColors.textSecondary
+        case .warning: return PickemsColors.warning
+        }
+    }
+}
+
 struct GamePickRow: View {
     let game: SlateGame
     let selectedTeamId: String?
@@ -13,8 +24,13 @@ struct GamePickRow: View {
     /// Shown when the row is disabled because this game has locked.
     var lockedCaption: String? = nil
     var showsSpread: Bool = true
+    var winResultTitle: String = "Covered"
     let onSelect: (String) -> Void
     @Environment(\.themePalette) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var watching = false
+    @State private var bounceToken = 0
+    @State private var successPulse = false
 
     private var resolvedAwayRank: Int? {
         GamePickRowPresentation.resolvedRank(explicit: awayRank, live: liveCard?.awayCuratedRank)
@@ -24,9 +40,30 @@ struct GamePickRow: View {
         GamePickRowPresentation.resolvedRank(explicit: homeRank, live: liveCard?.homeCuratedRank)
     }
 
+    private var displayedStatus: SlateGame.GameStatus {
+        liveCard?.status ?? game.status
+    }
+
+    private var scoreColumn: GamePickRowPresentation.ComfortableScoreColumn? {
+        GamePickRowPresentation.comfortableScoreColumn(
+            from: GamePickRowPresentation.statusColumn(
+                game: game,
+                liveCard: liveCard,
+                isDisabled: isDisabled
+            )
+        )
+    }
+
+    private var showsResultBadge: Bool {
+        guard displayedStatus == .final, let result = liveCard?.pickResult else { return false }
+        return result != .pending
+    }
+
     var body: some View {
-        PickemsCard {
-            VStack(spacing: 12) {
+        PickemsCard(
+            padding: EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14)
+        ) {
+            VStack(spacing: PickemsSpacing.xs) {
                 HStack {
                     teamButton(
                         teamId: game.awayTeamId,
@@ -35,15 +72,7 @@ struct GamePickRow: View {
                         rank: resolvedAwayRank,
                         caption: "Away"
                     )
-                    VStack(spacing: 2) {
-                        Text(game.matchupSeparator)
-                            .foregroundStyle(PickemsColors.textSecondary)
-                        if let live = liveCard, live.status != .scheduled {
-                            Text(live.statusDetail)
-                                .font(.caption2)
-                                .foregroundStyle(live.status == .inProgress ? PickemsColors.warning : PickemsColors.textSecondary)
-                        }
-                    }
+                    centerColumn
                     teamButton(
                         teamId: game.homeTeamId,
                         name: game.homeTeamAbbreviation,
@@ -53,26 +82,7 @@ struct GamePickRow: View {
                     )
                 }
 
-                ZStack {
-                    if showsSpread {
-                        LockedSpreadLabel(
-                            lockedText: game.favoriteSpreadDisplay,
-                            liveText: liveCard?.liveSpreadLabel,
-                            isLocked: true,
-                            isFinal: (liveCard?.status ?? game.status) == .final,
-                            font: .caption.weight(.semibold)
-                        )
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .multilineTextAlignment(.center)
-                    }
-
-                    if let result = liveCard?.pickResult {
-                        HStack {
-                            Spacer()
-                            pickResultBadge(result)
-                        }
-                    }
-                }
+                metaRow
 
                 if showConfidenceToggle {
                     Button {
@@ -88,39 +98,126 @@ struct GamePickRow: View {
                     .disabled(isDisabled)
                 }
 
-                Text(game.kickoffMetaLine)
-                    .font(.caption2)
-                    .foregroundStyle(PickemsColors.textSecondary)
-
                 if let lockedCaption {
                     Label(lockedCaption, systemImage: "lock.fill")
-                        .font(.caption2.weight(.semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(PickemsColors.textSecondary)
                 }
             }
         }
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(successPulse ? PickemsColors.success : Color.clear, lineWidth: 1.5)
+                .animation(.easeOut(duration: 0.6), value: successPulse)
+                .allowsHitTesting(false)
+        }
         .accessibilityElement(children: .contain)
+        .onAppear {
+            watching = displayedStatus != .final
+        }
+        .onChange(of: watch) { old, new in
+            celebrateIfNeeded(from: old, to: new)
+        }
+    }
+
+    private var watch: GamePickRowPresentation.PickWatch {
+        GamePickRowPresentation.PickWatch(status: displayedStatus, result: liveCard?.pickResult)
+    }
+
+    private var centerColumn: some View {
+        VStack(spacing: 2) {
+            Text(game.matchupSeparator)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(PickemsColors.textSecondary)
+            if let scoreColumn {
+                if !scoreColumn.score.isEmpty {
+                    Text(scoreColumn.score)
+                        .font(.title3.weight(.bold).monospacedDigit())
+                        .foregroundStyle(PickemsColors.textPrimary)
+                        .fixedSize()
+                }
+                Text(scoreColumn.caption)
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(scoreColumn.captionIsLive ? PickemsColors.warning : PickemsColors.textSecondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var metaRow: some View {
+        HStack(alignment: .center, spacing: PickemsSpacing.xs) {
+            Text(game.kickoffMetaLine)
+                .font(.caption)
+                .foregroundStyle(PickemsColors.textSecondary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if showsResultBadge, let result = liveCard?.pickResult {
+                pickResultBadge(result)
+            } else if showsSpread {
+                LockedSpreadLabel(
+                    lockedText: game.favoriteSpreadDisplay,
+                    liveText: liveCard?.liveSpreadLabel,
+                    isLocked: true,
+                    isFinal: displayedStatus == .final,
+                    font: .caption.weight(.semibold)
+                )
+                .multilineTextAlignment(.trailing)
+            }
+        }
     }
 
     @ViewBuilder
     private func pickResultBadge(_ result: ESPNLiveGameCard.PickResult) -> some View {
+        Label(
+            GamePickRowPresentation.resultBadgeTitle(result, winTitle: winResultTitle),
+            systemImage: resultSymbol(result)
+        )
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(GamePickRowPresentation.pickResultTone(result).color)
+        .symbolEffect(.bounce, value: reduceMotion ? 0 : bounceToken)
+    }
+
+    private func resultSymbol(_ result: ESPNLiveGameCard.PickResult) -> String {
         switch result {
-        case .win:
-            Label("Win", systemImage: "checkmark.circle.fill")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(PickemsColors.success)
-        case .loss:
-            Label("Loss", systemImage: "xmark.circle.fill")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(theme.accent)
-        case .push:
-            Label("Push", systemImage: "minus.circle.fill")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(PickemsColors.textSecondary)
-        case .pending:
-            Label("Pending", systemImage: "clock.fill")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(PickemsColors.warning)
+        case .win: return "checkmark.circle.fill"
+        case .loss: return "xmark.circle.fill"
+        case .push: return "minus.circle.fill"
+        case .pending: return "clock.fill"
+        }
+    }
+
+    private func celebrateIfNeeded(
+        from _: GamePickRowPresentation.PickWatch,
+        to new: GamePickRowPresentation.PickWatch
+    ) {
+        if new.status != .final {
+            watching = true
+            return
+        }
+        guard watching, let result = new.result, result != .pending else { return }
+        guard let effect = CelebrationPolicy.watchingEffect(
+            wasWatching: true,
+            becameFinal: true,
+            result: result,
+            winTitle: winResultTitle,
+            awayName: game.awayTeamName,
+            homeName: game.homeTeamName,
+            isNeutral: game.isNeutralSite
+        ) else {
+            watching = false
+            return
+        }
+        watching = false
+        AccessibilityNotification.Announcement(effect.announcement).post()
+        guard effect.feedback == .success else { return }
+        PickemsHaptics.success()
+        if !reduceMotion {
+            bounceToken += 1
+        }
+        successPulse = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            successPulse = false
         }
     }
 
@@ -157,22 +254,33 @@ struct GamePickRow: View {
                     logoURL: logo,
                     abbreviation: name,
                     rank: rank,
-                    size: 32,
+                    size: 28,
                     showsAbbreviationFallback: false
                 )
                 Text(name)
-                    .font(.subheadline.weight(.semibold))
-                Text(caption)
-                    .font(.caption2)
-                    .foregroundStyle(PickemsColors.textSecondary)
+                    .font(.body.weight(.semibold))
             }
-            .frame(maxWidth: .infinity)
-            .padding(8)
-            .background(isSelected ? theme.accent.opacity(0.3) : Color.clear)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? theme.accent : Color.clear, lineWidth: 2)
-            )
+            .padding(.vertical, PickemsSpacing.xs)
+            .padding(.horizontal, 6)
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .background {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isSelected ? theme.accent.opacity(0.22) : Color.clear)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(isSelected ? theme.accent : Color.clear, lineWidth: 1.5)
+            }
+            .overlay(alignment: .topTrailing) {
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(theme.accent)
+                        .padding(PickemsSpacing.xxs)
+                        .accessibilityHidden(true)
+                }
+            }
+            .animation(.snappy(duration: 0.2), value: isSelected)
         }
         .disabled(isDisabled)
         .foregroundStyle(PickemsColors.textPrimary)
