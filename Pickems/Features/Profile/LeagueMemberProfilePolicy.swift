@@ -43,7 +43,7 @@ enum LeagueMemberProfilePolicy {
         }
 
         var recordLabel: String {
-            Self.recordLabel(wins: wins, losses: losses, pushes: pushes)
+            LeagueMemberProfilePolicy.recordLabel(wins: wins, losses: losses, pushes: pushes)
         }
     }
 
