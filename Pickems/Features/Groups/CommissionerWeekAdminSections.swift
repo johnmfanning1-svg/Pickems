@@ -52,8 +52,10 @@ struct CommissionerWeekAdminSections: View {
     }
 
     private var activeESPNWeekId: String? {
-        appState.groupService.cfbWeek.map { CFBWeekSync.weekId(for: $0) }
-            ?? appState.groupService.currentWeek?.id
+        CommissionerPinnedLeague.activeChipWeekId(
+            espnWeekId: appState.groupService.cfbWeek.map { CFBWeekSync.weekId(for: $0) },
+            pinnedWeekId: week?.id
+        )
     }
 
     @ViewBuilder

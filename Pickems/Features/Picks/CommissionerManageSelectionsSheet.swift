@@ -22,6 +22,24 @@ struct CommissionerManageSelectionsSheet: View {
         return appState.pickService.nominations.filter { $0.submittedBy == member.id }
     }
 
+    /// Slate room on this sheet's league. Nil while listeners are elsewhere,
+    /// so Add Selection is hidden instead of using another league's slate.
+    private var remainingSlateSlots: Int? {
+        CommissionerPinnedLeague.remainingSelectionSlots(
+            pinnedGroupId: groupId,
+            observingGroupId: appState.pickService.observingGroupId,
+            nominations: appState.pickService.nominations,
+            slate: appState.pickService.slateGames,
+            group: CommissionerPinnedLeague.group(
+                id: groupId,
+                selected: appState.groupService.selectedGroup,
+                listed: appState.groupService.groups,
+                fallback: nil
+            ),
+            weekSlateSize: week.slateSize
+        )
+    }
+
     private var perMember: Int {
         max(
             week.selectionsPerMember > 0
@@ -90,23 +108,8 @@ struct CommissionerManageSelectionsSheet: View {
                     }
                 }
 
-                if nominations.count < perMember {
-                    let unique = Set(
-                        appState.pickService.nominations.map(\.espnEventId)
-                            + appState.pickService.slateGames.map(\.espnEventId)
-                    ).count
-                    let expected = (appState.groupService.selectedGroup?.rules.expectedSlateSize(
-                        memberCount: max(appState.groupService.selectedGroup?.memberCount ?? 1, 1)
-                    )) ?? max(week.slateSize, 1)
-                    let slateSize = SelectionSlateReconcile.effectiveSlateSize(
-                        weekSlateSize: week.slateSize,
-                        expected: expected
-                    )
-                    let remainingSlate = SelectionSlateReconcile.remainingSlateSlots(
-                        slateSize: slateSize,
-                        takenUniqueGames: unique
-                    )
-                    if remainingSlate > 0 {
+                if nominations.count < perMember, let remainingSlateSlots {
+                    if remainingSlateSlots > 0 {
                         PrimaryButton(title: "Add Selection", isLoading: isWorking) {
                             replacing = nil
                             appState.picksViewModel.selectionBrowseIntent = .addFor(

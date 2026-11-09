@@ -118,6 +118,37 @@ enum CommissionerPinnedLeague {
         if observingGroupId == pinnedGroupId { return live }
         return captured
     }
+
+    /// Selection slots left on the pinned league's slate, or nil while the live
+    /// listeners are on another league (hide the Add button rather than guess).
+    static func remainingSelectionSlots(
+        pinnedGroupId: String,
+        observingGroupId: String?,
+        nominations: [Nomination],
+        slate: [SlateGame],
+        group: PickemGroup?,
+        weekSlateSize: Int
+    ) -> Int? {
+        guard observingGroupId == pinnedGroupId, let group, group.id == pinnedGroupId else {
+            return nil
+        }
+        let unique = Set(nominations.map(\.espnEventId) + slate.map(\.espnEventId)).count
+        let expected = group.rules.expectedSlateSize(memberCount: max(group.memberCount, 1))
+        let slateSize = SelectionSlateReconcile.effectiveSlateSize(
+            weekSlateSize: weekSlateSize,
+            expected: expected
+        )
+        return SelectionSlateReconcile.remainingSlateSlots(
+            slateSize: slateSize,
+            takenUniqueGames: unique
+        )
+    }
+
+    /// Week chip to highlight. ESPN's current week wins. Otherwise the week
+    /// already pinned to this league — nil when that listener is on another league.
+    static func activeChipWeekId(espnWeekId: String?, pinnedWeekId: String?) -> String? {
+        espnWeekId ?? pinnedWeekId
+    }
 }
 
 /// Spread editor draft versus a later slate snapshot.

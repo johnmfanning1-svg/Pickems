@@ -1360,17 +1360,42 @@ final class PickService {
         try await batch.commit()
     }
 
+    /// Nomination count and lock fallback for `openWeekWithCurrentSlate`, read
+    /// before any await. A nil count and empty fallback mean the listeners are
+    /// not on this league, so a mid-call switch cannot stamp the other slate.
+    nonisolated static func openWeekSnapshot(
+        observingGroupId: String?,
+        groupId: String,
+        nominations: [Nomination],
+        slate: [SlateGame]
+    ) -> (count: Int?, fallback: [(id: String, kickoff: Date)]) {
+        guard observingGroupId == groupId else {
+            let empty: [(id: String, kickoff: Date)] = []
+            return (nil, empty)
+        }
+        let fallback: [(id: String, kickoff: Date)] =
+            nominations.map { (id: $0.espnEventId, kickoff: $0.kickoff) }
+            + slate.map { (id: $0.id, kickoff: $0.kickoff) }
+        return (nominations.count, fallback)
+    }
+
     /// Opens picking with whatever unique games/nominations exist (may be under slateSize).
     func openWeekWithCurrentSlate(
         groupId: String,
         weekId: String,
         rules: GroupRules
     ) async throws {
+        let snapshot = Self.openWeekSnapshot(
+            observingGroupId: observingGroupId,
+            groupId: groupId,
+            nominations: nominations,
+            slate: slateGames
+        )
         try await materializeNominationsIfNeeded(groupId: groupId, weekId: weekId)
         let games = await slateLockGames(
             groupId: groupId,
             weekId: weekId,
-            fallback: nominations.map { ($0.espnEventId, $0.kickoff) } + slateGames.map { ($0.id, $0.kickoff) }
+            fallback: snapshot.fallback
         )
         guard !games.isEmpty else {
             throw PickError.slateFull
@@ -1380,7 +1405,7 @@ final class PickService {
             weekId: weekId,
             rules: rules,
             games: games,
-            nominationCount: nominations.count,
+            nominationCount: snapshot.count,
             lockSlate: true
         )
     }
