@@ -13,7 +13,7 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: PickemsSpacing.lg) {
                     heroPulse
                         .pickemsAppear()
 
@@ -58,6 +58,11 @@ struct HomeView: View {
             }
             .onAppear {
                 updateLivePolling()
+                coverMoment.observe(
+                    appState: appState,
+                    isForeground: scenePhase == .active,
+                    absorbCurrentlyFinal: true
+                )
             }
             .onDisappear {
                 viewModel.stopLiveUpdates()
@@ -65,14 +70,23 @@ struct HomeView: View {
             .onChange(of: appState.selectedTab) { _, _ in
                 updateLivePolling()
             }
-            .onChange(of: scenePhase) { _, _ in
+            .onChange(of: scenePhase) { old, new in
                 updateLivePolling()
+                coverMoment.observe(
+                    appState: appState,
+                    isForeground: new == .active,
+                    absorbCurrentlyFinal: new == .active && old != .active
+                )
             }
             .onChange(of: appState.pickService.userPick) { _, _ in
                 Task { await viewModel.refresh(appState: appState) }
             }
             .onChange(of: appState.pickService.slateGames) { _, _ in
-                coverMoment.observe(appState: appState)
+                coverMoment.observe(
+                    appState: appState,
+                    isForeground: scenePhase == .active,
+                    absorbCurrentlyFinal: false
+                )
                 appState.publishSurfaces()
                 Task { await viewModel.refresh(appState: appState) }
             }
@@ -94,17 +108,19 @@ struct HomeView: View {
     }
 
     private var heroPulse: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 10) {
-                brandMark
-                Text("Pickems")
-                    .font(PickemsTypography.display(34))
-                    .foregroundStyle(PickemsColors.textPrimary)
-                Spacer(minLength: 0)
+        VStack(alignment: .leading, spacing: PickemsSpacing.sm) {
+            if appState.groupService.selectedGroup == nil {
+                HStack(spacing: 10) {
+                    brandMark(size: 24)
+                    Text("Pickems")
+                        .font(PickemsTypography.display(22))
+                        .foregroundStyle(PickemsColors.textPrimary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, PickemsSpacing.md)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Pickems")
             }
-            .padding(.horizontal)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Pickems")
 
             if appState.authService.currentUser?.favoriteTeam == nil {
                 Button {
@@ -144,7 +160,7 @@ struct HomeView: View {
 
             if appState.groupService.selectedGroup != nil {
                 PickemsCard {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: PickemsSpacing.sm) {
                         if let week = appState.groupService.currentWeek {
                             Text(week.displayLabel)
                                 .font(.subheadline.weight(.semibold))
@@ -152,20 +168,7 @@ struct HomeView: View {
                         }
 
                         if let entry = myStanding {
-                            HStack(alignment: .firstTextBaseline) {
-                                Text("#\(entry.rank)")
-                                    .font(PickemsTypography.rank)
-                                    .foregroundStyle(theme.accent)
-                                    .pickemsRankMotion(trigger: entry.rank)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("\(entry.weeklyWins)–\(entry.weeklyLosses) this week")
-                                        .font(.subheadline.weight(.semibold))
-                                    Text("Season \(entry.seasonWins)–\(entry.seasonLosses)")
-                                        .font(.caption)
-                                        .foregroundStyle(PickemsColors.textSecondary)
-                                }
-                                Spacer()
-                            }
+                            pulseRank(entry)
                         }
 
                         let cta = homeCTA
@@ -184,7 +187,7 @@ struct HomeView: View {
                 }
                 .padding(.horizontal)
             } else {
-                VStack(spacing: 16) {
+                VStack(spacing: PickemsSpacing.sm) {
                     EmptyStateView(
                         icon: "person.3.fill",
                         title: "Join a league",
@@ -214,17 +217,13 @@ struct HomeView: View {
     }
 
     private var moreSections: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: PickemsSpacing.lg) {
             if !viewModel.newsItems.isEmpty {
                 NewsFeedSection(items: viewModel.newsItems)
             }
 
             if viewModel.isLoading && viewModel.liveGames.isEmpty {
-                ProgressView("Loading scores…")
-                    .tint(theme.accent)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 24)
-                    .accessibilityLabel("Loading scores")
+                HomeScoreboardPlaceholder()
             } else if !viewModel.liveGames.isEmpty || viewModel.isRefreshingContent {
                 LiveScoreboardSection(
                     games: viewModel.liveGames,
@@ -243,7 +242,7 @@ struct HomeView: View {
 
             if appState.groupService.standings != nil {
                 let topEntries = appState.rankedStandings(weekly: true).prefix(3)
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: PickemsSpacing.sm) {
                     PickemsSectionHeader(
                         title: "Top Standings",
                         subtitle: "This week's leaders",
@@ -265,7 +264,7 @@ struct HomeView: View {
     }
 
     @ViewBuilder
-    private var brandMark: some View {
+    private func brandMark(size: CGFloat) -> some View {
         if let team = appState.authService.currentUser?.favoriteTeam,
            let url = URL(string: team.resolvedLogoURL) {
             AsyncImage(url: url) { phase in
@@ -274,15 +273,15 @@ struct HomeView: View {
                     image.resizable().scaledToFit()
                 default:
                     Image(systemName: "checkmark.seal.fill")
-                        .font(.title2)
+                        .font(.system(size: size))
                         .foregroundStyle(theme.accent)
                 }
             }
-            .frame(width: 32, height: 32)
+            .frame(width: size, height: size)
             .accessibilityHidden(true)
         } else {
             Image(systemName: "checkmark.seal.fill")
-                .font(.title2)
+                .font(.system(size: size))
                 .foregroundStyle(theme.accent)
                 .accessibilityHidden(true)
         }
@@ -337,6 +336,30 @@ struct HomeView: View {
         .accessibilityHint("Switch, join, or create a league")
     }
 
+    /// Streak stays off Home. `PlayerSeasonStats` is built by Stats and Rivalry into local
+    /// state, and `GroupService` does not keep a copy. Loading it here would add a season of reads.
+    private func pulseRank(_ entry: StandingEntry) -> some View {
+        let pulse = PulseRankCopy.display(
+            entry: entry,
+            board: appState.rankedStandings(weekly: true)
+        )
+        return HStack(alignment: .firstTextBaseline) {
+            Text(pulse.rankText)
+                .font(PickemsTypography.rank)
+                .foregroundStyle(theme.accent)
+                .accessibilityLabel(pulse.accessibilityRank)
+                .pulseRankMotion(pulse.animatableRank)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(pulse.detailText)
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                Text("Season \(entry.seasonWins)–\(entry.seasonLosses)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(PickemsColors.textSecondary)
+            }
+            Spacer()
+        }
+    }
+
     private var myStanding: StandingEntry? {
         guard let userId = appState.authService.currentUser?.id else { return nil }
         return appState.rankedStandings(weekly: true).first { $0.id == userId }
@@ -378,10 +401,23 @@ struct HomeView: View {
     }
 }
 
+private extension View {
+    @ViewBuilder
+    func pulseRankMotion(_ rank: Int?) -> some View {
+        if let rank {
+            self.pickemsRankMotion(trigger: rank)
+        } else {
+            self
+        }
+    }
+}
+
 private struct HomeScoredWeekSection: View {
     let week: WeekSummary
     let group: PickemGroup
     @Environment(AppState.self) private var appState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var presentedWeekWin: PresentedWeekWin?
 
     private var awards: WeekAwards? {
         if let stored = week.awards,
@@ -409,34 +445,222 @@ private struct HomeScoredWeekSection: View {
         return nil
     }
 
+    private var rankedEntries: [StandingEntry] {
+        appState.rankedStandings(weekly: true)
+    }
+
+    private var myEntry: StandingEntry? {
+        guard let userId = appState.currentUserId else { return nil }
+        return rankedEntries.first { $0.id == userId }
+    }
+
+    private var weekWinKind: CelebrationPolicy.WeekWinKind? {
+        guard let userId = appState.currentUserId else { return nil }
+        let entries = rankedEntries.map {
+            CelebrationPolicy.WeekBoardEntry(
+                id: $0.id,
+                rank: $0.rank,
+                isTied: $0.isTied,
+                weeklyWins: $0.weeklyWins,
+                weeklyLosses: $0.weeklyLosses
+            )
+        }
+        return CelebrationPolicy.weekWinKind(
+            entries: entries,
+            userId: userId,
+            weekStatus: week.status
+        )
+    }
+
+    private var isPerfectSaturday: Bool {
+        guard let entry = myEntry else { return false }
+        return StreakEngine.isPerfectSaturday(
+            wins: entry.weeklyWins,
+            losses: entry.weeklyLosses,
+            slateSize: appState.pickService.slateGames.count
+        )
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: PickemsSpacing.sm) {
+            if let presentedWeekWin {
+                WeekWinCard(
+                    title: presentedWeekWin.title,
+                    wins: presentedWeekWin.wins,
+                    losses: presentedWeekWin.losses,
+                    isPerfect: presentedWeekWin.isPerfect,
+                    shareSource: appState.weeklyShareSource(),
+                    showsBurst: !reduceMotion
+                )
+                .padding(.horizontal, PickemsSpacing.md)
+            }
+
             if appState.isCommissioner {
+                if presentedWeekWin == nil, isPerfectSaturday {
+                    StreakBadgeView(streak: 0, isPerfect: true)
+                        .padding(.horizontal, PickemsSpacing.md)
+                }
                 CommissionerLeagueRecapPanel(
                     group: group,
                     week: week,
-                    entries: appState.rankedStandings(weekly: true),
+                    entries: rankedEntries,
                     picks: appState.pickService.allPicks,
                     games: appState.pickService.slateGames,
                     awards: awards
                 )
             } else {
-                WeekRecapCard(recapText: WeekRecapGenerator.recap(
-                    groupName: group.name,
-                    week: week,
-                    standings: appState.groupService.standings,
-                    userId: appState.authService.currentUser?.id,
-                    pickMode: appState.pickMode(for: week)
-                ))
+                WeekRecapCard(
+                    recapText: WeekRecapGenerator.recap(
+                        groupName: group.name,
+                        week: week,
+                        standings: appState.groupService.standings,
+                        userId: appState.currentUserId,
+                        pickMode: appState.pickMode(for: week)
+                    ),
+                    showsPerfectSaturday: presentedWeekWin == nil && isPerfectSaturday
+                )
                 if let awards {
                     WeekAwardsBanner(awards: awards)
                         .padding(.horizontal)
                 }
-                if let shareSource = appState.weeklyShareSource() {
+                if presentedWeekWin == nil, let shareSource = appState.weeklyShareSource() {
                     ShareResultsButton(source: shareSource)
                         .padding(.horizontal)
                 }
             }
         }
+        .onAppear(perform: revealWeekWinIfNeeded)
+    }
+
+    private func revealWeekWinIfNeeded() {
+        guard presentedWeekWin == nil, let kind = weekWinKind, let entry = myEntry else { return }
+        let already = CelebrationStore.hasCelebratedWeekWin(groupId: group.id, weekId: week.id)
+        guard CelebrationPolicy.shouldShowWeekWin(kind: kind, alreadyCelebrated: already) else { return }
+        presentedWeekWin = PresentedWeekWin(
+            title: kind.title(weekNumber: week.weekNumber),
+            wins: entry.weeklyWins,
+            losses: entry.weeklyLosses,
+            isPerfect: isPerfectSaturday
+        )
+        CelebrationStore.markWeekWinCelebrated(groupId: group.id, weekId: week.id)
+    }
+}
+
+private struct PresentedWeekWin: Equatable {
+    var title: String
+    var wins: Int
+    var losses: Int
+    var isPerfect: Bool
+}
+
+private struct WeekWinCard: View {
+    let title: String
+    let wins: Int
+    let losses: Int
+    let isPerfect: Bool
+    let shareSource: ShareSource?
+    let showsBurst: Bool
+    @Environment(\.themePalette) private var theme
+
+    var body: some View {
+        PickemsCard {
+            VStack(alignment: .leading, spacing: PickemsSpacing.sm) {
+                HStack(spacing: PickemsSpacing.xs) {
+                    Image(systemName: "crown.fill")
+                        .font(.title3)
+                        .foregroundStyle(theme.accent)
+                        .accessibilityHidden(true)
+                    Text(title)
+                        .font(PickemsTypography.display(28))
+                        .foregroundStyle(PickemsColors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(CelebrationPolicy.recordLine(wins: wins, losses: losses))
+                    .font(.title3.weight(.bold).monospacedDigit())
+                    .foregroundStyle(PickemsColors.textPrimary)
+                if isPerfect {
+                    StreakBadgeView(streak: 0, isPerfect: true)
+                }
+                if let shareSource {
+                    ShareResultsButton(source: shareSource)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .overlay(alignment: .top) {
+            if showsBurst {
+                WeekWinBurst(accent: theme.accent)
+                    .offset(y: -8)
+                    .allowsHitTesting(false)
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+}
+
+/// Short accent-and-white burst. Overlaid so the card does not jump when it ends.
+private struct WeekWinBurst: View {
+    let accent: Color
+    private let started = Date()
+    private let count = 14
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+            let elapsed = timeline.date.timeIntervalSince(started)
+            let progress = min(1, max(0, elapsed / 0.9))
+            Canvas { context, size in
+                guard progress < 1 else { return }
+                let origin = CGPoint(x: size.width / 2, y: size.height * 0.72)
+                for index in 0..<count {
+                    let angle = (Double(index) / Double(count)) * Double.pi * 2
+                    let reach = 26 + Double(index % 4) * 12
+                    let x = origin.x + CGFloat(cos(angle) * reach * progress)
+                    let y = origin.y + CGFloat(sin(angle) * reach * 0.45 * progress) - CGFloat(16 * progress)
+                    let width: CGFloat = index.isMultiple(of: 3) ? 8 : 5
+                    let rect = CGRect(x: x - width / 2, y: y - 1.5, width: width, height: 3)
+                    var burst = context
+                    burst.opacity = 1 - progress
+                    let color = index.isMultiple(of: 2) ? accent : Color.white
+                    burst.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: .color(color))
+                }
+            }
+        }
+        .frame(height: 52)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct HomeScoreboardPlaceholder: View {
+    var body: some View {
+        VStack(spacing: PickemsSpacing.sm) {
+            ForEach(0..<3, id: \.self) { _ in
+                PickemsCard {
+                    HStack(spacing: PickemsSpacing.sm) {
+                        teamColumn
+                        VStack(spacing: PickemsSpacing.xxs) {
+                            Text("Sat 12:00")
+                            Text("ESPN")
+                            Text("TEAM -1.5")
+                        }
+                        .frame(minWidth: 80)
+                        teamColumn
+                    }
+                }
+                .redacted(reason: .placeholder)
+                .padding(.horizontal, PickemsSpacing.md)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading scores")
+    }
+
+    private var teamColumn: some View {
+        VStack(spacing: 2) {
+            RoundedRectangle(cornerRadius: 6)
+                .frame(width: 32, height: 32)
+            Text("Away")
+            Text("00")
+        }
+        .frame(maxWidth: .infinity)
     }
 }

@@ -27,9 +27,9 @@ struct LeaderboardRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: PickemsSpacing.sm) {
             Text("#\(entry.rank)")
-                .font(PickemsTypography.display(18))
+                .font(PickemsTypography.display(18).monospacedDigit())
                 .foregroundStyle(theme.accent)
                 .frame(width: 36, alignment: .leading)
                 .accessibilityHidden(true)

@@ -8,8 +8,8 @@ struct LiveGameRow: View {
         // `.contain` so VoiceOver can reach LockedSpreadLabel's "Line info" button.
         // Away column carries the row summary; the spread chip keeps its own children.
         PickemsCard {
-            VStack(spacing: 12) {
-                HStack(spacing: 12) {
+            VStack(spacing: PickemsSpacing.sm) {
+                HStack(spacing: PickemsSpacing.sm) {
                     teamColumn(
                         name: card.awayTeamAbbreviation,
                         logo: card.awayTeamLogoURL,
@@ -20,7 +20,7 @@ struct LiveGameRow: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(accessibilityLabel)
 
-                    VStack(spacing: 4) {
+                    VStack(spacing: PickemsSpacing.xxs) {
                         if card.status == .scheduled {
                             Text(
                                 GameKickoffLine.make(
@@ -65,7 +65,7 @@ struct LiveGameRow: View {
                             }
                         }
                         if card.isSlateGame, let pick = card.userPickTeamAbbreviation {
-                            HStack(spacing: 4) {
+                            HStack(spacing: PickemsSpacing.xxs) {
                                 Text("Pick: \(pick)")
                                     .font(.caption2)
                                 pickResultIcon
@@ -147,7 +147,7 @@ struct LiveGameRow: View {
     private var pickResultColor: Color {
         switch card.pickResult {
         case .win: return PickemsColors.success
-        case .loss: return theme.accent
+        case .loss: return GamePickRowPresentation.pickResultTone(.loss).color
         case .push: return PickemsColors.textSecondary
         case .pending, .none: return PickemsColors.warning
         }
@@ -200,7 +200,7 @@ struct LiveScoreboardSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: PickemsSpacing.sm) {
             if usesWeekMenu {
                 scoreboardHeaderWithWeekMenu
             } else {
@@ -227,8 +227,8 @@ struct LiveScoreboardSection: View {
     }
 
     private var scoreboardHeaderWithWeekMenu: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: PickemsSpacing.xs) {
+            VStack(alignment: .leading, spacing: PickemsSpacing.xxs) {
                 Text(title)
                     .font(.headline)
                     .foregroundStyle(PickemsColors.textPrimary)
@@ -296,7 +296,7 @@ struct LiveScoreboardSection: View {
 
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: PickemsSpacing.xs) {
                 ForEach(HomeScoreboardFilter.primaryChips, id: \.self) { filter in
                     filterChip(filter)
                 }
