@@ -337,9 +337,10 @@ enum PickemsHelp {
     static let widgetAndLiveActivity = HelpTopic(
         id: "profile.widgetLiveActivity",
         title: "Home Screen & Live Activity",
-        message: "Choose which league the Home Screen widget and Live Activities show. Switching leagues in the app does not change this until you pick a different league here.",
+        message: "Choose which league the Home Screen widget and lock-screen Live Activity show. The Live Activity lists your picks, the score, and whether each one is covering. Switching leagues in the app does not change this until you pick a different league here.",
         tips: [
             "The widget and lock-screen Live Activity update as soon as you change this setting.",
+            "The lock screen shows your teams only — never anyone else's picks.",
             "If you leave that league, Pickems falls back to another league you are in, or clears the widget."
         ]
     )

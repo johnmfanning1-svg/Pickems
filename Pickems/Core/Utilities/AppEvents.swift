@@ -112,7 +112,7 @@ enum AppEvents {
     /// Never log emails, passwords, or raw tokens.
     static func redact(_ metadata: [String: String]) -> [String: String] {
         let blocked: Set<String> = [
-            "email", "password", "token", "idToken", "fcmToken", "authorization",
+            "email", "password", "token", "idToken", "fcmToken", "liveActivityToken", "authorization",
         ]
         return metadata.reduce(into: [:]) { result, pair in
             if blocked.contains(pair.key) {

@@ -31,6 +31,10 @@ enum FirestoreDocument {
 enum FirestoreField {
     static let memberIds = "memberIds"
     static let fcmToken = "fcmToken"
+    static let liveActivityToken = "liveActivityToken"
+    static let liveActivityGroupId = "liveActivityGroupId"
+    static let liveActivityWeekId = "liveActivityWeekId"
+    static let liveActivityKey = "liveActivityKey"
     static let groupId = "groupId"
     static let nominationCount = "nominationCount"
     static let spread = "spread"

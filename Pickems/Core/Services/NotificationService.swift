@@ -127,7 +127,11 @@ final class NotificationService: NSObject {
         lastPersisted = nil
         do {
             try await Firestore.firestore().user(userId).updateData([
-                FirestoreField.fcmToken: FieldValue.delete()
+                FirestoreField.fcmToken: FieldValue.delete(),
+                FirestoreField.liveActivityToken: FieldValue.delete(),
+                FirestoreField.liveActivityGroupId: FieldValue.delete(),
+                FirestoreField.liveActivityWeekId: FieldValue.delete(),
+                FirestoreField.liveActivityKey: FieldValue.delete(),
             ])
             AppLog.debug(AppLog.notifications, "FCM token cleared", metadata: [
                 "uid": AppEvents.shortUID(userId),
