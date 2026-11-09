@@ -1379,6 +1379,29 @@ final class PickService {
         return (nominations.count, fallback)
     }
 
+    /// Nomination count and lock fallback for `openPickemsIfReady`, captured
+    /// before any await. Nil count and an empty fallback mean the listeners
+    /// are on another league, so that slate cannot open or stamp this week.
+    /// The count is the larger of the pinned nominations and the week doc.
+    nonisolated static func openPickemsLockInputs(
+        observingGroupId: String?,
+        groupId: String,
+        nominations: [Nomination],
+        slate: [SlateGame],
+        weekNominationCount: Int
+    ) -> (count: Int?, fallback: [(id: String, kickoff: Date)]) {
+        let snapshot = openWeekSnapshot(
+            observingGroupId: observingGroupId,
+            groupId: groupId,
+            nominations: nominations,
+            slate: slate
+        )
+        guard let count = snapshot.count else {
+            return (nil, [])
+        }
+        return (max(count, weekNominationCount), snapshot.fallback)
+    }
+
     /// Opens picking with whatever unique games/nominations exist (may be under slateSize).
     func openWeekWithCurrentSlate(
         groupId: String,
@@ -1413,6 +1436,9 @@ final class PickService {
     /// Opens Pickems when every Selection is in or the Selection deadline has passed.
     /// The lock snapshot is first kickoff, or per-game kickoff on rolling lock.
     /// Does not stamp `lockedAt` — that early lock is commissioner-only.
+    ///
+    /// The listener snapshot is taken before the first await. A call that starts
+    /// while the listener is on another league returns without writing.
     func openPickemsIfReady(
         groupId: String,
         week: WeekSummary,
@@ -1420,22 +1446,33 @@ final class PickService {
         memberIds: [String],
         now: Date = Date()
     ) async {
+        let pinnedNominations = nominations
+        let pinnedSlate = slateGames
+        let lock = Self.openPickemsLockInputs(
+            observingGroupId: observingGroupId,
+            groupId: groupId,
+            nominations: pinnedNominations,
+            slate: pinnedSlate,
+            weekNominationCount: week.nominationCount
+        )
+        guard lock.count != nil else { return }
+
         let uniqueCount = Set(
-            nominations.map(\.espnEventId) + slateGames.map(\.espnEventId)
+            pinnedNominations.map(\.espnEventId) + pinnedSlate.map(\.espnEventId)
         ).count
         var byUser: [String: Int] = [:]
-        for nomination in nominations {
+        for nomination in pinnedNominations {
             byUser[nomination.submittedBy, default: 0] += 1
         }
         let slateIsComplete = ScoringEngine.isMemberNominationRoundComplete(
             nominationsByUser: byUser,
             memberIds: memberIds,
             selectionsPerMember: max(week.selectionsPerMember, rules.selectionsPerMember),
-            uniqueNominationCount: max(uniqueCount, slateGames.count),
+            uniqueNominationCount: max(uniqueCount, pinnedSlate.count),
             slateSize: max(week.slateSize, rules.expectedSlateSize(memberCount: max(memberIds.count, 1)))
         )
         let commissionerFull = week.selectionMode == .commissioner
-            && max(uniqueCount, slateGames.count) >= max(week.slateSize, 1)
+            && max(uniqueCount, pinnedSlate.count) >= max(week.slateSize, 1)
         guard WeekTransition.shouldOpenPickems(
             week,
             slateIsComplete: week.selectionMode == .commissioner ? commissionerFull : slateIsComplete,
@@ -1443,9 +1480,9 @@ final class PickService {
         ) else { return }
         // Never open a slate that has already kicked off. Check before
         // materializing so a stale week gets no writes.
-        let localKickoffs = slateGames.isEmpty
-            ? nominations.map(\.kickoff)
-            : slateGames.map(\.kickoff)
+        let localKickoffs = pinnedSlate.isEmpty
+            ? pinnedNominations.map(\.kickoff)
+            : pinnedSlate.map(\.kickoff)
         if let reason = WeekTransition.pickemsOpenSkipReason(kickoffs: localKickoffs, now: now) {
             logPickemsOpenSkip(groupId: groupId, weekId: week.id, reason: reason)
             return
@@ -1459,7 +1496,7 @@ final class PickService {
             let games = await slateLockGames(
                 groupId: groupId,
                 weekId: week.id,
-                fallback: nominations.map { ($0.espnEventId, $0.kickoff) } + slateGames.map { ($0.id, $0.kickoff) }
+                fallback: lock.fallback
             )
             let gameKickoffs: [Date] = games.map { $0.kickoff }
             if let reason = WeekTransition.pickemsOpenSkipReason(kickoffs: gameKickoffs, now: now) {
@@ -1476,7 +1513,7 @@ final class PickService {
                 weekId: week.id,
                 rules: rules,
                 games: games,
-                nominationCount: max(nominations.count, week.nominationCount),
+                nominationCount: lock.count,
                 lockSlate: false
             )
         } catch {

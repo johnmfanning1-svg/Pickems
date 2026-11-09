@@ -149,6 +149,13 @@ enum CommissionerPinnedLeague {
     static func activeChipWeekId(espnWeekId: String?, pinnedWeekId: String?) -> String? {
         espnWeekId ?? pinnedWeekId
     }
+
+    /// Selections this member owes. A week value of 0 was never snapshotted.
+    /// Fall back to the rules pinned on this sheet, not the live selected league.
+    static func selectionsPerMember(weekValue: Int, pinnedRulesValue: Int) -> Int {
+        let resolved = weekValue > 0 ? weekValue : pinnedRulesValue
+        return max(resolved, 1)
+    }
 }
 
 /// Spread editor draft versus a later slate snapshot.
