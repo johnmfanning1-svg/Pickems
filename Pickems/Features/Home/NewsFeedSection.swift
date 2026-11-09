@@ -4,7 +4,7 @@ struct NewsFeedSection: View {
     let items: [ESPNNewsItem]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: PickemsSpacing.sm) {
             PickemsSectionHeader(
                 title: "CFB News",
                 subtitle: "Headlines from ESPN"
@@ -17,7 +17,7 @@ struct NewsFeedSection: View {
                     .padding(.horizontal)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: PickemsSpacing.sm) {
                         ForEach(items) { item in
                             NewsCard(item: item)
                         }
@@ -33,7 +33,7 @@ struct NewsCard: View {
     let item: ESPNNewsItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: PickemsSpacing.xs) {
             if let imageURL = item.imageURL, let url = URL(string: imageURL) {
                 AsyncImage(url: url) { image in
                     image.resizable().scaledToFill()
@@ -67,6 +67,7 @@ struct NewsCard: View {
 
 struct WeekRecapCard: View {
     let recapText: String
+    var showsPerfectSaturday: Bool = false
     @Environment(\.themePalette) private var theme
 
     var body: some View {
@@ -79,6 +80,10 @@ struct WeekRecapCard: View {
                 .font(.subheadline)
                 .foregroundStyle(PickemsColors.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if showsPerfectSaturday {
+                StreakBadgeView(streak: 0, isPerfect: true)
+            }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)

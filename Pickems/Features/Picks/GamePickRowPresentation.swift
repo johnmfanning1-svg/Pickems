@@ -125,6 +125,60 @@ enum GamePickRowPresentation {
         }
     }
 
+    /// Loss stays on `PickemsColors.lost` so a team theme cannot paint a miss in the accent.
+    enum PickResultTone: Equatable {
+        case success
+        case lost
+        case secondary
+        case warning
+    }
+
+    static func pickResultTone(_ result: ESPNLiveGameCard.PickResult) -> PickResultTone {
+        switch result {
+        case .win: return .success
+        case .loss: return .lost
+        case .push: return .secondary
+        case .pending: return .warning
+        }
+    }
+
+    static func resultBadgeTitle(_ result: ESPNLiveGameCard.PickResult, winTitle: String) -> String {
+        switch result {
+        case .win: return winTitle
+        case .loss: return "Loss"
+        case .push: return "Push"
+        case .pending: return "Pending"
+        }
+    }
+
+    /// Score block for the Comfortable center column. Scheduled and locked rows keep the meta line instead.
+    struct PickWatch: Equatable {
+        var status: SlateGame.GameStatus
+        var result: ESPNLiveGameCard.PickResult?
+    }
+
+    struct ComfortableScoreColumn: Equatable {
+        var score: String
+        var caption: String
+        var captionIsLive: Bool
+    }
+
+    static func comfortableScoreColumn(from column: StatusColumn) -> ComfortableScoreColumn? {
+        switch column {
+        case .scheduled, .locked:
+            return nil
+        case .live(let score, let period):
+            return ComfortableScoreColumn(
+                score: score,
+                caption: period.isEmpty ? "Live" : period,
+                captionIsLive: true
+            )
+        case .final(let label, _):
+            let score = label.hasPrefix("F ") ? String(label.dropFirst(2)) : ""
+            return ComfortableScoreColumn(score: score, caption: "Final", captionIsLive: false)
+        }
+    }
+
     /// Team the Pickems line applies to. Nil for pick'em, Straight Up, or a missing side.
     static func favoriteTeamId(game: SlateGame, showsSpread: Bool) -> String? {
         guard showsSpread else { return nil }

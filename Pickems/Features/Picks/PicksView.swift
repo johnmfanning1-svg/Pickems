@@ -505,7 +505,7 @@ struct PicksView: View {
             !WeekTransition.isGameLocked($0, week: week) && viewModel.allowsPicks($0)
         }
 
-        return VStack(spacing: 16) {
+        return VStack(spacing: PickemsSpacing.md) {
             PickemsSectionHeader(
                 title: appState.selectedPickMode.pickemsSectionTitle,
                 subtitle: "Tap a team to pick. Tap again to clear that Pickem — the Selection stays on the slate.",
@@ -558,7 +558,8 @@ struct PicksView: View {
                         viewModel.saveDraft(appState: appState)
                     },
                     lockedCaption: viewModel.pickBlockCaption(game) ?? (gameLocked ? "Locked at kickoff" : nil),
-                    showsSpread: appState.selectedPickMode.showsSpreads
+                    showsSpread: appState.selectedPickMode.showsSpreads,
+                    winResultTitle: appState.selectedPickMode.coverMomentWinTitle
                 ) { teamId in
                     guard viewModel.allowsPicks(game) else { return }
                     if teamId.isEmpty {
@@ -641,7 +642,7 @@ struct PicksView: View {
     }
 
     private func lockedPhase(week: WeekSummary) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: PickemsSpacing.md) {
             GroupPicksView(embedded: true)
 
             yourPickemsDisclosure(week: week)
@@ -701,7 +702,7 @@ struct PicksView: View {
             .accessibilityAddTraits(.isButton)
 
             if picksExpanded {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: PickemsSpacing.xs) {
                     HStack {
                         Spacer(minLength: 8)
                         pickemsDensityPicker
@@ -710,7 +711,7 @@ struct PicksView: View {
                     PickemsGameList(
                         games: appState.pickService.slateGames.sortedByKickoff,
                         isDense: cardsAreDense,
-                        comfortableSpacing: 8,
+                        comfortableSpacing: PickemsSpacing.xs,
                         comfortableHorizontalPadding: 4,
                         denseHorizontalPadding: 0
                     ) { game in
@@ -723,6 +724,7 @@ struct PicksView: View {
                             homeRank: viewModel.teamRanks.rank(for: game.homeTeamId),
                             awayRank: viewModel.teamRanks.rank(for: game.awayTeamId),
                             showsSpread: appState.selectedPickMode.showsSpreads,
+                            winResultTitle: appState.selectedPickMode.coverMomentWinTitle,
                             onSelect: { _ in }
                         )
                     }
@@ -745,8 +747,8 @@ struct PicksView: View {
 private struct PickemsGameList<Row: View>: View {
     let games: [SlateGame]
     var isDense: Bool
-    var comfortableSpacing: CGFloat = 16
-    var comfortableHorizontalPadding: CGFloat = 16
+    var comfortableSpacing: CGFloat = 10
+    var comfortableHorizontalPadding: CGFloat = PickemsSpacing.md
     var denseHorizontalPadding: CGFloat = 16
     let row: (SlateGame) -> Row
 

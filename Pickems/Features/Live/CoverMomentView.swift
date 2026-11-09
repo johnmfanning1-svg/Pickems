@@ -27,12 +27,12 @@ struct CoverMomentView: View {
                     Text(gameLabel)
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(PickemsColors.textPrimary)
-                    Text(recordText)
-                        .font(PickemsTypography.display(28))
-                        .foregroundStyle(PickemsColors.textPrimary)
-                    Text(rankText)
-                        .font(.subheadline)
-                        .foregroundStyle(PickemsColors.textSecondary)
+                Text(recordText)
+                    .font(PickemsTypography.display(28).monospacedDigit())
+                    .foregroundStyle(PickemsColors.textPrimary)
+                Text(rankText)
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(PickemsColors.textSecondary)
                 }
                 .opacity(appeared ? 1 : 0)
                 .offset(y: appeared ? 0 : 16)
@@ -58,7 +58,10 @@ struct CoverMomentView: View {
             withAnimation(.spring(response: 0.55, dampingFraction: 0.78)) {
                 appeared = true
             }
-            PickemsHaptics.success()
+            // Misses stay on the card. This sheet is a win or a cover.
+            if resultTitle != "Missed" {
+                PickemsHaptics.success()
+            }
         }
     }
 }
@@ -67,43 +70,96 @@ struct CoverMomentView: View {
 @Observable
 final class CoverMomentPresenter {
     private var seenFinalGameIds = Set<String>()
+    private var loadedKey: String?
+    /// Set once the slate for `loadedKey` has actually arrived. An empty first
+    /// snapshot must not count, or the load that follows would look like a live final.
+    private var seededKey: String?
+    private var defaults: UserDefaults
 
-    func observe(appState: AppState) {
-        guard let userId = appState.authService.currentUser?.id else { return }
-        let games = appState.pickService.slateGames
-        let pick = appState.pickService.userPick
-        for game in games where game.status == .final {
-            guard !seenFinalGameIds.contains(game.id) else { continue }
-            seenFinalGameIds.insert(game.id)
-            guard let picked = pick?.picks[game.id],
-                  let correct = ScoringEngine.isPickCorrect(
-                    pickedTeamId: picked,
-                    game: game,
-                    pickMode: appState.selectedPickMode
-                  ) else {
-                continue
-            }
-            let label = "\(game.awayTeamAbbreviation) @ \(game.homeTeamAbbreviation)"
-            let resultTitle = correct ? appState.selectedPickMode.coverMomentWinTitle : "Missed"
-            let recordText: String
-            let rankText: String
-            if let entry = appState.rankedStandings(weekly: true).first(where: { $0.id == userId }) {
-                recordText = "\(entry.weeklyWins)–\(entry.weeklyLosses) today"
-                rankText = "You're #\(entry.rank) live"
-            } else {
-                recordText = "Pick settled"
-                rankText = ""
-            }
-            appState.present(
-                .coverMoment(
-                    gameLabel: label,
-                    resultTitle: resultTitle,
-                    recordText: recordText,
-                    rankText: rankText
-                ),
-                policy: .ifIdle
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    /// `absorbCurrentlyFinal` is true on the observation that brings the app back to the foreground,
+    /// so finals that landed while it was away are marked seen and do not open the sheet.
+    func observe(appState: AppState, isForeground: Bool, absorbCurrentlyFinal: Bool) {
+        guard let userId = appState.currentUserId,
+              let groupId = appState.groupService.selectedGroup?.id,
+              let weekId = appState.groupService.currentWeek?.id else { return }
+
+        let key = CelebrationStore.seenFinalsKey(groupId: groupId, weekId: weekId)
+        if loadedKey != key {
+            loadedKey = key
+            seededKey = nil
+            seenFinalGameIds = CelebrationStore.loadSeenFinals(
+                groupId: groupId,
+                weekId: weekId,
+                defaults: defaults
             )
-            break
         }
+        let slate = appState.pickService.slateGames
+        let isFirstObservation = seededKey != key
+
+        let mode = appState.selectedPickMode
+        let pick = appState.pickService.userPick
+        let games = slate.map { game in
+            observedGame(game, pick: pick, pickMode: mode)
+        }
+        let outcome = CelebrationPolicy.observe(
+            games: games,
+            previouslySeen: seenFinalGameIds,
+            isFirstObservation: isFirstObservation,
+            isForeground: isForeground,
+            absorbCurrentlyFinal: absorbCurrentlyFinal,
+            winTitle: mode.coverMomentWinTitle
+        )
+        seenFinalGameIds = outcome.seen
+        CelebrationStore.saveSeenFinals(outcome.seen, groupId: groupId, weekId: weekId, defaults: defaults)
+        if !slate.isEmpty {
+            seededKey = key
+        }
+
+        guard !isFirstObservation, let gameId = outcome.sheetGameId,
+              let game = appState.pickService.slateGames.first(where: { $0.id == gameId }) else { return }
+
+        let label = "\(game.awayTeamAbbreviation) @ \(game.homeTeamAbbreviation)"
+        let recordText: String
+        let rankText: String
+        if let entry = appState.rankedStandings(weekly: true).first(where: { $0.id == userId }) {
+            recordText = CelebrationPolicy.recordLine(wins: entry.weeklyWins, losses: entry.weeklyLosses)
+            let pulse = PulseRankCopy.display(
+                entry: entry,
+                board: appState.rankedStandings(weekly: true)
+            )
+            rankText = pulse.animatableRank == nil ? "" : "You're \(pulse.rankText) live"
+        } else {
+            recordText = "Pick settled"
+            rankText = ""
+        }
+        appState.present(
+            .coverMoment(
+                gameLabel: label,
+                resultTitle: mode.coverMomentWinTitle,
+                recordText: recordText,
+                rankText: rankText
+            ),
+            policy: .ifIdle
+        )
+    }
+
+    private func observedGame(_ game: SlateGame, pick: UserPick?, pickMode: PickMode) -> CelebrationPolicy.ObservedGame {
+        let picked = pick?.picks[game.id]
+        let pickedId = (picked?.isEmpty == false) ? picked : nil
+        let correct = pickedId.flatMap {
+            ScoringEngine.isPickCorrect(pickedTeamId: $0, game: game, pickMode: pickMode)
+        }
+        let hasScores = game.homeScore != nil && game.awayScore != nil
+        let isPush = game.status == .final && pickedId != nil && hasScores && correct == nil
+        return CelebrationPolicy.ObservedGame(
+            id: game.id,
+            isFinal: game.status == .final,
+            isCorrect: correct,
+            isPush: isPush
+        )
     }
 }

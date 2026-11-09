@@ -6,17 +6,38 @@ enum PickemsTypography {
         .system(size: size, weight: weight, design: .rounded)
     }
 
-    static let rank = Font.system(size: 28, weight: .bold, design: .rounded)
+    static let rank = Font.system(size: 28, weight: .bold, design: .rounded).monospacedDigit()
     static let section = Font.system(size: 20, weight: .semibold, design: .default)
 }
 
+/// One-shot rank pop when the number improves (a lower rank). Reduce Motion keeps a crossfade.
 struct RankChangeMotion: ViewModifier {
     let trigger: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulse = 0
+    @State private var ready = false
 
     func body(content: Content) -> some View {
         content
-            .scaleEffect(1)
-            .animation(.spring(response: 0.45, dampingFraction: 0.7), value: trigger)
+            .contentTransition(reduceMotion ? .opacity : .numericText(value: Double(trigger)))
+            .phaseAnimator([CGFloat(1.0), 1.12, 1.0], trigger: pulse) { view, phase in
+                view.scaleEffect(reduceMotion ? 1 : phase)
+            } animation: { _ in
+                .spring(response: 0.45, dampingFraction: 0.7)
+            }
+            .onChange(of: trigger) { old, new in
+                guard ready, new < old, !reduceMotion else { return }
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.7)) {
+                    pulse += 1
+                }
+            }
+            .onAppear { ready = true }
+            .animation(
+                reduceMotion
+                    ? .easeOut(duration: 0.2)
+                    : .spring(response: 0.45, dampingFraction: 0.7),
+                value: trigger
+            )
     }
 }
 

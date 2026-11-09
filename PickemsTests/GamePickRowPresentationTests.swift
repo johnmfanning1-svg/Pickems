@@ -277,6 +277,44 @@ struct GamePickRowPresentationTests {
         #expect(!underdog.contains("3.5"))
     }
 
+    @Test func comfortableCenterShowsTheScoreForLiveAndFinal() {
+        let live = GamePickRowPresentation.comfortableScoreColumn(
+            from: .live(score: "21\u{2013}14", period: "Q3")
+        )
+        #expect(live == GamePickRowPresentation.ComfortableScoreColumn(score: "21\u{2013}14", caption: "Q3", captionIsLive: true))
+
+        let liveClockOnly = GamePickRowPresentation.comfortableScoreColumn(
+            from: .live(score: "", period: "")
+        )
+        #expect(liveClockOnly?.caption == "Live")
+        #expect(liveClockOnly?.captionIsLive == true)
+
+        let final = GamePickRowPresentation.comfortableScoreColumn(
+            from: .final(label: "F 41\u{2013}9", result: .win)
+        )
+        #expect(final == GamePickRowPresentation.ComfortableScoreColumn(score: "41\u{2013}9", caption: "Final", captionIsLive: false))
+
+        let finalWithoutScore = GamePickRowPresentation.comfortableScoreColumn(
+            from: .final(label: "F", result: nil)
+        )
+        #expect(finalWithoutScore?.score == "")
+        #expect(finalWithoutScore?.caption == "Final")
+
+        #expect(GamePickRowPresentation.comfortableScoreColumn(from: .scheduled(time: "12:00")) == nil)
+        #expect(GamePickRowPresentation.comfortableScoreColumn(from: .locked(time: "12:00")) == nil)
+    }
+
+    @Test func lossToneStaysLostAndAWinBadgeUsesTheCoverTitle() {
+        #expect(GamePickRowPresentation.pickResultTone(.loss) == .lost)
+        #expect(GamePickRowPresentation.pickResultTone(.win) == .success)
+        #expect(GamePickRowPresentation.pickResultTone(.push) == .secondary)
+        #expect(GamePickRowPresentation.pickResultTone(.pending) == .warning)
+        #expect(GamePickRowPresentation.resultBadgeTitle(.win, winTitle: "Covered") == "Covered")
+        #expect(GamePickRowPresentation.resultBadgeTitle(.win, winTitle: "Won") == "Won")
+        #expect(GamePickRowPresentation.resultBadgeTitle(.loss, winTitle: "Covered") == "Loss")
+        #expect(GamePickRowPresentation.resultBadgeTitle(.push, winTitle: "Covered") == "Push")
+    }
+
     @Test func lineInfoAppearsOnlyWhenTheMarketLineMoved() {
         #expect(
             GamePickRowPresentation.lineInfoMessage(locked: "UCF -1.5", live: "UCF -2.5", isFinal: false)?
