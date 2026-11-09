@@ -110,7 +110,7 @@ struct LeagueHeroRankCopyTests {
         #expect(weeklyTie.weeklyRank.label == "This Week Rank")
         #expect(weeklyTie.seasonRank.value == "#3")
         #expect(weeklyTie.seasonRank.label == "Season Rank")
-        #expect(weeklyTie.accessibilityLabel == "Week 4 to 1, season 59 to 66, Tied for this week rank 1, Season rank 3")
+        #expect(weeklyTie.accessibilityLabel == "Week 4 to 1, season 59 to 66, Tied for This week rank 1, Season rank 3")
 
         let weekSolo = LeagueHeroRankCopy.Member(id: "me", wins: 5, losses: 2, rank: 4, isTied: false)
         let seasonLeader = LeagueHeroRankCopy.Member(id: "me", wins: 60, losses: 65, rank: 2, isTied: false)
@@ -124,7 +124,7 @@ struct LeagueHeroRankCopyTests {
         #expect(seasonTie.weeklyRank.value == "#4")
         #expect(seasonTie.seasonRank.value == "T-#2")
         #expect(seasonTie.accessibilityLabel.contains("This week rank 4"))
-        #expect(seasonTie.accessibilityLabel.contains("Tied for season rank 2"))
+        #expect(seasonTie.accessibilityLabel.contains("Tied for Season rank 2"))
 
         let flagged = LeagueHeroRankCopy.Member(id: "me", wins: 3, losses: 3, rank: 2, isTied: true)
         let flaggedCopy = LeagueHeroRankCopy.display(
@@ -135,5 +135,54 @@ struct LeagueHeroRankCopyTests {
         )
         #expect(flaggedCopy.weeklyRank.value == "T-#2")
         #expect(flaggedCopy.seasonRank.value == "#3")
+        #expect(flaggedCopy.accessibilityLabel.contains("Tied for This week rank 2"))
+    }
+
+    @Test func missingScopeKeepsTheOtherRow() {
+        let season = LeagueHeroRankCopy.Member(id: "me", wins: 59, losses: 66, rank: 3, isTied: false)
+        let weekOnly = LeagueHeroRankCopy.display(
+            weekly: LeagueHeroRankCopy.Member(id: "me", wins: 4, losses: 1, rank: 2, isTied: false),
+            weeklyBoard: [LeagueHeroRankCopy.Member(id: "me", wins: 4, losses: 1, rank: 2, isTied: false)],
+            season: nil,
+            seasonBoard: []
+        )
+        #expect(weekOnly.weeklyRecord.value == "4\u{2013}1")
+        #expect(weekOnly.weeklyRank.value == "#2")
+        #expect(weekOnly.weeklyRank.label == "This Week Rank")
+        #expect(weekOnly.seasonRecord.value == "\u{2014}")
+        #expect(weekOnly.seasonRecord.label == "Season")
+        #expect(weekOnly.seasonRank.value == "\u{2014}")
+        #expect(weekOnly.seasonRank.label == "Season Rank")
+        #expect(weekOnly.accessibilityLabel == "Week 4 to 1, Season unavailable, This week rank 2, No season rank yet")
+
+        let seasonOnly = LeagueHeroRankCopy.display(
+            weekly: nil,
+            weeklyBoard: [],
+            season: season,
+            seasonBoard: [season]
+        )
+        #expect(seasonOnly.weeklyRecord.value == "\u{2014}")
+        #expect(seasonOnly.weeklyRecord.label == "This Week")
+        #expect(seasonOnly.weeklyRank.value == "\u{2014}")
+        #expect(seasonOnly.seasonRecord.value == "59\u{2013}66")
+        #expect(seasonOnly.seasonRank.value == "#3")
+        #expect(seasonOnly.accessibilityLabel == "Week unavailable, season 59 to 66, No this week rank yet, Season rank 3")
+
+        let hidden = LeagueHeroRankCopy.summary(
+            weekly: nil,
+            weeklyBoard: [],
+            season: nil,
+            seasonBoard: []
+        )
+        #expect(hidden == nil)
+
+        let shown = LeagueHeroRankCopy.summary(
+            weekly: nil,
+            weeklyBoard: [],
+            season: season,
+            seasonBoard: [season]
+        )
+        #expect(shown?.seasonRank.value == "#3")
+        #expect(shown?.weeklyRank.value == "\u{2014}")
     }
 }

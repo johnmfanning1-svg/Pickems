@@ -49,12 +49,41 @@ enum LeagueHeroRankCopy {
         )
     }
 
-    static func display(
-        weekly: Member,
+    /// Nil only when the viewer is on neither board. One missing scope stays on
+    /// the card as a dash so the other row still shows.
+    static func summary(
+        weekly: Member?,
         weeklyBoard: [Member],
-        season: Member,
+        season: Member?,
+        seasonBoard: [Member]
+    ) -> Display? {
+        guard weekly != nil || season != nil else { return nil }
+        return display(
+            weekly: weekly,
+            weeklyBoard: weeklyBoard,
+            season: season,
+            seasonBoard: seasonBoard
+        )
+    }
+
+    static func display(
+        weekly: Member?,
+        weeklyBoard: [Member],
+        season: Member?,
         seasonBoard: [Member]
     ) -> Display {
+        let weeklyRecord = recordStat(
+            member: weekly,
+            label: "This Week",
+            present: { "Week \($0.wins) to \($0.losses)" },
+            missing: "Week unavailable"
+        )
+        let seasonRecord = recordStat(
+            member: season,
+            label: "Season",
+            present: { "season \($0.wins) to \($0.losses)" },
+            missing: "Season unavailable"
+        )
         let weeklyRank = rankStat(
             member: weekly,
             board: weeklyBoard,
@@ -68,17 +97,40 @@ enum LeagueHeroRankCopy {
             scope: "season"
         )
         let accessibility = [
-            "Week \(weekly.wins) to \(weekly.losses)",
-            "season \(season.wins) to \(season.losses)",
+            weeklyRecord.accessibility,
+            seasonRecord.accessibility,
             weeklyRank.accessibility,
             seasonRank.accessibility,
         ].joined(separator: ", ")
         return Display(
-            weeklyRecord: Stat(value: record(weekly.wins, weekly.losses), label: "This Week"),
-            seasonRecord: Stat(value: record(season.wins, season.losses), label: "Season"),
+            weeklyRecord: weeklyRecord.stat,
+            seasonRecord: seasonRecord.stat,
             weeklyRank: weeklyRank.stat,
             seasonRank: seasonRank.stat,
             accessibilityLabel: accessibility
+        )
+    }
+
+    private struct SpokenStat {
+        var stat: Stat
+        var accessibility: String
+    }
+
+    private static func recordStat(
+        member: Member?,
+        label: String,
+        present: (Member) -> String,
+        missing: String
+    ) -> SpokenStat {
+        guard let member else {
+            return SpokenStat(
+                stat: Stat(value: unavailableRank, label: label),
+                accessibility: missing
+            )
+        }
+        return SpokenStat(
+            stat: Stat(value: record(member.wins, member.losses), label: label),
+            accessibility: present(member)
         )
     }
 
@@ -88,11 +140,17 @@ enum LeagueHeroRankCopy {
     }
 
     private static func rankStat(
-        member: Member,
+        member: Member?,
         board: [Member],
         label: String,
         scope: String
     ) -> RankParts {
+        guard let member else {
+            return RankParts(
+                stat: Stat(value: unavailableRank, label: label),
+                accessibility: "No \(scope) rank yet"
+            )
+        }
         if member.wins + member.losses == 0 {
             return RankParts(
                 stat: Stat(value: unavailableRank, label: label),
@@ -104,7 +162,7 @@ enum LeagueHeroRankCopy {
         let value = tied ? "T-#\(member.rank)" : "#\(member.rank)"
         let spokenScope = "\(scope.prefix(1).uppercased())\(scope.dropFirst())"
         let accessibility = tied
-            ? "Tied for \(scope) rank \(member.rank)"
+            ? "Tied for \(spokenScope) rank \(member.rank)"
             : "\(spokenScope) rank \(member.rank)"
         return RankParts(
             stat: Stat(value: value, label: label),

@@ -207,12 +207,12 @@ struct GroupsView: View {
         guard let userId = appState.currentUserId else { return nil }
         let weeklyBoard = appState.rankedStandings(weekly: true)
         let seasonBoard = appState.rankedStandings(weekly: false)
-        guard let weeklyEntry = weeklyBoard.first(where: { $0.id == userId }),
-              let seasonEntry = seasonBoard.first(where: { $0.id == userId }) else { return nil }
-        return LeagueHeroRankCopy.display(
-            weekly: heroMember(weeklyEntry, weeklyScope: true),
+        let weeklyEntry = weeklyBoard.first { $0.id == userId }
+        let seasonEntry = seasonBoard.first { $0.id == userId }
+        return LeagueHeroRankCopy.summary(
+            weekly: weeklyEntry.map { heroMember($0, weeklyScope: true) },
             weeklyBoard: weeklyBoard.map { heroMember($0, weeklyScope: true) },
-            season: heroMember(seasonEntry, weeklyScope: false),
+            season: seasonEntry.map { heroMember($0, weeklyScope: false) },
             seasonBoard: seasonBoard.map { heroMember($0, weeklyScope: false) }
         )
     }
