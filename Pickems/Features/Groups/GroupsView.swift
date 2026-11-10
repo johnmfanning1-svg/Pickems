@@ -36,6 +36,7 @@ struct GroupsView: View {
             .navigationTitle("Leagues")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                LeagueSearchJoinToolbarItem { appState.present($0) }
                 HelpToolbarItem(topic: PickemsHelp.groupsOverview)
             }
             .pickemsRefreshable(isRefreshing: $isRefreshing) {
@@ -603,7 +604,7 @@ struct GroupsView: View {
                         systemImage: "person.badge.plus",
                         hint: "Enter an invite code for a different league"
                     ) {
-                        appState.present(.joinGroup)
+                        appState.present(LeagueSearchJoin.sheet)
                     }
 
                     manageRow(
