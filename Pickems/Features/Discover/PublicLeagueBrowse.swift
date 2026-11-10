@@ -23,7 +23,7 @@ enum PublicLeagueBrowse {
     static let accessibilityLabel = "Browse public leagues"
     static let accessibilityHint = "Shows public leagues you can join. Private leagues stay hidden."
     static let intro = "Public leagues anyone can join. Private and invite-only leagues stay hidden."
-    static let emptyMessage = "No public leagues yet. Commissioners can list a league in Discover from settings."
+    static let emptyMessage = "No public leagues yet. A commissioner can make a league public when creating it, or later in league settings."
 
     /// Index rows a signed-in member can browse. No name or code is required to
     /// ask: this filters a list, it does not search `groups`.

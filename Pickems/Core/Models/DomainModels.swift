@@ -98,7 +98,7 @@ struct PickemGroup: Codable, Identifiable, Equatable {
     var memberIds: [String]
     var rules: GroupRules
     var createdAt: Date
-    /// When true, league appears in Discover for anyone signed in.
+    /// When true, the league is listed in Browse and anyone signed in can join.
     var isPublic: Bool = false
     /// Private-league lock so only the commissioner can share the invite. Nil/missing means off.
     var commissionerOnlyInvites: Bool? = nil
