@@ -76,7 +76,12 @@ import {
   lockedSpreadPatch,
   oddsRefreshPatch,
 } from "./spreadLock";
-import { shouldClaimLeadAlert, shouldNotifyGameFinal, tookTheLeadRecipients } from "./leadAlert";
+import {
+  shouldClaimLeadAlert,
+  shouldNotifyGameFinal,
+  tookTheLeadRecipients,
+  userIdsWithPicks,
+} from "./leadAlert";
 
 initializeApp();
 const db = getFirestore();
@@ -1177,6 +1182,8 @@ async function refreshLiveStandings(
     previous,
     games,
     changedGameIds,
+    // Doc id is the roster id, matching the board built above.
+    pickedUserIds: userIdsWithPicks(picks),
     nowMs,
   });
 
