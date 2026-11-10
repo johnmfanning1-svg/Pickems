@@ -1049,9 +1049,36 @@ service cloud.firestore {
       }
     }
 
+    // Discover / Browse index. Any signed-in member may list these rows.
+    // Group docs, rosters, and picks stay on the membership-scoped rules above.
+    // A row exists only while the league is public, and only with the fields
+    // Browse shows — a private league cannot be written in here.
+    function publicLeagueIndexOk(groupId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['groupId', 'name', 'inviteCode', 'memberCount', 'updatedAt'])
+        && data.keys().hasAll(['groupId', 'name', 'inviteCode', 'memberCount'])
+        && data.groupId == groupId
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 80
+        && data.inviteCode is string
+        && data.inviteCode.matches('^[A-Z0-9]{4,8}$')
+        && data.memberCount is int
+        && data.memberCount >= 0
+        && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is timestamp);
+    }
+
+    function leagueIsDiscoverable(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId)).data.isPublic == true;
+    }
+
     match /publicLeagues/{groupId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn() && isCommissioner(groupId);
+      allow create, update: if isSignedIn()
+        && isCommissioner(groupId)
+        && leagueIsDiscoverable(groupId)
+        && publicLeagueIndexOk(groupId);
+      allow delete: if isSignedIn() && isCommissioner(groupId);
     }
 
     // Remote kill switches and feature flags (appConfig/live). Every signed-in

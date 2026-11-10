@@ -1,14 +1,6 @@
 import SwiftUI
 import FirebaseFirestore
 
-struct PublicLeagueListing: Codable, Identifiable, Equatable {
-    var id: String { groupId }
-    var groupId: String
-    var name: String
-    var inviteCode: String
-    var memberCount: Int
-}
-
 @MainActor
 @Observable
 final class DiscoverService {
@@ -22,11 +14,14 @@ final class DiscoverService {
         isLoading = true
         defer { isLoading = false }
         do {
-            let snap = try await db.collection("publicLeagues")
+            let snap = try await db.collection(PublicLeagueBrowse.indexCollection)
                 .order(by: "memberCount", descending: true)
                 .limit(to: 40)
                 .getDocuments()
-            leagues = snap.documents.compactMap { try? $0.data(as: PublicLeagueListing.self) }
+            leagues = PublicLeagueBrowse.listings(
+                from: snap.documents.compactMap { try? $0.data(as: PublicLeagueListing.self) }
+            )
+            errorMessage = nil
         } catch {
             UserFacingError.apply(error, to: &errorMessage)
         }
@@ -62,7 +57,7 @@ struct DiscoverLeaguesView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(league.name)
                                 .font(.headline)
-                            Text("\(league.memberCount) members")
+                            Text(PublicLeagueBrowse.memberCountLabel(league.memberCount))
                                 .font(.caption)
                                 .foregroundStyle(PickemsColors.textSecondary)
                         }

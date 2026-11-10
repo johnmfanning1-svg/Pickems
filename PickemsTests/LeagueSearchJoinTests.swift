@@ -12,6 +12,6 @@ struct LeagueSearchJoinTests {
     @Test func usesMagnifyingGlassAndSearchJoinLabel() {
         #expect(LeagueSearchJoin.systemImage == "magnifyingglass")
         #expect(LeagueSearchJoin.accessibilityLabel == "Search or join a league")
-        #expect(LeagueSearchJoin.accessibilityHint == "Enter an invite code from your commissioner")
+        #expect(LeagueSearchJoin.accessibilityHint == "Enter an invite code, or browse public leagues")
     }
 }

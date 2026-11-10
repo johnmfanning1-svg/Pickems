@@ -371,7 +371,11 @@ enum PickemsHelp {
         id: "onboarding.join",
         title: "Join a League",
         message: "Enter the 4–8 character invite code from your commissioner.",
-        tips: ["Codes are case-insensitive.", "Ask your commissioner to tap Invite Friends on the Leagues tab."]
+        tips: [
+            "Codes are case-insensitive.",
+            "Ask your commissioner to tap Invite Friends on the Leagues tab.",
+            "Tap Browse to see public leagues you can join without a code. Private leagues are not listed."
+        ]
     )
 }
 
