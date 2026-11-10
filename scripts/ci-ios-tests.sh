@@ -34,9 +34,9 @@ rc=$?
 set -e
 # Counts come from the .xcresult bundle (Swift Testing and XCTest alike),
 # not from grepping test.log.
-# Floor on passed + expected failures. 667 after #146. The search/join
-# toolbar adds 2 presentation tests. 667 + 2 = 669. Do not lower this.
-MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-669}"
+# Floor on passed + expected failures. 669 after #149. League summary rank
+# copy adds 4 tests. 669 + 4 = 673. Do not lower this.
+MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-673}"
 grep -iE "error:|Test case .* failed|\*\* TEST" "$OUT/logs/test.log" | tail -n 200 || true
 summary="$OUT/logs/test-summary.json"
 if ! xcrun xcresulttool get test-results summary --path "$OUT/TestResults.xcresult" --format json > "$summary" 2>"$OUT/logs/xcresulttool.err"; then
