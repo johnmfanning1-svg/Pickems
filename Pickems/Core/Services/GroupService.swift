@@ -745,10 +745,12 @@ final class GroupService {
         displayName: String,
         avatarColorHex: String? = nil,
         avatarImageURL: String? = nil,
-        rules: GroupRules = .default
-    ) async throws -> PickemGroup {
+        rules: GroupRules = .default,
+        isPublic: Bool = false
+    ) async throws -> LeagueCreateResult {
         AppEvents.track(.onboardingCreateStarted, metadata: [
             "uid": AppEvents.shortUID(commissionerId),
+            "is_public": isPublic ? "true" : "false",
         ])
         do {
             let inviteCode = generateInviteCode()
@@ -760,8 +762,12 @@ final class GroupService {
                 commissionerId: commissionerId,
                 memberIds: [commissionerId],
                 rules: rules,
-                createdAt: Date()
+                createdAt: Date(),
+                isPublic: isPublic
             )
+            // `LeagueVisibility.createWriteOrder`: the group document (including
+            // isPublic) has to commit before the Browse index. Rules read that
+            // document and deny the index row until isPublic is true.
             try await groupRef.setData(from: group)
             try await db.collection("inviteCodes").document(inviteCode).setData(["groupId": groupRef.documentID])
 
@@ -777,6 +783,10 @@ final class GroupService {
             )
             try await groupRef.collection("members").document(commissionerId)
                 .setData(try memberDocumentForCreate(member))
+            // Index last, and only once the league itself exists. A miss here
+            // does not fail creation — the commissioner can save List in Browse
+            // from settings, which writes the same row.
+            let browseListingNotice = await listCreatedLeagueInBrowse(group)
             // Put the new league in `groups` before adopting so the membership
             // listener cannot bounce selection back to the previous league.
             if !groups.contains(where: { $0.id == group.id }) {
@@ -787,14 +797,59 @@ final class GroupService {
             AppEvents.track(.onboardingCreateSucceeded, metadata: [
                 "uid": AppEvents.shortUID(commissionerId),
                 "group_id": group.id,
+                "is_public": isPublic ? "true" : "false",
+                "browse_listed": browseListingNotice == nil && isPublic ? "true" : "false",
             ])
-            return group
+            return LeagueCreateResult(group: group, browseListingNotice: browseListingNotice)
         } catch {
             AppEvents.failure(.onboardingCreateFailed, error: error, metadata: [
                 "uid": AppEvents.shortUID(commissionerId),
             ])
             throw error
         }
+    }
+
+    /// Writes `publicLeagues/{id}` after the group doc is already public.
+    /// Returns a notice when Browse will not show the league. Never throws.
+    private func listCreatedLeagueInBrowse(_ group: PickemGroup) async -> String? {
+        guard group.isPublic else { return nil }
+        let row = LeagueVisibility.indexRow(
+            groupId: group.id,
+            name: group.name,
+            inviteCode: group.inviteCode,
+            memberCount: group.memberCount
+        )
+        let publishError: Error?
+        if let row {
+            publishError = await PublicLeagueIndexPublish.attempt {
+                var payload = row.storedFields()
+                payload["updatedAt"] = FieldValue.serverTimestamp()
+                try await self.db.collection(PublicLeagueBrowse.indexCollection)
+                    .document(row.groupId)
+                    .setData(payload)
+            }
+            if let publishError {
+                AppLog.error(
+                    AppLog.firestore,
+                    "public league index write failed",
+                    error: publishError,
+                    metadata: [
+                        "group_id": group.id,
+                        "attempts": "\(PublicLeagueIndexPublish.maxAttempts)",
+                    ]
+                )
+            }
+        } else {
+            publishError = nil
+            AppLog.notice(AppLog.firestore, "public league index skipped — row would be rejected", metadata: [
+                "group_id": group.id,
+            ])
+        }
+        return LeagueVisibility.browseListingNotice(
+            isPublic: group.isPublic,
+            indexRow: row,
+            publishError: publishError
+        )
     }
 
     func joinGroup(

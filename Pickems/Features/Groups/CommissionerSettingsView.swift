@@ -70,10 +70,7 @@ struct CommissionerSettingsView: View {
     }
 
     private var visibilityFooter: String {
-        if isPublic {
-            return "Public leagues appear in Discover. See who's in is on the Pickems tab."
-        }
-        return "Private leagues stay off Discover. Turn on Only commissioner can invite to hide Invite Friends for members — they will be asked to contact you instead. You still share the code from Invite Friends on the Leagues tab."
+        isPublic ? LeagueVisibility.publicSettingsFooter : LeagueVisibility.privateSettingsFooter
     }
 
     // `body` is split into small pieces on purpose: as one expression (every section,
@@ -361,7 +358,7 @@ struct CommissionerSettingsView: View {
 
     private var visibilitySection: some View {
         Section {
-            Toggle("List in Discover", isOn: $isPublic)
+            Toggle(LeagueVisibility.settingsToggleTitle, isOn: $isPublic)
                 .listRowBackground(PickemsColors.cardBackground)
             if !isPublic {
                 Toggle("Only commissioner can invite", isOn: $commissionerOnlyInvites)

@@ -303,6 +303,7 @@ enum PickemsHelp {
             "Changes apply to future weeks. Set a Selection deadline each week in member mode.",
             "Pickems Lock chooses entire-slate lock at first kickoff, or rolling lock at each game.",
             "On a private league, Only commissioner can invite hides Invite Friends for members.",
+            "List in Browse puts the league on the Browse screen. Anyone signed in can join. You can choose that when you create the league, or here.",
             "This Week’s chip bar picks which week you admin. It also switches Selections and Pickems.",
             "Resolve Ties appears after this week is scored when two or more people have the same number of wins. Head-to-Head leagues skip that — the slate breaks ties."
         ]
@@ -363,8 +364,8 @@ enum PickemsHelp {
     static let createGroup = HelpTopic(
         id: "onboarding.create",
         title: "Create a League",
-        message: "Start a private league. You'll be the commissioner and can invite friends with your code.",
-        tips: ["Choose Against the Spread or Straight Up when you create the league. You can change it later in Commissioner Settings → Scoring.", "You can configure slate size and other rules after creating the league."]
+        message: "You'll be the commissioner. Choose Private to keep it invite-only, or Public to list it in Browse so anyone can join.",
+        tips: ["Choose Against the Spread or Straight Up when you create the league. You can change it later in Commissioner Settings → Scoring.", "You can configure slate size and other rules after creating the league.", "List in Browse can also be changed later in Commissioner Settings."]
     )
 
     static let joinGroup = HelpTopic(

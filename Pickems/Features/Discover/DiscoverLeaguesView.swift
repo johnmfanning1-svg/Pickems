@@ -48,7 +48,7 @@ struct DiscoverLeaguesView: View {
                 ProgressView()
                     .listRowBackground(PickemsColors.cardBackground)
             } else if service.leagues.isEmpty {
-                Text("No public leagues yet. Commissioners can enable Discover in settings.")
+                Text(PublicLeagueBrowse.emptyMessage)
                     .foregroundStyle(PickemsColors.textSecondary)
                     .listRowBackground(PickemsColors.cardBackground)
             } else {

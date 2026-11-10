@@ -7,10 +7,12 @@ struct CreateGroupWizardView: View {
 
     @State private var step = 0
     @State private var groupName = ""
+    @State private var visibility: LeagueVisibility = .createDefault
     @State private var rules = GroupRules.default
     @State private var isWorking = false
     @State private var errorMessage: String?
     @State private var createdGroup: PickemGroup?
+    @State private var browseListingNotice: String?
 
     var onComplete: () -> Void = {}
 
@@ -75,22 +77,87 @@ struct CreateGroupWizardView: View {
         }
     }
 
+    private var resolvedGroupName: String {
+        let trimmed = groupName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "My Pickems" : trimmed
+    }
+
     private var nameStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Name your league")
-                .font(.title2.bold())
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Name your league")
+                    .font(.title2.bold())
+                    .foregroundStyle(PickemsColors.textPrimary)
+                Text("You'll be the commissioner and can invite friends with a code.")
+                    .font(.subheadline)
+                    .foregroundStyle(PickemsColors.textSecondary)
+
+                TextField("Saturday Watch Party", text: $groupName)
+                    .textFieldStyle(.pickems)
+
+                visibilityChoice
+
+                HelpInfoButton(topic: PickemsHelp.createGroup)
+            }
+            .padding()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var visibilityChoice: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(LeagueVisibility.sectionTitle)
+                .font(.headline)
                 .foregroundStyle(PickemsColors.textPrimary)
-            Text("You'll be the commissioner and can invite friends with a code.")
+            Text(LeagueVisibility.sectionDetail)
                 .font(.subheadline)
                 .foregroundStyle(PickemsColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            TextField("Saturday Watch Party", text: $groupName)
-                .textFieldStyle(.pickems)
-
-            HelpInfoButton(topic: PickemsHelp.createGroup)
+            ForEach(LeagueVisibility.allCases) { option in
+                let selected = visibility == option
+                Button {
+                    guard visibility != option else { return }
+                    visibility = option
+                    PickemsHaptics.selection()
+                } label: {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                            .font(.body)
+                            .foregroundStyle(selected ? theme.accent : PickemsColors.textSecondary)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(option.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(PickemsColors.textPrimary)
+                            Text(option.detail)
+                                .font(.caption)
+                                .foregroundStyle(PickemsColors.textSecondary)
+                                .multilineTextAlignment(.leading)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(PickemsColors.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(
+                                selected ? theme.accent : PickemsColors.hairlineSubtle,
+                                lineWidth: selected ? 1.5 : 1
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(option.title)
+                .accessibilityValue(selected ? "Selected" : "Not selected")
+                .accessibilityHint(option.detail)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
         }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(LeagueVisibility.sectionTitle)
     }
 
     private var rulesStep: some View {
@@ -158,8 +225,9 @@ struct CreateGroupWizardView: View {
 
             PickemsCard {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(groupName.isEmpty ? "My Pickems" : groupName)
+                    Text(resolvedGroupName)
                         .font(.headline)
+                    Text(visibility.reviewLabel)
                     Text(rules.selectionMode.displayName)
                     if rules.selectionMode == .member {
                         Text("\(rules.selectionsPerMember) Selection\(rules.selectionsPerMember == 1 ? "" : "s") per member")
@@ -186,6 +254,13 @@ struct CreateGroupWizardView: View {
     }
 
     private func inviteStep(for group: PickemGroup) -> some View {
+        ScrollView {
+            inviteStepContent(for: group)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private func inviteStepContent(for group: PickemGroup) -> some View {
         VStack(spacing: 24) {
             VStack(spacing: 8) {
                 Image(systemName: "checkmark.seal.fill")
@@ -198,10 +273,11 @@ struct CreateGroupWizardView: View {
                     .foregroundStyle(PickemsColors.textPrimary)
                     .multilineTextAlignment(.center)
 
-                Text("Share your invite code so friends can join.")
+                Text(browseListingNotice ?? LeagueVisibility.createdSubtitle(isPublic: group.isPublic))
                     .font(.subheadline)
-                    .foregroundStyle(PickemsColors.textSecondary)
+                    .foregroundStyle(browseListingNotice == nil ? PickemsColors.textSecondary : PickemsColors.warning)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity)
 
@@ -227,8 +303,6 @@ struct CreateGroupWizardView: View {
                     finishAfterCreate()
                 }
             }
-
-            Spacer(minLength: 0)
         }
         .padding()
     }
@@ -237,6 +311,7 @@ struct CreateGroupWizardView: View {
         Task {
             isWorking = true
             errorMessage = nil
+            browseListingNotice = nil
             defer { isWorking = false }
 
             guard let user = await resolvedUser() else {
@@ -249,19 +324,21 @@ struct CreateGroupWizardView: View {
             }
             do {
                 rules.pickDeadline = .firstKickoff
-                let group = try await appState.groupService.createGroup(
-                    name: groupName.isEmpty ? "My Pickems" : groupName,
+                let result = try await appState.groupService.createGroup(
+                    name: resolvedGroupName,
                     commissionerId: user.id,
                     displayName: user.displayName,
                     avatarColorHex: user.avatarColorHex,
                     avatarImageURL: user.avatarImageURL,
-                    rules: rules
+                    rules: rules,
+                    isPublic: visibility.isPublic
                 )
-                try await appState.groupService.updateRules(groupId: group.id, rules: rules)
+                try await appState.groupService.updateRules(groupId: result.group.id, rules: rules)
                 appState.groupService.loadGroups(for: user.id)
                 PickemsHaptics.success()
                 // Show invite before dismissing so all entry points (incl. onboarding sheet) get the step.
-                createdGroup = group
+                browseListingNotice = result.browseListingNotice
+                createdGroup = result.group
             } catch {
                 errorMessage = UserFacingError.message(for: error, context: .write)
                     ?? error.localizedDescription
