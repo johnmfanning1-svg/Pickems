@@ -44,6 +44,69 @@ struct AppearancePreferenceTests {
         #expect(AppearancePreferenceStore.resolvedColorScheme(defaults: defaults) == .dark)
     }
 
+    @Test func appGroupDefaultsIsOneObject() {
+        let first = AppearancePreferenceStore.appGroupDefaults
+        let second = AppearancePreferenceStore.appGroupDefaults
+        #expect(first === second)
+    }
+
+    /// Profile's write used to hit a new `UserDefaults(suiteName:)` each time.
+    /// The string was saved (Light stayed selected) but the window's `@AppStorage`
+    /// never heard `didChangeNotification`, so the app stayed on the device's dark style.
+    @Test func profileWriteNotifiesTheSharedStoreTheWindowObserves() {
+        let window = AppearancePreferenceStore.appGroupDefaults
+        let key = AppearancePreference.storageKey
+        let previous = window.object(forKey: key)
+        defer {
+            if let previous {
+                window.set(previous, forKey: key)
+            } else {
+                window.removeObject(forKey: key)
+            }
+        }
+
+        let box = DefaultsChangeBox()
+        let token = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: window,
+            queue: nil
+        ) { _ in
+            box.hits += 1
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        AppearancePreferenceStore.set(.light)
+
+        #expect(window.string(forKey: key) == "light")
+        #expect(box.hits >= 1)
+        #expect(AppearancePreference.resolve(stored: window.string(forKey: key)).resolvedColorScheme == .light)
+    }
+
+    @Test func aFreshSuiteObjectKeepsTheValueButMissesTheChangeNotification() {
+        let suite = "pickems.appearance.split.\(UUID().uuidString)"
+        let profile = UserDefaults(suiteName: suite)!
+        let window = UserDefaults(suiteName: suite)!
+        defer { profile.removePersistentDomain(forName: suite) }
+
+        #expect(profile !== window)
+
+        let box = DefaultsChangeBox()
+        let token = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: window,
+            queue: nil
+        ) { _ in
+            box.hits += 1
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        AppearancePreferenceStore.set(.light, defaults: profile)
+
+        #expect(window.string(forKey: AppearancePreference.storageKey) == "light")
+        #expect(AppearancePreferenceStore.resolvedColorScheme(defaults: window) == .light)
+        #expect(box.hits == 0)
+    }
+
     @Test func profileChoicesAreSystemLightDark() {
         #expect(AppearancePreference.allCases.map(\.rawValue) == ["system", "light", "dark"])
         #expect(AppearancePreference.allCases.map(\.label) == ["System", "Light", "Dark"])
@@ -142,6 +205,10 @@ struct AppearancePreferenceTests {
             let right = try String(contentsOf: root.appendingPathComponent(widget), encoding: .utf8)
             #expect(left == right)
         }
+    }
+
+    private final class DefaultsChangeBox: @unchecked Sendable {
+        var hits = 0
     }
 
     private var statusKeys: [KeyPath<PickemsSurfacePalette, ColorContrast.RGB>] {

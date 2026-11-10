@@ -5,8 +5,6 @@ import FirebaseCore
 struct PickemsApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appState: AppState
-    @AppStorage(AppearancePreference.storageKey, store: AppearancePreferenceStore.appGroupDefaults)
-    private var appearanceRaw = AppearancePreference.defaultPreference.rawValue
 
     init() {
         // Idempotent with AppDelegate — whichever runs first wins. Must precede AppState
@@ -19,64 +17,88 @@ struct PickemsApp: App {
 
     var body: some Scene {
         WindowGroup {
-            SharingBootstrap {
-                RootView()
-                    .environment(appState)
-                    .environment(\.themePalette, appState.appTheme.palette)
-                    .appSheetHost(appState)
-                    .onAppear {
-                        appDelegate.setDeepLinkHandler { action in
-                            appState.handleDeepLink(action)
+            // Outermost, so Light/Dark override the device for the window, not
+            // only the view under SharingBootstrap. System passes nil.
+            AppearanceRoot(appState: appState) {
+                SharingBootstrap {
+                    RootView()
+                        .environment(appState)
+                        .environment(\.themePalette, appState.appTheme.palette)
+                        .appSheetHost(appState)
+                        .onAppear {
+                            appDelegate.setDeepLinkHandler { action in
+                                appState.handleDeepLink(action)
+                            }
                         }
-                    }
-                    .task {
-                        appState.configure()
-                        await appState.bootstrapSession()
-                    }
-                    .onChange(of: appState.authService.currentUser?.favoriteTeamId) { _, _ in
-                        appState.appTheme.sync(from: appState.authService.currentUser)
-                    }
-                    .preferredColorScheme(
-                        AppearancePreference.resolve(stored: appearanceRaw).resolvedColorScheme
-                    )
-                    .onChange(of: appearanceRaw) { _, _ in
-                        PickemsTheme.apply(palette: appState.appTheme.palette)
-                    }
-                    .onOpenURL { url in
-                        if let action = DeepLinkRouter.parse(url: url) {
-                            appState.handleDeepLink(action)
+                        .task {
+                            appState.configure()
+                            await appState.bootstrapSession()
                         }
-                    }
-                    .onChange(of: appState.groupService.hasCompletedInitialGroupLoad) { _, loaded in
-                        if loaded { appState.flushPendingNotificationRoute() }
-                    }
-                    .onChange(of: appState.groupService.groups.map(\.id)) { _, _ in
-                        appState.flushPendingNotificationRoute()
-                    }
-                    .onChange(of: appState.authService.authStateDetermined) { _, determined in
-                        #if DEBUG
-                        guard !DevAuthBypass.isEnabled else { return }
-                        #endif
-                        guard determined, appState.authService.isAuthenticated else { return }
-                        Task { await appState.onAuthStateReady() }
-                    }
-                    .onChange(of: appState.authService.isSignedIn) { _, signedIn in
-                        #if DEBUG
-                        guard !DevAuthBypass.isEnabled else { return }
-                        #endif
-                        guard signedIn else {
-                            appState.resetSession()
-                            return
+                        .onChange(of: appState.authService.currentUser?.favoriteTeamId) { _, _ in
+                            appState.appTheme.sync(from: appState.authService.currentUser)
                         }
-                        Task { await appState.onAuthStateReady() }
-                    }
-                    .onChange(of: appState.needsOnboarding) { wasOnboarding, needsOnboarding in
-                        if wasOnboarding, !needsOnboarding {
-                            appState.selectedTab = .home
-                            appState.scheduleFavoriteTeamPrompt()
+                        .onOpenURL { url in
+                            if let action = DeepLinkRouter.parse(url: url) {
+                                appState.handleDeepLink(action)
+                            }
                         }
-                    }
+                        .onChange(of: appState.groupService.hasCompletedInitialGroupLoad) { _, loaded in
+                            if loaded { appState.flushPendingNotificationRoute() }
+                        }
+                        .onChange(of: appState.groupService.groups.map(\.id)) { _, _ in
+                            appState.flushPendingNotificationRoute()
+                        }
+                        .onChange(of: appState.authService.authStateDetermined) { _, determined in
+                            #if DEBUG
+                            guard !DevAuthBypass.isEnabled else { return }
+                            #endif
+                            guard determined, appState.authService.isAuthenticated else { return }
+                            Task { await appState.onAuthStateReady() }
+                        }
+                        .onChange(of: appState.authService.isSignedIn) { _, signedIn in
+                            #if DEBUG
+                            guard !DevAuthBypass.isEnabled else { return }
+                            #endif
+                            guard signedIn else {
+                                appState.resetSession()
+                                return
+                            }
+                            Task { await appState.onAuthStateReady() }
+                        }
+                        .onChange(of: appState.needsOnboarding) { wasOnboarding, needsOnboarding in
+                            if wasOnboarding, !needsOnboarding {
+                                appState.selectedTab = .home
+                                appState.scheduleFavoriteTeamPrompt()
+                            }
+                        }
+                }
             }
         }
+    }
+}
+
+/// Window color scheme. Profile writes `AppearancePreferenceStore.appGroupDefaults`;
+/// this view observes that same object, so Light forces a light scheme while the
+/// device is dark, Dark stays dark, and System follows the device.
+private struct AppearanceRoot<Content: View>: View {
+    @AppStorage(AppearancePreference.storageKey, store: AppearancePreferenceStore.appGroupDefaults)
+    private var appearanceRaw = AppearancePreference.defaultPreference.rawValue
+
+    var appState: AppState
+    private let content: Content
+
+    init(appState: AppState, @ViewBuilder content: () -> Content) {
+        self.appState = appState
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .preferredColorScheme(
+                AppearancePreference.resolve(stored: appearanceRaw).resolvedColorScheme
+            )
+            .onChange(of: appearanceRaw) { _, _ in
+                PickemsTheme.apply(palette: appState.appTheme.palette)
+            }
     }
 }

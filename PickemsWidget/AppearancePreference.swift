@@ -41,9 +41,13 @@ enum AppearancePreference: String, CaseIterable, Identifiable {
 }
 
 enum AppearancePreferenceStore {
-    static var appGroupDefaults: UserDefaults {
+    /// One object for the suite. `@AppStorage` only observes the instance it was
+    /// given. A new `UserDefaults(suiteName:)` on each access still stores the
+    /// string (the Profile control stays on Light) but never tells the window,
+    /// so `preferredColorScheme` stays dark and does not override the device.
+    static let appGroupDefaults: UserDefaults = {
         UserDefaults(suiteName: PickemsAppGroup.suiteName) ?? .standard
-    }
+    }()
 
     static func preference(defaults: UserDefaults = appGroupDefaults) -> AppearancePreference {
         AppearancePreference.resolve(stored: defaults.string(forKey: AppearancePreference.storageKey))
