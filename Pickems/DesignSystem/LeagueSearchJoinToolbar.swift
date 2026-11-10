@@ -8,7 +8,7 @@ import SwiftUI
 enum LeagueSearchJoin {
     static let systemImage = "magnifyingglass"
     static let accessibilityLabel = "Search or join a league"
-    static let accessibilityHint = "Enter an invite code from your commissioner"
+    static let accessibilityHint = "Enter an invite code, or browse public leagues"
     static let sheet: AppSheet = .joinGroup
 }
 

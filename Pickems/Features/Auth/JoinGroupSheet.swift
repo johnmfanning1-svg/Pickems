@@ -9,69 +9,130 @@ struct JoinGroupSheet: View {
     @State private var inviteCode = ""
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @State private var path = NavigationPath()
+    @State private var detent: PresentationDetent = .medium
+
+    private enum JoinSheetRoute: Hashable {
+        case browse
+    }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("Invite Code", text: $inviteCode)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                } header: {
-                    HStack {
-                        Text("Join a League")
-                        Spacer()
-                        HelpInfoButton(topic: PickemsHelp.joinGroup, size: .caption)
+        NavigationStack(path: $path) {
+            joinForm
+                .navigationTitle("Join League")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
                     }
-                } footer: {
-                    Text("Enter the 4–8 character code from your commissioner.")
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Join") { join() }
+                            .fontWeight(.semibold)
+                            .disabled(!InviteCodeRules.isValidFormat(inviteCode) || isWorking)
+                    }
                 }
+                .navigationDestination(for: JoinSheetRoute.self) { _ in
+                    PublicLeagueBrowseView { listing in
+                        await join(listing: listing)
+                    }
+                }
+                .onAppear {
+                    if inviteCode.isEmpty { inviteCode = initialCode }
+                }
+        }
+        .presentationDetents([.medium, .large], selection: $detent)
+        .presentationDragIndicator(.visible)
+        .onChange(of: path.count) { _, count in
+            detent = count == 0 ? .medium : .large
+        }
+    }
 
-                if let errorMessage {
-                    Section {
-                        Text(errorMessage)
+    private var joinForm: some View {
+        Form {
+            Section {
+                TextField("Invite Code", text: $inviteCode)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+            } header: {
+                HStack {
+                    Text("Join a League")
+                    Spacer()
+                    HelpInfoButton(topic: PickemsHelp.joinGroup, size: .caption)
+                }
+            } footer: {
+                Text("Enter the 4–8 character code from your commissioner.")
+            }
+
+            Section {
+                NavigationLink(value: JoinSheetRoute.browse) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(PublicLeagueBrowse.entryTitle)
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(theme.accent)
+                            Text(PublicLeagueBrowse.entrySubtitle)
+                                .font(.caption)
+                                .foregroundStyle(PickemsColors.textSecondary)
+                        }
+                    } icon: {
+                        Image(systemName: "globe")
                             .foregroundStyle(theme.accent)
-                            .font(.caption)
                     }
+                    .padding(.vertical, 2)
                 }
+                .accessibilityLabel(PublicLeagueBrowse.accessibilityLabel)
+                .accessibilityHint(PublicLeagueBrowse.accessibilityHint)
+            } footer: {
+                Text(PublicLeagueBrowse.entryFooter)
             }
-            .navigationTitle("Join League")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+
+            if let errorMessage {
+                Section {
+                    Text(errorMessage)
+                        .foregroundStyle(theme.accent)
+                        .font(.caption)
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Join") { join() }
-                        .fontWeight(.semibold)
-                        .disabled(!InviteCodeRules.isValidFormat(inviteCode) || isWorking)
-                }
-            }
-            .onAppear {
-                if inviteCode.isEmpty { inviteCode = initialCode }
             }
         }
-        .presentationDetents([.medium])
     }
 
     private func join() {
-        Task {
-            isWorking = true
-            errorMessage = nil
-            defer { isWorking = false }
+        Task { _ = await join(code: inviteCode) }
+    }
 
-            guard appState.authService.currentUser != nil else {
-                errorMessage = "Sign in required."
-                return
-            }
-            do {
-                try await appState.joinGroup(inviteCode: inviteCode, markOnboarding: true)
-                PickemsHaptics.success()
-                dismiss()
-            } catch {
-                errorMessage = UserFacingError.message(for: error, context: .joinGroup)
-                    ?? "Couldn't join that league. Check the invite code and try again."
-            }
+    private func join(listing: PublicLeagueListing) async -> String? {
+        guard let code = PublicLeagueBrowse.joinCode(for: listing) else {
+            let message = "Couldn't join that league. Try again."
+            errorMessage = message
+            return message
+        }
+        return await join(code: code)
+    }
+
+    /// Same open/join path the invite field uses. Returns a message, or nil
+    /// after the sheet dismisses.
+    @discardableResult
+    private func join(code: String) async -> String? {
+        guard !isWorking else { return nil }
+        isWorking = true
+        errorMessage = nil
+        defer { isWorking = false }
+
+        guard appState.authService.currentUser != nil else {
+            let message = "Sign in required."
+            errorMessage = message
+            return message
+        }
+        do {
+            try await appState.joinGroup(inviteCode: code, markOnboarding: true)
+            PickemsHaptics.success()
+            dismiss()
+            return nil
+        } catch {
+            let message = UserFacingError.message(for: error, context: .joinGroup)
+                ?? "Couldn't join that league. Check the invite code and try again."
+            errorMessage = message
+            return message
         }
     }
 }

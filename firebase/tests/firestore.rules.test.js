@@ -2799,3 +2799,119 @@ describe("coordinator roles", () => {
     );
   });
 });
+
+describe("public league browse index", () => {
+  const PUBLIC_ID = "public-league";
+  const PRIVATE_ID = "private-league";
+
+  function indexPayload(groupId, code, name, extra = {}) {
+    return {
+      groupId,
+      name,
+      inviteCode: code,
+      memberCount: 2,
+      updatedAt: serverTimestamp(),
+      ...extra,
+    };
+  }
+
+  async function seedLeagues() {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, "groups", PUBLIC_ID), {
+        id: PUBLIC_ID,
+        name: "Saturday Slate",
+        inviteCode: "PUB123",
+        commissionerId: COMMISH,
+        memberIds: [COMMISH, MEMBER],
+        isPublic: true,
+      });
+      await setDoc(doc(db, "groups", PRIVATE_ID), {
+        id: PRIVATE_ID,
+        name: "Office Pool",
+        inviteCode: "PRIV88",
+        commissionerId: COMMISH,
+        memberIds: [COMMISH],
+        isPublic: false,
+      });
+      await setDoc(doc(db, "groups", PRIVATE_ID, "weeks", "2026-W1", "picks", COMMISH), {
+        userId: COMMISH,
+        picks: [{ teamId: "333" }],
+      });
+      await setDoc(doc(db, "publicLeagues", PUBLIC_ID), {
+        groupId: PUBLIC_ID,
+        name: "Saturday Slate",
+        inviteCode: "PUB123",
+        memberCount: 2,
+        updatedAt: new Date(),
+      });
+    });
+  }
+
+  it("lets a signed-in outsider list public leagues without private data", async () => {
+    await seedLeagues();
+    const outsider = testEnv.authenticatedContext(OUTSIDER).firestore();
+    const listed = await assertSucceeds(getDocs(collection(outsider, "publicLeagues")));
+    const ids = listed.docs.map((entry) => entry.id);
+    expect(ids).toContain(PUBLIC_ID);
+    expect(ids).not.toContain(PRIVATE_ID);
+
+    await assertFails(getDoc(doc(outsider, "groups", PUBLIC_ID)));
+    await assertFails(getDoc(doc(outsider, "groups", PRIVATE_ID)));
+    await assertFails(
+      getDocs(query(collection(outsider, "groups"), where("isPublic", "==", true)))
+    );
+    await assertFails(
+      getDoc(doc(outsider, "groups", PRIVATE_ID, "weeks", "2026-W1", "picks", COMMISH))
+    );
+    await assertFails(
+      getDoc(doc(testEnv.unauthenticatedContext().firestore(), "publicLeagues", PUBLIC_ID))
+    );
+  });
+
+  it("lets the commissioner index a public league and blocks a private one", async () => {
+    await seedLeagues();
+    const commish = testEnv.authenticatedContext(COMMISH).firestore();
+    await assertSucceeds(
+      setDoc(
+        doc(commish, "publicLeagues", PUBLIC_ID),
+        indexPayload(PUBLIC_ID, "PUB123", "Saturday Slate")
+      )
+    );
+    await assertFails(
+      setDoc(
+        doc(commish, "publicLeagues", PRIVATE_ID),
+        indexPayload(PRIVATE_ID, "PRIV88", "Office Pool")
+      )
+    );
+    await assertFails(
+      setDoc(
+        doc(commish, "publicLeagues", PUBLIC_ID),
+        indexPayload(PUBLIC_ID, "PUB123", "Saturday Slate", { memberIds: [COMMISH] })
+      )
+    );
+    await assertFails(
+      setDoc(
+        doc(testEnv.authenticatedContext(MEMBER).firestore(), "publicLeagues", PUBLIC_ID),
+        indexPayload(PUBLIC_ID, "PUB123", "Saturday Slate")
+      )
+    );
+    await assertSucceeds(
+      updateDoc(doc(commish, "publicLeagues", PUBLIC_ID), { memberCount: 3 })
+    );
+  });
+
+  it("lets the commissioner remove the index after the league goes private", async () => {
+    await seedLeagues();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "groups", PUBLIC_ID), { isPublic: false });
+    });
+    const commish = testEnv.authenticatedContext(COMMISH).firestore();
+    const index = doc(commish, "publicLeagues", PUBLIC_ID);
+    await assertFails(updateDoc(index, { memberCount: 1 }));
+    await assertFails(
+      deleteDoc(doc(testEnv.authenticatedContext(OUTSIDER).firestore(), "publicLeagues", PUBLIC_ID))
+    );
+    await assertSucceeds(deleteDoc(index));
+  });
+});
