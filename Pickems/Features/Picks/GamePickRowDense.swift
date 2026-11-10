@@ -295,7 +295,7 @@ struct GamePickRowDense: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(isSelected ? theme.accent : Color.white.opacity(0.14), lineWidth: isSelected ? 1.5 : 1)
+                        .strokeBorder(isSelected ? theme.accent : PickemsColors.hairlineStrong, lineWidth: isSelected ? 1.5 : 1)
                 )
                 .overlay(alignment: .topTrailing) {
                     if isSelected {
@@ -436,7 +436,7 @@ struct GamePickRowDense: View {
                     onSelect: { _ in }
                 )
                 if index < GamePickRowPreviewData.states.count - 1 {
-                    Divider().overlay(Color.white.opacity(0.08))
+                    Divider().overlay(PickemsColors.hairline)
                 }
             }
         }
@@ -493,7 +493,7 @@ private struct DenseSlatePreview: View {
                     onSelect: { _ in }
                 )
                 if index < samples.count - 1 {
-                    Divider().overlay(Color.white.opacity(0.08))
+                    Divider().overlay(PickemsColors.hairline)
                 }
             }
         }
@@ -515,7 +515,7 @@ private struct DensePreviewContainer<Content: View>: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                .strokeBorder(PickemsColors.hairline, lineWidth: 1)
         )
     }
 }

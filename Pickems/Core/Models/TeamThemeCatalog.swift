@@ -1,6 +1,7 @@
 import Foundation
 
-/// Curated CFB team colors. Accents are contrast-adjusted at palette build time for the dark UI.
+/// Curated CFB team colors. Accents are contrast-adjusted at palette build time:
+/// dark mode picks the readable school color, and light mode darkens that same hue.
 enum TeamThemeCatalog {
     static let teams: [FavoriteTeam] = [
         // SEC

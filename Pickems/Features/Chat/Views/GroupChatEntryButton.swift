@@ -36,13 +36,13 @@ struct GroupChatEntryButton: View {
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                    .strokeBorder(PickemsColors.hairlineSubtle, lineWidth: 1)
             )
             .overlay(alignment: .topTrailing) {
                 if unreadCount > 0 {
                     Text(badgeText)
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(theme.onAccent)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(theme.accent)

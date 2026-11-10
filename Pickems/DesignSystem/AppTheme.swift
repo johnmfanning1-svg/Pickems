@@ -20,6 +20,7 @@ final class AppTheme {
                 "team": team.abbreviation,
                 "accent_hex": chosen.hex,
                 "accent_contrast": String(format: "%.2f", ColorContrast.contrastRatio(chosen, background)),
+                "light_accent_hex": next.accentLightRGB.hex,
                 "primary_hex": team.primaryHex,
                 "secondary_hex": team.secondaryHex,
             ])
@@ -38,6 +39,7 @@ final class AppTheme {
                 "team": team.abbreviation,
                 "accent_hex": chosen.hex,
                 "accent_contrast": String(format: "%.2f", ColorContrast.contrastRatio(chosen, background)),
+                "light_accent_hex": palette.accentLightRGB.hex,
                 "primary_hex": team.primaryHex,
                 "secondary_hex": team.secondaryHex,
             ])

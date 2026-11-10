@@ -142,7 +142,7 @@ struct ScaledShareCardPreview: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                .strokeBorder(PickemsColors.hairline, lineWidth: 1)
         )
     }
 }

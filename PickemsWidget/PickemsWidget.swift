@@ -153,6 +153,7 @@ struct PickemsWidgetEntryView: View {
     @Environment(\.widgetRenderingMode) private var renderingMode
     @Environment(\.showsWidgetContainerBackground) private var systemShowsBackground
     @Environment(\.showsWidgetBackgroundOverride) private var showsBackgroundOverride
+    @Environment(\.colorScheme) private var colorScheme
 
     private var family: WidgetFamily { familyOverride ?? systemFamily }
     private var showsBackground: Bool { showsBackgroundOverride ?? systemShowsBackground }
@@ -181,10 +182,23 @@ struct PickemsWidgetEntryView: View {
             .redacted(reason: entry.redacted ? .placeholder : [])
             .widgetURL(rowLinks || family == .accessoryInline ? nil : deepLink)
         if renderingMode == .fullColor && showsBackground {
-            content.environment(\.colorScheme, .dark)
+            content.environment(\.colorScheme, resolvedScheme)
         } else {
             content
         }
+    }
+
+    /// Full-color widgets follow the Profile appearance. Tinted and clear widgets keep the system style.
+    private var resolvedScheme: ColorScheme {
+        AppearancePreferenceStore.resolvedColorScheme() ?? colorScheme
+    }
+
+    /// Colors drawn by this view. Child views read the environment override instead.
+    private var tone: ColorScheme {
+        if renderingMode == .fullColor && showsBackground {
+            return resolvedScheme
+        }
+        return colorScheme
     }
 
     @ViewBuilder
@@ -458,7 +472,7 @@ struct PickemsWidgetEntryView: View {
             if let delta = WidgetStandingsCopy.deltaSymbol(rank: snapshot.rank, previousRank: snapshot.previousRank) {
                 Text(delta)
                     .font(WidgetStyle.titleFont)
-                    .foregroundStyle(WidgetStyle.accented(delta.hasPrefix("▲") ? WidgetStyle.winGreen : WidgetStyle.brandRed, mode: renderingMode))
+                    .foregroundStyle(WidgetStyle.accented(delta.hasPrefix("▲") ? WidgetStyle.winGreen(tone) : WidgetStyle.brandRed(tone), mode: renderingMode))
                     .widgetAccentable()
                     .lineLimit(1)
             }
@@ -473,7 +487,7 @@ struct PickemsWidgetEntryView: View {
         let isYou = row.id == snapshot.userId
         return HStack(spacing: 4) {
             Circle()
-                .fill(isYou ? WidgetStyle.accented(WidgetStyle.brandRed, mode: renderingMode) : Color.clear)
+                .fill(isYou ? WidgetStyle.accented(WidgetStyle.brandRed(tone), mode: renderingMode) : Color.clear)
                 .frame(width: 6, height: 6)
                 .widgetAccentable(isYou)
             Text("#\(row.rank)")

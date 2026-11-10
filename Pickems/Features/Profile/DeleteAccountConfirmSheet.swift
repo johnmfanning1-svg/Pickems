@@ -6,6 +6,7 @@ import AuthenticationServices
 struct DeleteAccountConfirmSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var password = ""
     @State private var isWorking = false
@@ -60,7 +61,7 @@ struct DeleteAccountConfirmSheet: View {
                         } onCompletion: { result in
                             Task { await deleteWithApple(result) }
                         }
-                        .signInWithAppleButtonStyle(.white)
+                        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                         .frame(height: 50)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .disabled(isWorking)

@@ -315,7 +315,7 @@ struct GroupsView: View {
 
     private var totalsDivider: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.08))
+            .fill(PickemsColors.hairline)
             .frame(width: 1, height: 36)
     }
 
@@ -564,7 +564,7 @@ struct GroupsView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                    .strokeBorder(PickemsColors.hairlineSubtle, lineWidth: 1)
             )
     }
 
@@ -593,7 +593,7 @@ struct GroupsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                        .strokeBorder(PickemsColors.hairlineSubtle, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -734,7 +734,7 @@ struct GroupChip: View {
                 .overlay(
                     Capsule()
                         .strokeBorder(
-                            isSelected ? Color.clear : Color.white.opacity(0.08),
+                            isSelected ? Color.clear : PickemsColors.hairline,
                             lineWidth: 1
                         )
                 )

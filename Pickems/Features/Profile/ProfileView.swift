@@ -14,11 +14,14 @@ struct ProfileView: View {
     @State private var managementError: String?
     @State private var isRefreshing = false
     @State private var showScrimmage = false
+    @AppStorage(AppearancePreference.storageKey, store: AppearancePreferenceStore.appGroupDefaults)
+    private var appearanceRaw = AppearancePreference.defaultPreference.rawValue
 
     var body: some View {
         NavigationStack {
             Form {
                 accountSection
+                appearanceSection
                 notificationsSection
                 if AppConfig.isXSharingConfigured {
                     sharingSection
@@ -166,6 +169,35 @@ struct ProfileView: View {
         } footer: {
             Text("First and last name are for your account. Username is unique and shown in leagues.")
         }
+    }
+
+    private var appearanceSection: some View {
+        Section {
+            Picker("Appearance", selection: appearanceSelection) {
+                ForEach(AppearancePreference.allCases) { option in
+                    Text(option.label).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .listRowBackground(PickemsColors.cardBackground)
+            .accessibilityLabel("Appearance")
+            .accessibilityHint("System follows iPhone settings. Light and Dark stay fixed.")
+        } header: {
+            Text("Appearance")
+        } footer: {
+            Text("System matches this iPhone. Light and Dark stay until you change them. Your team color stays the accent.")
+        }
+    }
+
+    private var appearanceSelection: Binding<AppearancePreference> {
+        Binding(
+            get: { AppearancePreference.resolve(stored: appearanceRaw) },
+            set: { newValue in
+                appearanceRaw = newValue.rawValue
+                appState.publishSurfaces()
+            }
+        )
     }
 
     // MARK: - Notifications / etc.

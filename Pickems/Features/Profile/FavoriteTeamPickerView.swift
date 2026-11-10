@@ -204,7 +204,7 @@ struct FavoriteTeamRow: View {
             HStack(spacing: 4) {
                 Circle().fill(team.primaryColor).frame(width: 12, height: 12)
                 Circle().fill(team.secondaryColor).frame(width: 12, height: 12)
-                    .overlay(Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+                    .overlay(Circle().strokeBorder(PickemsColors.ring, lineWidth: 1))
             }
 
             if isSelected {

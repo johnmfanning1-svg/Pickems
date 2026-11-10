@@ -20,7 +20,7 @@ struct WeekDeadlineHeader: View {
         VStack(alignment: .leading, spacing: 14) {
             selectionSection
             if showsDivider {
-                Divider().overlay(Color.white.opacity(0.08))
+                Divider().overlay(PickemsColors.hairline)
             }
             pickemsSection
         }
