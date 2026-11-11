@@ -34,6 +34,12 @@ struct StandingsSnapshot: Codable, Equatable {
     var picksMade: Int? = nil
     /// Games the user is expected to pick. Nil on older snapshots, which then render as round one.
     var picksTotal: Int? = nil
+    /// Signed-in user's nominations while this week is still in Selections. Nil once picking opens.
+    var selectionsMade: Int? = nil
+    /// `selectionsPerMember` in member leagues, slate size when the commissioner builds the slate.
+    var selectionsTotal: Int? = nil
+    /// `member` or `commissioner` while Selections is open. Nil on older snapshots and after the slate is set.
+    var selectionQuota: String? = nil
     /// Rank before the latest change. Nil when the widget has not seen a different rank.
     var previousRank: Int? = nil
 
@@ -54,6 +60,8 @@ struct StandingsSnapshot: Codable, Equatable {
         var homeColorHex: String? = nil
         /// Clock or state, e.g. "Q3 4:12", "Final", "Sat 3:30".
         var statusText: String? = nil
+        /// True when the signed-in user nominated this game. Nil outside member Selections.
+        var isUserSelection: Bool? = nil
     }
 
     enum SnapshotPickResult: String, Codable, Equatable {

@@ -11,8 +11,17 @@ extension StandingsSnapshot {
         )
         snapshot.selectionsDeadline = Date().addingTimeInterval(18 * 3_600 + 24 * 60)
         snapshot.pickemsDeadline = Date().addingTimeInterval(42 * 3_600)
-        snapshot.picksMade = 7
-        snapshot.picksTotal = 10
+        snapshot.selectionQuota = WidgetSelectionQuota.member
+        snapshot.selectionsMade = 2
+        snapshot.selectionsTotal = 2
+        snapshot.picksMade = 0
+        snapshot.picksTotal = 4
+        snapshot.games = (0..<2).map { index in
+            var game = previewGame(index: index, kickoff: Date().addingTimeInterval(42 * 3_600))
+            game.userPick = nil
+            game.isUserSelection = true
+            return game
+        }
         return snapshot
     }
 

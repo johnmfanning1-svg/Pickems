@@ -115,8 +115,8 @@ extension AppState {
     }
 
     /// Widget + Live Activity for the display league (not necessarily the in-app selection).
-    func publishSurfaces() {
-        WidgetSnapshotService.publish(from: self)
+    func publishSurfaces(timelineReload: WidgetSnapshotService.TimelineReload = .immediate) {
+        WidgetSnapshotService.publish(from: self, timelineReload: timelineReload)
         LiveActivityController.sync(from: self)
     }
 
