@@ -49,6 +49,11 @@ struct PickemsWidgetProvider: AppIntentTimelineProvider {
         // Do not write the display preference here: the App Group holds one snapshot,
         // so two widgets on different leagues would keep overwriting each other.
         let loaded = loadSnapshot()
+        // Follow current league: the app publishes the open league. Show that
+        // snapshot even when this widget still has a league from an old pin.
+        if PickemsAppGroup.displayGroupId() == nil {
+            return (loaded, nil)
+        }
         guard let league = configuration.league else {
             return (loaded, nil)
         }

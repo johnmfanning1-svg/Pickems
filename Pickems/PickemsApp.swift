@@ -43,7 +43,13 @@ struct PickemsApp: App {
                             }
                         }
                         .onChange(of: appState.groupService.hasCompletedInitialGroupLoad) { _, loaded in
-                            if loaded { appState.flushPendingNotificationRoute() }
+                            if loaded {
+                                appState.flushPendingNotificationRoute()
+                                appState.migrateWidgetFollowIfNeeded()
+                            }
+                        }
+                        .onChange(of: appState.groupService.selectedGroup?.id) { _, _ in
+                            appState.migrateWidgetFollowIfNeeded()
                         }
                         .onChange(of: appState.groupService.groups.map(\.id)) { _, _ in
                             appState.flushPendingNotificationRoute()

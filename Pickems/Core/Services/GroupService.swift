@@ -171,6 +171,8 @@ final class GroupService {
             }
     }
 
+    /// Updates the open league. `MainTabView` reloads the widget and Live Activity
+    /// immediately when `selectedGroup` changes, so Follow tracks this switch.
     func selectGroup(_ group: PickemGroup) {
         let queuedWeek = queuedDeepLink?.groupId == group.id ? queuedDeepLink?.weekId : nil
         queuedDeepLink = nil

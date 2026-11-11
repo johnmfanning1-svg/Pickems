@@ -73,4 +73,59 @@ struct WidgetDisplayGroupResolverTests {
             ) == "a"
         )
     }
+
+    @Test func emptySavedIdFollowsTheSelectedLeague() {
+        #expect(
+            WidgetDisplayGroupResolver.resolve(
+                savedId: "",
+                selectedGroupId: "b",
+                groupIds: ["a", "b"]
+            ) == "b"
+        )
+    }
+
+    @Test func emptySavedIdFallsBackToFirstMembership() {
+        #expect(
+            WidgetDisplayGroupResolver.resolve(
+                savedId: "",
+                selectedGroupId: nil,
+                groupIds: ["a", "b"]
+            ) == "a"
+        )
+        #expect(
+            WidgetDisplayGroupResolver.resolve(
+                savedId: "",
+                selectedGroupId: "",
+                groupIds: ["a", "b"]
+            ) == "a"
+        )
+        #expect(
+            WidgetDisplayGroupResolver.resolve(
+                savedId: "",
+                selectedGroupId: "missing",
+                groupIds: ["a", "b"]
+            ) == "a"
+        )
+    }
+
+    @Test func missingBoardFetchesOnlyWhenTheSnapshotIsAnotherLeague() {
+        #expect(
+            WidgetDisplayGroupResolver.shouldFetchStandingsWhenBoardMissing(
+                displayGroupId: "b",
+                snapshotGroupId: "a"
+            )
+        )
+        #expect(
+            WidgetDisplayGroupResolver.shouldFetchStandingsWhenBoardMissing(
+                displayGroupId: "b",
+                snapshotGroupId: nil
+            )
+        )
+        #expect(
+            !WidgetDisplayGroupResolver.shouldFetchStandingsWhenBoardMissing(
+                displayGroupId: "b",
+                snapshotGroupId: "b"
+            )
+        )
+    }
 }
