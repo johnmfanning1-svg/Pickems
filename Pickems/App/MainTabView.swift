@@ -45,6 +45,22 @@ struct MainTabView: View {
         .onChange(of: appState.groupService.standings) { _, _ in
             appState.publishSurfaces()
         }
+        .onChange(of: appState.groupService.currentWeek) { _, _ in
+            appState.publishSurfaces()
+        }
+        .onChange(of: appState.pickService.nominations) { _, _ in
+            appState.publishSurfaces()
+        }
+        .onChange(of: appState.pickService.userPick) { _, _ in
+            appState.publishSurfaces()
+        }
+        .onChange(of: appState.pickService.slateGames) { _, _ in
+            appState.publishSurfaces()
+        }
+        .onChange(of: appState.picksViewModel.livePickCards) { _, cards in
+            WidgetSnapshotService.rememberLiveCards(Array(cards.values))
+            appState.publishSurfaces(timelineReload: .budgeted)
+        }
     }
 }
 

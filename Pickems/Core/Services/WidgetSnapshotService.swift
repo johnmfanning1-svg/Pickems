@@ -8,7 +8,17 @@ enum WidgetSnapshotService {
 
     private static var fetchGeneration = 0
 
-    static func publish(from appState: AppState) {
+    /// Immediate reloads follow a save or a week change. Score ticks stay inside the widget refresh budget.
+    enum TimelineReload {
+        case immediate
+        case budgeted
+    }
+
+    private static var rememberedLiveScores: [String: WidgetSnapshotBuilder.LiveScore] = [:]
+    private static var lastBudgetedReload = Date.distantPast
+    private static let budgetedReloadInterval: TimeInterval = 15 * 60
+
+    static func publish(from appState: AppState, timelineReload: TimelineReload = .immediate) {
         PickemsAppGroup.saveLeagues(
             appState.groupService.groups.map { WidgetLeague(id: $0.id, name: $0.name) }
         )
@@ -22,10 +32,30 @@ enum WidgetSnapshotService {
         }
 
         if CFBSeasonCalendar.isPreseason() {
-            publishPreseason(from: appState, group: group)
+            publishPreseason(from: appState, group: group, timelineReload: timelineReload)
             return
         }
-        publishStandings(from: appState, group: group)
+        publishStandings(from: appState, group: group, timelineReload: timelineReload)
+    }
+
+    /// Home and Pickems already have these cards. Later publishes reuse them for the snapshot.
+    static func rememberLiveCards(_ cards: [ESPNLiveGameCard]) {
+        for card in cards {
+            let text = ESPNLiveGameCard.strippingTrailingScore(from: card.statusDetail)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let score = WidgetSnapshotBuilder.LiveScore(
+                awayScore: card.awayScore,
+                homeScore: card.homeScore,
+                status: card.status,
+                statusText: text.isEmpty ? nil : text
+            )
+            if !card.espnEventId.isEmpty {
+                rememberedLiveScores[card.espnEventId] = score
+            }
+            if !card.id.isEmpty, card.id != card.espnEventId {
+                rememberedLiveScores[card.id] = score
+            }
+        }
     }
 
     /// League the widget and Live Activities should show.
@@ -52,7 +82,11 @@ enum WidgetSnapshotService {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
-    private static func publishPreseason(from appState: AppState, group: PickemGroup) {
+    private static func publishPreseason(
+        from appState: AppState,
+        group: PickemGroup,
+        timelineReload: TimelineReload
+    ) {
         let kickoff = CFBSeasonCalendar.nextSeasonKickoff()
         let seasonYear = CFBSeasonCalendar.seasonYear(containing: kickoff)
         let user = appState.authService.currentUser
@@ -92,11 +126,14 @@ enum WidgetSnapshotService {
             seasonKickoffAt: kickoff
         )
         PickemsAppGroup.save(snapshot)
-        WidgetCenter.shared.reloadTimelines(ofKind: "PickemsStandingsWidget")
-        WidgetCenter.shared.reloadAllTimelines()
+        reloadTimelines(timelineReload)
     }
 
-    private static func publishStandings(from appState: AppState, group: PickemGroup) {
+    private static func publishStandings(
+        from appState: AppState,
+        group: PickemGroup,
+        timelineReload: TimelineReload
+    ) {
         guard let user = appState.authService.currentUser else {
             PickemsAppGroup.clear()
             WidgetCenter.shared.reloadAllTimelines()
@@ -119,7 +156,8 @@ enum WidgetSnapshotService {
                 weekNumber: weekNumber,
                 seasonYear: standingsSeasonYear(from: appState, week: week),
                 ranked: ranked,
-                extras: extras(from: appState, group: group, week: week, weekNumber: weekNumber)
+                extras: extras(from: appState, group: group, week: week, weekNumber: weekNumber),
+                timelineReload: timelineReload
             )
             return
         }
@@ -135,7 +173,8 @@ enum WidgetSnapshotService {
                 groupId: groupId,
                 userId: userId,
                 userDisplayName: displayName,
-                generation: generation
+                generation: generation,
+                timelineReload: timelineReload
             )
         }
     }
@@ -145,7 +184,8 @@ enum WidgetSnapshotService {
         groupId: String,
         userId: String,
         userDisplayName: String,
-        generation: Int
+        generation: Int,
+        timelineReload: TimelineReload
     ) async {
         let fetched = await appState.groupService.fetchStandings(groupId: groupId)
         guard generation == fetchGeneration else { return }
@@ -179,7 +219,8 @@ enum WidgetSnapshotService {
                 previous: PickemsAppGroup.load(),
                 groupId: group.id,
                 weekNumber: weekNumber
-            )
+            ),
+            timelineReload: timelineReload
         )
     }
 
@@ -237,12 +278,22 @@ enum WidgetSnapshotService {
     ) -> WidgetSnapshotBuilder.Extras {
         let pickMode = week?.resolvedPickMode(leagueMode: group.rules.pickMode) ?? group.rules.pickMode
         if let slate = loadedSlate(from: appState, group: group, week: week) {
+            let scores = liveScores(from: appState)
             return WidgetSnapshotBuilder.extras(
                 week: week,
                 games: slate.games,
                 picks: slate.picks,
                 pickMode: pickMode,
-                statusTextByGameId: statusTextByGameId(from: appState, games: slate.games)
+                statusTextByGameId: statusTextByGameId(from: appState, games: slate.games),
+                nominations: appState.pickService.nominations,
+                userId: appState.authService.currentUser?.id ?? "",
+                liveScores: scores,
+                nominationsLoaded: appState.pickService.didLoadNominations,
+                memberQuota: CommissionerPinnedLeague.selectionsPerMember(
+                    weekValue: week?.selectionsPerMember ?? 0,
+                    pinnedRulesValue: group.rules.selectionsPerMember
+                ),
+                slateQuota: max((week?.slateSize ?? 0) > 0 ? week?.slateSize ?? 0 : group.rules.slateSize, 1)
             )
         }
         let fresh = WidgetSnapshotBuilder.extras(week: week, games: [], picks: [:], pickMode: pickMode)
@@ -265,10 +316,35 @@ enum WidgetSnapshotService {
               appState.pickService.observedWeekId == week.id else {
             return nil
         }
-        let games = week.status == .selection
+        let official = appState.pickService.slateGames
+        // During Selections the slate is the merged nominations. After lock, keep that
+        // merge until the games collection has the final slate, so a status flip cannot
+        // publish an empty board.
+        let games = (week.status == .selection || official.isEmpty)
             ? appState.pickService.displaySlateGames
-            : appState.pickService.slateGames
+            : official
         return (games, appState.pickService.userPick?.picks ?? [:])
+    }
+
+    private static func liveScores(from appState: AppState) -> [String: WidgetSnapshotBuilder.LiveScore] {
+        var scores = rememberedLiveScores
+        for card in appState.picksViewModel.livePickCards.values {
+            let key = card.espnEventId.isEmpty ? card.id : card.espnEventId
+            guard !key.isEmpty, scores[key] == nil else { continue }
+            let text = ESPNLiveGameCard.strippingTrailingScore(from: card.statusDetail)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let score = WidgetSnapshotBuilder.LiveScore(
+                awayScore: card.awayScore,
+                homeScore: card.homeScore,
+                status: card.status,
+                statusText: text.isEmpty ? nil : text
+            )
+            scores[key] = score
+            if !card.id.isEmpty, card.id != key {
+                scores[card.id] = score
+            }
+        }
+        return scores
     }
 
     /// Clock lines already on screen. No extra network read from the widget path.
@@ -284,6 +360,10 @@ enum WidgetSnapshotService {
                 map[game.id] = clock
             }
         }
+        for (id, score) in rememberedLiveScores {
+            guard let text = score.statusText, !text.isEmpty else { continue }
+            map[id] = text
+        }
         return map
     }
 
@@ -294,7 +374,8 @@ enum WidgetSnapshotService {
         weekNumber: Int,
         seasonYear: Int,
         ranked: [StandingEntry],
-        extras: WidgetSnapshotBuilder.Extras = .empty
+        extras: WidgetSnapshotBuilder.Extras = .empty,
+        timelineReload: TimelineReload = .immediate
     ) {
         let mine = ranked.first(where: { $0.id == userId })
         let rank = mine?.rank ?? 0
@@ -333,6 +414,9 @@ enum WidgetSnapshotService {
             weekPhaseHint: nil,
             picksMade: extras.picksMade,
             picksTotal: extras.picksTotal,
+            selectionsMade: extras.selectionsMade,
+            selectionsTotal: extras.selectionsTotal,
+            selectionQuota: extras.selectionQuota,
             previousRank: WidgetSnapshotBuilder.previousRank(
                 currentRank: rank,
                 previous: prior,
@@ -341,8 +425,22 @@ enum WidgetSnapshotService {
             )
         )
         PickemsAppGroup.save(snapshot)
-        WidgetCenter.shared.reloadTimelines(ofKind: "PickemsStandingsWidget")
-        WidgetCenter.shared.reloadAllTimelines()
+        reloadTimelines(timelineReload)
+    }
+
+    private static func reloadTimelines(_ policy: TimelineReload) {
+        switch policy {
+        case .immediate:
+            lastBudgetedReload = Date()
+            WidgetCenter.shared.reloadTimelines(ofKind: "PickemsStandingsWidget")
+            WidgetCenter.shared.reloadAllTimelines()
+        case .budgeted:
+            let now = Date()
+            guard now.timeIntervalSince(lastBudgetedReload) >= budgetedReloadInterval else { return }
+            lastBudgetedReload = now
+            WidgetCenter.shared.reloadTimelines(ofKind: "PickemsStandingsWidget")
+            WidgetCenter.shared.reloadAllTimelines()
+        }
     }
 
     private static func standingsWeekNumber(

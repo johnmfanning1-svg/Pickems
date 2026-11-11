@@ -12,6 +12,9 @@ enum WidgetSnapshotBuilder {
         var nextLockAt: Date?
         var picksMade: Int? = nil
         var picksTotal: Int? = nil
+        var selectionsMade: Int? = nil
+        var selectionsTotal: Int? = nil
+        var selectionQuota: String? = nil
 
         static let empty = Extras(
             selectionsDeadline: nil,
@@ -20,8 +23,19 @@ enum WidgetSnapshotBuilder {
             games: nil,
             nextLockAt: nil,
             picksMade: nil,
-            picksTotal: nil
+            picksTotal: nil,
+            selectionsMade: nil,
+            selectionsTotal: nil,
+            selectionQuota: nil
         )
+    }
+
+    /// Scores already on screen. The widget does not fetch them itself.
+    struct LiveScore: Equatable {
+        var awayScore: Int?
+        var homeScore: Int?
+        var status: SlateGame.GameStatus
+        var statusText: String?
     }
 
     static func extras(
@@ -30,26 +44,58 @@ enum WidgetSnapshotBuilder {
         picks: [String: String],
         pickMode: PickMode,
         now: Date = Date(),
-        statusTextByGameId: [String: String] = [:]
+        statusTextByGameId: [String: String] = [:],
+        nominations: [Nomination] = [],
+        userId: String = "",
+        liveScores: [String: LiveScore] = [:],
+        nominationsLoaded: Bool = true,
+        memberQuota: Int? = nil,
+        slateQuota: Int? = nil
     ) -> Extras {
         guard let week else { return .empty }
 
-        let selections: Date? = (week.status == .selection && !week.skipsSelection)
-            ? week.selectionDeadline
-            : nil
-        let mapped = games.map {
-            snapshotGame(
-                $0,
+        let scored = overlayingLiveScores(games, scores: liveScores)
+        let countingSelections = week.status == .selection && !week.skipsSelection
+        let userEventIds = Set(
+            nominations
+                .filter { $0.submittedBy == userId }
+                .map(\.espnEventId)
+                .filter { !$0.isEmpty }
+        )
+        let selections: Date? = countingSelections ? week.selectionDeadline : nil
+        let markSelections = countingSelections && week.selectionMode == .member && nominationsLoaded
+        let mapped = scored.map { game in
+            let clock = statusTextByGameId[game.id]
+                ?? statusTextByGameId[game.espnEventId]
+                ?? liveScores[game.id]?.statusText
+                ?? liveScores[game.espnEventId]?.statusText
+            let selected: Bool? = markSelections
+                ? (userEventIds.contains(game.espnEventId) || userEventIds.contains(game.id))
+                : nil
+            return snapshotGame(
+                game,
                 week: week,
                 picks: picks,
                 pickMode: pickMode,
                 now: now,
-                statusText: statusTextByGameId[$0.id]
+                statusText: clock,
+                isUserSelection: selected
             )
         }
-        let counts = pickCounts(mapped)
+        let memberCountsReady = week.selectionMode != .member || nominationsLoaded
+        let counts = (countingSelections && week.selectionMode == .member && !nominationsLoaded)
+            ? nil
+            : pickCounts(mapped)
+        let selection = selectionCounts(
+            week: week,
+            counting: countingSelections && memberCountsReady,
+            userNominationCount: userEventIds.count,
+            slateCount: scored.count,
+            memberQuota: memberQuota,
+            slateQuota: slateQuota
+        )
         let next: Date? = week.isRollingLock
-            ? PickDeadlineCalculator.nextLockDate(week: week, games: games, now: now)
+            ? PickDeadlineCalculator.nextLockDate(week: week, games: scored, now: now)
             : nil
         return Extras(
             selectionsDeadline: selections,
@@ -58,8 +104,29 @@ enum WidgetSnapshotBuilder {
             games: cap(mapped),
             nextLockAt: next,
             picksMade: counts?.made,
-            picksTotal: counts?.total
+            picksTotal: counts?.total,
+            selectionsMade: selection?.made,
+            selectionsTotal: selection?.total,
+            selectionQuota: selection?.quota
         )
+    }
+
+    /// Prefer a live card's score when the app already has one. A final slate row stays final.
+    static func overlayingLiveScores(
+        _ games: [SlateGame],
+        scores: [String: LiveScore]
+    ) -> [SlateGame] {
+        guard !scores.isEmpty else { return games }
+        return games.map { game in
+            guard let score = scores[game.id] ?? scores[game.espnEventId] else { return game }
+            var copy = game
+            if let away = score.awayScore { copy.awayScore = away }
+            if let home = score.homeScore { copy.homeScore = home }
+            if score.status == .final || (score.status == .inProgress && copy.status != .final) {
+                copy.status = score.status
+            }
+            return copy
+        }
     }
 
     /// Same league and week, rank actually moved: remember the rank we just left.
@@ -108,7 +175,30 @@ enum WidgetSnapshotBuilder {
         carried.nextLockAt = previous.nextLockAt
         carried.picksMade = previous.picksMade
         carried.picksTotal = previous.picksTotal
+        carried.selectionsMade = previous.selectionsMade
+        carried.selectionsTotal = previous.selectionsTotal
+        carried.selectionQuota = previous.selectionQuota
         return carried
+    }
+
+    /// Member quota is the signed-in user's nominations. Commissioner mode fills the slate size.
+    private static func selectionCounts(
+        week: WeekSummary,
+        counting: Bool,
+        userNominationCount: Int,
+        slateCount: Int,
+        memberQuota: Int?,
+        slateQuota: Int?
+    ) -> (made: Int, total: Int, quota: String)? {
+        guard counting else { return nil }
+        switch week.selectionMode {
+        case .member:
+            let total = memberQuota ?? week.selectionsPerMember
+            return (userNominationCount, max(total, 1), WidgetSelectionQuota.member)
+        case .commissioner:
+            let total = slateQuota ?? week.slateSize
+            return (slateCount, max(total, 1), WidgetSelectionQuota.commissioner)
+        }
     }
 
     /// Selection is not a Pickems lock. Only a game that has actually started is locked then.
@@ -131,7 +221,8 @@ enum WidgetSnapshotBuilder {
         picks: [String: String],
         pickMode: PickMode,
         now: Date,
-        statusText: String?
+        statusText: String?,
+        isUserSelection: Bool?
     ) -> StandingsSnapshot.SnapshotGame {
         let pickedId = trimmedPick(picks[game.id])
         let pickName: String?
@@ -155,7 +246,8 @@ enum WidgetSnapshotBuilder {
             result: result(game: game, pickedTeamId: pickedId, pickMode: pickMode),
             awayColorHex: colorHex(teamId: game.awayTeamId, abbreviation: game.awayTeamAbbreviation),
             homeColorHex: colorHex(teamId: game.homeTeamId, abbreviation: game.homeTeamAbbreviation),
-            statusText: resolvedStatusText(game: game, override: statusText)
+            statusText: resolvedStatusText(game: game, override: statusText),
+            isUserSelection: isUserSelection
         )
     }
 
@@ -209,16 +301,43 @@ enum WidgetSnapshotBuilder {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// Keep live and upcoming games when a slate is longer than the widget can show.
+    /// Keep the viewer's selections and open picks, then live games, when a slate is longer than the widget can show.
     private static func cap(_ games: [StandingsSnapshot.SnapshotGame]) -> [StandingsSnapshot.SnapshotGame] {
         let sorted = games.sorted { $0.kickoff < $1.kickoff }
         guard sorted.count > maxGames else { return sorted }
+        var kept: [StandingsSnapshot.SnapshotGame] = []
+        var seen = Set<String>()
+        func take(_ game: StandingsSnapshot.SnapshotGame) {
+            guard kept.count < maxGames, seen.insert(game.id).inserted else { return }
+            kept.append(game)
+        }
+        for game in sorted where game.isUserSelection == true {
+            take(game)
+        }
+        for game in sorted where trimmedPick(game.userPick) != nil && !game.isFinal {
+            take(game)
+        }
+        for game in sorted where trimmedPick(game.userPick) == nil && !game.isFinal {
+            take(game)
+        }
+        for game in capPool(sorted.filter { !seen.contains($0.id) }, limit: maxGames - kept.count) {
+            take(game)
+        }
+        return kept.sorted { $0.kickoff < $1.kickoff }
+    }
+
+    private static func capPool(
+        _ sorted: [StandingsSnapshot.SnapshotGame],
+        limit: Int
+    ) -> [StandingsSnapshot.SnapshotGame] {
+        guard limit > 0 else { return [] }
+        guard sorted.count > limit else { return sorted }
         let active = sorted.filter { !$0.isFinal }
-        if active.count >= maxGames {
-            return Array(active.prefix(maxGames))
+        if active.count >= limit {
+            return Array(active.prefix(limit))
         }
         let finals = sorted.filter(\.isFinal)
-        let room = maxGames - active.count
-        return (active + finals.prefix(room)).sorted { $0.kickoff < $1.kickoff }
+        let room = limit - active.count
+        return active + Array(finals.prefix(room))
     }
 }

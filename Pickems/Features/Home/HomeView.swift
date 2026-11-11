@@ -82,6 +82,10 @@ struct HomeView: View {
             .onChange(of: appState.pickService.userPick) { _, _ in
                 Task { await viewModel.refresh(appState: appState) }
             }
+            .onChange(of: viewModel.slateGames) { _, cards in
+                WidgetSnapshotService.rememberLiveCards(cards)
+                appState.publishSurfaces(timelineReload: .budgeted)
+            }
             .onChange(of: appState.pickService.slateGames) { _, _ in
                 coverMoment.observe(
                     appState: appState,

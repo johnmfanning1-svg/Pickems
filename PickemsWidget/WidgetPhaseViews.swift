@@ -21,10 +21,10 @@ struct DeadlinePhaseView: View {
 
     private var enlarged: Bool { !showsBackground }
     private var stale: Bool { WidgetPhase.isStale(snapshot: snapshot, now: now) }
-    private var owed: (made: Int, total: Int, left: Int)? {
-        WidgetPicksOwed.owed(made: snapshot.picksMade, total: snapshot.picksTotal)
+    private var progress: WidgetDeadlineProgress.Model {
+        WidgetDeadlineProgress.model(snapshot: snapshot, kind: kind)
     }
-    private var allIn: Bool { owed?.left == 0 }
+    private var allIn: Bool { progress.completionTitle != nil }
 
     var body: some View {
         switch family {
@@ -68,7 +68,7 @@ struct DeadlinePhaseView: View {
         VStack(alignment: .leading, spacing: WidgetStyle.rowSpacing) {
             header
             countdownStack
-            if !luminanceReduced, let owed, owed.left > 0 {
+            if !luminanceReduced, progress.list != .none {
                 dueList
             }
             if stale { WidgetRefreshButton() }
@@ -81,8 +81,8 @@ struct DeadlinePhaseView: View {
     private var rectangular: some View {
         VStack(alignment: .leading, spacing: 2) {
             WidgetEyebrow(text: snapshot.groupName)
-            if allIn {
-                Text("All picks in ✓")
+            if let title = progress.completionTitle {
+                Text(title)
                     .font(WidgetStyle.heroFont(for: family, enlarged: enlarged))
                     .foregroundStyle(WidgetStyle.accented(WidgetStyle.winGreen(colorScheme), mode: renderingMode))
                     .lineLimit(1)
@@ -91,13 +91,10 @@ struct DeadlinePhaseView: View {
                 timer(isHero: false)
             } else {
                 timer(isHero: true)
-                if let owed {
-                    Text("\(owed.left) of \(owed.total) left")
+                if let detail = progress.detail {
+                    Text(detail)
                         .font(WidgetStyle.rowFont)
                         .lineLimit(1)
-                } else {
-                    Text("left")
-                        .font(WidgetStyle.rowFont)
                 }
             }
         }
@@ -107,11 +104,11 @@ struct DeadlinePhaseView: View {
 
     private var circular: some View {
         Group {
-            if let owed {
-                Gauge(value: Double(owed.made), in: 0...Double(max(owed.total, 1))) {
+            if let made = progress.made, let total = progress.total {
+                Gauge(value: Double(min(made, total)), in: 0...Double(max(total, 1))) {
                     Text(kind == .selections ? "Sel" : "Picks")
                 } currentValueLabel: {
-                    Text(owed.left == 0 ? "✓" : "\(owed.left)")
+                    Text(allIn ? "✓" : "\(max(total - made, 0))")
                 }
                 .gaugeStyle(.accessoryCircularCapacity)
                 .widgetAccentable()
@@ -139,45 +136,46 @@ struct DeadlinePhaseView: View {
 
     @ViewBuilder
     private var countdownStack: some View {
-        if allIn {
-            Text("All picks in ✓")
+        if let title = progress.completionTitle {
+            Text(title)
                 .font(WidgetStyle.heroFont(for: family, enlarged: enlarged))
                 .foregroundStyle(WidgetStyle.accented(WidgetStyle.winGreen(colorScheme), mode: renderingMode))
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
                 .widgetAccentable()
             timer(isHero: false)
+            if !luminanceReduced, progress.showsBar, let made = progress.made, let total = progress.total {
+                progressBar(made: made, total: total)
+            }
         } else {
-            Text(kind == .selections ? "Selections lock in" : "Picks lock in")
+            Text(progress.lockTitle)
                 .font(WidgetStyle.titleFont)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             timer(isHero: true)
-            if let owed {
-                Text("\(owed.left) of \(owed.total) left")
+            if let detail = progress.detail {
+                Text(detail)
                     .font(WidgetStyle.rowFont)
                     .lineLimit(1)
-                if !luminanceReduced {
-                    progress(made: owed.made, total: owed.total)
+                if !luminanceReduced, progress.showsBar, let made = progress.made, let total = progress.total {
+                    progressBar(made: made, total: total)
                 }
-            } else {
-                Text("left")
-                    .font(WidgetStyle.rowFont)
-                    .foregroundStyle(.secondary)
             }
         }
     }
 
     private var dueList: some View {
-        let due = (snapshot.games ?? []).filter { $0.userPick == nil && !$0.isFinal }.prefix(4)
+        let rows = WidgetDeadlineProgress.rows(snapshot: snapshot, kind: kind)
         return VStack(alignment: .leading, spacing: WidgetStyle.rowSpacing) {
-            WidgetEyebrow(text: "Picks due")
-            if due.isEmpty {
-                Text("Every open game has a pick")
+            if let title = progress.listTitle {
+                WidgetEyebrow(text: title)
+            }
+            if rows.isEmpty, let empty = progress.listEmpty {
+                Text(empty)
                     .font(WidgetStyle.rowFont)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(Array(due)) { game in
+                ForEach(rows) { game in
                     HStack {
                         Text("\(game.awayShortName) @ \(game.homeShortName)")
                             .lineLimit(1)
@@ -187,10 +185,17 @@ struct DeadlinePhaseView: View {
                             .lineLimit(1)
                     }
                     .font(WidgetStyle.rowFont)
-                    .widgetLink(linkRows ? WidgetDeepLink.gameURL(snapshot: snapshot, gameId: game.id) : nil)
+                    .widgetLink(linkRows ? rowLink(for: game) : nil)
                 }
             }
         }
+    }
+
+    private func rowLink(for game: StandingsSnapshot.SnapshotGame) -> URL? {
+        if progress.list == .userSelections {
+            return WidgetDeepLink.url(phase: .deadline(deadline, .selections), snapshot: snapshot)
+        }
+        return WidgetDeepLink.gameURL(snapshot: snapshot, gameId: game.id)
     }
 
     private func timer(isHero: Bool) -> some View {
@@ -203,14 +208,14 @@ struct DeadlinePhaseView: View {
             .widgetAccentable()
     }
 
-    private func progress(made: Int, total: Int) -> some View {
-        let fraction = total == 0 ? 0 : CGFloat(made) / CGFloat(total)
+    private func progressBar(made: Int, total: Int) -> some View {
+        let fraction = total == 0 ? 0 : min(1, CGFloat(made) / CGFloat(total))
         return GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.primary.opacity(0.15))
                 Capsule()
                     .fill(WidgetStyle.accented(WidgetStyle.progressGold(colorScheme), mode: renderingMode))
-                    .frame(width: max(4, proxy.size.width * fraction))
+                    .frame(width: made <= 0 ? 0 : max(4, proxy.size.width * fraction))
                     .widgetAccentable()
             }
         }
@@ -221,12 +226,8 @@ struct DeadlinePhaseView: View {
     private var accessibilityText: String {
         let remaining = WidgetInlineCopy.compactRemaining(deadline.timeIntervalSince(now))
         var text = "\(snapshot.groupName). \(kind.label), \(remaining) remaining. Week \(snapshot.weekNumber)."
-        if let owed {
-            if owed.left == 0 {
-                text += " All picks in."
-            } else {
-                text += " \(owed.left) of \(owed.total) picks left."
-            }
+        if !progress.accessibilityDetail.isEmpty {
+            text += " \(progress.accessibilityDetail)"
         }
         return text
     }
@@ -256,8 +257,16 @@ struct ScoreboardPhaseView: View {
         }
     }
 
+    private var pickProgress: WidgetPickProgress.Summary? {
+        WidgetPickProgress.summarize(snapshot.games ?? [], now: now)
+    }
+
     private var games: [StandingsSnapshot.SnapshotGame] {
-        WidgetScoreboard.ordered(snapshot.games ?? [], now: now, limit: rowLimit)
+        let rows = snapshot.games ?? []
+        if pickProgress != nil {
+            return WidgetPickProgress.pickedGames(rows, now: now, limit: rowLimit)
+        }
+        return WidgetScoreboard.ordered(rows, now: now, limit: rowLimit)
     }
 
     var body: some View {
@@ -296,6 +305,12 @@ struct ScoreboardPhaseView: View {
                     .widgetAccentable()
             }
             .widgetLink(linkRows ? WidgetDeepLink.url(phase: .scoreboard, snapshot: snapshot) : nil)
+            if let line = pickProgress?.line {
+                Text(line)
+                    .font(WidgetStyle.rowFont)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
             if !luminanceReduced {
                 ForEach(games) { game in
                     SnapshotGameLine(game: game, now: now, stale: stale, snapshot: snapshot, linked: linkRows)
@@ -327,7 +342,7 @@ struct ScoreboardPhaseView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
                 .widgetAccentable()
-            Text("Live · Week \(snapshot.weekNumber)")
+            Text(pickProgress?.line ?? "Live · Week \(snapshot.weekNumber)")
                 .font(WidgetStyle.rowFont)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -353,7 +368,11 @@ struct ScoreboardPhaseView: View {
     }
 
     private var scoreboardLabel: String {
-        "Week \(snapshot.weekNumber) scoreboard. \(snapshot.weeklyWins) wins, \(snapshot.weeklyLosses) losses, \(snapshot.groupName)."
+        var text = "Week \(snapshot.weekNumber) scoreboard. \(snapshot.weeklyWins) wins, \(snapshot.weeklyLosses) losses, \(snapshot.groupName)."
+        if let line = pickProgress?.line {
+            text += " \(line)."
+        }
+        return text
     }
 }
 

@@ -261,6 +261,146 @@ struct WidgetSnapshotBuilderTests {
         #expect(byId["mystery"]?.awayColorHex == nil)
     }
 
+    @Test func selectionWeekCountsTheUsersNominationsNotTheMergedSlate() {
+        let kickoff = now.addingTimeInterval(86_400)
+        let extras = WidgetSnapshotBuilder.extras(
+            week: week(
+                status: .selection,
+                selectionDeadline: now.addingTimeInterval(3_600),
+                pickDeadline: kickoff,
+                selectionsPerMember: 2,
+                slateSize: 8
+            ),
+            games: [
+                slate(id: "mine-1", kickoff: kickoff, homeAbbreviation: "OSU", awayAbbreviation: "PSU"),
+                slate(id: "mine-2", kickoff: kickoff.addingTimeInterval(60), homeAbbreviation: "MICH", awayAbbreviation: "MSU"),
+                slate(id: "them-1", kickoff: kickoff.addingTimeInterval(120), homeAbbreviation: "ALA", awayAbbreviation: "UGA"),
+                slate(id: "them-2", kickoff: kickoff.addingTimeInterval(180), homeAbbreviation: "ORE", awayAbbreviation: "USC"),
+            ],
+            picks: [:],
+            pickMode: .straightUp,
+            now: now,
+            nominations: [
+                nomination(eventId: "mine-1", submittedBy: "me"),
+                nomination(eventId: "mine-2", submittedBy: "me"),
+                nomination(eventId: "them-1", submittedBy: "them"),
+                nomination(eventId: "them-2", submittedBy: "them"),
+            ],
+            userId: "me"
+        )
+        #expect(extras.selectionQuota == WidgetSelectionQuota.member)
+        #expect(extras.selectionsMade == 2)
+        #expect(extras.selectionsTotal == 2)
+        #expect(extras.picksMade == 0)
+        #expect(extras.picksTotal == 4)
+        let selected = (extras.games ?? []).filter { $0.isUserSelection == true }.map(\.id)
+        #expect(selected == ["mine-1", "mine-2"])
+        #expect((extras.games ?? []).filter { $0.isUserSelection == false }.count == 2)
+        #expect((extras.games ?? []).allSatisfy { $0.userPick == nil })
+    }
+
+    @Test func selectionWeekWithNoNominationsYet() {
+        let extras = WidgetSnapshotBuilder.extras(
+            week: week(
+                status: .selection,
+                selectionDeadline: now.addingTimeInterval(3_600),
+                selectionsPerMember: 2
+            ),
+            games: [slate(id: "them", kickoff: now.addingTimeInterval(86_400))],
+            picks: [:],
+            pickMode: .straightUp,
+            now: now,
+            nominations: [nomination(eventId: "them", submittedBy: "them")],
+            userId: "me"
+        )
+        #expect(extras.selectionsMade == 0)
+        #expect(extras.selectionsTotal == 2)
+        #expect(extras.picksMade == 0)
+        #expect(extras.picksTotal == 1)
+        #expect(extras.games?.allSatisfy { $0.isUserSelection == false } == true)
+    }
+
+    @Test func commissionerSelectionCountsTheSlateNotAMemberQuota() {
+        let extras = WidgetSnapshotBuilder.extras(
+            week: week(
+                status: .selection,
+                selectionDeadline: now.addingTimeInterval(3_600),
+                selectionMode: .commissioner,
+                selectionsPerMember: 2,
+                slateSize: 8
+            ),
+            games: [
+                slate(id: "1", kickoff: now.addingTimeInterval(3_600)),
+                slate(id: "2", kickoff: now.addingTimeInterval(4_000)),
+                slate(id: "3", kickoff: now.addingTimeInterval(5_000)),
+            ],
+            picks: [:],
+            pickMode: .straightUp,
+            now: now,
+            nominations: [
+                nomination(eventId: "1", submittedBy: "commissioner"),
+                nomination(eventId: "2", submittedBy: "commissioner"),
+                nomination(eventId: "3", submittedBy: "commissioner"),
+            ],
+            userId: "member"
+        )
+        #expect(extras.selectionQuota == WidgetSelectionQuota.commissioner)
+        #expect(extras.selectionsMade == 3)
+        #expect(extras.selectionsTotal == 8)
+        #expect(extras.picksMade == 0)
+        #expect(extras.picksTotal == 3)
+        #expect(extras.games?.allSatisfy { $0.isUserSelection == nil } == true)
+    }
+
+    @Test func pickingWeekCountsTheFullSlatePastTheWidgetCap() {
+        let games = (0..<13).map { index in
+            slate(id: "g-\(index)", kickoff: now.addingTimeInterval(TimeInterval(3_600 + index)))
+        }
+        var picks: [String: String] = [:]
+        for index in 0..<5 {
+            picks["g-\(index)"] = "h"
+        }
+        let extras = WidgetSnapshotBuilder.extras(
+            week: week(status: .picking, pickDeadline: now.addingTimeInterval(3_600), slateSize: 13),
+            games: games,
+            picks: picks,
+            pickMode: .straightUp,
+            now: now
+        )
+        #expect(extras.selectionQuota == nil)
+        #expect(extras.selectionsMade == nil)
+        #expect(extras.picksMade == 5)
+        #expect(extras.picksTotal == 13)
+        #expect(extras.games?.count == 12)
+    }
+
+    @Test func liveScoreOverlayFeedsPickProgress() {
+        let kickoff = now.addingTimeInterval(-1_800)
+        let extras = WidgetSnapshotBuilder.extras(
+            week: week(status: .locked, pickDeadline: kickoff),
+            games: [
+                slate(id: "live", kickoff: kickoff, homeAbbreviation: "OSU", awayAbbreviation: "MICH"),
+            ],
+            picks: ["live": "h"],
+            pickMode: .straightUp,
+            now: now,
+            liveScores: [
+                "live": .init(awayScore: 14, homeScore: 21, status: .inProgress, statusText: "Q3 4:12"),
+            ]
+        )
+        let game = extras.games?.first
+        #expect(game?.homeScore == 21)
+        #expect(game?.awayScore == 14)
+        #expect(game?.userPick == "OSU")
+        #expect(game?.statusText == "Q3 4:12")
+        #expect(game?.isFinal == false)
+        let summary = WidgetPickProgress.summarize(extras.games ?? [], now: now)
+        #expect(summary?.correct == 1)
+        #expect(summary?.lost == 0)
+        #expect(summary?.pending == 0)
+        #expect(summary?.line == "1 correct")
+    }
+
     @Test func previousRankRemembersTheLastMove() {
         var previous = StandingsSnapshot(
             groupId: "league",
@@ -312,16 +452,19 @@ struct WidgetSnapshotBuilderTests {
         selectionDeadline: Date? = nil,
         pickDeadline: Date? = nil,
         pickLockMode: DeadlinePolicy? = nil,
-        weekLockAt: Date? = nil
+        weekLockAt: Date? = nil,
+        selectionMode: SelectionMode = .member,
+        selectionsPerMember: Int = 1,
+        slateSize: Int = 2
     ) -> WeekSummary {
         WeekSummary(
             id: "2026-W\(weekNumber)",
             seasonYear: 2026,
             weekNumber: weekNumber,
             status: status,
-            slateSize: 2,
-            selectionMode: .member,
-            selectionsPerMember: 1,
+            slateSize: slateSize,
+            selectionMode: selectionMode,
+            selectionsPerMember: selectionsPerMember,
             lockedAt: nil,
             pickDeadline: pickDeadline,
             pickLockMode: pickLockMode,
@@ -360,6 +503,27 @@ struct WidgetSnapshotBuilderTests {
             homeScore: homeScore,
             awayScore: awayScore,
             winnerTeamId: nil
+        )
+    }
+
+    private func nomination(eventId: String, submittedBy: String) -> Nomination {
+        Nomination(
+            id: eventId,
+            submittedBy: submittedBy,
+            submitterName: submittedBy,
+            espnEventId: eventId,
+            spread: 3,
+            spreadTeamId: "h",
+            homeTeamId: "h",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "H",
+            homeTeamLogoURL: nil,
+            awayTeamId: "a",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "A",
+            awayTeamLogoURL: nil,
+            kickoff: now,
+            createdAt: now
         )
     }
 }

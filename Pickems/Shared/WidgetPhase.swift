@@ -82,17 +82,13 @@ enum WidgetPhase: Equatable {
         uniqueSorted([now] + boundaryDates(snapshot: snapshot, now: now))
     }
 
-    /// Deadline and standings place an entry on the next deadline or kickoff.
-    /// Scoreboard keeps every later kickoff so the next-lock line can move with them.
+    /// One entry at every known transition (selection deadline, picks lock, each kickoff)
+    /// so the phase flips while that entry is current, even if a reload is delayed.
+    /// Scoreboard uses the same dates so the next-lock line can move with kickoffs.
     static func timelineDates(snapshot: StandingsSnapshot?, phase: WidgetPhase, now: Date) -> [Date] {
         guard let snapshot else { return [now] }
         switch phase {
-        case .deadline, .standings:
-            if let next = boundaryDates(snapshot: snapshot, now: now).first {
-                return [now, next]
-            }
-            return [now]
-        case .scoreboard:
+        case .deadline, .standings, .scoreboard:
             return entryDates(snapshot: snapshot, now: now)
         case .preseason, .empty:
             return [now]
@@ -380,4 +376,207 @@ enum WidgetPicksOwed: Equatable {
         let left = max(0, total - made)
         return (made, total, left)
     }
+}
+
+enum WidgetSelectionQuota {
+    static let member = "member"
+    static let commissioner = "commissioner"
+}
+
+enum WidgetDeadlineList: Equatable {
+    case userSelections
+    case unpicked
+    case slate
+    case none
+}
+
+/// Copy and row choice for the deadline widget. The phase (`kind`) wins over stored
+/// selection counts, so a timeline entry past the selection deadline shows Pickems.
+enum WidgetDeadlineProgress: Equatable {
+    struct Model: Equatable {
+        var completionTitle: String?
+        var lockTitle: String
+        var countdownIsHero: Bool
+        var detail: String?
+        var made: Int?
+        var total: Int?
+        var showsBar: Bool
+        var listTitle: String?
+        var listEmpty: String?
+        var list: WidgetDeadlineList
+        var accessibilityDetail: String
+    }
+
+    static func model(snapshot: StandingsSnapshot, kind: WidgetDeadlineKind) -> Model {
+        if kind == .selections, snapshot.selectionQuota == WidgetSelectionQuota.member {
+            return memberSelections(snapshot)
+        }
+        if kind == .selections, snapshot.selectionQuota == WidgetSelectionQuota.commissioner {
+            return commissionerSlate(snapshot)
+        }
+        return picks(snapshot, kind: kind)
+    }
+
+    static func rows(
+        snapshot: StandingsSnapshot,
+        kind: WidgetDeadlineKind,
+        limit: Int = 4
+    ) -> [StandingsSnapshot.SnapshotGame] {
+        let games = snapshot.games ?? []
+        let capped = max(0, limit)
+        switch model(snapshot: snapshot, kind: kind).list {
+        case .none:
+            return []
+        case .userSelections:
+            return Array(games.filter { $0.isUserSelection == true }.prefix(capped))
+        case .unpicked:
+            return Array(games.filter { widgetTrimmed($0.userPick) == nil && !$0.isFinal }.prefix(capped))
+        case .slate:
+            return Array(games.prefix(capped))
+        }
+    }
+
+    private static func memberSelections(_ snapshot: StandingsSnapshot) -> Model {
+        let made = max(0, snapshot.selectionsMade ?? 0)
+        let total = max(0, snapshot.selectionsTotal ?? 0)
+        let complete = total > 0 && made >= total
+        return Model(
+            completionTitle: complete ? "All selections in ✓" : nil,
+            lockTitle: "Selections lock in",
+            countdownIsHero: !complete,
+            detail: complete || total == 0 ? nil : "\(made) of \(total) selected",
+            made: total > 0 ? made : nil,
+            total: total > 0 ? total : nil,
+            showsBar: total > 0,
+            listTitle: "Your selections",
+            listEmpty: "Select your games",
+            list: .userSelections,
+            accessibilityDetail: complete ? "All selections in." : "\(made) of \(total) selected."
+        )
+    }
+
+    private static func commissionerSlate(_ snapshot: StandingsSnapshot) -> Model {
+        let made = max(0, snapshot.selectionsMade ?? 0)
+        let total = max(0, snapshot.selectionsTotal ?? 0)
+        let complete = total > 0 && made >= total
+        if !complete && made == 0 {
+            return Model(
+                completionTitle: nil,
+                lockTitle: "Selections lock in",
+                countdownIsHero: true,
+                detail: "Waiting on selections",
+                made: nil,
+                total: nil,
+                showsBar: false,
+                listTitle: nil,
+                listEmpty: nil,
+                list: .none,
+                accessibilityDetail: "Waiting on selections."
+            )
+        }
+        return Model(
+            completionTitle: complete ? "Slate is set" : nil,
+            lockTitle: "Selections lock in",
+            countdownIsHero: !complete,
+            detail: complete ? nil : "\(made) of \(total) on the slate",
+            made: total > 0 ? made : nil,
+            total: total > 0 ? total : nil,
+            showsBar: total > 0,
+            listTitle: "Slate",
+            listEmpty: nil,
+            list: .slate,
+            accessibilityDetail: complete ? "Slate is set." : "\(made) of \(total) on the slate."
+        )
+    }
+
+    private static func picks(_ snapshot: StandingsSnapshot, kind: WidgetDeadlineKind) -> Model {
+        let lockTitle = kind == .selections ? "Selections lock in" : "Picks lock in"
+        guard let owed = WidgetPicksOwed.owed(made: snapshot.picksMade, total: snapshot.picksTotal) else {
+            return Model(
+                completionTitle: nil,
+                lockTitle: lockTitle,
+                countdownIsHero: true,
+                detail: "left",
+                made: nil,
+                total: nil,
+                showsBar: false,
+                listTitle: nil,
+                listEmpty: nil,
+                list: .none,
+                accessibilityDetail: ""
+            )
+        }
+        let complete = owed.left == 0
+        let done = kind == .selections ? "All selections in ✓" : "All picks in ✓"
+        return Model(
+            completionTitle: complete ? done : nil,
+            lockTitle: lockTitle,
+            countdownIsHero: !complete,
+            detail: complete ? nil : "\(owed.made) of \(owed.total) picked",
+            made: owed.made,
+            total: owed.total,
+            showsBar: !complete,
+            listTitle: complete ? nil : "Picks due",
+            listEmpty: "Every open game has a pick",
+            list: complete ? .none : .unpicked,
+            accessibilityDetail: complete
+                ? (kind == .selections ? "All selections in." : "All picks in.")
+                : "\(owed.made) of \(owed.total) picked."
+        )
+    }
+}
+
+/// Live and final progress for the signed-in user's picks, from scores already on the snapshot.
+enum WidgetPickProgress: Equatable {
+    struct Summary: Equatable {
+        var correct: Int
+        var lost: Int
+        var pending: Int
+        var line: String
+    }
+
+    static func summarize(_ games: [StandingsSnapshot.SnapshotGame], now: Date) -> Summary? {
+        let picked = games.filter { widgetTrimmed($0.userPick) != nil }
+        guard !picked.isEmpty else { return nil }
+        var correct = 0
+        var lost = 0
+        var pending = 0
+        for game in picked {
+            switch WidgetScoreboard.pickStatus(game, now: now) {
+            case .winning, .finalWin:
+                correct += 1
+            case .losing, .finalLoss:
+                lost += 1
+            case .upcoming, .tied, .push, .noPick:
+                pending += 1
+            }
+        }
+        let settled = picked.allSatisfy(\.isFinal)
+        var parts: [String] = []
+        if correct > 0 { parts.append("\(correct) \(settled ? "won" : "correct")") }
+        if lost > 0 { parts.append("\(lost) lost") }
+        if pending > 0 { parts.append("\(pending) pending") }
+        if parts.isEmpty { parts.append("0 pending") }
+        return Summary(
+            correct: correct,
+            lost: lost,
+            pending: pending,
+            line: parts.joined(separator: " · ")
+        )
+    }
+
+    static func pickedGames(
+        _ games: [StandingsSnapshot.SnapshotGame],
+        now: Date,
+        limit: Int
+    ) -> [StandingsSnapshot.SnapshotGame] {
+        let picked = games.filter { widgetTrimmed($0.userPick) != nil }
+        return WidgetScoreboard.ordered(picked, now: now, limit: limit)
+    }
+}
+
+private func widgetTrimmed(_ raw: String?) -> String? {
+    guard let raw else { return nil }
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
 }
