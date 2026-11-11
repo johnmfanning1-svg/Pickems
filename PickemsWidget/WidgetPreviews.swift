@@ -14,6 +14,10 @@ extension StandingsSnapshot {
         snapshot.selectionQuota = WidgetSelectionQuota.member
         snapshot.selectionsMade = 2
         snapshot.selectionsTotal = 2
+        snapshot.selectionMembersDone = 6
+        snapshot.selectionMembersTotal = 11
+        snapshot.selectionGamesFilled = 12
+        snapshot.selectionGamesTarget = 22
         snapshot.picksMade = 0
         snapshot.picksTotal = 4
         snapshot.games = (0..<2).map { index in

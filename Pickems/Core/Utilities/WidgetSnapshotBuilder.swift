@@ -15,6 +15,10 @@ enum WidgetSnapshotBuilder {
         var selectionsMade: Int? = nil
         var selectionsTotal: Int? = nil
         var selectionQuota: String? = nil
+        var selectionMembersDone: Int? = nil
+        var selectionMembersTotal: Int? = nil
+        var selectionGamesFilled: Int? = nil
+        var selectionGamesTarget: Int? = nil
 
         static let empty = Extras(
             selectionsDeadline: nil,
@@ -26,7 +30,11 @@ enum WidgetSnapshotBuilder {
             picksTotal: nil,
             selectionsMade: nil,
             selectionsTotal: nil,
-            selectionQuota: nil
+            selectionQuota: nil,
+            selectionMembersDone: nil,
+            selectionMembersTotal: nil,
+            selectionGamesFilled: nil,
+            selectionGamesTarget: nil
         )
     }
 
@@ -50,7 +58,11 @@ enum WidgetSnapshotBuilder {
         liveScores: [String: LiveScore] = [:],
         nominationsLoaded: Bool = true,
         memberQuota: Int? = nil,
-        slateQuota: Int? = nil
+        slateQuota: Int? = nil,
+        memberIds: [String]? = nil,
+        rulesSelectionsPerMember: Int = 0,
+        slateEventIds: [String]? = nil,
+        gamesTarget: Int? = nil
     ) -> Extras {
         guard let week else { return .empty }
 
@@ -86,10 +98,22 @@ enum WidgetSnapshotBuilder {
         let counts = (countingSelections && week.selectionMode == .member && !nominationsLoaded)
             ? nil
             : pickCounts(mapped)
+        let progress = memberSelectionProgress(
+            week: week,
+            counting: countingSelections,
+            nominations: nominations,
+            nominationsLoaded: nominationsLoaded,
+            userId: userId,
+            memberIds: memberIds,
+            rulesSelectionsPerMember: rulesSelectionsPerMember,
+            slateEventIds: slateEventIds,
+            gamesTarget: gamesTarget
+        )
+        let gamesKnown = progress != nil && slateEventIds != nil && gamesTarget != nil
         let selection = selectionCounts(
             week: week,
             counting: countingSelections && memberCountsReady,
-            userNominationCount: userEventIds.count,
+            userNominationCount: progress?.youMade ?? userEventIds.count,
             slateCount: scored.count,
             memberQuota: memberQuota,
             slateQuota: slateQuota
@@ -107,7 +131,11 @@ enum WidgetSnapshotBuilder {
             picksTotal: counts?.total,
             selectionsMade: selection?.made,
             selectionsTotal: selection?.total,
-            selectionQuota: selection?.quota
+            selectionQuota: selection?.quota,
+            selectionMembersDone: progress?.membersDone,
+            selectionMembersTotal: progress?.memberCount,
+            selectionGamesFilled: gamesKnown ? progress?.gamesFilled : nil,
+            selectionGamesTarget: gamesKnown ? progress?.gamesTarget : nil
         )
     }
 
@@ -178,7 +206,38 @@ enum WidgetSnapshotBuilder {
         carried.selectionsMade = previous.selectionsMade
         carried.selectionsTotal = previous.selectionsTotal
         carried.selectionQuota = previous.selectionQuota
+        carried.selectionMembersDone = previous.selectionMembersDone
+        carried.selectionMembersTotal = previous.selectionMembersTotal
+        carried.selectionGamesFilled = previous.selectionGamesFilled
+        carried.selectionGamesTarget = previous.selectionGamesTarget
         return carried
+    }
+
+    /// Same tally as the Make Selections subtitle. Nil until member nominations and the roster are loaded.
+    private static func memberSelectionProgress(
+        week: WeekSummary,
+        counting: Bool,
+        nominations: [Nomination],
+        nominationsLoaded: Bool,
+        userId: String,
+        memberIds: [String]?,
+        rulesSelectionsPerMember: Int,
+        slateEventIds: [String]?,
+        gamesTarget: Int?
+    ) -> MemberSelectionProgress.Counts? {
+        guard counting,
+              week.selectionMode == .member,
+              nominationsLoaded,
+              let memberIds else { return nil }
+        return MemberSelectionProgress.counts(
+            nominations: nominations,
+            slateEventIds: slateEventIds ?? [],
+            userId: userId,
+            memberIds: memberIds,
+            weekSelectionsPerMember: week.selectionsPerMember,
+            rulesSelectionsPerMember: rulesSelectionsPerMember,
+            gamesTarget: gamesTarget ?? 0
+        )
     }
 
     /// Member quota is the signed-in user's nominations. Commissioner mode fills the slate size.

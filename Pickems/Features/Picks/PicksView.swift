@@ -374,28 +374,27 @@ struct PicksView: View {
 
     private func memberNominationUI(week: WeekSummary, rules: GroupRules) -> some View {
         let userId = appState.currentUserId ?? ""
-        let perMember = week.selectionsPerMember > 0 ? week.selectionsPerMember : rules.selectionsPerMember
-        let userNoms = appState.pickService.nominations.filter { $0.submittedBy == userId }.count
-        let atLimit = userNoms >= perMember
         let memberIds = appState.groupService.selectedGroup?.memberIds ?? []
-        var byUser: [String: Int] = [:]
-        for nom in appState.pickService.nominations {
-            byUser[nom.submittedBy, default: 0] += 1
-        }
-        let membersDone = memberIds.filter { (byUser[$0] ?? 0) >= perMember }.count
-        let uniqueGames = Set(
-            appState.pickService.nominations.map(\.espnEventId)
-                + appState.pickService.slateGames.map(\.espnEventId)
-        ).count
         let memberCount = max(memberIds.count, 1)
-        let targetGames = rules.expectedSlateSize(memberCount: memberCount)
+        let progress = MemberSelectionProgress.counts(
+            nominations: appState.pickService.nominations,
+            slateEventIds: appState.pickService.slateGames.map(\.espnEventId),
+            userId: userId,
+            memberIds: memberIds,
+            weekSelectionsPerMember: week.selectionsPerMember,
+            rulesSelectionsPerMember: rules.selectionsPerMember,
+            gamesTarget: rules.expectedSlateSize(memberCount: memberCount)
+        )
+        let userNoms = progress.youMade
+        let perMember = progress.youTotal
+        let atLimit = userNoms >= perMember
         let deadlinePassed = week.isSelectionDeadlinePassed
         let slateFull = viewModel.isLeagueSlateFullForOwnSelections(appState: appState)
 
         return VStack(alignment: .leading, spacing: 12) {
             PickemsSectionHeader(
                 title: "Make Selections",
-                subtitle: "You: \(userNoms)/\(perMember) · Members done: \(membersDone)/\(memberCount) · Games: \(uniqueGames)/\(targetGames)",
+                subtitle: progress.subtitle,
                 help: PickemsHelp.nominations
             )
 
