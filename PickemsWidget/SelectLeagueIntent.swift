@@ -26,11 +26,13 @@ struct WidgetLeagueQuery: EntityQuery {
 
     func defaultResult() async -> WidgetLeagueEntity? {
         let leagues = PickemsAppGroup.loadLeagues()
-        if let id = PickemsAppGroup.displayGroupId(),
-           let match = leagues.first(where: { $0.id == id }) {
-            return WidgetLeagueEntity(id: match.id, name: match.name)
+        // A Profile pin fills the widget's league. With no pin, leave this empty so
+        // the widget shows the snapshot for the league open in the app.
+        guard let id = PickemsAppGroup.displayGroupId(),
+              let match = leagues.first(where: { $0.id == id }) else {
+            return nil
         }
-        return leagues.first.map { WidgetLeagueEntity(id: $0.id, name: $0.name) }
+        return WidgetLeagueEntity(id: match.id, name: match.name)
     }
 }
 

@@ -19,6 +19,9 @@ enum WidgetSnapshotService {
     private static let budgetedReloadInterval: TimeInterval = 15 * 60
 
     static func publish(from appState: AppState, timelineReload: TimelineReload = .immediate) {
+        WidgetDisplayFollowMigration.applyIfPossible(
+            selectedGroupId: appState.groupService.selectedGroup?.id
+        )
         PickemsAppGroup.saveLeagues(
             appState.groupService.groups.map { WidgetLeague(id: $0.id, name: $0.name) }
         )
@@ -140,9 +143,8 @@ enum WidgetSnapshotService {
             return
         }
 
-        if group.id == appState.groupService.selectedGroup?.id {
-            let ranked = selectedGroupRankedStandings(from: appState, group: group)
-            guard let ranked else { return }
+        if group.id == appState.groupService.selectedGroup?.id,
+           let ranked = selectedGroupRankedStandings(from: appState, group: group) {
             let week = appState.groupService.currentWeek
             let weekNumber = standingsWeekNumber(
                 from: appState,
@@ -159,6 +161,17 @@ enum WidgetSnapshotService {
                 extras: extras(from: appState, group: group, week: week, weekNumber: weekNumber),
                 timelineReload: timelineReload
             )
+            return
+        }
+
+        // This league's board is not loaded. Keep a snapshot that already belongs
+        // to it. Follow still has the previous league's snapshot, so fetch below
+        // and reload as soon as that league's standings come back.
+        if group.id == appState.groupService.selectedGroup?.id,
+           !WidgetDisplayGroupResolver.shouldFetchStandingsWhenBoardMissing(
+               displayGroupId: group.id,
+               snapshotGroupId: PickemsAppGroup.load()?.groupId
+           ) {
             return
         }
 
@@ -190,6 +203,11 @@ enum WidgetSnapshotService {
         let fetched = await appState.groupService.fetchStandings(groupId: groupId)
         guard generation == fetchGeneration else { return }
         guard let group = resolvedDisplayGroup(from: appState), group.id == groupId else { return }
+        // The open league's board landed while this fetch was in flight.
+        if group.id == appState.groupService.selectedGroup?.id,
+           selectedGroupRankedStandings(from: appState, group: group) != nil {
+            return
+        }
 
         let ranked = rankedDisplayEntries(
             standings: fetched.standings,

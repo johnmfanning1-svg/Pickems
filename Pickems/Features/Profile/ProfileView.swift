@@ -397,12 +397,14 @@ struct ProfileView: View {
     private var widgetDisplaySection: some View {
         Section {
             Picker("League", selection: displayGroupSelection) {
+                Text(WidgetDisplayGroupPicker.followLabel)
+                    .tag(WidgetDisplayGroupPicker.followTag)
                 ForEach(appState.groupService.groups) { option in
                     Text(option.name).tag(option.id)
                 }
             }
             .listRowBackground(PickemsColors.cardBackground)
-            .accessibilityHint("Choose which league the Home Screen widget and Live Activities show")
+            .accessibilityHint("Follow the league you're viewing, or pin the Home Screen widget and Live Activities to one league")
         } header: {
             HStack {
                 Text("Home Screen & Live Activity")
@@ -413,7 +415,7 @@ struct ProfileView: View {
                 )
             }
         } footer: {
-            Text("The widget and live lock screen / Dynamic Island follow this league, even if you switch leagues in the app.")
+            Text("Follow current league updates the widget and Live Activity when you switch leagues. Pick a league to pin them there.")
         }
     }
 
@@ -490,12 +492,16 @@ struct ProfileView: View {
     private var displayGroupSelection: Binding<String> {
         Binding(
             get: {
-                WidgetSnapshotService.resolvedDisplayGroup(from: appState)?.id ?? ""
+                WidgetDisplayGroupPicker.selectionTag(savedId: PickemsAppGroup.displayGroupId())
             },
-            set: { newId in
-                guard appState.groupService.groups.contains(where: { $0.id == newId }) else { return }
-                PickemsAppGroup.setDisplayGroupId(newId)
-                appState.publishSurfaces()
+            set: { newTag in
+                guard let defaults = PickemsAppGroup.defaults else { return }
+                guard WidgetDisplayGroupPicker.apply(
+                    tag: newTag,
+                    memberIds: appState.groupService.groups.map(\.id),
+                    defaults: defaults
+                ) else { return }
+                appState.publishSurfaces(timelineReload: .immediate)
             }
         )
     }

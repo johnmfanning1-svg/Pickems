@@ -332,18 +332,19 @@ enum PickemsHelp {
             "First and last name identify your account; username is what friends see in leagues.",
             "Usernames must be unique (letters, numbers, underscore).",
             "Push alerts cover Selection and Pickems deadlines — toggle each in Profile, or change iOS permission in Settings.",
-            "Home Screen widget and Live Activities follow the league you pick under Home Screen & Live Activity."
+            "Home Screen widget and Live Activities follow the league you're viewing. Pin one under Home Screen & Live Activity to keep them on that league."
         ]
     )
 
     static let widgetAndLiveActivity = HelpTopic(
         id: "profile.widgetLiveActivity",
         title: "Home Screen & Live Activity",
-        message: "Choose which league the Home Screen widget and lock-screen Live Activity show. The Live Activity lists your picks, the score, and whether each one is covering. Switching leagues in the app does not change this until you pick a different league here.",
+        message: "Follow current league keeps the Home Screen widget and lock-screen Live Activity on the league you're viewing. Pick a league to pin them while you browse other leagues. The Live Activity lists your picks, the score, and whether each one is covering.",
         tips: [
-            "The widget and lock-screen Live Activity update as soon as you change this setting.",
+            "Follow current league is the default. The widget and Live Activity update as soon as you switch leagues.",
+            "Pin a league when the widget should stay there while you look at another league.",
             "The lock screen shows your teams only — never anyone else's picks.",
-            "If you leave that league, Pickems falls back to another league you are in, or clears the widget."
+            "If you leave the pinned league, Pickems follows the league you're viewing, or another league you're in."
         ]
     )
 

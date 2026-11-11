@@ -114,10 +114,17 @@ extension AppState {
         picksViewModel.resyncWhenVisible(appState: self)
     }
 
-    /// Widget + Live Activity for the display league (not necessarily the in-app selection).
+    /// Widget + Live Activity. A Profile pin stays put. With no pin, this is the open league.
     func publishSurfaces(timelineReload: WidgetSnapshotService.TimelineReload = .immediate) {
         WidgetSnapshotService.publish(from: self, timelineReload: timelineReload)
         LiveActivityController.sync(from: self)
+    }
+
+    /// One-time: a pin that matches the open league becomes Follow current league.
+    func migrateWidgetFollowIfNeeded() {
+        WidgetDisplayFollowMigration.applyIfPossible(
+            selectedGroupId: groupService.selectedGroup?.id
+        )
     }
 
     func joinGroup(inviteCode: String, markOnboarding: Bool = true) async throws {

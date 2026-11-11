@@ -37,7 +37,9 @@ struct MainTabView: View {
             appState.publishSurfaces()
         }
         .onChange(of: appState.groupService.selectedGroup?.id) { _, _ in
-            appState.publishSurfaces()
+            // GroupService.selectGroup, the league chips, and the Home league header
+            // all land here. Immediate reload so Follow leaves the previous league now.
+            appState.publishSurfaces(timelineReload: .immediate)
         }
         .onChange(of: appState.groupService.members.map(\.id)) { _, _ in
             appState.publishSurfaces()
