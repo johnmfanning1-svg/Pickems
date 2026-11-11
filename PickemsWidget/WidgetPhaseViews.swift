@@ -89,13 +89,16 @@ struct DeadlinePhaseView: View {
                     .minimumScaleFactor(0.5)
                     .widgetAccentable()
                 timer(isHero: false)
+                selectionProgressLine
             } else {
                 timer(isHero: true)
                 if let detail = progress.detail {
                     Text(detail)
                         .font(WidgetStyle.rowFont)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
+                selectionProgressLine
             }
         }
         .accessibilityElement(children: .ignore)
@@ -142,8 +145,10 @@ struct DeadlinePhaseView: View {
                 .foregroundStyle(WidgetStyle.accented(WidgetStyle.winGreen(colorScheme), mode: renderingMode))
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
+                .layoutPriority(1)
                 .widgetAccentable()
             timer(isHero: false)
+            selectionProgressLine
             if !luminanceReduced, progress.showsBar, let made = progress.made, let total = progress.total {
                 progressBar(made: made, total: total)
             }
@@ -152,16 +157,46 @@ struct DeadlinePhaseView: View {
                 .font(WidgetStyle.titleFont)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+                .layoutPriority(1)
             timer(isHero: true)
             if let detail = progress.detail {
                 Text(detail)
                     .font(WidgetStyle.rowFont)
                     .lineLimit(1)
-                if !luminanceReduced, progress.showsBar, let made = progress.made, let total = progress.total {
-                    progressBar(made: made, total: total)
-                }
+                    .minimumScaleFactor(0.7)
+                    .layoutPriority(1)
+            }
+            selectionProgressLine
+            if progress.detail != nil, !luminanceReduced, progress.showsBar, let made = progress.made, let total = progress.total {
+                progressBar(made: made, total: total)
             }
         }
+    }
+
+    /// Subtitle under the headline and countdown. It scales on its own so the headline stays full size.
+    @ViewBuilder
+    private var selectionProgressLine: some View {
+        if let full = progress.selectionProgressLine {
+            Text(displayedSelectionProgress(full: full))
+                .font(usesCompactSelectionProgress ? .caption2.monospacedDigit() : WidgetStyle.rowFont)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(usesCompactSelectionProgress ? 0.45 : 0.5)
+        }
+    }
+
+    private var usesCompactSelectionProgress: Bool {
+        switch family {
+        case .systemSmall, .accessoryRectangular:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func displayedSelectionProgress(full: String) -> String {
+        guard usesCompactSelectionProgress else { return full }
+        return WidgetSelectionProgressLine.line(snapshot: snapshot, compact: true) ?? full
     }
 
     private var dueList: some View {
@@ -228,6 +263,9 @@ struct DeadlinePhaseView: View {
         var text = "\(snapshot.groupName). \(kind.label), \(remaining) remaining. Week \(snapshot.weekNumber)."
         if !progress.accessibilityDetail.isEmpty {
             text += " \(progress.accessibilityDetail)"
+        }
+        if let line = progress.selectionProgressLine {
+            text += " \(line)."
         }
         return text
     }

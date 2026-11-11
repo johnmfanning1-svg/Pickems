@@ -40,6 +40,14 @@ struct StandingsSnapshot: Codable, Equatable {
     var selectionsTotal: Int? = nil
     /// `member` or `commissioner` while Selections is open. Nil on older snapshots and after the slate is set.
     var selectionQuota: String? = nil
+    /// Members who have finished their Selections. Nil hides that part of the progress line.
+    var selectionMembersDone: Int? = nil
+    /// League size in the Members done denominator. Nil on snapshots written before this field existed.
+    var selectionMembersTotal: Int? = nil
+    /// Unique games nominated or already on the slate. Nil hides the Games part of the progress line.
+    var selectionGamesFilled: Int? = nil
+    /// Expected slate size (`members × selections per person`). Nil on older snapshots.
+    var selectionGamesTarget: Int? = nil
     /// Rank before the latest change. Nil when the widget has not seen a different rank.
     var previousRank: Int? = nil
 

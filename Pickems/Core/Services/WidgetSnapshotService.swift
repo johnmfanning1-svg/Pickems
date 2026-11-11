@@ -293,7 +293,13 @@ enum WidgetSnapshotService {
                     weekValue: week?.selectionsPerMember ?? 0,
                     pinnedRulesValue: group.rules.selectionsPerMember
                 ),
-                slateQuota: max((week?.slateSize ?? 0) > 0 ? week?.slateSize ?? 0 : group.rules.slateSize, 1)
+                slateQuota: max((week?.slateSize ?? 0) > 0 ? week?.slateSize ?? 0 : group.rules.slateSize, 1),
+                memberIds: group.memberIds,
+                rulesSelectionsPerMember: group.rules.selectionsPerMember,
+                slateEventIds: appState.pickService.didLoadSlateGames
+                    ? appState.pickService.slateGames.map(\.espnEventId)
+                    : nil,
+                gamesTarget: group.rules.expectedSlateSize(memberCount: max(group.memberIds.count, 1))
             )
         }
         let fresh = WidgetSnapshotBuilder.extras(week: week, games: [], picks: [:], pickMode: pickMode)
@@ -417,6 +423,10 @@ enum WidgetSnapshotService {
             selectionsMade: extras.selectionsMade,
             selectionsTotal: extras.selectionsTotal,
             selectionQuota: extras.selectionQuota,
+            selectionMembersDone: extras.selectionMembersDone,
+            selectionMembersTotal: extras.selectionMembersTotal,
+            selectionGamesFilled: extras.selectionGamesFilled,
+            selectionGamesTarget: extras.selectionGamesTarget,
             previousRank: WidgetSnapshotBuilder.previousRank(
                 currentRank: rank,
                 previous: prior,

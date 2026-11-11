@@ -167,6 +167,10 @@ struct WidgetSnapshotBuilderTests {
         previous.pickemsDeadline = keptLock
         previous.games = [keptGame]
         previous.nextLockAt = keptLock
+        previous.selectionMembersDone = 6
+        previous.selectionMembersTotal = 11
+        previous.selectionGamesFilled = 12
+        previous.selectionGamesTarget = 22
 
         let fresh = WidgetSnapshotBuilder.Extras(
             selectionsDeadline: now.addingTimeInterval(99),
@@ -187,6 +191,10 @@ struct WidgetSnapshotBuilderTests {
         #expect(same.selectionsDeadline == keptDeadline)
         #expect(same.pickemsDeadline == keptLock)
         #expect(same.rollingLock == true)
+        #expect(same.selectionMembersDone == 6)
+        #expect(same.selectionMembersTotal == 11)
+        #expect(same.selectionGamesFilled == 12)
+        #expect(same.selectionGamesTarget == 22)
 
         let otherLeague = WidgetSnapshotBuilder.carryForward(
             fresh,
@@ -372,6 +380,193 @@ struct WidgetSnapshotBuilderTests {
         #expect(extras.picksMade == 5)
         #expect(extras.picksTotal == 13)
         #expect(extras.games?.count == 12)
+        #expect(extras.selectionMembersDone == nil)
+        #expect(extras.selectionGamesFilled == nil)
+    }
+
+    @Test func memberSelectionProgressUsesTheMakeSelectionsCounts() {
+        let memberIds = ["me"] + (1...10).map { "m\($0)" }
+        var rules = GroupRules.default
+        rules.selectionsPerMember = 2
+        let gamesTarget = rules.expectedSlateSize(memberCount: memberIds.count)
+        #expect(gamesTarget == 22)
+
+        var nominations = [
+            nomination(eventId: "a", submittedBy: "me"),
+            nomination(eventId: "b", submittedBy: "me"),
+            nomination(eventId: "a", submittedBy: "m1"),
+            nomination(eventId: "c", submittedBy: "m1"),
+        ]
+        for (member, events) in [("m2", ["d", "e"]), ("m3", ["f", "g"]), ("m4", ["h", "i"]), ("m5", ["j", "k"])] {
+            for event in events {
+                nominations.append(nomination(eventId: event, submittedBy: member))
+            }
+        }
+        let progress = MemberSelectionProgress.counts(
+            nominations: nominations,
+            slateEventIds: ["a", "l"],
+            userId: "me",
+            memberIds: memberIds,
+            weekSelectionsPerMember: 2,
+            rulesSelectionsPerMember: rules.selectionsPerMember,
+            gamesTarget: gamesTarget
+        )
+        let extras = WidgetSnapshotBuilder.extras(
+            week: week(
+                status: .selection,
+                selectionDeadline: now.addingTimeInterval(3_600),
+                selectionsPerMember: 2
+            ),
+            games: [slate(id: "display-only", kickoff: now.addingTimeInterval(86_400))],
+            picks: [:],
+            pickMode: .straightUp,
+            now: now,
+            nominations: nominations,
+            userId: "me",
+            memberIds: memberIds,
+            rulesSelectionsPerMember: rules.selectionsPerMember,
+            slateEventIds: ["a", "l"],
+            gamesTarget: gamesTarget
+        )
+        #expect(progress.subtitle == "You: 2/2 · Members done: 6/11 · Games: 12/22")
+        #expect(extras.selectionsMade == progress.youMade)
+        #expect(extras.selectionsTotal == progress.youTotal)
+        #expect(extras.selectionMembersDone == 6)
+        #expect(extras.selectionMembersTotal == 11)
+        #expect(extras.selectionGamesFilled == 12)
+        #expect(extras.selectionGamesTarget == 22)
+        #expect(WidgetSelectionProgressLine.line(
+            youMade: extras.selectionsMade,
+            youTotal: extras.selectionsTotal,
+            membersDone: extras.selectionMembersDone,
+            membersTotal: extras.selectionMembersTotal,
+            gamesFilled: extras.selectionGamesFilled,
+            gamesTarget: extras.selectionGamesTarget
+        ) == progress.subtitle)
+
+        let repeatedEvent = WidgetSnapshotBuilder.extras(
+            week: week(
+                status: .selection,
+                selectionDeadline: now.addingTimeInterval(3_600),
+                selectionsPerMember: 2
+            ),
+            games: [],
+            picks: [:],
+            pickMode: .straightUp,
+            now: now,
+            nominations: [
+                nomination(eventId: "same", submittedBy: "me"),
+                nomination(eventId: "same", submittedBy: "me"),
+            ],
+            userId: "me",
+            memberIds: ["me"],
+            rulesSelectionsPerMember: 2,
+            slateEventIds: [],
+            gamesTarget: 2
+        )
+        #expect(repeatedEvent.selectionsMade == 2)
+        #expect(repeatedEvent.selectionMembersDone == 1)
+        #expect(repeatedEvent.selectionGamesFilled == 1)
+    }
+
+    @Test func selectionProgressStaysNilUntilTheRosterIsLoaded() {
+        let memberIds = ["me", "them"]
+        let nominations = [
+            nomination(eventId: "mine", submittedBy: "me"),
+            nomination(eventId: "theirs", submittedBy: "them"),
+        ]
+        let week = week(
+            status: .selection,
+            selectionDeadline: now.addingTimeInterval(3_600),
+            selectionsPerMember: 1
+        )
+        let unloaded = WidgetSnapshotBuilder.extras(
+            week: week,
+            games: [],
+            picks: [:],
+            pickMode: .straightUp,
+            now: now,
+            nominations: nominations,
+            userId: "me",
+            nominationsLoaded: false,
+            memberIds: memberIds,
+            rulesSelectionsPerMember: 1,
+            slateEventIds: ["slate"],
+            gamesTarget: 2
+        )
+        #expect(unloaded.selectionsMade == nil)
+        #expect(unloaded.selectionMembersDone == nil)
+        #expect(unloaded.selectionGamesFilled == nil)
+
+        let noRoster = WidgetSnapshotBuilder.extras(
+            week: week,
+            games: [],
+            picks: [:],
+            pickMode: .straightUp,
+            now: now,
+            nominations: nominations,
+            userId: "me",
+            slateEventIds: ["slate"],
+            gamesTarget: 2
+        )
+        #expect(noRoster.selectionsMade == 1)
+        #expect(noRoster.selectionMembersDone == nil)
+        #expect(noRoster.selectionGamesFilled == nil)
+
+        let slateMissing = WidgetSnapshotBuilder.extras(
+            week: week,
+            games: [],
+            picks: [:],
+            pickMode: .straightUp,
+            now: now,
+            nominations: nominations,
+            userId: "me",
+            memberIds: memberIds,
+            rulesSelectionsPerMember: 1,
+            gamesTarget: 2
+        )
+        #expect(slateMissing.selectionMembersDone == 2)
+        #expect(slateMissing.selectionMembersTotal == 2)
+        #expect(slateMissing.selectionGamesFilled == nil)
+        #expect(slateMissing.selectionGamesTarget == nil)
+
+        let commissioner = WidgetSnapshotBuilder.extras(
+            week: self.week(
+                status: .selection,
+                selectionDeadline: now.addingTimeInterval(3_600),
+                selectionMode: .commissioner,
+                selectionsPerMember: 1
+            ),
+            games: [],
+            picks: [:],
+            pickMode: .straightUp,
+            now: now,
+            nominations: nominations,
+            userId: "me",
+            memberIds: memberIds,
+            rulesSelectionsPerMember: 1,
+            slateEventIds: ["slate"],
+            gamesTarget: 8
+        )
+        #expect(commissioner.selectionQuota == WidgetSelectionQuota.commissioner)
+        #expect(commissioner.selectionMembersDone == nil)
+        #expect(commissioner.selectionGamesFilled == nil)
+
+        let picking = WidgetSnapshotBuilder.extras(
+            week: self.week(status: .picking, pickDeadline: now.addingTimeInterval(3_600)),
+            games: [slate(id: "1", kickoff: now.addingTimeInterval(3_600))],
+            picks: [:],
+            pickMode: .straightUp,
+            now: now,
+            nominations: nominations,
+            userId: "me",
+            memberIds: memberIds,
+            rulesSelectionsPerMember: 1,
+            slateEventIds: ["slate"],
+            gamesTarget: 2
+        )
+        #expect(picking.selectionMembersDone == nil)
+        #expect(picking.selectionGamesFilled == nil)
     }
 
     @Test func liveScoreOverlayFeedsPickProgress() {

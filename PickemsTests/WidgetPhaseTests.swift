@@ -241,6 +241,10 @@ struct WidgetPhaseTests {
         #expect(decoded.selectionsMade == nil)
         #expect(decoded.selectionsTotal == nil)
         #expect(decoded.selectionQuota == nil)
+        #expect(decoded.selectionMembersDone == nil)
+        #expect(decoded.selectionMembersTotal == nil)
+        #expect(decoded.selectionGamesFilled == nil)
+        #expect(decoded.selectionGamesTarget == nil)
         #expect(decoded.previousRank == nil)
         #expect(decoded.games?.first?.awayColorHex == nil)
         #expect(decoded.games?.first?.homeColorHex == nil)
@@ -344,7 +348,160 @@ struct WidgetPhaseTests {
         #expect(set.showsBar == true)
         #expect(set.countdownIsHero == false)
         #expect(set.list == .slate)
+        #expect(set.selectionProgressLine == nil)
         #expect(WidgetDeadlineProgress.rows(snapshot: snapshot, kind: .selections).map(\.id) == ["slate"])
+    }
+
+    @Test func selectionProgressLineMatchesTheMakeSelectionsSubtitle() {
+        let full = WidgetSelectionProgressLine.subtitle(
+            youMade: 2,
+            youTotal: 2,
+            membersDone: 6,
+            membersTotal: 11,
+            gamesFilled: 12,
+            gamesTarget: 22
+        )
+        #expect(full == "You: 2/2 · Members done: 6/11 · Games: 12/22")
+        #expect(WidgetSelectionProgressLine.line(
+            youMade: 2,
+            youTotal: 2,
+            membersDone: 6,
+            membersTotal: 11,
+            gamesFilled: 12,
+            gamesTarget: 22
+        ) == full)
+        #expect(WidgetSelectionProgressLine.line(
+            youMade: 2,
+            youTotal: 2,
+            membersDone: 6,
+            membersTotal: 11,
+            gamesFilled: 12,
+            gamesTarget: 22,
+            compact: true
+        ) == "You 2/2 · 6/11 done · 12/22 games")
+    }
+
+    @Test func selectionProgressLineOmitsMissingParts() {
+        #expect(WidgetSelectionProgressLine.line(
+            youMade: 2,
+            youTotal: 2,
+            membersDone: nil,
+            membersTotal: nil,
+            gamesFilled: 12,
+            gamesTarget: 22
+        ) == "You: 2/2 · Games: 12/22")
+        #expect(WidgetSelectionProgressLine.line(
+            youMade: 2,
+            youTotal: 2,
+            membersDone: 6,
+            membersTotal: 11,
+            gamesFilled: nil,
+            gamesTarget: nil
+        ) == "You: 2/2 · Members done: 6/11")
+        #expect(WidgetSelectionProgressLine.line(
+            youMade: nil,
+            youTotal: nil,
+            membersDone: 6,
+            membersTotal: 11,
+            gamesFilled: 12,
+            gamesTarget: 22
+        ) == "Members done: 6/11 · Games: 12/22")
+        #expect(WidgetSelectionProgressLine.line(
+            youMade: 2,
+            youTotal: nil,
+            membersDone: 6,
+            membersTotal: nil,
+            gamesFilled: 12,
+            gamesTarget: nil
+        ) == nil)
+        #expect(WidgetSelectionProgressLine.line(
+            youMade: nil,
+            youTotal: nil,
+            membersDone: nil,
+            membersTotal: nil,
+            gamesFilled: nil,
+            gamesTarget: nil
+        ) == nil)
+
+        var snapshot = make()
+        snapshot.selectionsMade = 1
+        snapshot.selectionsTotal = 2
+        snapshot.selectionGamesFilled = 4
+        snapshot.selectionGamesTarget = 8
+        #expect(WidgetSelectionProgressLine.line(snapshot: snapshot) == "You: 1/2 · Games: 4/8")
+        #expect(WidgetSelectionProgressLine.line(snapshot: snapshot, compact: true) == "You 1/2 · 4/8 games")
+    }
+
+    @Test func selectionProgressFieldsRoundTripAndDecodeAsNil() throws {
+        let json = """
+        {
+          "groupId": "g",
+          "groupName": "Saturday Crew",
+          "weekNumber": 3,
+          "seasonYear": 2026,
+          "userId": "u",
+          "userDisplayName": "You",
+          "weeklyWins": 1,
+          "weeklyLosses": 0,
+          "seasonWins": 4,
+          "seasonLosses": 2,
+          "rank": 2,
+          "totalPlayers": 8,
+          "topEntries": [],
+          "updatedAt": 0
+        }
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(StandingsSnapshot.self, from: json)
+        #expect(decoded.selectionMembersDone == nil)
+        #expect(decoded.selectionMembersTotal == nil)
+        #expect(decoded.selectionGamesFilled == nil)
+        #expect(decoded.selectionGamesTarget == nil)
+
+        var roundTrip = decoded
+        roundTrip.selectionMembersDone = 6
+        roundTrip.selectionMembersTotal = 11
+        roundTrip.selectionGamesFilled = 12
+        roundTrip.selectionGamesTarget = 22
+        let data = try JSONEncoder().encode(roundTrip)
+        let again = try JSONDecoder().decode(StandingsSnapshot.self, from: data)
+        #expect(again.selectionMembersDone == 6)
+        #expect(again.selectionMembersTotal == 11)
+        #expect(again.selectionGamesFilled == 12)
+        #expect(again.selectionGamesTarget == 22)
+        #expect(again == roundTrip)
+    }
+
+    @Test func selectionProgressLineStaysOnTheMemberSelectionsStage() {
+        var snapshot = make()
+        snapshot.selectionQuota = WidgetSelectionQuota.member
+        snapshot.selectionsMade = 1
+        snapshot.selectionsTotal = 2
+        snapshot.selectionMembersDone = 6
+        snapshot.selectionMembersTotal = 11
+        snapshot.selectionGamesFilled = 12
+        snapshot.selectionGamesTarget = 22
+        snapshot.picksMade = 0
+        snapshot.picksTotal = 4
+        let open = WidgetDeadlineProgress.model(snapshot: snapshot, kind: .selections)
+        #expect(open.completionTitle == nil)
+        #expect(open.detail == "1 of 2 selected")
+        #expect(open.selectionProgressLine == "You: 1/2 · Members done: 6/11 · Games: 12/22")
+
+        snapshot.selectionsMade = 2
+        let done = WidgetDeadlineProgress.model(snapshot: snapshot, kind: .selections)
+        #expect(done.completionTitle == "All selections in ✓")
+        #expect(done.selectionProgressLine == "You: 2/2 · Members done: 6/11 · Games: 12/22")
+
+        let pickems = WidgetDeadlineProgress.model(snapshot: snapshot, kind: .pickems)
+        #expect(pickems.selectionProgressLine == nil)
+        #expect(pickems.detail == "0 of 4 picked")
+
+        snapshot.selectionQuota = WidgetSelectionQuota.commissioner
+        snapshot.selectionsMade = 3
+        snapshot.selectionsTotal = 8
+        let commissioner = WidgetDeadlineProgress.model(snapshot: snapshot, kind: .selections)
+        #expect(commissioner.selectionProgressLine == nil)
+        #expect(commissioner.detail == "3 of 8 on the slate")
     }
 
     @Test func timelineEntriesCrossSelectionAndPickLocks() {

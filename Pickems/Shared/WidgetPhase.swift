@@ -383,6 +383,81 @@ enum WidgetSelectionQuota {
     static let commissioner = "commissioner"
 }
 
+/// The Make Selections subtitle. Missing counts drop out instead of rendering a blank fraction.
+enum WidgetSelectionProgressLine {
+    static func subtitle(
+        youMade: Int,
+        youTotal: Int,
+        membersDone: Int,
+        membersTotal: Int,
+        gamesFilled: Int,
+        gamesTarget: Int
+    ) -> String {
+        parts(
+            you: (youMade, youTotal),
+            members: (membersDone, membersTotal),
+            games: (gamesFilled, gamesTarget),
+            compact: false
+        ).joined(separator: " · ")
+    }
+
+    /// Nil when every part is missing. `compact` is the narrow-family variant of the same counts.
+    static func line(
+        youMade: Int?,
+        youTotal: Int?,
+        membersDone: Int?,
+        membersTotal: Int?,
+        gamesFilled: Int?,
+        gamesTarget: Int?,
+        compact: Bool = false
+    ) -> String? {
+        let pieces = parts(
+            you: pair(youMade, youTotal),
+            members: pair(membersDone, membersTotal),
+            games: pair(gamesFilled, gamesTarget),
+            compact: compact
+        )
+        guard !pieces.isEmpty else { return nil }
+        return pieces.joined(separator: " · ")
+    }
+
+    static func line(snapshot: StandingsSnapshot, compact: Bool = false) -> String? {
+        line(
+            youMade: snapshot.selectionsMade,
+            youTotal: snapshot.selectionsTotal,
+            membersDone: snapshot.selectionMembersDone,
+            membersTotal: snapshot.selectionMembersTotal,
+            gamesFilled: snapshot.selectionGamesFilled,
+            gamesTarget: snapshot.selectionGamesTarget,
+            compact: compact
+        )
+    }
+
+    private static func pair(_ made: Int?, _ total: Int?) -> (Int, Int)? {
+        guard let made, let total else { return nil }
+        return (made, total)
+    }
+
+    private static func parts(
+        you: (Int, Int)?,
+        members: (Int, Int)?,
+        games: (Int, Int)?,
+        compact: Bool
+    ) -> [String] {
+        var pieces: [String] = []
+        if let you {
+            pieces.append(compact ? "You \(you.0)/\(you.1)" : "You: \(you.0)/\(you.1)")
+        }
+        if let members {
+            pieces.append(compact ? "\(members.0)/\(members.1) done" : "Members done: \(members.0)/\(members.1)")
+        }
+        if let games {
+            pieces.append(compact ? "\(games.0)/\(games.1) games" : "Games: \(games.0)/\(games.1)")
+        }
+        return pieces
+    }
+}
+
 enum WidgetDeadlineList: Equatable {
     case userSelections
     case unpicked
@@ -405,6 +480,8 @@ enum WidgetDeadlineProgress: Equatable {
         var listEmpty: String?
         var list: WidgetDeadlineList
         var accessibilityDetail: String
+        /// Make Selections subtitle. Nil outside member Selections, and when every part is missing.
+        var selectionProgressLine: String? = nil
     }
 
     static func model(snapshot: StandingsSnapshot, kind: WidgetDeadlineKind) -> Model {
@@ -451,7 +528,8 @@ enum WidgetDeadlineProgress: Equatable {
             listTitle: "Your selections",
             listEmpty: "Select your games",
             list: .userSelections,
-            accessibilityDetail: complete ? "All selections in." : "\(made) of \(total) selected."
+            accessibilityDetail: complete ? "All selections in." : "\(made) of \(total) selected.",
+            selectionProgressLine: WidgetSelectionProgressLine.line(snapshot: snapshot)
         )
     }
 
