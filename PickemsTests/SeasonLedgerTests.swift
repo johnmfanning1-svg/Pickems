@@ -9,42 +9,42 @@ struct SeasonLedgerTests {
         let highlights = SeasonLedgerHighlight.winHighlights(weeklyWinsByMemberId: [
             "a": 8, "b": 6, "c": 5,
         ])
-        #expect(highlights["a"] == .best)
-        #expect(highlights["b"] == .none)
-        #expect(highlights["c"] == .none)
+        #expect(highlights["a"] == SeasonLedgerWinHighlight.best)
+        #expect(highlights["b"] == SeasonLedgerWinHighlight.none)
+        #expect(highlights["c"] == SeasonLedgerWinHighlight.none)
     }
 
     @Test func twoWayTieForHighIsGold() {
         let highlights = SeasonLedgerHighlight.winHighlights(weeklyWinsByMemberId: [
             "a": 7, "b": 7, "c": 4,
         ])
-        #expect(highlights["a"] == .tie)
-        #expect(highlights["b"] == .tie)
-        #expect(highlights["c"] == .none)
+        #expect(highlights["a"] == SeasonLedgerWinHighlight.tie)
+        #expect(highlights["b"] == SeasonLedgerWinHighlight.tie)
+        #expect(highlights["c"] == SeasonLedgerWinHighlight.none)
     }
 
     @Test func threeWayTieForHighIsGoldForAllLeaders() {
         let highlights = SeasonLedgerHighlight.winHighlights(weeklyWinsByMemberId: [
             "a": 5, "b": 5, "c": 5, "d": 2,
         ])
-        #expect(highlights["a"] == .tie)
-        #expect(highlights["b"] == .tie)
-        #expect(highlights["c"] == .tie)
-        #expect(highlights["d"] == .none)
+        #expect(highlights["a"] == SeasonLedgerWinHighlight.tie)
+        #expect(highlights["b"] == SeasonLedgerWinHighlight.tie)
+        #expect(highlights["c"] == SeasonLedgerWinHighlight.tie)
+        #expect(highlights["d"] == SeasonLedgerWinHighlight.none)
     }
 
     @Test func allMembersEqualProducesNoHighlight() {
         let highlights = SeasonLedgerHighlight.winHighlights(weeklyWinsByMemberId: [
             "a": 0, "b": 0, "c": 0,
         ])
-        #expect(highlights.values.allSatisfy { $0 == .none })
+        #expect(highlights.values.allSatisfy { $0 == SeasonLedgerWinHighlight.none })
     }
 
     @Test func uniqueBowlsWeekHighIsBest() {
         let highlights = SeasonLedgerHighlight.winHighlights(weeklyWinsByMemberId: [
             "a": 3, "b": 2, "c": 2,
         ])
-        #expect(highlights["a"] == .best)
+        #expect(highlights["a"] == SeasonLedgerWinHighlight.best)
     }
 
     // MARK: - Games back
@@ -228,7 +228,7 @@ struct SeasonLedgerTests {
             pickedTeamId: "home",
             pickMode: .ats
         )
-        #expect(status == .push)
+        #expect(status == PickBoardStatus.push)
     }
 
     // MARK: - Week title
@@ -319,9 +319,9 @@ struct SeasonLedgerTests {
             spreadTeamId: "home",
             kickoff: Date(timeIntervalSince1970: 0),
             status: .final,
-            homeScore: 17,
-            awayScore: 20,
-            winnerTeamId: "away"
+            homeScore: 20,
+            awayScore: 17,
+            winnerTeamId: "home"
         )
     }
 

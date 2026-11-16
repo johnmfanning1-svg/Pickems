@@ -194,6 +194,8 @@ struct PickemsSurfacePalette: Equatable {
     var covering: ColorContrast.RGB
     var lost: ColorContrast.RGB
     var push: ColorContrast.RGB
+    /// Season Ledger Detailed push chips (distinct from gray league chart pushes).
+    var ledgerPush: ColorContrast.RGB
     var accent: ColorContrast.RGB
     var accentSecondary: ColorContrast.RGB
     var progressGold: ColorContrast.RGB
@@ -210,6 +212,7 @@ enum PickemsSurfaces {
         covering: ColorContrast.RGB(r: 0.22, g: 0.48, b: 0.92),
         lost: ColorContrast.RGB(r: 0.86, g: 0.15, b: 0.15),
         push: ColorContrast.RGB(r: 0.36, g: 0.37, b: 0.40),
+        ledgerPush: ColorContrast.RGB(r: 0.231, g: 0.471, b: 0.878),
         accent: ColorContrast.RGB(r: 0.86, g: 0.15, b: 0.15),
         accentSecondary: ColorContrast.RGB(r: 0.65, g: 0.10, b: 0.10),
         progressGold: ColorContrast.RGB(r: 0.96, g: 0.76, b: 0.26)
@@ -230,6 +233,7 @@ enum PickemsSurfaces {
             covering: readable(dark.covering),
             lost: readable(dark.lost),
             push: readable(dark.push),
+            ledgerPush: readable(dark.ledgerPush),
             accent: readable(dark.accent),
             accentSecondary: readable(dark.accentSecondary),
             progressGold: readable(dark.progressGold)
