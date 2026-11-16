@@ -8,27 +8,27 @@ struct SeasonLedgerTests {
     @Test func staleRefreshErrorWithDataShowsBannerNotFullError() {
         let data = minimalSeasonData()
         let error = "Couldn't load that right now."
-        #expect(SeasonLedgerLoader.showsRefreshFailureBanner(errorMessage: error, data: data))
-        #expect(!SeasonLedgerLoader.showsFullLoadError(errorMessage: error, data: data, isLoading: false))
+        #expect(SeasonLedgerRefreshPresentation.showsRefreshFailureBanner(errorMessage: error, data: data))
+        #expect(!SeasonLedgerRefreshPresentation.showsFullLoadError(errorMessage: error, data: data, isLoading: false))
     }
 
     @Test func loadErrorWithNoDataShowsFullErrorNotBanner() {
         let error = "Couldn't load that right now."
-        #expect(!SeasonLedgerLoader.showsRefreshFailureBanner(errorMessage: error, data: nil))
-        #expect(SeasonLedgerLoader.showsFullLoadError(errorMessage: error, data: nil, isLoading: false))
+        #expect(!SeasonLedgerRefreshPresentation.showsRefreshFailureBanner(errorMessage: error, data: nil))
+        #expect(SeasonLedgerRefreshPresentation.showsFullLoadError(errorMessage: error, data: nil, isLoading: false))
     }
 
     @Test func successfulReloadClearsRefreshBannerState() {
         let data = minimalSeasonData()
-        #expect(!SeasonLedgerLoader.showsRefreshFailureBanner(errorMessage: nil, data: data))
-        #expect(!SeasonLedgerLoader.showsFullLoadError(errorMessage: nil, data: data, isLoading: false))
+        #expect(!SeasonLedgerRefreshPresentation.showsRefreshFailureBanner(errorMessage: nil, data: data))
+        #expect(!SeasonLedgerRefreshPresentation.showsFullLoadError(errorMessage: nil, data: data, isLoading: false))
     }
 
     @Test func refreshErrorClearsWhenLeagueOrViewerChanges() {
-        #expect(SeasonLedgerLoader.shouldClearRefreshError(cachedKey: "g1|u1", groupId: "g2", viewerId: "u1"))
-        #expect(SeasonLedgerLoader.shouldClearRefreshError(cachedKey: "g1|u1", groupId: "g1", viewerId: "u2"))
-        #expect(!SeasonLedgerLoader.shouldClearRefreshError(cachedKey: "g1|u1", groupId: "g1", viewerId: "u1"))
-        #expect(!SeasonLedgerLoader.shouldClearRefreshError(cachedKey: nil, groupId: "g1", viewerId: "u1"))
+        #expect(SeasonLedgerRefreshPresentation.shouldClearRefreshError(cachedKey: "g1|u1", groupId: "g2", viewerId: "u1"))
+        #expect(SeasonLedgerRefreshPresentation.shouldClearRefreshError(cachedKey: "g1|u1", groupId: "g1", viewerId: "u2"))
+        #expect(!SeasonLedgerRefreshPresentation.shouldClearRefreshError(cachedKey: "g1|u1", groupId: "g1", viewerId: "u1"))
+        #expect(!SeasonLedgerRefreshPresentation.shouldClearRefreshError(cachedKey: nil, groupId: "g1", viewerId: "u1"))
     }
 
     // MARK: - Highlights

@@ -1,24 +1,13 @@
 import Foundation
 
-@MainActor
-@Observable
-final class SeasonLedgerLoader {
+/// MainActor-free refresh failure presentation for Season Ledger tests and views.
+enum SeasonLedgerRefreshPresentation {
     /// Shown when a refresh fails but the last loaded ledger is still on screen.
     static let staleRefreshBannerMessage =
         "Couldn't refresh. Showing the last loaded ledger."
 
-    private(set) var data: SeasonLedgerSeasonData?
-    private(set) var isLoading = false
-    private(set) var errorMessage: String?
-
-    private var cachedKey: String?
-
-    var showsRefreshFailureBanner: Bool {
-        Self.showsRefreshFailureBanner(errorMessage: errorMessage, data: data)
-    }
-
-    var showsFullLoadError: Bool {
-        Self.showsFullLoadError(errorMessage: errorMessage, data: data, isLoading: isLoading)
+    static func cacheKey(groupId: String, viewerId: String?) -> String {
+        "\(groupId)|\(viewerId ?? "")"
     }
 
     static func showsRefreshFailureBanner(
@@ -48,9 +37,34 @@ final class SeasonLedgerLoader {
         guard let cachedKey else { return false }
         return cachedKey != cacheKey(groupId: groupId, viewerId: viewerId)
     }
+}
+
+@MainActor
+@Observable
+final class SeasonLedgerLoader {
+    private(set) var data: SeasonLedgerSeasonData?
+    private(set) var isLoading = false
+    private(set) var errorMessage: String?
+
+    private var cachedKey: String?
+
+    var showsRefreshFailureBanner: Bool {
+        SeasonLedgerRefreshPresentation.showsRefreshFailureBanner(
+            errorMessage: errorMessage,
+            data: data
+        )
+    }
+
+    var showsFullLoadError: Bool {
+        SeasonLedgerRefreshPresentation.showsFullLoadError(
+            errorMessage: errorMessage,
+            data: data,
+            isLoading: isLoading
+        )
+    }
 
     func clearRefreshErrorIfIdentityChanged(groupId: String, viewerId: String?) {
-        if Self.shouldClearRefreshError(
+        if SeasonLedgerRefreshPresentation.shouldClearRefreshError(
             cachedKey: cachedKey,
             groupId: groupId,
             viewerId: viewerId
@@ -58,6 +72,7 @@ final class SeasonLedgerLoader {
             errorMessage = nil
         }
     }
+
     private static var seasonCache: [String: SeasonLedgerSeasonData] = [:]
     private static let weekFetchLimit = 64
     private static let parallelWeekCap = 6
@@ -72,7 +87,10 @@ final class SeasonLedgerLoader {
             cachedKey = nil
             return
         }
-        let key = Self.cacheKey(groupId: group.id, viewerId: appState.currentUserId)
+        let key = SeasonLedgerRefreshPresentation.cacheKey(
+            groupId: group.id,
+            viewerId: appState.currentUserId
+        )
         clearRefreshErrorIfIdentityChanged(groupId: group.id, viewerId: appState.currentUserId)
         if !forceRefresh, cachedKey == key, let data {
             self.data = data
@@ -92,7 +110,10 @@ final class SeasonLedgerLoader {
             cachedKey = nil
             return
         }
-        let key = Self.cacheKey(groupId: group.id, viewerId: appState.currentUserId)
+        let key = SeasonLedgerRefreshPresentation.cacheKey(
+            groupId: group.id,
+            viewerId: appState.currentUserId
+        )
         let hadData = data != nil
         isLoading = true
         if !hadData {
@@ -120,10 +141,6 @@ final class SeasonLedgerLoader {
                 data = nil
             }
         }
-    }
-
-    static func cacheKey(groupId: String, viewerId: String?) -> String {
-        "\(groupId)|\(viewerId ?? "")"
     }
 
     static func clearAllCache() {

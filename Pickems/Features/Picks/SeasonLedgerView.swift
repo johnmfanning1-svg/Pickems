@@ -111,11 +111,11 @@ private struct SeasonLedgerRefreshFailureBanner: View {
                 .foregroundStyle(theme.accent)
                 .accessibilityHidden(true)
 
-            Text(SeasonLedgerLoader.staleRefreshBannerMessage)
+            Text(SeasonLedgerRefreshPresentation.staleRefreshBannerMessage)
                 .font(.subheadline)
                 .foregroundStyle(PickemsColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-                .accessibilityLabel(SeasonLedgerLoader.staleRefreshBannerMessage)
+                .accessibilityLabel(SeasonLedgerRefreshPresentation.staleRefreshBannerMessage)
 
             Spacer(minLength: 0)
 
