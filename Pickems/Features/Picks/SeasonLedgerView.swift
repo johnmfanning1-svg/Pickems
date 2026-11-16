@@ -35,8 +35,10 @@ struct SeasonLedgerView: View {
                     .accessibilityLabel("Loading season ledger")
             } else if let data = loader.data, !data.weeks.isEmpty {
                 VStack(spacing: PickemsSpacing.md) {
-                    if let error = loader.errorMessage {
-                        ContextualTipBanner(icon: "exclamationmark.triangle.fill", message: error)
+                    if loader.showsRefreshFailureBanner {
+                        SeasonLedgerRefreshFailureBanner {
+                            Task { await loader.reload(appState: appState) }
+                        }
                     }
                     scopePicker
                     if scope == .summary {
@@ -55,7 +57,7 @@ struct SeasonLedgerView: View {
                 }
                 .padding(.horizontal, PickemsSpacing.md)
                 .padding(.bottom, PickemsSpacing.md)
-            } else if let error = loader.errorMessage {
+            } else if loader.showsFullLoadError, let error = loader.errorMessage {
                 ContentUnavailableView(
                     "Couldn't load ledger",
                     systemImage: "exclamationmark.triangle",
@@ -94,5 +96,39 @@ struct SeasonLedgerView: View {
         }
         .pickerStyle(.segmented)
         .accessibilityLabel("Season ledger view")
+    }
+}
+
+/// Non-blocking refresh failure while stale ledger data remains visible.
+private struct SeasonLedgerRefreshFailureBanner: View {
+    let onRetry: () -> Void
+    @Environment(\.themePalette) private var theme
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title3)
+                .foregroundStyle(theme.accent)
+                .accessibilityHidden(true)
+
+            Text(SeasonLedgerLoader.staleRefreshBannerMessage)
+                .font(.subheadline)
+                .foregroundStyle(PickemsColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(SeasonLedgerLoader.staleRefreshBannerMessage)
+
+            Spacer(minLength: 0)
+
+            Button("Retry", action: onRetry)
+                .font(.subheadline.weight(.semibold))
+                .accessibilityLabel("Retry loading season ledger")
+        }
+        .padding()
+        .background(PickemsColors.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(theme.accent.opacity(0.15), lineWidth: 1)
+        )
     }
 }
