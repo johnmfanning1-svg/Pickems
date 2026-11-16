@@ -61,7 +61,7 @@ struct SeasonLedgerTests {
         #expect(SeasonLedgerGamesBack.caption(memberWins: 10, leaderWins: leader) == "−4")
     }
 
-  @Test func gamesBackUsesStandingsGapWinArithmetic() {
+    @Test func gamesBackUsesStandingsGapWinArithmetic() {
         #expect(StandingsGap.gamesAhead(youWins: 14, themWins: 10) == 4)
         #expect(SeasonLedgerGamesBack.caption(memberWins: 10, leaderWins: 14) == "−4")
     }
@@ -169,6 +169,68 @@ struct SeasonLedgerTests {
         #expect(!hidden.contains("done"))
     }
 
+    // MARK: - Layout
+
+    @Test func wideRosterUsesSingleSharedMemberScroll() {
+        #expect(SeasonLedgerMemberTableLayout.usesSharedHorizontalScroll(memberCount: 5))
+        #expect(!SeasonLedgerMemberTableLayout.usesSharedHorizontalScroll(memberCount: 4))
+        #expect(SeasonLedgerMemberTableLayout.sharedScrollMemberThreshold == 4)
+    }
+
+    // MARK: - Week eligibility
+
+    @Test func eligibleWeeksStayInCurrentSeasonYear() {
+        let weeks = [
+            weekSummary(id: "2025-W10", number: 10, status: .scored, seasonYear: 2025),
+            weekSummary(id: "2026-W2", number: 2, status: .scored, seasonYear: 2026),
+            weekSummary(id: "2026-W3", number: 3, status: .locked, seasonYear: 2026),
+        ]
+        let eligible = SeasonLedgerWeekEligibility.eligibleWeeks(from: weeks, seasonYear: 2026)
+        #expect(eligible.map(\.id) == ["2026-W2", "2026-W3"])
+    }
+
+    @Test func duplicateWeekNumbersFromOtherSeasonsAreExcluded() {
+        let weeks = [
+            weekSummary(id: "2025-W5", number: 5, status: .scored, seasonYear: 2025),
+            weekSummary(id: "2026-W5", number: 5, status: .scored, seasonYear: 2026),
+        ]
+        let eligible = SeasonLedgerWeekEligibility.eligibleWeeks(from: weeks, seasonYear: 2026)
+        #expect(eligible.count == 1)
+        #expect(eligible[0].id == "2026-W5")
+    }
+
+    @Test func pickingWeekBeforeDeadlineIsExcluded() {
+        var week = weekSummary(id: "2026-W6", number: 6, status: .picking, seasonYear: 2026)
+        week.pickDeadline = Date().addingTimeInterval(3600)
+        let now = Date()
+        #expect(!SeasonLedgerWeekEligibility.isEligible(week, now: now))
+    }
+
+    @Test func pushCountsThroughAggregator() {
+        let game = pushGame(id: "g-push")
+        let members = [member("a", "Alex")]
+        let picks: [String: UserPick] = [
+            "a": pick(userId: "a", choices: ["g-push": "home"]),
+        ]
+        let records = SeasonLedgerAggregator.memberRecords(
+            members: members,
+            games: [game],
+            picksByUserId: picks,
+            hiddenGameIds: [],
+            viewerId: "a",
+            pickMode: .ats
+        )
+        #expect(records["a"]?.pushes == 1)
+        #expect(records["a"]?.wins == 0)
+        #expect(records["a"]?.losses == 0)
+        let status = SeasonLedgerAggregator.pickCellStatus(
+            game: game,
+            pickedTeamId: "home",
+            pickMode: .ats
+        )
+        #expect(status == .push)
+    }
+
     // MARK: - Week title
 
     @Test func armyNavyWeekTitleFromId() {
@@ -201,10 +263,15 @@ struct SeasonLedgerTests {
         )
     }
 
-    private func weekSummary(id: String, number: Int, status: WeekStatus = .scored) -> WeekSummary {
+    private func weekSummary(
+        id: String,
+        number: Int,
+        status: WeekStatus = .scored,
+        seasonYear: Int = 2026
+    ) -> WeekSummary {
         WeekSummary(
             id: id,
-            seasonYear: 2026,
+            seasonYear: seasonYear,
             weekNumber: number,
             status: status,
             slateSize: 10,
@@ -233,6 +300,28 @@ struct SeasonLedgerTests {
             homeScore: homeWins ? 28 : 10,
             awayScore: homeWins ? 10 : 28,
             winnerTeamId: homeWins ? "home" : "away"
+        )
+    }
+
+    private func pushGame(id: String) -> SlateGame {
+        SlateGame(
+            id: id,
+            espnEventId: id,
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: 3,
+            spreadTeamId: "home",
+            kickoff: Date(timeIntervalSince1970: 0),
+            status: .final,
+            homeScore: 17,
+            awayScore: 20,
+            winnerTeamId: "away"
         )
     }
 

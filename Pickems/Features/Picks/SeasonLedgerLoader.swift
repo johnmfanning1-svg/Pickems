@@ -7,7 +7,7 @@ final class SeasonLedgerLoader {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
 
-    private var cachedGroupId: String?
+    private var cachedKey: String?
     private static var seasonCache: [String: SeasonLedgerSeasonData] = [:]
     private static let weekFetchLimit = 64
     private static let parallelWeekCap = 6
@@ -19,15 +19,17 @@ final class SeasonLedgerLoader {
         guard let group = appState.groupService.selectedGroup else {
             data = nil
             errorMessage = nil
+            cachedKey = nil
             return
         }
-        if !forceRefresh, cachedGroupId == group.id, let data {
+        let key = Self.cacheKey(groupId: group.id, viewerId: appState.currentUserId)
+        if !forceRefresh, cachedKey == key, let data {
             self.data = data
             return
         }
-        if !forceRefresh, let cached = Self.seasonCache[group.id] {
+        if !forceRefresh, let cached = Self.seasonCache[key] {
             data = cached
-            cachedGroupId = group.id
+            cachedKey = key
             return
         }
         await reload(appState: appState)
@@ -36,14 +38,20 @@ final class SeasonLedgerLoader {
     func reload(appState: AppState) async {
         guard let group = appState.groupService.selectedGroup else {
             data = nil
+            cachedKey = nil
             return
         }
+        let key = Self.cacheKey(groupId: group.id, viewerId: appState.currentUserId)
+        let hadData = data != nil
         isLoading = true
-        errorMessage = nil
+        if !hadData {
+            errorMessage = nil
+        }
         defer { isLoading = false }
         do {
             let built = try await Self.buildSeason(
                 groupId: group.id,
+                seasonYear: Self.resolveSeasonYear(groupService: appState.groupService),
                 leaguePickMode: group.rules.pickMode,
                 members: appState.groupService.members,
                 viewerId: appState.currentUserId,
@@ -51,21 +59,39 @@ final class SeasonLedgerLoader {
                 groupService: appState.groupService
             )
             data = built
-            cachedGroupId = group.id
-            Self.seasonCache[group.id] = built
+            cachedKey = key
+            errorMessage = nil
+            Self.seasonCache[key] = built
         } catch {
-            data = nil
             errorMessage = UserFacingError.message(for: error, context: .generic)
                 ?? error.localizedDescription
         }
     }
 
+    static func cacheKey(groupId: String, viewerId: String?) -> String {
+        "\(groupId)|\(viewerId ?? "")"
+    }
+
+    static func clearAllCache() {
+        seasonCache.removeAll()
+    }
+
     static func invalidate(groupId: String) {
-        seasonCache.removeValue(forKey: groupId)
+        let prefix = "\(groupId)|"
+        for key in seasonCache.keys where key.hasPrefix(prefix) {
+            seasonCache.removeValue(forKey: key)
+        }
+    }
+
+    private static func resolveSeasonYear(groupService: GroupService) -> Int {
+        groupService.currentWeek?.seasonYear
+            ?? groupService.cfbWeek?.seasonYear
+            ?? CFBSeasonCalendar.seasonYear()
     }
 
     private static func buildSeason(
         groupId: String,
+        seasonYear: Int,
         leaguePickMode: PickMode,
         members: [GroupMember],
         viewerId: String?,
@@ -73,16 +99,10 @@ final class SeasonLedgerLoader {
         groupService: GroupService
     ) async throws -> SeasonLedgerSeasonData {
         let fetched = try await groupService.fetchPastWeeks(groupId: groupId, limit: Self.weekFetchLimit)
-        let eligible = fetched
-            .filter { week in
-                week.status == .scored
-                    || week.status == .locked
-                    || WeekTransition.pickemsShouldShowLeagueBoard(week)
-            }
-            .sorted {
-                if $0.seasonYear != $1.seasonYear { return $0.seasonYear < $1.seasonYear }
-                return $0.weekNumber < $1.weekNumber
-            }
+        let eligible = SeasonLedgerWeekEligibility.eligibleWeeks(
+            from: fetched,
+            seasonYear: seasonYear
+        )
 
         var boards: [SeasonLedgerWeekBoard] = []
         boards.reserveCapacity(eligible.count)
@@ -150,7 +170,7 @@ final class SeasonLedgerLoader {
                 members: members
             )
             if let own = pickService.userPick {
-                var map = Dictionary(uniqueKeysWithValues: picks.map { ($0.userId, $0) })
+                var map = Dictionary(picks.map { ($0.userId, $0) }, uniquingKeysWithValues: { _, new in new })
                 map[own.userId] = own
                 picks = Array(map.values)
             }
@@ -158,7 +178,7 @@ final class SeasonLedgerLoader {
 
         let pickMode = resolvedWeek.resolvedPickMode(leagueMode: leaguePickMode)
         let hidden = SeasonLedgerPrivacy.hiddenGameIds(week: resolvedWeek, games: games)
-        let picksByUserId = Dictionary(uniqueKeysWithValues: picks.map { ($0.userId, $0) })
+        let picksByUserId = Dictionary(picks.map { ($0.userId, $0) }, uniquingKeysWithValues: { _, new in new })
 
         let records = SeasonLedgerAggregator.memberRecords(
             members: members,

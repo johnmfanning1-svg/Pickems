@@ -33,14 +33,11 @@ struct SeasonLedgerView: View {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityLabel("Loading season ledger")
-            } else if let error = loader.errorMessage, loader.data == nil {
-                ContentUnavailableView(
-                    "Couldn't load ledger",
-                    systemImage: "exclamationmark.triangle",
-                    description: Text(error)
-                )
             } else if let data = loader.data, !data.weeks.isEmpty {
                 VStack(spacing: PickemsSpacing.md) {
+                    if let error = loader.errorMessage {
+                        ContextualTipBanner(icon: "exclamationmark.triangle.fill", message: error)
+                    }
                     scopePicker
                     if scope == .summary {
                         SeasonLedgerSummaryView(
@@ -52,13 +49,18 @@ struct SeasonLedgerView: View {
                         SeasonLedgerDetailedView(
                             data: data,
                             members: members,
-                            currentUserId: appState.currentUserId,
-                            pickMode: appState.selectedPickMode
+                            currentUserId: appState.currentUserId
                         )
                     }
                 }
                 .padding(.horizontal, PickemsSpacing.md)
                 .padding(.bottom, PickemsSpacing.md)
+            } else if let error = loader.errorMessage {
+                ContentUnavailableView(
+                    "Couldn't load ledger",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(error)
+                )
             } else {
                 ContentUnavailableView(
                     "No Ledger Yet",

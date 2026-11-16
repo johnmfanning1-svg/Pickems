@@ -7,7 +7,6 @@ struct SeasonLedgerSummaryView: View {
 
     private let weekColumnWidth: CGFloat = 76
     private let memberPairWidth: CGFloat = 58
-    private var scrollsHorizontally: Bool { members.count > 4 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: PickemsSpacing.sm) {
@@ -36,21 +35,17 @@ struct SeasonLedgerSummaryView: View {
     }
 
     private var tableCard: some View {
-        VStack(spacing: 0) {
-            headerRow
-            Divider().overlay(PickemsColors.hairline)
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(data.weeks) { weekBoard in
-                        weekRow(weekBoard)
-                        Divider().overlay(PickemsColors.hairline)
-                    }
-                }
+        ScrollView(.vertical) {
+            SeasonLedgerSplitMemberScroll(
+                memberCount: members.count,
+                memberBandWidth: memberPairWidth,
+                leadingWidth: weekColumnWidth,
+                rowSpacing: 4
+            ) {
+                leadingColumn
+            } memberBand: {
+                memberColumnStack
             }
-            Divider().overlay(PickemsColors.hairlineStrong)
-            footerTotalRow
-            Divider().overlay(PickemsColors.hairline)
-            footerGamesBackRow
         }
         .background(PickemsColors.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -60,36 +55,115 @@ struct SeasonLedgerSummaryView: View {
         )
     }
 
-    private var headerRow: some View {
-        HStack(spacing: 0) {
-            Color.clear.frame(width: weekColumnWidth, height: 56)
-            memberColumns(height: 56) { member in
-                memberHeader(member)
+    private var leadingColumn: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Color.clear.frame(height: 56)
+            ForEach(data.weeks) { board in
+                Text(SeasonLedgerWeekTitle.rowTitle(for: board.week))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(PickemsColors.textPrimary)
+                    .frame(height: 36, alignment: .leading)
+                    .padding(.leading, 8)
+                    .accessibilityAddTraits(.isHeader)
             }
+            Text("Total")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(PickemsColors.textPrimary)
+                .frame(height: 40, alignment: .leading)
+                .padding(.leading, 8)
+            Text("Games Back")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(PickemsColors.textSecondary)
+                .frame(height: 36, alignment: .leading)
+                .padding(.leading, 8)
         }
-        .background(PickemsColors.cardBackground)
     }
 
-    private func weekRow(_ board: SeasonLedgerWeekBoard) -> some View {
+    private var scrollsMembers: Bool {
+        SeasonLedgerMemberTableLayout.usesSharedHorizontalScroll(memberCount: members.count)
+    }
+
+    private var memberColumnStack: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 0) {
+                ForEach(members) { member in
+                    memberHeader(member)
+                        .frame(width: scrollsMembers ? memberPairWidth : nil)
+                        .frame(maxWidth: scrollsMembers ? nil : .infinity)
+                }
+            }
+            .frame(height: 56)
+
+            ForEach(data.weeks) { board in
+                weekMemberRow(board)
+                    .frame(height: 36)
+            }
+
+            footerTotalMembers
+                .frame(height: 40)
+                .background(PickemsColors.hairlineSubtle.opacity(0.35))
+
+            footerGamesBackMembers
+                .frame(height: 36)
+        }
+    }
+
+    private func weekMemberRow(_ board: SeasonLedgerWeekBoard) -> some View {
         let highlights = SeasonLedgerHighlight.winHighlights(weeklyWinsByMemberId: board.weeklyWinsByMemberId)
         return HStack(spacing: 0) {
-            Text(SeasonLedgerWeekTitle.rowTitle(for: board.week))
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(PickemsColors.textPrimary)
-                .frame(width: weekColumnWidth, alignment: .leading)
-                .padding(.leading, 8)
-                .accessibilityAddTraits(.isHeader)
-            memberColumns(height: 36) { member in
+            ForEach(members) { member in
                 let record = board.recordsByMemberId[member.id] ?? .zero
                 let highlight = highlights[member.id] ?? .none
                 HStack(spacing: 0) {
                     winCell(record.wins, highlight: highlight)
                     lossCell(record.losses)
                 }
+                .frame(width: scrollsMembers ? memberPairWidth : nil)
+                .frame(maxWidth: scrollsMembers ? nil : .infinity)
                 .accessibilityLabel(weekAccessibility(board: board, member: member, highlight: highlight))
             }
         }
-        .padding(.vertical, 4)
+    }
+
+    private var footerTotalMembers: some View {
+        HStack(spacing: 0) {
+            ForEach(members) { member in
+                let season = data.seasonRecord(for: member.id)
+                HStack(spacing: 0) {
+                    Text("\(season.wins)")
+                        .font(.subheadline.weight(.bold).monospacedDigit())
+                        .foregroundStyle(PickemsColors.textPrimary)
+                        .frame(width: memberPairWidth / 2)
+                    Text("\(season.losses)")
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .frame(width: memberPairWidth / 2)
+                }
+                .frame(width: scrollsMembers ? memberPairWidth : nil)
+                .frame(maxWidth: scrollsMembers ? nil : .infinity)
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var footerGamesBackMembers: some View {
+        let leaderWins = SeasonLedgerGamesBack.leaderWins(memberSeasonWins: data.seasonWinsByMemberId())
+        return HStack(spacing: 0) {
+            ForEach(members) { member in
+                let wins = data.seasonRecord(for: member.id).wins
+                let caption = SeasonLedgerGamesBack.caption(memberWins: wins, leaderWins: leaderWins)
+                Text(caption)
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .frame(width: scrollsMembers ? memberPairWidth : nil)
+                    .frame(maxWidth: scrollsMembers ? nil : .infinity)
+                    .accessibilityLabel(
+                        caption == "—"
+                            ? "\(member.displayName), even with the leader"
+                            : "\(member.displayName), \(caption.replacingOccurrences(of: "−", with: "")) games back"
+                    )
+            }
+        }
     }
 
     private func weekAccessibility(
@@ -105,81 +179,6 @@ struct SeasonLedgerSummaryView: View {
         case .none: break
         }
         return phrase
-    }
-
-    private var footerTotalRow: some View {
-        HStack(spacing: 0) {
-            Text("Total")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(PickemsColors.textPrimary)
-                .frame(width: weekColumnWidth, alignment: .leading)
-                .padding(.leading, 8)
-            memberColumns(height: 40) { member in
-                let season = data.seasonRecord(for: member.id)
-                HStack(spacing: 0) {
-                    Text("\(season.wins)")
-                        .font(.subheadline.weight(.bold).monospacedDigit())
-                        .foregroundStyle(PickemsColors.textPrimary)
-                        .frame(width: memberPairWidth / 2)
-                    Text("\(season.losses)")
-                        .font(.subheadline.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(PickemsColors.textSecondary)
-                        .frame(width: memberPairWidth / 2)
-                }
-            }
-        }
-        .padding(.vertical, 6)
-        .background(PickemsColors.hairlineSubtle.opacity(0.35))
-        .accessibilityElement(children: .contain)
-    }
-
-    private var footerGamesBackRow: some View {
-        let leaderWins = SeasonLedgerGamesBack.leaderWins(memberSeasonWins: data.seasonWinsByMemberId())
-        return HStack(spacing: 0) {
-            Text("Games Back")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(PickemsColors.textSecondary)
-                .frame(width: weekColumnWidth, alignment: .leading)
-                .padding(.leading, 8)
-            memberColumns(height: 36) { member in
-                let wins = data.seasonRecord(for: member.id).wins
-                let caption = SeasonLedgerGamesBack.caption(memberWins: wins, leaderWins: leaderWins)
-                Text(caption)
-                    .font(.caption.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(PickemsColors.textSecondary)
-                    .frame(width: memberPairWidth)
-                    .accessibilityLabel(
-                        caption == "—"
-                            ? "\(member.displayName), even with the leader"
-                            : "\(member.displayName), \(caption.replacingOccurrences(of: "−", with: "")) games back"
-                    )
-            }
-        }
-        .padding(.vertical, 6)
-    }
-
-    @ViewBuilder
-    private func memberColumns<Content: View>(
-        height: CGFloat,
-        @ViewBuilder content: @escaping (GroupMember) -> Content
-    ) -> some View {
-        if scrollsHorizontally {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
-                    ForEach(members) { member in
-                        content(member).frame(width: memberPairWidth, height: height)
-                    }
-                }
-            }
-        } else {
-            HStack(spacing: 0) {
-                ForEach(members) { member in
-                    content(member)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: height)
-                }
-            }
-        }
     }
 
     private func memberHeader(_ member: GroupMember) -> some View {
