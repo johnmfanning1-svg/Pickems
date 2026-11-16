@@ -106,7 +106,7 @@ enum PickemsHelp {
             "Your column stays pinned next to Game while you scroll other members.",
             "Gray cells are pushes — the spread landed exactly. They are neither a win nor a loss.",
             "Tap a member on the league leaderboard to compare your picks with theirs. If this week isn’t public yet, browse previous weeks from the top of that screen.",
-            "After lock, open Season History to browse past weeks' charts."
+            "After lock, open Season History to browse a week's chart, or Season Ledger for the full season record."
         ]
     )
 
@@ -123,7 +123,7 @@ enum PickemsHelp {
                 "Tap the expand arrows to view the chart fullscreen in landscape.",
                 "Your column stays pinned next to Game while you scroll other members.",
                 "Tap a member on the league leaderboard to compare your picks with theirs.",
-                "After lock, open Season History to browse past weeks' charts."
+                "After lock, open Season History for a week's chart or Season Ledger for the full season record."
             ]
         )
     }
@@ -134,7 +134,21 @@ enum PickemsHelp {
         message: "Browse locked and scored weeks as league Pickems charts. Choose a week to see how everyone picked.",
         tips: [
             "Your record for that week sits above the chart.",
-            "Weeks that have not locked yet show a countdown instead of an empty chart."
+            "Weeks that have not locked yet show a countdown instead of an empty chart.",
+            "Tap expand to view the chart fullscreen in landscape.",
+        ]
+    )
+
+    static let seasonLedger = HelpTopic(
+        id: "picks.seasonLedger",
+        title: "Season Ledger",
+        message: "League-wide season record: Summary shows each member's wins and losses by week; Detailed shows every game and pick.",
+        tips: [
+            "Summary highlights the best week in green and a tied best week in gold.",
+            "Games Back is based on season wins, not win–loss differential.",
+            "Detailed uses colored pick chips — blue cells are pushes. Gray pushes on the live league chart are unchanged.",
+            "Other members' picks stay hidden until each game locks.",
+            "An asterisk marks the favored team — the spread applies to that team."
         ]
     )
 

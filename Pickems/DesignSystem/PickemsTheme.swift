@@ -12,12 +12,15 @@ enum PickemsColors {
     static let textSecondary = adaptive(\.textSecondary)
     static let success = adaptive(\.success)
     static let warning = adaptive(\.warning)
+    static let progressGold = adaptive(\.progressGold)
     /// Live pick currently covering the spread.
     static let covering = adaptive(\.covering)
     /// Final loss / brand red already used as `accent`.
     static let lost = adaptive(\.lost)
-    /// Final push — landed exactly on the spread. Distinct from pending (unfilled card).
+      /// Final push — landed exactly on the spread. Distinct from pending (unfilled card).
     static let push = adaptive(\.push)
+    /// Season Ledger Detailed final pushes (blue), not the gray league chart push.
+    static let ledgerPush = adaptive(\.ledgerPush)
 
     /// Ink on status fills. Dark mode keeps the chip colors the board already used.
     static let onSuccess = ink(light: PickemsSurfaces.light.success, dark: .init(r: 0, g: 0, b: 0))
@@ -25,6 +28,7 @@ enum PickemsColors {
     static let onCovering = ink(light: PickemsSurfaces.light.covering, dark: .init(r: 1, g: 1, b: 1))
     static let onLost = ink(light: PickemsSurfaces.light.lost, dark: .init(r: 1, g: 1, b: 1))
     static let onPush = ink(light: PickemsSurfaces.light.push, dark: .init(r: 1, g: 1, b: 1))
+    static let onLedgerPush = ink(light: PickemsSurfaces.light.ledgerPush, dark: .init(r: 1, g: 1, b: 1))
 
     /// Hairlines that were white-on-dark. Light mode uses black at a similar strength.
     static let hairlineSubtle = hairline(lightAlpha: 0.10, darkAlpha: 0.06)

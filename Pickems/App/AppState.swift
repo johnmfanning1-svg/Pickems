@@ -330,6 +330,7 @@ final class AppState {
         picksViewModel.resetForSession()
         chatService.stopObserving()
         notificationService.forgetPendingUser()
+        SeasonLedgerLoader.clearAllCache()
     }
 
     func signOut() async throws {
