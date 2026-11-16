@@ -65,6 +65,9 @@ final class SeasonLedgerLoader {
         } catch {
             errorMessage = UserFacingError.message(for: error, context: .generic)
                 ?? error.localizedDescription
+            if cachedKey != key {
+                data = nil
+            }
         }
     }
 

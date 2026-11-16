@@ -10,6 +10,9 @@ struct SeasonLedgerDetailedView: View {
     private let matchupWidth: CGFloat = 112
     private let metaWidth: CGFloat = 44
     private let pickWidth: CGFloat = 44
+    /// Shared with the member pick band so leading and member rows stay aligned.
+    private let gameRowHeight: CGFloat = 44
+    private let weekTotalsRowHeight: CGFloat = 36
     private var pinnedMetaWidth: CGFloat { matchupWidth + metaWidth * 3 }
 
     private var scrollsMembers: Bool {
@@ -143,7 +146,7 @@ struct SeasonLedgerDetailedView: View {
                 .font(.caption2.weight(.semibold))
                 .frame(width: metaWidth)
         }
-        .padding(.vertical, 6)
+        .frame(height: gameRowHeight)
         .padding(.horizontal, 4)
     }
 
@@ -152,7 +155,7 @@ struct SeasonLedgerDetailedView: View {
             .font(.caption.weight(.bold))
             .foregroundStyle(PickemsColors.progressGold)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 8)
+            .frame(height: weekTotalsRowHeight)
             .padding(.horizontal, 4)
             .background(PickemsColors.progressGold.opacity(0.12))
     }
@@ -212,14 +215,14 @@ struct SeasonLedgerDetailedView: View {
             if expanded {
                 VStack(spacing: 0) {
                     ForEach(board.games) { game in
-                        HStack(spacing: 0) {
+                        HStack(alignment: .center, spacing: 0) {
                             ForEach(members) { member in
                                 pickChip(game: game, board: board, member: member)
                                     .frame(width: scrollsMembers ? pickWidth : nil)
                                     .frame(maxWidth: scrollsMembers ? nil : .infinity)
                             }
                         }
-                        .padding(.vertical, 6)
+                        .frame(height: gameRowHeight)
                         Divider().overlay(PickemsColors.hairline)
                     }
                     HStack(spacing: 0) {
@@ -232,7 +235,7 @@ struct SeasonLedgerDetailedView: View {
                                 .frame(maxWidth: scrollsMembers ? nil : .infinity)
                         }
                     }
-                    .padding(.vertical, 8)
+                    .frame(height: weekTotalsRowHeight)
                     .background(PickemsColors.progressGold.opacity(0.12))
                 }
                 .background(PickemsColors.cardBackground)
