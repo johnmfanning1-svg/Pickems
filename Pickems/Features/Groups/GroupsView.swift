@@ -821,7 +821,29 @@ struct LeaderboardView: View {
             title: "Leaderboard",
             subtitle: standingsSubtitle,
             help: PickemsHelp.leaderboard(for: appState.selectedPickMode)
-        )
+        ) {
+            seasonLedgerCapsule
+        }
+    }
+
+    @ViewBuilder
+    private var seasonLedgerCapsule: some View {
+        if appState.groupService.selectedGroup != nil {
+            NavigationLink {
+                SeasonLedgerView()
+            } label: {
+                Label("Season Ledger", systemImage: "tablecells")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(theme.onAccent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(theme.accent)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("Open season ledger")
+        }
     }
 
     @ViewBuilder

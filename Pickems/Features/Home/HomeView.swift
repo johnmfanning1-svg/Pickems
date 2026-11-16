@@ -128,9 +128,12 @@ struct HomeView: View {
             }
 
             if let status = leagueStatus {
-                HomeLeagueStatusHeader(status: status, profileUserId: appState.currentUserId) {
-                    homeCallToAction
-                }
+                HomeLeagueStatusHeader(
+                    status: status,
+                    profileUserId: appState.currentUserId,
+                    middleContent: { homeSeasonLedgerLink },
+                    footer: { homeCallToAction }
+                )
                 .padding(.horizontal)
             }
 
@@ -407,6 +410,32 @@ struct HomeView: View {
         let needed = max(slate.count - ineligible.count, 0)
         let submitted = appState.pickService.userPick?.isLocked == true
         return (made, needed, submitted)
+    }
+
+    @ViewBuilder
+    private var homeSeasonLedgerLink: some View {
+        if appState.groupService.selectedGroup != nil {
+            NavigationLink {
+                SeasonLedgerView()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "tablecells")
+                        .foregroundStyle(theme.accent)
+                    Text("Season Ledger")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(PickemsColors.textPrimary)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
+                .padding(.vertical, 6)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the league season ledger")
+        }
     }
 
     @ViewBuilder

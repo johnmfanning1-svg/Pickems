@@ -1,10 +1,11 @@
 import SwiftUI
 
 /// League status at the top of Home. Used only by `HomeView`.
-struct HomeLeagueStatusHeader<Footer: View>: View {
+struct HomeLeagueStatusHeader<Footer: View, Middle: View>: View {
     let status: HomeLeagueStatus.Model
     /// Signed-in member. The status block opens their league profile. The footer stays a separate control.
     var profileUserId: String? = nil
+    @ViewBuilder var middleContent: () -> Middle
     @ViewBuilder var footer: () -> Footer
     @Environment(\.themePalette) private var theme
 
@@ -18,6 +19,8 @@ struct HomeLeagueStatusHeader<Footer: View>: View {
                 } else {
                     statusBlock
                 }
+
+                middleContent()
 
                 footer()
             }
@@ -100,6 +103,19 @@ struct HomeLeagueStatusHeader<Footer: View>: View {
         case .final:
             return PickemsColors.success
         }
+    }
+}
+
+extension HomeLeagueStatusHeader where Middle == EmptyView {
+    init(
+        status: HomeLeagueStatus.Model,
+        profileUserId: String? = nil,
+        @ViewBuilder footer: @escaping () -> Footer
+    ) {
+        self.status = status
+        self.profileUserId = profileUserId
+        self.middleContent = { EmptyView() }
+        self.footer = footer
     }
 }
 

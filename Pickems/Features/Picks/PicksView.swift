@@ -185,14 +185,14 @@ struct PicksView: View {
     }
 
     private var seasonHistoryControl: some View {
-        NavigationLink { SeasonPickHistoryView() } label: {
-            Label("Season History", systemImage: "calendar")
+        NavigationLink { SeasonLedgerView() } label: {
+            Label("Season Ledger", systemImage: "tablecells")
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundStyle(theme.accent)
         }
         .padding(.horizontal)
-        .accessibilityHint("View league Pickems charts by week")
+        .accessibilityHint("View the league season ledger, summary and detailed picks by week")
     }
 
     private var displayedWeeks: [WeekSummary] {

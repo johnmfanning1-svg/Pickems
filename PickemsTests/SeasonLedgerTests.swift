@@ -1,0 +1,260 @@
+import Foundation
+import Testing
+@testable import Pickems
+
+struct SeasonLedgerTests {
+    // MARK: - Highlights
+
+    @Test func uniqueWeeklyHighIsBest() {
+        let highlights = SeasonLedgerHighlight.winHighlights(weeklyWinsByMemberId: [
+            "a": 8, "b": 6, "c": 5,
+        ])
+        #expect(highlights["a"] == .best)
+        #expect(highlights["b"] == .none)
+        #expect(highlights["c"] == .none)
+    }
+
+    @Test func twoWayTieForHighIsGold() {
+        let highlights = SeasonLedgerHighlight.winHighlights(weeklyWinsByMemberId: [
+            "a": 7, "b": 7, "c": 4,
+        ])
+        #expect(highlights["a"] == .tie)
+        #expect(highlights["b"] == .tie)
+        #expect(highlights["c"] == .none)
+    }
+
+    @Test func threeWayTieForHighIsGoldForAllLeaders() {
+        let highlights = SeasonLedgerHighlight.winHighlights(weeklyWinsByMemberId: [
+            "a": 5, "b": 5, "c": 5, "d": 2,
+        ])
+        #expect(highlights["a"] == .tie)
+        #expect(highlights["b"] == .tie)
+        #expect(highlights["c"] == .tie)
+        #expect(highlights["d"] == .none)
+    }
+
+    @Test func allMembersEqualProducesNoHighlight() {
+        let highlights = SeasonLedgerHighlight.winHighlights(weeklyWinsByMemberId: [
+            "a": 0, "b": 0, "c": 0,
+        ])
+        #expect(highlights.values.allSatisfy { $0 == .none })
+    }
+
+    @Test func uniqueBowlsWeekHighIsBest() {
+        let highlights = SeasonLedgerHighlight.winHighlights(weeklyWinsByMemberId: [
+            "a": 3, "b": 2, "c": 2,
+        ])
+        #expect(highlights["a"] == .best)
+    }
+
+    // MARK: - Games back
+
+    @Test func soleLeaderShowsEvenEmDash() {
+        #expect(SeasonLedgerGamesBack.caption(memberWins: 20, leaderWins: 20) == "—")
+        #expect(SeasonLedgerGamesBack.caption(memberWins: 10, leaderWins: 20) == "−10")
+    }
+
+    @Test func coLeaderEvenWhenLossesDiffer() {
+        let leader = SeasonLedgerGamesBack.leaderWins(memberSeasonWins: ["a": 14, "b": 14, "c": 10])
+        #expect(leader == 14)
+        #expect(SeasonLedgerGamesBack.caption(memberWins: 14, leaderWins: leader) == "—")
+        #expect(SeasonLedgerGamesBack.caption(memberWins: 10, leaderWins: leader) == "−4")
+    }
+
+  @Test func gamesBackUsesStandingsGapWinArithmetic() {
+        #expect(StandingsGap.gamesAhead(youWins: 14, themWins: 10) == 4)
+        #expect(SeasonLedgerGamesBack.caption(memberWins: 10, leaderWins: 14) == "−4")
+    }
+
+    // MARK: - Totals
+
+    @Test func weekTotalsMatchPerGameScoring() {
+        let games = [
+            finalGame(id: "g1", homeWins: true),
+            finalGame(id: "g2", homeWins: false),
+        ]
+        let members = [member("a", "Alex")]
+        let picks: [String: UserPick] = [
+            "a": pick(userId: "a", choices: ["g1": "home", "g2": "away"]),
+        ]
+        let records = SeasonLedgerAggregator.memberRecords(
+            members: members,
+            games: games,
+            picksByUserId: picks,
+            hiddenGameIds: [],
+            viewerId: "a",
+            pickMode: .ats
+        )
+        #expect(records["a"]?.wins == 2)
+        #expect(records["a"]?.losses == 0)
+    }
+
+    @Test func missedFinalPickCountsAsLoss() {
+        let games = [finalGame(id: "g1", homeWins: true)]
+        let members = [member("a", "Alex")]
+        let records = SeasonLedgerAggregator.memberRecords(
+            members: members,
+            games: games,
+            picksByUserId: [:],
+            hiddenGameIds: [],
+            viewerId: nil,
+            pickMode: .ats
+        )
+        #expect(records["a"]?.wins == 0)
+        #expect(records["a"]?.losses == 1)
+    }
+
+    @Test func seasonWLPSumsAcrossWeekBoards() {
+        let week1 = SeasonLedgerWeekBoard(
+            week: weekSummary(id: "2026-W1", number: 1),
+            games: [],
+            picksByUserId: [:],
+            hiddenGameIds: [],
+            recordsByMemberId: ["a": .init(wins: 3, losses: 1, pushes: 0)],
+            pickMode: .ats
+        )
+        let week2 = SeasonLedgerWeekBoard(
+            week: weekSummary(id: "2026-W2", number: 2),
+            games: [],
+            picksByUserId: [:],
+            hiddenGameIds: [],
+            recordsByMemberId: ["a": .init(wins: 2, losses: 2, pushes: 1)],
+            pickMode: .ats
+        )
+        let data = SeasonLedgerSeasonData(groupId: "g", weeks: [week1, week2], memberIds: ["a"])
+        let season = data.seasonRecord(for: "a")
+        #expect(season.wins == 5)
+        #expect(season.losses == 3)
+        #expect(season.pushes == 1)
+    }
+
+    // MARK: - Privacy
+
+    @Test func hiddenGameBlocksOtherMembersPickDisplay() {
+        #expect(
+            SeasonLedgerPrivacy.mayShowPick(
+                gameId: "g1",
+                memberId: "b",
+                viewerId: "a",
+                hiddenGameIds: ["g1"]
+            ) == false
+        )
+        #expect(
+            SeasonLedgerPrivacy.mayShowPick(
+                gameId: "g1",
+                memberId: "a",
+                viewerId: "a",
+                hiddenGameIds: ["g1"]
+            )
+        )
+    }
+
+    @Test func publicWeekHasNoHiddenGames() {
+        let week = weekSummary(id: "2026-W3", number: 3, status: .scored)
+        let games = [finalGame(id: "g1", homeWins: true)]
+        #expect(SeasonLedgerPrivacy.hiddenGameIds(week: week, games: games).isEmpty)
+    }
+
+    @Test func rollingLockHidesUnstartedGames() {
+        var week = weekSummary(id: "2026-W4", number: 4, status: .picking)
+        week.pickLockMode = .rolling
+        week.pickDeadline = Date().addingTimeInterval(-60)
+        week.remainingLockAt = Date().addingTimeInterval(3600)
+        let games = [
+            scheduledGame(id: "open"),
+            finalGame(id: "done", homeWins: true),
+        ]
+        let hidden = SeasonLedgerPrivacy.hiddenGameIds(week: week, games: games)
+        #expect(hidden.contains("open"))
+        #expect(!hidden.contains("done"))
+    }
+
+    // MARK: - Week title
+
+    @Test func armyNavyWeekTitleFromId() {
+        let week = weekSummary(id: "2026-army-navy", number: 15)
+        #expect(SeasonLedgerWeekTitle.rowTitle(for: week) == "Army Navy")
+    }
+
+    // MARK: - Helpers
+
+    private func member(_ id: String, _ name: String) -> GroupMember {
+        GroupMember(
+            id: id,
+            displayName: name,
+            avatarColorHex: "#424242",
+            role: .member,
+            joinedAt: Date(),
+            seasonWins: 0,
+            seasonLosses: 0
+        )
+    }
+
+    private func pick(userId: String, choices: [String: String]) -> UserPick {
+        UserPick(
+            id: userId,
+            userId: userId,
+            displayName: userId,
+            picks: choices,
+            submittedAt: nil,
+            isLocked: true
+        )
+    }
+
+    private func weekSummary(id: String, number: Int, status: WeekStatus = .scored) -> WeekSummary {
+        WeekSummary(
+            id: id,
+            seasonYear: 2026,
+            weekNumber: number,
+            status: status,
+            slateSize: 10,
+            selectionMode: .member,
+            selectionsPerMember: 3,
+            nominationCount: 0
+        )
+    }
+
+    private func finalGame(id: String, homeWins: Bool) -> SlateGame {
+        SlateGame(
+            id: id,
+            espnEventId: id,
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: homeWins ? 7 : -7,
+            spreadTeamId: "home",
+            kickoff: Date(timeIntervalSince1970: 0),
+            status: .final,
+            homeScore: homeWins ? 28 : 10,
+            awayScore: homeWins ? 10 : 28,
+            winnerTeamId: homeWins ? "home" : "away"
+        )
+    }
+
+    private func scheduledGame(id: String) -> SlateGame {
+        SlateGame(
+            id: id,
+            espnEventId: id,
+            homeTeamId: "home",
+            homeTeamName: "Home",
+            homeTeamAbbreviation: "HOM",
+            homeTeamLogoURL: nil,
+            awayTeamId: "away",
+            awayTeamName: "Away",
+            awayTeamAbbreviation: "AWY",
+            awayTeamLogoURL: nil,
+            spread: 3,
+            spreadTeamId: "home",
+            kickoff: Date().addingTimeInterval(3600),
+            status: .scheduled,
+            homeScore: nil,
+            awayScore: nil,
+            winnerTeamId: nil
+        )
+    }
+}
