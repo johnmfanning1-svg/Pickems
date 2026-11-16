@@ -170,7 +170,7 @@ final class SeasonLedgerLoader {
                 members: members
             )
             if let own = pickService.userPick {
-                var map = Dictionary(picks.map { ($0.userId, $0) }, uniquingKeysWithValues: { _, new in new })
+                var map = Dictionary(picks.map { ($0.userId, $0) }, uniquingKeysWith: { _, new in new })
                 map[own.userId] = own
                 picks = Array(map.values)
             }
@@ -178,7 +178,7 @@ final class SeasonLedgerLoader {
 
         let pickMode = resolvedWeek.resolvedPickMode(leagueMode: leaguePickMode)
         let hidden = SeasonLedgerPrivacy.hiddenGameIds(week: resolvedWeek, games: games)
-        let picksByUserId = Dictionary(picks.map { ($0.userId, $0) }, uniquingKeysWithValues: { _, new in new })
+        let picksByUserId = Dictionary(picks.map { ($0.userId, $0) }, uniquingKeysWith: { _, new in new })
 
         let records = SeasonLedgerAggregator.memberRecords(
             members: members,
