@@ -3,6 +3,34 @@ import Testing
 @testable import Pickems
 
 struct SeasonLedgerTests {
+    // MARK: - Refresh failure presentation
+
+    @Test func staleRefreshErrorWithDataShowsBannerNotFullError() {
+        let data = minimalSeasonData()
+        let error = "Couldn't load that right now."
+        #expect(SeasonLedgerRefreshPresentation.showsRefreshFailureBanner(errorMessage: error, data: data))
+        #expect(!SeasonLedgerRefreshPresentation.showsFullLoadError(errorMessage: error, data: data, isLoading: false))
+    }
+
+    @Test func loadErrorWithNoDataShowsFullErrorNotBanner() {
+        let error = "Couldn't load that right now."
+        #expect(!SeasonLedgerRefreshPresentation.showsRefreshFailureBanner(errorMessage: error, data: nil))
+        #expect(SeasonLedgerRefreshPresentation.showsFullLoadError(errorMessage: error, data: nil, isLoading: false))
+    }
+
+    @Test func successfulReloadClearsRefreshBannerState() {
+        let data = minimalSeasonData()
+        #expect(!SeasonLedgerRefreshPresentation.showsRefreshFailureBanner(errorMessage: nil, data: data))
+        #expect(!SeasonLedgerRefreshPresentation.showsFullLoadError(errorMessage: nil, data: data, isLoading: false))
+    }
+
+    @Test func refreshErrorClearsWhenLeagueOrViewerChanges() {
+        #expect(SeasonLedgerRefreshPresentation.shouldClearRefreshError(cachedKey: "g1|u1", groupId: "g2", viewerId: "u1"))
+        #expect(SeasonLedgerRefreshPresentation.shouldClearRefreshError(cachedKey: "g1|u1", groupId: "g1", viewerId: "u2"))
+        #expect(!SeasonLedgerRefreshPresentation.shouldClearRefreshError(cachedKey: "g1|u1", groupId: "g1", viewerId: "u1"))
+        #expect(!SeasonLedgerRefreshPresentation.shouldClearRefreshError(cachedKey: nil, groupId: "g1", viewerId: "u1"))
+    }
+
     // MARK: - Highlights
 
     @Test func uniqueWeeklyHighIsBest() {
@@ -260,6 +288,23 @@ struct SeasonLedgerTests {
             picks: choices,
             submittedAt: nil,
             isLocked: true
+        )
+    }
+
+    private func minimalSeasonData(groupId: String = "g1") -> SeasonLedgerSeasonData {
+        SeasonLedgerSeasonData(
+            groupId: groupId,
+            weeks: [
+                SeasonLedgerWeekBoard(
+                    week: weekSummary(id: "2026-W1", number: 1),
+                    games: [],
+                    picksByUserId: [:],
+                    hiddenGameIds: [],
+                    recordsByMemberId: ["a": .init(wins: 1, losses: 0, pushes: 0)],
+                    pickMode: .ats
+                ),
+            ],
+            memberIds: ["a"]
         )
     }
 
