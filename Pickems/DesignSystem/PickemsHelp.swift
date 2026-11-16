@@ -106,7 +106,7 @@ enum PickemsHelp {
             "Your column stays pinned next to Game while you scroll other members.",
             "Gray cells are pushes — the spread landed exactly. They are neither a win nor a loss.",
             "Tap a member on the league leaderboard to compare your picks with theirs. If this week isn’t public yet, browse previous weeks from the top of that screen.",
-            "After lock, open Season Ledger for a league-wide season record — summary by week or detailed pick-by-pick."
+            "After lock, open Season History to browse a week's chart, or Season Ledger for the full season record."
         ]
     )
 
@@ -123,13 +123,24 @@ enum PickemsHelp {
                 "Tap the expand arrows to view the chart fullscreen in landscape.",
                 "Your column stays pinned next to Game while you scroll other members.",
                 "Tap a member on the league leaderboard to compare your picks with theirs.",
-                "After lock, open Season Ledger for a league-wide season record."
+                "After lock, open Season History for a week's chart or Season Ledger for the full season record."
             ]
         )
     }
 
     static let seasonHistory = HelpTopic(
         id: "picks.seasonHistory",
+        title: "Season History",
+        message: "Browse locked and scored weeks as league Pickems charts. Choose a week to see how everyone picked.",
+        tips: [
+            "Your record for that week sits above the chart.",
+            "Weeks that have not locked yet show a countdown instead of an empty chart.",
+            "Tap expand to view the chart fullscreen in landscape.",
+        ]
+    )
+
+    static let seasonLedger = HelpTopic(
+        id: "picks.seasonLedger",
         title: "Season Ledger",
         message: "League-wide season record: Summary shows each member's wins and losses by week; Detailed shows every game and pick.",
         tips: [

@@ -72,7 +72,7 @@ struct PicksView: View {
                     }
 
                     if kind == .pickems, appState.groupService.selectedGroup != nil {
-                        seasonHistoryControl
+                        pickemsSeasonLinks
                     }
 
                     if let error = appState.pickService.errorMessage {
@@ -184,15 +184,25 @@ struct PicksView: View {
         }
     }
 
-    private var seasonHistoryControl: some View {
-        NavigationLink { SeasonLedgerView() } label: {
-            Label("Season Ledger", systemImage: "tablecells")
-                .font(.subheadline.weight(.semibold))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .foregroundStyle(theme.accent)
+    private var pickemsSeasonLinks: some View {
+        VStack(spacing: 10) {
+            NavigationLink { SeasonLedgerView() } label: {
+                Label("Season Ledger", systemImage: "tablecells")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(theme.accent)
+            }
+            .accessibilityHint("View the league season ledger, summary and detailed picks by week")
+
+            NavigationLink { SeasonPickHistoryView() } label: {
+                Label("Season History", systemImage: "calendar")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(theme.accent)
+            }
+            .accessibilityHint("View league Pickems charts by week")
         }
         .padding(.horizontal)
-        .accessibilityHint("View the league season ledger, summary and detailed picks by week")
     }
 
     private var displayedWeeks: [WeekSummary] {

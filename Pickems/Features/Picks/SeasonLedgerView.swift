@@ -75,7 +75,7 @@ struct SeasonLedgerView: View {
         .pickemsScreenBackground()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                HelpInfoButton(topic: PickemsHelp.seasonHistory, size: .body)
+                HelpInfoButton(topic: PickemsHelp.seasonLedger, size: .body)
             }
         }
         .task(id: appState.groupService.selectedGroup?.id) {
