@@ -188,13 +188,17 @@ struct SeasonLedgerSummaryView: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PickemsColors.textPrimary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(0.8)
+                .multilineTextAlignment(.center)
             HStack(spacing: 0) {
-                Text("WINS")
-                Text("LOSSES")
+                Text("W")
+                    .frame(width: memberPairWidth / 2)
+                Text("L")
+                    .frame(width: memberPairWidth / 2)
             }
-            .font(.system(size: 9, weight: .semibold))
+            .font(.caption)
             .foregroundStyle(PickemsColors.textSecondary)
+            .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)

@@ -1,6 +1,6 @@
 import UIKit
 
-/// Portrait by default; landscape only while the expanded League Pickems chart is open.
+/// Portrait by default; landscape only while an expanded fullscreen chart or ledger is open.
 enum InterfaceOrientationLock {
     @MainActor
     static func set(_ mask: UIInterfaceOrientationMask) {

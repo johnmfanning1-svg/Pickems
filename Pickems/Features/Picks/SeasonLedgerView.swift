@@ -1,6 +1,6 @@
 import SwiftUI
 
-private enum SeasonLedgerScope: String, CaseIterable, Identifiable {
+enum SeasonLedgerScope: String, CaseIterable, Identifiable {
     case summary
     case detailed
 
@@ -19,6 +19,7 @@ struct SeasonLedgerView: View {
     @State private var scope: SeasonLedgerScope = .summary
     @State private var loader = SeasonLedgerLoader()
     @State private var isRefreshing = false
+    @State private var showExpandedLedger = false
 
     private var members: [GroupMember] {
         SeasonLedgerMembers.ordered(
@@ -36,7 +37,7 @@ struct SeasonLedgerView: View {
             } else if let data = loader.data, !data.weeks.isEmpty {
                 VStack(spacing: PickemsSpacing.md) {
                     if loader.showsRefreshFailureBanner {
-                        SeasonLedgerRefreshFailureBanner {
+                        SeasonLedgerRefreshFailureBanner(isLoading: loader.isLoading) {
                             Task { await loader.reload(appState: appState) }
                         }
                     }
@@ -77,7 +78,28 @@ struct SeasonLedgerView: View {
         .pickemsScreenBackground()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                HelpInfoButton(topic: PickemsHelp.seasonLedger, size: .body)
+                HStack(spacing: 4) {
+                    if loader.data != nil, !(loader.data?.weeks.isEmpty ?? true) {
+                        Button {
+                            showExpandedLedger = true
+                        } label: {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.body.weight(.semibold))
+                        }
+                        .accessibilityLabel("Expand season ledger to full screen")
+                    }
+                    HelpInfoButton(topic: PickemsHelp.seasonLedger, size: .body)
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showExpandedLedger) {
+            if let data = loader.data {
+                SeasonLedgerExpandedView(
+                    scope: $scope,
+                    data: data,
+                    members: members,
+                    currentUserId: appState.currentUserId
+                )
             }
         }
         .task(id: appState.groupService.selectedGroup?.id) {
@@ -99,8 +121,68 @@ struct SeasonLedgerView: View {
     }
 }
 
+/// Landscape fullscreen ledger. Portrait lock is restored on dismiss.
+struct SeasonLedgerExpandedView: View {
+    @Binding var scope: SeasonLedgerScope
+    let data: SeasonLedgerSeasonData
+    let members: [GroupMember]
+    let currentUserId: String?
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.themePalette) private var theme
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: PickemsSpacing.md) {
+                Picker("Ledger view", selection: $scope) {
+                    ForEach(SeasonLedgerScope.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityLabel("Season ledger view")
+
+                if scope == .summary {
+                    SeasonLedgerSummaryView(
+                        data: data,
+                        members: members,
+                        currentUserId: currentUserId
+                    )
+                } else {
+                    SeasonLedgerDetailedView(
+                        data: data,
+                        members: members,
+                        currentUserId: currentUserId
+                    )
+                }
+            }
+            .padding(.horizontal, PickemsSpacing.md)
+            .padding(.bottom, PickemsSpacing.md)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .pickemsScreenBackground()
+            .navigationTitle("Season Ledger")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "arrow.down.right.and.arrow.up.left")
+                            .font(.body.weight(.semibold))
+                    }
+                    .accessibilityLabel("Exit full screen")
+                }
+            }
+        }
+        .statusBarHidden(true)
+        .onAppear { InterfaceOrientationLock.set(.landscape) }
+        .onDisappear { InterfaceOrientationLock.set(.portrait) }
+    }
+}
+
 /// Non-blocking refresh failure while stale ledger data remains visible.
 private struct SeasonLedgerRefreshFailureBanner: View {
+    let isLoading: Bool
     let onRetry: () -> Void
     @Environment(\.themePalette) private var theme
 
@@ -121,6 +203,7 @@ private struct SeasonLedgerRefreshFailureBanner: View {
 
             Button("Retry", action: onRetry)
                 .font(.subheadline.weight(.semibold))
+                .disabled(isLoading)
                 .accessibilityLabel("Retry loading season ledger")
         }
         .padding()
