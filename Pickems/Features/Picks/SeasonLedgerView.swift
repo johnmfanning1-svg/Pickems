@@ -1,6 +1,6 @@
 import SwiftUI
 
-private enum SeasonLedgerScope: String, CaseIterable, Identifiable {
+enum SeasonLedgerScope: String, CaseIterable, Identifiable {
     case summary
     case detailed
 
