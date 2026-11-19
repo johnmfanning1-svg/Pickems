@@ -2,12 +2,12 @@ import Foundation
 
 /// Commissioner lock-Selections / open-Pickems confirm copy for Settings → This Week.
 enum OpenWeekEarlyPrompt {
-    static let earlyButtonTitle = "Lock Selections, Start Pickems"
+    static let earlyButtonTitle = "Lock Selections Early, Start Pickems"
 
-    static let earlyConfirmTitle = "Lock Selections, Start Pickems?"
+    static let earlyConfirmTitle = "Lock Selections Early, Start Pickems?"
     static let earlyConfirmMessage =
         "Members can no longer add or remove Selections. Pickems open for the games on the slate now."
-    static let earlyAccessibilityLabel = "Lock Selections, Start Pickems"
+    static let earlyAccessibilityLabel = "Lock Selections Early, Start Pickems"
 
     static func openWithGamesButtonTitle(uniqueGames: Int) -> String {
         let suffix = uniqueGames == 1 ? "" : "s"
