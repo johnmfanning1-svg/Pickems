@@ -670,7 +670,7 @@ struct CommissionerSettingsView: View {
         route = .selectionDeadline(
             SelectionDeadlineEdit(
                 capture: capture,
-                initialDeadline: nil,
+                initialDeadline: ReopenSelectionsPrompt.defaultReopenDeadline(),
                 reopenOnSave: true
             )
         )

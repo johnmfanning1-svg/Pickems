@@ -167,12 +167,12 @@ struct CommissionerWeekAdminSections: View {
     }
 
     private func confirmReopenSelections(_ tappedWeek: WeekSummary) {
-        let liveWeek = pinnedWeek(matching: tappedWeek.id) ?? tappedWeek
-        guard ReopenSelectionsPrompt.confirmWriteTarget(
-            settingsGroupId: groupId,
-            pinnedWeekId: tappedWeek.id,
-            liveWeek: liveWeek
-        ) != nil else {
+        guard let liveWeek = pinnedWeek(matching: tappedWeek.id),
+              ReopenSelectionsPrompt.confirmWriteTarget(
+                  settingsGroupId: groupId,
+                  pinnedWeekId: tappedWeek.id,
+                  liveWeek: liveWeek
+              ) != nil else {
             appState.pickService.errorMessage = ReopenSelectionsPrompt.weekUnavailableMessage
             PickemsHaptics.warning()
             return

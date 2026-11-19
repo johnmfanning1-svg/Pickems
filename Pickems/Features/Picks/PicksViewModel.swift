@@ -615,6 +615,12 @@ final class PicksViewModel {
             PickemsHaptics.warning()
             return
         }
+        guard let userId = appState.currentUserId else {
+            appState.pickService.errorMessage = ReopenSelectionsPrompt.signInRequiredMessage
+            PickemsHaptics.warning()
+            return
+        }
+        let commissionerName = appState.authService.currentUser?.displayName ?? "Commissioner"
         isReopeningSelections = true
         Task {
             defer { isReopeningSelections = false }
@@ -623,21 +629,27 @@ final class PicksViewModel {
                     groupId: groupId,
                     weekId: weekId
                 )
+                if let deadline {
+                    do {
+                        try await appState.groupService.setSelectionDeadline(
+                            groupId: groupId,
+                            weekId: weekId,
+                            deadline: deadline,
+                            setByUserId: userId
+                        )
+                    } catch {
+                        appState.pickService.errorMessage =
+                            ReopenSelectionsPrompt.deadlineSaveFailedAfterReopenMessage
+                        PickemsHaptics.warning()
+                        return
+                    }
+                }
                 try await appState.pickService.clearSlateGamesForSelectionReopen(
                     groupId: groupId,
                     weekId: weekId,
-                    commissionerUserId: appState.currentUserId ?? group.commissionerId,
-                    commissionerName: appState.authService.currentUser?.displayName ?? "Commissioner"
+                    commissionerUserId: userId,
+                    commissionerName: commissionerName
                 )
-                if let deadline {
-                    guard let userId = appState.currentUserId else { return }
-                    try await appState.groupService.setSelectionDeadline(
-                        groupId: groupId,
-                        weekId: weekId,
-                        deadline: deadline,
-                        setByUserId: userId
-                    )
-                }
                 PickemsHaptics.success()
             } catch {
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)

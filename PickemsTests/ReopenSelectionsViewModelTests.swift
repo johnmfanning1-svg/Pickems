@@ -24,4 +24,30 @@ struct ReopenSelectionsViewModelTests {
         #expect(vm.isReopeningSelections)
         #expect(appState.pickService.errorMessage == nil)
     }
+
+    @Test func missingUserSurfacesErrorBeforeAnyWrite() {
+        let vm = PicksViewModel()
+        let appState = AppState()
+        appState.groupService.groups = [
+            PickemGroup(
+                id: "league-a",
+                name: "League A",
+                inviteCode: "ABC123",
+                commissionerId: "u1",
+                memberIds: ["u1"],
+                rules: .default,
+                createdAt: Date()
+            )
+        ]
+
+        vm.reopenSelectionsWithDeadline(
+            deadline: Date().addingTimeInterval(3600),
+            groupId: "league-a",
+            weekId: "2026-W12",
+            appState: appState
+        )
+
+        #expect(appState.pickService.errorMessage == ReopenSelectionsPrompt.signInRequiredMessage)
+        #expect(!vm.isReopeningSelections)
+    }
 }

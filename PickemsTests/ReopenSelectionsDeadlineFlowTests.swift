@@ -18,6 +18,7 @@ struct ReopenSelectionsDeadlineFlowTests {
     }
 
     @Test func reopenFlowEditSetsReopenOnSave() {
+        let seed = ReopenSelectionsPrompt.defaultReopenDeadline()
         let edit = SelectionDeadlineEdit(
             capture: DeadlineEditCapture(
                 groupId: "g",
@@ -25,10 +26,24 @@ struct ReopenSelectionsDeadlineFlowTests {
                 weekLabel: "Week 1",
                 isRollingLock: false
             ),
-            initialDeadline: nil,
+            initialDeadline: seed,
             reopenOnSave: true
         )
         #expect(edit.reopenOnSave)
-        #expect(edit.initialDeadline == nil)
+        #expect(edit.initialDeadline == seed)
+    }
+
+    @Test func writeStepsWithDeadlineOrderReopenSetDeadlineThenClearSlate() {
+        #expect(ReopenSelectionsPrompt.writeStepsWithDeadline == [
+            .reopenWeek,
+            .setDeadline,
+            .clearSlate,
+        ])
+    }
+
+    @Test func deadlineSaveFailedMessageGuidesCommissioner() {
+        let message = ReopenSelectionsPrompt.deadlineSaveFailedAfterReopenMessage
+        #expect(message.localizedCaseInsensitiveContains("reopened"))
+        #expect(message.localizedCaseInsensitiveContains("Selection Deadline"))
     }
 }

@@ -13,6 +13,22 @@ enum ReopenSelectionsPrompt {
     static let leagueUnavailableMessage =
         "That league isn't available right now. Pull to refresh and try again."
 
+    static let signInRequiredMessage = "Sign in to continue."
+
+    static let deadlineSaveFailedAfterReopenMessage =
+        "Selections reopened, but the new deadline didn't save. Set it in Selection Deadline."
+
+    /// Firestore rules on `main` allow only isolated week-field sets (see `weekOperatorFieldUpdate`).
+    /// Status reopen and `selectionDeadline` cannot ship in one client update, so the app reopens,
+    /// sets the deadline, then clears the materialized slate.
+    enum WriteStep: Equatable, CaseIterable {
+        case reopenWeek
+        case setDeadline
+        case clearSlate
+    }
+
+    static let writeStepsWithDeadline: [WriteStep] = [.reopenWeek, .setDeadline, .clearSlate]
+
     /// Frozen at tap from the pinned settings league, not `selectedGroup`.
     static func writeTarget(settingsGroupId: String, week: WeekSummary) -> (groupId: String, weekId: String)? {
         guard WeekTransition.canReopenSelections(week) else { return nil }
