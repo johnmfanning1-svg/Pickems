@@ -13,6 +13,8 @@ final class PickService {
         SlateGameDecoding.mergedSlate(games: slateGames, nominations: nominations)
     }
     var userPick: UserPick?
+    /// True while the own-pick doc has local writes the server hasn't confirmed.
+    private(set) var userPickHasPendingWrites = false
     /// Bumped when a local commissioner set/clear (or week reset) must beat a
     /// pending Picks-tab draft, including empty wipes from Group Pickems.
     private(set) var userPickEpoch = 0
@@ -97,6 +99,7 @@ final class PickService {
         observedWeekId = weekId
         userPickWriteGeneration += 1
         userPick = nil
+        userPickHasPendingWrites = false
         userPickEpoch += 1
         allPicks = []
         revealedPicksByGameId = [:]
@@ -153,7 +156,7 @@ final class PickService {
 
         pickListener = db.week(groupId: groupId, weekId: weekId)
             .picks.document(userId)
-            .addSnapshotListener { [weak self] snapshot, error in
+            .addSnapshotListener(includeMetadataChanges: true) { [weak self] snapshot, error in
                 Task { @MainActor in
                     guard let self else { return }
                     guard self.observedWeekId == weekId else { return }
@@ -167,6 +170,9 @@ final class PickService {
                         return
                     }
                     let pick = try? snapshot?.data(as: UserPick.self)
+                    self.userPickHasPendingWrites = snapshot?.metadata.hasPendingWrites ?? false
+                    // Metadata-only snapshot (server confirmed a local write): nothing else changed.
+                    guard pick != self.userPick else { return }
                     self.userPick = pick
                     // Pre-deadline list queries fail; keep own pick visible in Group Picks.
                     self.mergeOwnPickIntoAllPicks(pick)
@@ -288,6 +294,7 @@ final class PickService {
         observedWeekId = nil
         userPickWriteGeneration += 1
         userPick = nil
+        userPickHasPendingWrites = false
         userPickEpoch += 1
         allPicks = []
         revealedPicksByGameId = [:]
@@ -594,6 +601,27 @@ final class PickService {
             } else {
                 result.removeValue(forKey: game.id)
             }
+        }
+        return result
+    }
+
+    /// First save has no server doc to fall back on. Drop picks on games that already
+    /// started so one kicked-off game cannot make the rules reject the whole write.
+    static func droppingStartedGames(
+        _ picks: [String: String],
+        games: [SlateGame],
+        week: WeekSummary,
+        now: Date = Date()
+    ) -> [String: String] {
+        var result = picks
+        for game in games where WeekTransition.gameHasStarted(
+            gameId: game.id,
+            kickoff: game.kickoff,
+            status: game.status,
+            week: week,
+            now: now
+        ) {
+            result.removeValue(forKey: game.id)
         }
         return result
     }
@@ -1601,13 +1629,17 @@ final class PickService {
         var trimmed = validGameIds.isEmpty
             ? cleaned
             : cleaned.filter { validGameIds.contains($0.key) }
-        if let week, let existing = userPick?.picks {
-            trimmed = Self.preservingLockedPicks(
-                incoming: trimmed,
-                existing: existing,
-                games: slateGames,
-                week: week
-            )
+        if let week {
+            if let existing = userPick?.picks {
+                trimmed = Self.preservingLockedPicks(
+                    incoming: trimmed,
+                    existing: existing,
+                    games: slateGames,
+                    week: week
+                )
+            } else {
+                trimmed = Self.droppingStartedGames(trimmed, games: slateGames, week: week)
+            }
         }
         let trimmedConfidence: String? = {
             if let week,
@@ -1681,13 +1713,17 @@ final class PickService {
             ineligibleGameIds: ineligibleGameIds
         )
         var cleaned = Self.sanitizedPicks(picks).filter { slateIds.contains($0.key) }
-        if let week, rolling, let existing = userPick?.picks {
-            cleaned = Self.preservingLockedPicks(
-                incoming: cleaned,
-                existing: existing,
-                games: slateGames,
-                week: week
-            )
+        if let week, rolling {
+            if let existing = userPick?.picks {
+                cleaned = Self.preservingLockedPicks(
+                    incoming: cleaned,
+                    existing: existing,
+                    games: slateGames,
+                    week: week
+                )
+            } else {
+                cleaned = Self.droppingStartedGames(cleaned, games: slateGames, week: week)
+            }
         }
         if rolling, let week {
             let openIds = ScheduledGameEligibility.requiredPickIds(

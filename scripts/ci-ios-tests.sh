@@ -37,7 +37,7 @@ set -e
 # Floor on passed + expected failures. 714 before Follow current league.
 # Follow current league adds 11 tests. Season Ledger adds 15, review fixes add 5.
 # Ledger refresh banner adds 4. Do not lower this.
-MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-749}"
+MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-757}"
 grep -iE "error:|Test case .* failed|\*\* TEST" "$OUT/logs/test.log" | tail -n 200 || true
 summary="$OUT/logs/test-summary.json"
 if ! xcrun xcresulttool get test-results summary --path "$OUT/TestResults.xcresult" --format json > "$summary" 2>"$OUT/logs/xcresulttool.err"; then

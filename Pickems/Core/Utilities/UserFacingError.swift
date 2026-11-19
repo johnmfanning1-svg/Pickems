@@ -9,6 +9,12 @@ enum UserFacingError {
     static let refreshUnavailableMessage =
         "Couldn't refresh right now. Pull to refresh or try again in a moment."
 
+    /// A Pickems save the server never took. The on-screen pick is rolled back.
+    static let pickNotSavedMessage = "Pick didn't save. Try again."
+
+    /// Rules deny a pick write when a game in it has already kicked off.
+    static let pickKickedOffMessage = "This game already kicked off; pick not saved."
+
     /// User-visible message. Returns `nil` when the failure is expected noise
     /// (e.g. listing private picks before the deadline) and should not be shown.
     static func message(for error: Error, context: Context = .generic) -> String? {
@@ -27,9 +33,15 @@ enum UserFacingError {
                 return "Couldn't open that league. Check the invite code and try again."
             case .write:
                 return "You don't have permission to do that in this league."
+            case .pickWrite:
+                return pickKickedOffMessage
             case .generic:
                 return "Couldn't load that right now. Pull to refresh or try again in a moment."
             }
+        }
+
+        if context == .pickWrite, !(error is PickService.PickError) {
+            return pickNotSavedMessage
         }
 
         if isServerSourceUnavailable(error) {
@@ -62,6 +74,8 @@ enum UserFacingError {
         case privatePicks
         case joinGroup
         case write
+        /// Saving or submitting your own Pickems.
+        case pickWrite
     }
 
     static func isCancellation(_ error: Error) -> Bool {
