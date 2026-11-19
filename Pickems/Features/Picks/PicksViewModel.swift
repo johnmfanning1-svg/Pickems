@@ -625,32 +625,23 @@ final class PicksViewModel {
         Task {
             defer { isReopeningSelections = false }
             do {
-                try await appState.groupService.reopenWeekForSelections(
-                    groupId: groupId,
-                    weekId: weekId
-                )
-                if let deadline {
-                    do {
-                        try await appState.groupService.setSelectionDeadline(
-                            groupId: groupId,
-                            weekId: weekId,
-                            deadline: deadline,
-                            setByUserId: userId
-                        )
-                    } catch {
-                        appState.pickService.errorMessage =
-                            ReopenSelectionsPrompt.deadlineSaveFailedAfterReopenMessage
-                        PickemsHaptics.warning()
-                        return
-                    }
-                }
-                try await appState.pickService.clearSlateGamesForSelectionReopen(
+                switch try await ReopenSelectionsWriter.perform(
+                    deadline: deadline,
                     groupId: groupId,
                     weekId: weekId,
-                    commissionerUserId: userId,
-                    commissionerName: commissionerName
-                )
-                PickemsHaptics.success()
+                    userId: userId,
+                    commissionerName: commissionerName,
+                    reopenWeekForSelections: appState.groupService.reopenWeekForSelections(groupId:weekId:),
+                    setSelectionDeadline: appState.groupService.setSelectionDeadline(groupId:weekId:deadline:setByUserId:),
+                    clearSlateGamesForSelectionReopen: appState.pickService.clearSlateGamesForSelectionReopen(groupId:weekId:commissionerUserId:commissionerName:)
+                ) {
+                case .deadlineSaveFailed:
+                    appState.pickService.errorMessage =
+                        ReopenSelectionsPrompt.deadlineSaveFailedAfterReopenMessage
+                    PickemsHaptics.warning()
+                case .completed:
+                    PickemsHaptics.success()
+                }
             } catch {
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
             }

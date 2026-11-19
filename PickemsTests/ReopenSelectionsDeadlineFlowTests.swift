@@ -46,4 +46,25 @@ struct ReopenSelectionsDeadlineFlowTests {
         #expect(message.localizedCaseInsensitiveContains("reopened"))
         #expect(message.localizedCaseInsensitiveContains("Selection Deadline"))
     }
+
+    @Test func writerStopsBeforeClearSlateWhenDeadlineSaveFails() async throws {
+        var clearSlateCalled = false
+        let outcome = try await ReopenSelectionsWriter.perform(
+            deadline: Date(),
+            groupId: "g1",
+            weekId: "2026-W1",
+            userId: "u1",
+            commissionerName: "Commissioner",
+            reopenWeekForSelections: { _, _ in },
+            setSelectionDeadline: { _, _, _, _ in
+                struct TestFailure: Error {}
+                throw TestFailure()
+            },
+            clearSlateGamesForSelectionReopen: { _, _, _, _ in
+                clearSlateCalled = true
+            }
+        )
+        #expect(outcome == .deadlineSaveFailed)
+        #expect(!clearSlateCalled)
+    }
 }
