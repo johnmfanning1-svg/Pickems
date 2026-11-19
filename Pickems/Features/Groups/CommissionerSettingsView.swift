@@ -105,6 +105,12 @@ struct CommissionerSettingsView: View {
 
     private var settingsForm: some View {
         Form {
+            if let pickError = appState.pickService.errorMessage {
+                Section {
+                    ContextualTipBanner(icon: "exclamationmark.triangle.fill", message: pickError)
+                        .listRowBackground(PickemsColors.cardBackground)
+                }
+            }
             CommissionerWeekAdminSections(
                 group: group,
                 present: { (request: CommissionerSheetRequest) in presentCommissionerSheet(request) },
@@ -113,7 +119,8 @@ struct CommissionerSettingsView: View {
                     capturedPicksWeek = week
                     capturedPicksSlate = slate
                     picksRoute = CommissionerPicksRoute(memberId: member.id, weekId: week.id)
-                }
+                },
+                onReopenSelectionsConfirmed: { (week: WeekSummary) in presentReopenSelectionDeadline(week) }
             )
             if appState.canOperateWeek, !appState.isCommissioner {
                 coordinatorPickLockSection
@@ -651,6 +658,24 @@ struct CommissionerSettingsView: View {
         route = sheet
     }
 
+    private func presentReopenSelectionDeadline(_ week: WeekSummary) {
+        guard let capture = ReopenSelectionsPrompt.captureForReopenDeadline(
+            settingsGroupId: groupId,
+            week: week
+        ) else {
+            appState.pickService.errorMessage = ReopenSelectionsPrompt.weekUnavailableMessage
+            PickemsHaptics.warning()
+            return
+        }
+        route = .selectionDeadline(
+            SelectionDeadlineEdit(
+                capture: capture,
+                initialDeadline: nil,
+                reopenOnSave: true
+            )
+        )
+    }
+
     /// Week fields for display only. Nil when the on-screen league is no longer `groupId`,
     /// so a switch cannot supply another league's deadline as the editor seed.
     private func displayedWeek(groupId: String, weekId: String) -> WeekSummary? {
@@ -682,12 +707,21 @@ struct CommissionerSettingsView: View {
                 selectedGroupId: appState.groupService.selectedGroup?.id,
                 selectedWeekId: appState.groupService.currentWeek?.id
             )
-            appState.picksViewModel.setSelectionDeadline(
-                deadline,
-                groupId: write.groupId,
-                weekId: write.weekId,
-                appState: appState
-            )
+            if edit.reopenOnSave {
+                appState.picksViewModel.reopenSelectionsWithDeadline(
+                    deadline: deadline,
+                    groupId: write.groupId,
+                    weekId: write.weekId,
+                    appState: appState
+                )
+            } else {
+                appState.picksViewModel.setSelectionDeadline(
+                    deadline,
+                    groupId: write.groupId,
+                    weekId: write.weekId,
+                    appState: appState
+                )
+            }
         }
         .pickemsEnvironment(appState)
     }

@@ -593,6 +593,22 @@ final class PicksViewModel {
     }
 
     func reopenSelections(groupId: String, weekId: String, appState: AppState) {
+        reopenSelectionsWithDeadline(
+            deadline: nil,
+            groupId: groupId,
+            weekId: weekId,
+            appState: appState
+        )
+    }
+
+    /// Reopens Selections, clears the materialized slate, then sets the new deadline.
+    /// When `deadline` is nil, only reopen + slate clear run (legacy call sites).
+    func reopenSelectionsWithDeadline(
+        deadline: Date?,
+        groupId: String,
+        weekId: String,
+        appState: AppState
+    ) {
         guard !isReopeningSelections else { return }
         guard let group = appState.groupService.groups.first(where: { $0.id == groupId }) else {
             appState.pickService.errorMessage = ReopenSelectionsPrompt.leagueUnavailableMessage
@@ -613,6 +629,15 @@ final class PicksViewModel {
                     commissionerUserId: appState.currentUserId ?? group.commissionerId,
                     commissionerName: appState.authService.currentUser?.displayName ?? "Commissioner"
                 )
+                if let deadline {
+                    guard let userId = appState.currentUserId else { return }
+                    try await appState.groupService.setSelectionDeadline(
+                        groupId: groupId,
+                        weekId: weekId,
+                        deadline: deadline,
+                        setByUserId: userId
+                    )
+                }
                 PickemsHaptics.success()
             } catch {
                 UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)

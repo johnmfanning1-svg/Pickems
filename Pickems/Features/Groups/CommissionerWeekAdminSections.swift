@@ -9,6 +9,7 @@ struct CommissionerWeekAdminSections: View {
     /// are read only while their listeners are still on this id.
     let group: PickemGroup
     let present: (CommissionerSheetRequest) -> Void
+    var onReopenSelectionsConfirmed: (WeekSummary) -> Void = { _ in }
     /// Pickems admin push. The route lives on Settings, not on this row, so a
     /// member-list snapshot cannot pop the screen.
     var managePicks: (GroupMember, WeekSummary, [SlateGame]) -> Void = { _, _, _ in }
@@ -165,17 +166,27 @@ struct CommissionerWeekAdminSections: View {
         .listRowBackground(PickemsColors.cardBackground)
     }
 
-    private func confirmReopenSelections(_ week: WeekSummary) {
-        guard let target = ReopenSelectionsPrompt.writeTarget(settingsGroupId: groupId, week: week) else {
+    private func confirmReopenSelections(_ tappedWeek: WeekSummary) {
+        let liveWeek = pinnedWeek(matching: tappedWeek.id) ?? tappedWeek
+        guard ReopenSelectionsPrompt.confirmWriteTarget(
+            settingsGroupId: groupId,
+            pinnedWeekId: tappedWeek.id,
+            liveWeek: liveWeek
+        ) != nil else {
             appState.pickService.errorMessage = ReopenSelectionsPrompt.weekUnavailableMessage
             PickemsHaptics.warning()
             return
         }
-        picksVM.reopenSelections(
-            groupId: target.groupId,
-            weekId: target.weekId,
-            appState: appState
-        )
+        onReopenSelectionsConfirmed(liveWeek)
+    }
+
+    private func pinnedWeek(matching weekId: String) -> WeekSummary? {
+        guard appState.groupService.currentWeekGroupId == groupId else { return nil }
+        if let current = appState.groupService.currentWeek, current.id == weekId {
+            return current
+        }
+        guard appState.groupService.availableWeeksBelong(to: groupId) else { return nil }
+        return appState.groupService.availableWeeks.first { $0.id == weekId }
     }
 
     // MARK: - Selections / Slate rows

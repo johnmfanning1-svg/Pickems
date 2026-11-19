@@ -18,4 +18,32 @@ enum ReopenSelectionsPrompt {
         guard WeekTransition.canReopenSelections(week) else { return nil }
         return (settingsGroupId, week.id)
     }
+
+    /// At confirm time, re-read the pinned week and require the same id and reopenable status.
+    static func confirmWriteTarget(
+        settingsGroupId: String,
+        pinnedWeekId: String,
+        liveWeek: WeekSummary?
+    ) -> (groupId: String, weekId: String)? {
+        guard let liveWeek, liveWeek.id == pinnedWeekId else { return nil }
+        return writeTarget(settingsGroupId: settingsGroupId, week: liveWeek)
+    }
+
+    static func captureForReopenDeadline(
+        settingsGroupId: String,
+        week: WeekSummary
+    ) -> DeadlineEditCapture? {
+        guard writeTarget(settingsGroupId: settingsGroupId, week: week) != nil else { return nil }
+        return DeadlineEditCapture(
+            groupId: settingsGroupId,
+            weekId: week.id,
+            weekLabel: week.displayLabel,
+            isRollingLock: week.isRollingLock
+        )
+    }
+
+    /// Future default for the post-reopen deadline editor (selections still closed).
+    static func defaultReopenDeadline(now: Date = Date(), calendar: Calendar = .current) -> Date {
+        calendar.date(byAdding: .hour, value: 48, to: now) ?? now.addingTimeInterval(48 * 3600)
+    }
 }
