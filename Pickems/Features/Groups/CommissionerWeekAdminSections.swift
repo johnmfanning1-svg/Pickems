@@ -9,7 +9,6 @@ struct CommissionerWeekAdminSections: View {
     /// are read only while their listeners are still on this id.
     let group: PickemGroup
     let present: (CommissionerSheetRequest) -> Void
-    let requestReopenSelections: (WeekSummary) -> Void
     /// Pickems admin push. The route lives on Settings, not on this row, so a
     /// member-list snapshot cannot pop the screen.
     var managePicks: (GroupMember, WeekSummary, [SlateGame]) -> Void = { _, _, _ in }
@@ -121,10 +120,7 @@ struct CommissionerWeekAdminSections: View {
                         .listRowBackground(PickemsColors.cardBackground)
                     }
                 } else if !week.skipsSelection, WeekTransition.canReopenSelections(week) {
-                    Button("Reopen Selections") {
-                        requestReopenSelections(week)
-                    }
-                    .listRowBackground(PickemsColors.cardBackground)
+                    reopenSelectionsRow(week)
                 }
 
                 weekManageRows(week)
@@ -144,6 +140,42 @@ struct CommissionerWeekAdminSections: View {
         guard selected.id != week?.id else { return }
         PickemsHaptics.selection()
         appState.selectObservedWeek(selected)
+    }
+
+    @ViewBuilder
+    private func reopenSelectionsRow(_ week: WeekSummary) -> some View {
+        let reopenDisabled = picksVM.isReopeningSelections
+        AnchoredActionConfirm(
+            title: ReopenSelectionsPrompt.title,
+            message: ReopenSelectionsPrompt.message,
+            confirmTitle: ReopenSelectionsPrompt.confirmTitle,
+            destructive: false,
+            onConfirm: { confirmReopenSelections(week) }
+        ) {
+            if reopenDisabled {
+                HStack {
+                    ProgressView()
+                    Text("Reopen Selections…")
+                }
+            } else {
+                Text("Reopen Selections")
+            }
+        }
+        .disabled(reopenDisabled)
+        .listRowBackground(PickemsColors.cardBackground)
+    }
+
+    private func confirmReopenSelections(_ week: WeekSummary) {
+        guard let target = ReopenSelectionsPrompt.writeTarget(settingsGroupId: groupId, week: week) else {
+            appState.pickService.errorMessage = ReopenSelectionsPrompt.weekUnavailableMessage
+            PickemsHaptics.warning()
+            return
+        }
+        picksVM.reopenSelections(
+            groupId: target.groupId,
+            weekId: target.weekId,
+            appState: appState
+        )
     }
 
     // MARK: - Selections / Slate rows

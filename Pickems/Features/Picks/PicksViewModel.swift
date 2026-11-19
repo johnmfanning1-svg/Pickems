@@ -28,6 +28,8 @@ final class PicksViewModel {
     private var pendingWritePicks: [String: String]?
     /// True while `savePickDraft` / submit is on the network. Tab resync must not wipe that.
     private var writeInFlight = false
+    /// Commissioner Reopen Selections write on the network.
+    var isReopeningSelections = false
 
     func resetForSession() {
         draftPicks = [:]
@@ -36,6 +38,7 @@ final class PicksViewModel {
         stopLiveRefresh()
         showConfirmSubmit = false
         showConfirmNominations = false
+        isReopeningSelections = false
         selectionBrowseIntent = .own
         espnGames = []
         livePickCards = [:]
@@ -590,8 +593,15 @@ final class PicksViewModel {
     }
 
     func reopenSelections(groupId: String, weekId: String, appState: AppState) {
-        guard let group = appState.groupService.groups.first(where: { $0.id == groupId }) else { return }
+        guard !isReopeningSelections else { return }
+        guard let group = appState.groupService.groups.first(where: { $0.id == groupId }) else {
+            appState.pickService.errorMessage = ReopenSelectionsPrompt.leagueUnavailableMessage
+            PickemsHaptics.warning()
+            return
+        }
+        isReopeningSelections = true
         Task {
+            defer { isReopeningSelections = false }
             do {
                 try await appState.groupService.reopenWeekForSelections(
                     groupId: groupId,

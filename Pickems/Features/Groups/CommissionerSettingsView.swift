@@ -27,9 +27,6 @@ struct CommissionerSettingsView: View {
     @State private var capturedPicksMember: GroupMember?
     @State private var capturedPicksWeek: WeekSummary?
     @State private var capturedPicksSlate: [SlateGame] = []
-    /// League and week frozen when Reopen Selections was tapped.
-    /// The alert is presented from this value (`presenting:`), not a second flag.
-    @State private var reopenSelectionsTarget: DeadlineEditCapture?
     @State private var scoringSwitch: CommissionerScoringSwitch
     @State private var isSwitchingToRolling = false
     @State private var rollingPromptWeek: WeekSummary?
@@ -111,7 +108,6 @@ struct CommissionerSettingsView: View {
             CommissionerWeekAdminSections(
                 group: group,
                 present: { (request: CommissionerSheetRequest) in presentCommissionerSheet(request) },
-                requestReopenSelections: { (week: WeekSummary) in presentReopenSelectionsConfirm(week) },
                 managePicks: { (member: GroupMember, week: WeekSummary, slate: [SlateGame]) in
                     capturedPicksMember = member
                     capturedPicksWeek = week
@@ -430,7 +426,7 @@ struct CommissionerSettingsView: View {
         "Close Season \(seasonYearToClose.pickemsYearString)?"
     }
 
-    /// League-type prompt, Reopen Selections, rolling-lock prompt, Close Season confirm.
+    /// League-type prompt, rolling-lock prompt, Close Season confirm.
     /// All sit on the settings root, outside the Form.
     private var settingsFormWithSeasonAlerts: some View {
         settingsFormWithPromptAlerts
@@ -457,36 +453,9 @@ struct CommissionerSettingsView: View {
             }
     }
 
-    private var reopenSelectionsPresented: Binding<Bool> {
-        Binding(
-            get: { reopenSelectionsTarget != nil },
-            set: { (isPresented: Bool) in if !isPresented { reopenSelectionsTarget = nil } }
-        )
-    }
-
     private var settingsFormWithPromptAlerts: some View {
         settingsForm
             .modifier(scoringPromptAlert)
-            .alert(
-                "Reopen Selections?",
-                isPresented: reopenSelectionsPresented,
-                presenting: reopenSelectionsTarget
-            ) { (target: DeadlineEditCapture) in
-                Button("Reopen Selections") {
-                    let write = target.writeTarget(
-                        selectedGroupId: appState.groupService.selectedGroup?.id,
-                        selectedWeekId: appState.groupService.currentWeek?.id
-                    )
-                    appState.picksViewModel.reopenSelections(
-                        groupId: write.groupId,
-                        weekId: write.weekId,
-                        appState: appState
-                    )
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: { (_: DeadlineEditCapture) in
-                Text("Members can add and remove Selections again. Pickems close until you open the week.")
-            }
     }
 
     private var scoringPromptAlert: CommissionerScoringPromptAlert {
@@ -680,17 +649,6 @@ struct CommissionerSettingsView: View {
             selectedGroupId: appState.groupService.selectedGroup?.id
         ) else { return }
         route = sheet
-    }
-
-    private func presentReopenSelectionsConfirm(_ week: WeekSummary) {
-        guard appState.groupService.selectedGroup?.id == group.id,
-              WeekTransition.canReopenSelections(week) else { return }
-        reopenSelectionsTarget = DeadlineEditCapture(
-            groupId: group.id,
-            weekId: week.id,
-            weekLabel: week.displayLabel,
-            isRollingLock: week.isRollingLock
-        )
     }
 
     /// Week fields for display only. Nil when the on-screen league is no longer `groupId`,
