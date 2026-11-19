@@ -15,36 +15,27 @@ struct SeasonLedgerDetailedView: View {
     private let weekTotalsRowHeight: CGFloat = 36
     private var pinnedMetaWidth: CGFloat { matchupWidth + metaWidth * 3 }
 
-    private var scrollsMembers: Bool {
-        SeasonLedgerMemberTableLayout.usesSharedHorizontalScroll(memberCount: members.count)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: PickemsSpacing.sm) {
             detailedLegend
-            ScrollView(.vertical) {
-                SeasonLedgerSplitMemberScroll(
-                    memberCount: members.count,
-                    memberBandWidth: pickWidth,
-                    leadingWidth: pinnedMetaWidth,
-                    rowSpacing: 4
-                ) {
-                    leadingTableColumn
-                } memberBand: {
-                    memberTableColumn
+            SeasonLedgerPinnedTable(
+                memberCount: members.count,
+                fixedMemberBandWidth: pickWidth,
+                leadingWidth: pinnedMetaWidth,
+                headerLeading: { leadingHeaderLabels },
+                headerMembers: { memberHeaderRow }
+            ) {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(data.weeks) { board in
+                        SeasonLedgerTableBodyBand(leadingWidth: pinnedMetaWidth) {
+                            weekLeadingBlock(board)
+                        } members: {
+                            weekMemberBlock(board)
+                        }
+                    }
                 }
             }
         }
-        .onAppear {
-            if expandedWeekIds.isEmpty {
-                expandedWeekIds = defaultExpandedWeekIds
-            }
-        }
-    }
-
-    private var defaultExpandedWeekIds: Set<String> {
-        let scored = data.weeks.filter { $0.week.status == .scored && !$0.games.isEmpty }
-        return Set(scored.suffix(2).map(\.id))
     }
 
     private var detailedLegend: some View {
@@ -66,15 +57,6 @@ struct SeasonLedgerDetailedView: View {
             Circle().fill(color).frame(width: 8, height: 8)
             Text(label)
                 .foregroundStyle(PickemsColors.textSecondary)
-        }
-    }
-
-    private var leadingTableColumn: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            leadingHeaderLabels
-            ForEach(data.weeks) { board in
-                weekLeadingBlock(board)
-            }
         }
     }
 
@@ -160,15 +142,6 @@ struct SeasonLedgerDetailedView: View {
             .background(PickemsColors.progressGold.opacity(0.12))
     }
 
-    private var memberTableColumn: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            memberHeaderRow
-            ForEach(data.weeks) { board in
-                weekMemberBlock(board)
-            }
-        }
-    }
-
     private var memberHeaderRow: some View {
         HStack(spacing: 0) {
             ForEach(members) { member in
@@ -176,16 +149,16 @@ struct SeasonLedgerDetailedView: View {
                     Text(SeasonLedgerMembers.shortName(member, currentUserId: currentUserId))
                         .font(.caption.weight(.bold))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                        .minimumScaleFactor(0.65)
                         .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
                     let season = data.seasonRecord(for: member.id)
                     Text("\(season.wins)")
                         .font(.caption2.weight(.semibold).monospacedDigit())
                         .foregroundStyle(PickemsColors.textSecondary)
                         .lineLimit(1)
                 }
-                .frame(width: scrollsMembers ? pickWidth : nil)
-                .frame(maxWidth: scrollsMembers ? nil : .infinity)
+                .seasonLedgerMemberCellWidth()
                 .padding(.vertical, 4)
                 .background(
                     member.id == currentUserId
@@ -208,8 +181,7 @@ struct SeasonLedgerDetailedView: View {
                     let wins = board.recordsByMemberId[member.id]?.wins ?? 0
                     Text("\(wins)")
                         .font(.subheadline.weight(.bold).monospacedDigit())
-                        .frame(width: scrollsMembers ? pickWidth : nil)
-                        .frame(maxWidth: scrollsMembers ? nil : .infinity)
+                        .seasonLedgerMemberCellWidth()
                         .frame(height: 32)
                 }
             }
@@ -220,8 +192,7 @@ struct SeasonLedgerDetailedView: View {
                         HStack(alignment: .center, spacing: 0) {
                             ForEach(members) { member in
                                 pickChip(game: game, board: board, member: member)
-                                    .frame(width: scrollsMembers ? pickWidth : nil)
-                                    .frame(maxWidth: scrollsMembers ? nil : .infinity)
+                                    .seasonLedgerMemberCellWidth()
                             }
                         }
                         .frame(height: gameRowHeight)
@@ -233,8 +204,7 @@ struct SeasonLedgerDetailedView: View {
                             Text("\(wins)")
                                 .font(.caption.weight(.bold).monospacedDigit())
                                 .foregroundStyle(PickemsColors.progressGold)
-                                .frame(width: scrollsMembers ? pickWidth : nil)
-                                .frame(maxWidth: scrollsMembers ? nil : .infinity)
+                                .seasonLedgerMemberCellWidth()
                         }
                     }
                     .frame(height: weekTotalsRowHeight)

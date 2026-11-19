@@ -197,7 +197,48 @@ struct SeasonLedgerTests {
         #expect(!hidden.contains("done"))
     }
 
+    // MARK: - Week expansion
+
+    @Test func detailedViewStartsWithNoExpandedWeeks() {
+        let data = minimalSeasonData()
+        let expanded = SeasonLedgerWeekExpansion.initialExpandedWeekIds(data: data)
+        #expect(expanded.isEmpty)
+    }
+
+    @Test func detailedViewDoesNotAutoExpandLatestScoredWeeks() {
+        let weeks = (1 ... 10).map { number in
+            SeasonLedgerWeekBoard(
+                week: weekSummary(id: "2026-W\(number)", number: number),
+                games: [finalGame(id: "g\(number)", homeWins: true)],
+                picksByUserId: [:],
+                hiddenGameIds: [],
+                recordsByMemberId: ["a": .init(wins: 1, losses: 0, pushes: 0)],
+                pickMode: .ats
+            )
+        }
+        let data = SeasonLedgerSeasonData(groupId: "g", weeks: weeks, memberIds: ["a"])
+        #expect(SeasonLedgerWeekExpansion.initialExpandedWeekIds(data: data).isEmpty)
+    }
+
     // MARK: - Layout
+
+    @Test func memberColumnWidthUsesFixedBandWhenScrolling() {
+        let width = SeasonLedgerMemberTableLayout.memberColumnWidth(
+            memberCount: 6,
+            fixedBandWidth: 44,
+            availableMemberBandWidth: 300
+        )
+        #expect(width == 44)
+    }
+
+    @Test func memberColumnWidthSplitsAvailableWidthWhenNotScrolling() {
+        let width = SeasonLedgerMemberTableLayout.memberColumnWidth(
+            memberCount: 4,
+            fixedBandWidth: 44,
+            availableMemberBandWidth: 200
+        )
+        #expect(width == 50)
+    }
 
     @Test func wideRosterUsesSingleSharedMemberScroll() {
         #expect(SeasonLedgerMemberTableLayout.usesSharedHorizontalScroll(memberCount: 5))
