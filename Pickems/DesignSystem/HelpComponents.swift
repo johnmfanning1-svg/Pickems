@@ -293,41 +293,13 @@ struct HelpToolbarItem: ToolbarContent {
     }
 }
 
-private enum PickemsListRowCardMetrics {
-    static let cornerRadius: CGFloat = 12
-    static let verticalGutter: CGFloat = 4
-}
-
 extension View {
     func pickemsListRowBackground() -> some View {
         self.listRowBackground(PickemsColors.cardBackground)
     }
 
-    /// One inset-grouped row as its own fully rounded card (avoids square corners when a clear spacer row sits between neighbors).
-    func pickemsIsolatedListRow(separatorHidden: Bool = true) -> some View {
-        listRowBackground(
-            RoundedRectangle(cornerRadius: PickemsListRowCardMetrics.cornerRadius, style: .continuous)
-                .fill(PickemsColors.cardBackground)
-                .padding(.vertical, PickemsListRowCardMetrics.verticalGutter)
-        )
-        .modifier(OptionalListRowSeparatorHidden(hidden: separatorHidden))
-    }
-
     func pickemsScreenBackground() -> some View {
         modifier(PickemsScreenBackgroundModifier())
-    }
-}
-
-private struct OptionalListRowSeparatorHidden: ViewModifier {
-    let hidden: Bool
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if hidden {
-            content.listRowSeparator(.hidden)
-        } else {
-            content
-        }
     }
 }
 

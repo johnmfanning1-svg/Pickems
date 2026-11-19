@@ -41,7 +41,7 @@ struct CommissionerWeekAdminSections: View {
     }
 
     var body: some View {
-        weekStatusSection
+        weekStatusSections
         pickemsAdminSection
         tiesSection
     }
@@ -58,70 +58,108 @@ struct CommissionerWeekAdminSections: View {
         )
     }
 
+    private static let thisWeekFooter = """
+    Deadlines, slate, Pickems, and ties for the week you pick. Switching here also switches Selections and Pickems.
+    """
+
     @ViewBuilder
-    private var weekStatusSection: some View {
-        Section {
-            if !displayedWeeks.isEmpty {
-                WeekChipBar(
-                    weeks: displayedWeeks,
-                    selectedWeekId: week?.id,
-                    activeWeekId: activeESPNWeekId,
-                    dateRangeLabel: { appState.groupService.dateRangeLabel(for: $0.id) },
-                    accessibilityHint: "Admin this week. Also switches Selections and Pickems.",
-                    showsCaption: false,
-                    horizontalPadding: 0
-                ) { selected in
-                    selectAdminWeek(selected)
-                }
-                .buttonStyle(.borderless)
-                .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-            }
-
-            if let week {
-                Group {
-                    LabeledContent("Status", value: week.status.rawValue.capitalized)
-                }
-                .modifier(
-                    WeekStatusListRowChrome(
-                        isolated: isolatesRowAboveDestructiveCapsule(for: week)
-                    )
-                )
-
-                if !week.skipsSelection {
-                    selectionDeadlineRow(week)
-                }
-                if week.status == .selection, !week.skipsSelection {
-                    let target = group.rules.expectedSlateSize(
-                        memberCount: max(group.memberCount, 1)
-                    )
-                    if week.isSelectionDeadlinePassed {
-                        openWithGamesRow(week: week, uniqueGames: uniqueGames)
-                        if uniqueGames < target {
-                            Button("Fill Remaining Games") {
-                                appState.picksViewModel.selectionBrowseIntent = .own
-                                present(.adminGameBrowse(week))
-                            }
-                            .pickemsIsolatedListRow()
-                        }
-                    } else {
-                        lockSelectionsStartPickemsRow(week: week)
-                    }
-                } else if !week.skipsSelection, WeekTransition.canReopenSelections(week) {
-                    reopenSelectionsRow(week)
-                }
-
-                weekManageRows(week)
-            } else if displayedWeeks.isEmpty {
+    private var weekStatusSections: some View {
+        if let week {
+            weekStatusPrimarySection(week)
+            weekStatusDestructiveCapsuleSection(week)
+            weekStatusManageSection(week)
+        } else if displayedWeeks.isEmpty {
+            Section {
                 Text("No active week.")
                     .foregroundStyle(PickemsColors.textSecondary)
                     .listRowBackground(PickemsColors.cardBackground)
+            } header: {
+                Text("This Week")
+            } footer: {
+                Text(Self.thisWeekFooter)
+            }
+        } else {
+            Section {
+                weekChipBar
+            } header: {
+                Text("This Week")
+            } footer: {
+                Text(Self.thisWeekFooter)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var weekChipBar: some View {
+        if !displayedWeeks.isEmpty {
+            WeekChipBar(
+                weeks: displayedWeeks,
+                selectedWeekId: week?.id,
+                activeWeekId: activeESPNWeekId,
+                dateRangeLabel: { appState.groupService.dateRangeLabel(for: $0.id) },
+                accessibilityHint: "Admin this week. Also switches Selections and Pickems.",
+                showsCaption: false,
+                horizontalPadding: 0
+            ) { selected in
+                selectAdminWeek(selected)
+            }
+            .buttonStyle(.borderless)
+            .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
+    }
+
+    @ViewBuilder
+    private func weekStatusPrimarySection(_ week: WeekSummary) -> some View {
+        Section {
+            weekChipBar
+
+            LabeledContent("Status", value: week.status.rawValue.capitalized)
+                .listRowBackground(PickemsColors.cardBackground)
+
+            if !week.skipsSelection {
+                selectionDeadlineRow(week)
             }
         } header: {
             Text("This Week")
+        }
+    }
+
+    @ViewBuilder
+    private func weekStatusDestructiveCapsuleSection(_ week: WeekSummary) -> some View {
+        if week.status == .selection, !week.skipsSelection {
+            Section {
+                if week.isSelectionDeadlinePassed {
+                    openWithGamesRow(week: week, uniqueGames: uniqueGames)
+                } else {
+                    lockSelectionsStartPickemsRow(week: week)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func weekStatusManageSection(_ week: WeekSummary) -> some View {
+        Section {
+            if week.status == .selection, !week.skipsSelection, week.isSelectionDeadlinePassed {
+                let target = group.rules.expectedSlateSize(
+                    memberCount: max(group.memberCount, 1)
+                )
+                if uniqueGames < target {
+                    Button("Fill Remaining Games") {
+                        appState.picksViewModel.selectionBrowseIntent = .own
+                        present(.adminGameBrowse(week))
+                    }
+                    .listRowBackground(PickemsColors.cardBackground)
+                }
+            } else if !week.skipsSelection, WeekTransition.canReopenSelections(week) {
+                reopenSelectionsRow(week)
+            }
+
+            weekManageRows(week)
         } footer: {
-            Text("Deadlines, slate, Pickems, and ties for the week you pick. Switching here also switches Selections and Pickems.")
+            Text(Self.thisWeekFooter)
         }
     }
 
@@ -139,15 +177,6 @@ struct CommissionerWeekAdminSections: View {
         bottom: destructiveActionVerticalInset,
         trailing: 16
     )
-
-    private func showsDestructiveWeekCapsule(for week: WeekSummary) -> Bool {
-        week.status == .selection && !week.skipsSelection
-    }
-
-    private func isolatesRowAboveDestructiveCapsule(for week: WeekSummary) -> Bool {
-        guard showsDestructiveWeekCapsule(for: week) else { return false }
-        return CommissionerSelectionDeadlineRow.resolve(week: week) == .hidden
-    }
 
     private func commissionerDestructiveCapsuleLabel(_ title: String, dimmed: Bool) -> some View {
         Text(title)
@@ -279,7 +308,6 @@ struct CommissionerWeekAdminSections: View {
 
     @ViewBuilder
     private func weekManageRows(_ week: WeekSummary) -> some View {
-        let isolateLeadingManageRow = showsDestructiveWeekCapsule(for: week)
         if canManageSelections {
             CommissionerAdminRow(
                 title: "Selections",
@@ -289,8 +317,7 @@ struct CommissionerWeekAdminSections: View {
                     nominations: pinnedNominations,
                     perMember: selectionsPerMember
                 ),
-                hint: "Opens each member's Selections to change them.",
-                usesIsolatedListCard: isolateLeadingManageRow
+                hint: "Opens each member's Selections to change them."
             ) {
                 present(.selections(week))
             }
@@ -300,8 +327,7 @@ struct CommissionerWeekAdminSections: View {
                 title: "Slate",
                 systemImage: "list.bullet.rectangle",
                 summary: CommissionerAdminSummary.slate(gameCount: pinnedDisplaySlate.count),
-                hint: "Opens the slate to edit spreads or remove a Selection.",
-                usesIsolatedListCard: isolateLeadingManageRow && !canManageSelections
+                hint: "Opens the slate to edit spreads or remove a Selection."
             ) {
                 present(.slate(week))
             }
@@ -348,8 +374,7 @@ struct CommissionerWeekAdminSections: View {
             title: "Selection Deadline",
             systemImage: systemImage,
             summary: summary,
-            hint: "Opens the Selection deadline editor.",
-            usesIsolatedListCard: showsDestructiveWeekCapsule(for: week)
+            hint: "Opens the Selection deadline editor."
         ) {
             present(.selectionDeadline(week))
         }
@@ -359,11 +384,7 @@ struct CommissionerWeekAdminSections: View {
         Button("Set Selection Deadline") {
             present(.selectionDeadline(week))
         }
-        .modifier(
-            SelectionDeadlineSetButtonListChrome(
-                isolated: showsDestructiveWeekCapsule(for: week)
-            )
-        )
+        .listRowBackground(PickemsColors.cardBackground)
     }
 
     @ViewBuilder
@@ -519,39 +540,14 @@ struct CommissionerWeekAdminSections: View {
     }
 }
 
-private struct WeekStatusListRowChrome: ViewModifier {
-    let isolated: Bool
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if isolated {
-            content.pickemsIsolatedListRow()
-        } else {
-            content.listRowBackground(PickemsColors.cardBackground)
-        }
-    }
-}
-
-private struct SelectionDeadlineSetButtonListChrome: ViewModifier {
-    let isolated: Bool
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if isolated {
-            content.pickemsIsolatedListRow()
-        } else {
-            content.listRowBackground(PickemsColors.cardBackground)
-        }
-    }
-}
-
 private struct DestructiveWeekActionRowStyle: ViewModifier {
     let insets: EdgeInsets
 
     func body(content: Content) -> some View {
         content
             .listRowInsets(insets)
-            .pickemsIsolatedListRow()
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
     }
 }
 
