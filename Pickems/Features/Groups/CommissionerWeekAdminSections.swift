@@ -138,10 +138,10 @@ struct CommissionerWeekAdminSections: View {
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .foregroundStyle(PickemsColors.onWarning)
-            .background(PickemsColors.warning)
+            .foregroundStyle(PickemsColors.onLost)
+            .background(dimmed ? PickemsColors.lost.opacity(0.38) : PickemsColors.lost)
             .clipShape(Capsule())
-            .opacity(dimmed ? 0.45 : 1)
+            .opacity(dimmed ? 0.72 : 1)
     }
 
     private var destructiveWeekActionRowStyle: DestructiveWeekActionRowStyle {
