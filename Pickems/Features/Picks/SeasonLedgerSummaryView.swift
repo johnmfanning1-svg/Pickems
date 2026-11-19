@@ -35,16 +35,50 @@ struct SeasonLedgerSummaryView: View {
     }
 
     private var tableCard: some View {
-        ScrollView(.vertical) {
-            SeasonLedgerSplitMemberScroll(
-                memberCount: members.count,
-                memberBandWidth: memberPairWidth,
-                leadingWidth: weekColumnWidth,
-                rowSpacing: 4
-            ) {
-                leadingColumn
-            } memberBand: {
-                memberColumnStack
+        SeasonLedgerPinnedTable(
+            memberCount: members.count,
+            fixedMemberBandWidth: memberPairWidth,
+            leadingWidth: weekColumnWidth,
+            headerLeading: { Color.clear.frame(height: 56) },
+            headerMembers: { memberHeaderRow }
+        ) {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(data.weeks) { board in
+                    SeasonLedgerTableBodyBand(leadingWidth: weekColumnWidth) {
+                        Text(SeasonLedgerWeekTitle.rowTitle(for: board.week))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(PickemsColors.textPrimary)
+                            .frame(height: 36, alignment: .leading)
+                            .padding(.leading, 8)
+                            .accessibilityAddTraits(.isHeader)
+                    } members: {
+                        weekMemberRow(board)
+                            .frame(height: 36)
+                    }
+                }
+
+                SeasonLedgerTableBodyBand(leadingWidth: weekColumnWidth) {
+                    Text("Total")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(PickemsColors.textPrimary)
+                        .frame(height: 40, alignment: .leading)
+                        .padding(.leading, 8)
+                } members: {
+                    footerTotalMembers
+                        .frame(height: 40)
+                        .background(PickemsColors.hairlineSubtle.opacity(0.35))
+                }
+
+                SeasonLedgerTableBodyBand(leadingWidth: weekColumnWidth) {
+                    Text("Games Back")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .frame(height: 36, alignment: .leading)
+                        .padding(.leading, 8)
+                } members: {
+                    footerGamesBackMembers
+                        .frame(height: 36)
+                }
             }
         }
         .background(PickemsColors.cardBackground)
@@ -55,57 +89,14 @@ struct SeasonLedgerSummaryView: View {
         )
     }
 
-    private var leadingColumn: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Color.clear.frame(height: 56)
-            ForEach(data.weeks) { board in
-                Text(SeasonLedgerWeekTitle.rowTitle(for: board.week))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(PickemsColors.textPrimary)
-                    .frame(height: 36, alignment: .leading)
-                    .padding(.leading, 8)
-                    .accessibilityAddTraits(.isHeader)
+    private var memberHeaderRow: some View {
+        HStack(spacing: 0) {
+            ForEach(members) { member in
+                memberHeader(member)
+                    .seasonLedgerMemberCellWidth()
             }
-            Text("Total")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(PickemsColors.textPrimary)
-                .frame(height: 40, alignment: .leading)
-                .padding(.leading, 8)
-            Text("Games Back")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(PickemsColors.textSecondary)
-                .frame(height: 36, alignment: .leading)
-                .padding(.leading, 8)
         }
-    }
-
-    private var scrollsMembers: Bool {
-        SeasonLedgerMemberTableLayout.usesSharedHorizontalScroll(memberCount: members.count)
-    }
-
-    private var memberColumnStack: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 0) {
-                ForEach(members) { member in
-                    memberHeader(member)
-                        .frame(width: scrollsMembers ? memberPairWidth : nil)
-                        .frame(maxWidth: scrollsMembers ? nil : .infinity)
-                }
-            }
-            .frame(height: 56)
-
-            ForEach(data.weeks) { board in
-                weekMemberRow(board)
-                    .frame(height: 36)
-            }
-
-            footerTotalMembers
-                .frame(height: 40)
-                .background(PickemsColors.hairlineSubtle.opacity(0.35))
-
-            footerGamesBackMembers
-                .frame(height: 36)
-        }
+        .frame(height: 56)
     }
 
     private func weekMemberRow(_ board: SeasonLedgerWeekBoard) -> some View {
@@ -118,8 +109,7 @@ struct SeasonLedgerSummaryView: View {
                     winCell(record.wins, highlight: highlight)
                     lossCell(record.losses)
                 }
-                .frame(width: scrollsMembers ? memberPairWidth : nil)
-                .frame(maxWidth: scrollsMembers ? nil : .infinity)
+                .seasonLedgerMemberCellWidth()
                 .accessibilityLabel(weekAccessibility(board: board, member: member, highlight: highlight))
             }
         }
@@ -133,14 +123,13 @@ struct SeasonLedgerSummaryView: View {
                     Text("\(season.wins)")
                         .font(.subheadline.weight(.bold).monospacedDigit())
                         .foregroundStyle(PickemsColors.textPrimary)
-                        .frame(width: memberPairWidth / 2)
+                        .frame(maxWidth: .infinity)
                     Text("\(season.losses)")
                         .font(.subheadline.weight(.semibold).monospacedDigit())
                         .foregroundStyle(PickemsColors.textSecondary)
-                        .frame(width: memberPairWidth / 2)
+                        .frame(maxWidth: .infinity)
                 }
-                .frame(width: scrollsMembers ? memberPairWidth : nil)
-                .frame(maxWidth: scrollsMembers ? nil : .infinity)
+                .seasonLedgerMemberCellWidth()
             }
         }
         .accessibilityElement(children: .contain)
@@ -155,8 +144,7 @@ struct SeasonLedgerSummaryView: View {
                 Text(caption)
                     .font(.caption.weight(.semibold).monospacedDigit())
                     .foregroundStyle(PickemsColors.textSecondary)
-                    .frame(width: scrollsMembers ? memberPairWidth : nil)
-                    .frame(maxWidth: scrollsMembers ? nil : .infinity)
+                    .seasonLedgerMemberCellWidth()
                     .accessibilityLabel(
                         caption == "—"
                             ? "\(member.displayName), even with the leader"
@@ -188,19 +176,19 @@ struct SeasonLedgerSummaryView: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(PickemsColors.textPrimary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.65)
                 .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
             HStack(spacing: 0) {
                 Text("W")
-                    .frame(width: memberPairWidth / 2)
+                    .frame(maxWidth: .infinity)
                 Text("L")
-                    .frame(width: memberPairWidth / 2)
+                    .frame(maxWidth: .infinity)
             }
             .font(.caption)
             .foregroundStyle(PickemsColors.textSecondary)
             .lineLimit(1)
         }
-        .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
         .background(
             isYou
@@ -216,7 +204,8 @@ struct SeasonLedgerSummaryView: View {
         Text("\(value)")
             .font(.subheadline.weight(.bold).monospacedDigit())
             .foregroundStyle(winForeground(highlight))
-            .frame(width: memberPairWidth / 2, height: 32)
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
             .background(winBackground(highlight))
     }
 
@@ -224,7 +213,8 @@ struct SeasonLedgerSummaryView: View {
         Text("\(value)")
             .font(.subheadline.weight(.semibold).monospacedDigit())
             .foregroundStyle(PickemsColors.textSecondary)
-            .frame(width: memberPairWidth / 2, height: 32)
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
     }
 
     private func winBackground(_ highlight: SeasonLedgerWinHighlight) -> Color {
