@@ -12,7 +12,10 @@ enum UserFacingError {
     /// A Pickems save the server never took. The on-screen pick is rolled back.
     static let pickNotSavedMessage = "Pick didn't save. Try again."
 
-    /// Rules deny a pick write when a game in it has already kicked off.
+    /// First save dropped picks on games that had already started.
+    static let skippedStartedGamesMessage = "Skipped games that already started."
+
+    /// Rules denial on a pick write that included a game that already kicked off.
     static let pickKickedOffMessage = "This game already kicked off; pick not saved."
 
     /// User-visible message. Returns `nil` when the failure is expected noise
@@ -34,13 +37,16 @@ enum UserFacingError {
             case .write:
                 return "You don't have permission to do that in this league."
             case .pickWrite:
+                return pickNotSavedMessage
+            case .pickWriteStartedGame:
                 return pickKickedOffMessage
             case .generic:
                 return "Couldn't load that right now. Pull to refresh or try again in a moment."
             }
         }
 
-        if context == .pickWrite, !(error is PickService.PickError) {
+        if context == .pickWrite || context == .pickWriteStartedGame,
+           !(error is PickService.PickError) {
             return pickNotSavedMessage
         }
 
@@ -76,6 +82,8 @@ enum UserFacingError {
         case write
         /// Saving or submitting your own Pickems.
         case pickWrite
+        /// Same, when the attempted picks include a game that already started.
+        case pickWriteStartedGame
     }
 
     static func isCancellation(_ error: Error) -> Bool {
