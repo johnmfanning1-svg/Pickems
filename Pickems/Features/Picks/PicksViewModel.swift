@@ -132,6 +132,24 @@ final class PicksViewModel {
         writeInFlight = inFlight
     }
 
+    /// Shown under the Pickems list while a save is waiting on the server.
+    static let notSyncedCaption = "Not synced yet"
+
+    /// A failed save must not leave picks on screen the server never took.
+    /// Rolls the draft back to the last server pick unless a newer save is in flight.
+    @discardableResult
+    func revertFailedWrite(
+        _ attempted: [String: String],
+        serverPicks: [String: String]?,
+        serverConfidenceGameId: String?
+    ) -> Bool {
+        guard pendingWritePicks == attempted else { return false }
+        pendingWritePicks = nil
+        writeInFlight = false
+        applyServerPicks(serverPicks, confidenceGameId: serverConfidenceGameId)
+        return true
+    }
+
     func resetPendingWrite() {
         pendingWritePicks = nil
         writeInFlight = false
@@ -427,11 +445,12 @@ final class PicksViewModel {
                     writeInFlight = false
                 }
             } catch {
-                if pendingWritePicks == picks {
-                    pendingWritePicks = nil
-                    writeInFlight = false
-                }
-                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
+                revertFailedWrite(
+                    picks,
+                    serverPicks: appState.pickService.userPick?.picks,
+                    serverConfidenceGameId: appState.pickService.userPick?.confidenceGameId
+                )
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .pickWrite)
             }
         }
     }
@@ -472,11 +491,12 @@ final class PicksViewModel {
                 }
                 PickemsHaptics.success()
             } catch {
-                if pendingWritePicks == picks {
-                    pendingWritePicks = nil
-                    writeInFlight = false
-                }
-                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .write)
+                revertFailedWrite(
+                    picks,
+                    serverPicks: appState.pickService.userPick?.picks,
+                    serverConfidenceGameId: appState.pickService.userPick?.confidenceGameId
+                )
+                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .pickWrite)
             }
         }
     }

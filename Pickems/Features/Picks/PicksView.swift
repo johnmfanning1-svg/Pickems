@@ -583,6 +583,15 @@ struct PicksView: View {
                 }
             }
 
+            if appState.pickService.userPickHasPendingWrites {
+                Label(PicksViewModel.notSyncedCaption, systemImage: "icloud.and.arrow.up")
+                    .font(.caption)
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .accessibilityLabel("Your Pickems are not synced yet")
+            }
+
             if rolling, WeekTransition.pickemsShouldShowLeagueBoard(week) {
                 GroupPicksView(embedded: true)
             }
