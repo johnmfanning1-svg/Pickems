@@ -53,6 +53,8 @@ struct DeadlineEditCapture: Equatable {
 struct SelectionDeadlineEdit: Equatable {
     var capture: DeadlineEditCapture
     var initialDeadline: Date?
+    /// After Reopen Selections confirm, Save reopens the week then applies the deadline.
+    var reopenOnSave: Bool = false
 }
 
 struct PickDeadlineEdit: Equatable {

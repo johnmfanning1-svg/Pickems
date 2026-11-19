@@ -201,22 +201,16 @@ struct SelectionDeadlineDisplayTests {
         #expect(CommissionerSelectionDeadlineRow.resolve(week: week, now: now) == .setPrompt)
     }
 
-    @Test func lockedSelectionDeadlineRowShowsLockCopy() {
+    @Test func lockedSelectionDeadlineRowHiddenWhileReopenAvailable() {
         let due = now.addingTimeInterval(-3600)
         let passed = week(status: .picking, selectionDeadline: due)
-        let closed = CommissionerSelectionDeadlineRow.resolve(week: passed, now: now)
-        #expect(closed == .editor("Closed \(PickDeadlineCalculator.lockTimeLabel(for: due))"))
+        #expect(CommissionerSelectionDeadlineRow.resolve(week: passed, now: now) == .hidden)
 
         let early = week(status: .picking, selectionDeadline: now.addingTimeInterval(3600))
-        #expect(CommissionerSelectionDeadlineRow.resolve(week: early, now: now) == .editor("Locked when slate filled"))
+        #expect(CommissionerSelectionDeadlineRow.resolve(week: early, now: now) == .hidden)
 
-        for row in [closed, CommissionerSelectionDeadlineRow.resolve(week: early, now: now)] {
-            if case .editor(let summary) = row {
-                #expect(!summary.localizedCaseInsensitiveContains("set a"))
-            } else {
-                Issue.record("a stored deadline on a locked week must stay an editor row")
-            }
-        }
+        let locked = week(status: .locked, selectionDeadline: due)
+        #expect(CommissionerSelectionDeadlineRow.resolve(week: locked, now: now) == .hidden)
     }
 
     @Test func weekZeroSelectionDeadlineRowIsHidden() {

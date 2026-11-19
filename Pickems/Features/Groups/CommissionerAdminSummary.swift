@@ -61,6 +61,9 @@ enum CommissionerSelectionDeadlineRow: Equatable {
     case hidden
 
     static func resolve(week: WeekSummary, now: Date = Date()) -> Self {
+        if WeekTransition.canReopenSelections(week) {
+            return .hidden
+        }
         switch SelectionDeadlineDisplayResolver.resolve(week: week, now: now) {
         case .open, .locked:
             guard let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: week, now: now) else {

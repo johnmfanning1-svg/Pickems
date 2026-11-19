@@ -593,12 +593,34 @@ final class PicksViewModel {
     }
 
     func reopenSelections(groupId: String, weekId: String, appState: AppState) {
+        reopenSelectionsWithDeadline(
+            deadline: nil,
+            groupId: groupId,
+            weekId: weekId,
+            appState: appState
+        )
+    }
+
+    /// Reopens Selections, clears the materialized slate, then sets the new deadline.
+    /// When `deadline` is nil, only reopen + slate clear run (legacy call sites).
+    func reopenSelectionsWithDeadline(
+        deadline: Date?,
+        groupId: String,
+        weekId: String,
+        appState: AppState
+    ) {
         guard !isReopeningSelections else { return }
         guard let group = appState.groupService.groups.first(where: { $0.id == groupId }) else {
             appState.pickService.errorMessage = ReopenSelectionsPrompt.leagueUnavailableMessage
             PickemsHaptics.warning()
             return
         }
+        guard let userId = appState.currentUserId else {
+            appState.pickService.errorMessage = ReopenSelectionsPrompt.signInRequiredMessage
+            PickemsHaptics.warning()
+            return
+        }
+        let commissionerName = appState.authService.currentUser?.displayName ?? "Commissioner"
         isReopeningSelections = true
         Task {
             defer { isReopeningSelections = false }
@@ -607,11 +629,26 @@ final class PicksViewModel {
                     groupId: groupId,
                     weekId: weekId
                 )
+                if let deadline {
+                    do {
+                        try await appState.groupService.setSelectionDeadline(
+                            groupId: groupId,
+                            weekId: weekId,
+                            deadline: deadline,
+                            setByUserId: userId
+                        )
+                    } catch {
+                        appState.pickService.errorMessage =
+                            ReopenSelectionsPrompt.deadlineSaveFailedAfterReopenMessage
+                        PickemsHaptics.warning()
+                        return
+                    }
+                }
                 try await appState.pickService.clearSlateGamesForSelectionReopen(
                     groupId: groupId,
                     weekId: weekId,
-                    commissionerUserId: appState.currentUserId ?? group.commissionerId,
-                    commissionerName: appState.authService.currentUser?.displayName ?? "Commissioner"
+                    commissionerUserId: userId,
+                    commissionerName: commissionerName
                 )
                 PickemsHaptics.success()
             } catch {
