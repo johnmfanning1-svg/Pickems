@@ -15,6 +15,9 @@ final class PickService {
     var userPick: UserPick?
     /// True while the own-pick doc has local writes the server hasn't confirmed.
     private(set) var userPickHasPendingWrites = false
+    /// Last own pick the server confirmed (no pending local writes). A failed save
+    /// rolls the draft back to this, never to the optimistic local copy.
+    private(set) var lastConfirmedUserPick: UserPick?
     /// Bumped when a local commissioner set/clear (or week reset) must beat a
     /// pending Picks-tab draft, including empty wipes from Group Pickems.
     private(set) var userPickEpoch = 0
@@ -100,6 +103,7 @@ final class PickService {
         userPickWriteGeneration += 1
         userPick = nil
         userPickHasPendingWrites = false
+        lastConfirmedUserPick = nil
         userPickEpoch += 1
         allPicks = []
         revealedPicksByGameId = [:]
@@ -170,8 +174,15 @@ final class PickService {
                         return
                     }
                     let pick = try? snapshot?.data(as: UserPick.self)
-                    self.userPickHasPendingWrites = snapshot?.metadata.hasPendingWrites ?? false
+                    let pending = snapshot?.metadata.hasPendingWrites ?? false
+                    self.userPickHasPendingWrites = pending
+                    self.lastConfirmedUserPick = Self.confirmedPick(
+                        current: self.lastConfirmedUserPick,
+                        snapshotPick: pick,
+                        hasPendingWrites: pending
+                    )
                     // Metadata-only snapshot (server confirmed a local write): nothing else changed.
+                    // Skipping also skips the pick-count reconcile, which already ran for this data.
                     guard pick != self.userPick else { return }
                     self.userPick = pick
                     // Pre-deadline list queries fail; keep own pick visible in Group Picks.
@@ -295,6 +306,7 @@ final class PickService {
         userPickWriteGeneration += 1
         userPick = nil
         userPickHasPendingWrites = false
+        lastConfirmedUserPick = nil
         userPickEpoch += 1
         allPicks = []
         revealedPicksByGameId = [:]
@@ -603,6 +615,33 @@ final class PickService {
             }
         }
         return result
+    }
+
+    /// Server-confirmed own pick: a snapshot with pending local writes keeps the prior one.
+    static func confirmedPick(
+        current: UserPick?,
+        snapshotPick: UserPick?,
+        hasPendingWrites: Bool
+    ) -> UserPick? {
+        hasPendingWrites ? current : snapshotPick
+    }
+
+    /// True when any picked game has already started, so a rules denial means kickoff.
+    static func includesStartedGame(
+        _ picks: [String: String],
+        games: [SlateGame],
+        week: WeekSummary,
+        now: Date = Date()
+    ) -> Bool {
+        games.contains { game in
+            picks[game.id] != nil && WeekTransition.gameHasStarted(
+                gameId: game.id,
+                kickoff: game.kickoff,
+                status: game.status,
+                week: week,
+                now: now
+            )
+        }
     }
 
     /// First save has no server doc to fall back on. Drop picks on games that already
@@ -1599,6 +1638,8 @@ final class PickService {
         try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
     }
 
+    /// Returns game ids dropped because they already started (first save only).
+    @discardableResult
     func savePickDraft(
         groupId: String,
         weekId: String,
@@ -1608,7 +1649,7 @@ final class PickService {
         confidenceGameId: String? = nil,
         week: WeekSummary? = nil,
         allowLatePicks: Bool = false
-    ) async throws {
+    ) async throws -> Set<String> {
         if let week {
             switch week.status {
             case .locked, .scored:
@@ -1626,6 +1667,7 @@ final class PickService {
 
         let cleaned = Self.sanitizedPicks(picks)
         let validGameIds = Set(slateGames.map(\.id))
+        var skipped: Set<String> = []
         var trimmed = validGameIds.isEmpty
             ? cleaned
             : cleaned.filter { validGameIds.contains($0.key) }
@@ -1638,7 +1680,9 @@ final class PickService {
                     week: week
                 )
             } else {
-                trimmed = Self.droppingStartedGames(trimmed, games: slateGames, week: week)
+                let kept = Self.droppingStartedGames(trimmed, games: slateGames, week: week)
+                skipped = Set(trimmed.keys).subtracting(kept.keys)
+                trimmed = kept
             }
         }
         let trimmedConfidence: String? = {
@@ -1673,7 +1717,7 @@ final class PickService {
         )
         let generation = userPickWriteGeneration
         try await ref.setData(from: pick)
-        guard generation == userPickWriteGeneration else { return }
+        guard generation == userPickWriteGeneration else { return skipped }
         userPick = pick
         mergeOwnPickIntoAllPicks(pick)
         try await syncSubmission(
@@ -1685,8 +1729,11 @@ final class PickService {
             submittedAt: nil,
             pickCount: trimmed.count
         )
+        return skipped
     }
 
+    /// Returns game ids dropped because they already started (first rolling submit only).
+    @discardableResult
     func submitPicks(
         groupId: String,
         weekId: String,
@@ -1698,7 +1745,7 @@ final class PickService {
         allowLatePicks: Bool = false,
         week: WeekSummary? = nil,
         ineligibleGameIds: Set<String> = []
-    ) async throws {
+    ) async throws -> Set<String> {
         let rolling = week?.isRollingLock == true
         if rolling {
             if let week, WeekTransition.arePicksFullyLocked(week) {
@@ -1712,6 +1759,7 @@ final class PickService {
             slateGameIds: slateIds,
             ineligibleGameIds: ineligibleGameIds
         )
+        var skipped: Set<String> = []
         var cleaned = Self.sanitizedPicks(picks).filter { slateIds.contains($0.key) }
         if let week, rolling {
             if let existing = userPick?.picks {
@@ -1722,7 +1770,9 @@ final class PickService {
                     week: week
                 )
             } else {
-                cleaned = Self.droppingStartedGames(cleaned, games: slateGames, week: week)
+                let kept = Self.droppingStartedGames(cleaned, games: slateGames, week: week)
+                skipped = Set(cleaned.keys).subtracting(kept.keys)
+                cleaned = kept
             }
         }
         if rolling, let week {
@@ -1772,7 +1822,7 @@ final class PickService {
         )
         let generation = userPickWriteGeneration
         try await ref.setData(from: pick)
-        guard generation == userPickWriteGeneration else { return }
+        guard generation == userPickWriteGeneration else { return skipped }
         userPick = pick
         mergeOwnPickIntoAllPicks(pick)
         try await syncSubmission(
@@ -1784,6 +1834,7 @@ final class PickService {
             submittedAt: pick.submittedAt,
             pickCount: cleaned.count
         )
+        return skipped
     }
 
     private func syncSubmission(

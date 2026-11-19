@@ -150,6 +150,43 @@ final class PicksViewModel {
         return true
     }
 
+    /// A save that dropped started games echoes fewer picks than were attempted,
+    /// so the pending draft would never match. Settle on what was saved.
+    @discardableResult
+    func applySkippedStartedGames(
+        _ skipped: Set<String>,
+        attempted: [String: String],
+        saved: UserPick?
+    ) -> Bool {
+        guard !skipped.isEmpty, pendingWritePicks == attempted else { return false }
+        pendingWritePicks = nil
+        writeInFlight = false
+        applyServerPicks(saved?.picks, confidenceGameId: saved?.confidenceGameId)
+        return true
+    }
+
+    private func settleSuccessfulWrite(_ picks: [String: String], skipped: Set<String>, appState: AppState) {
+        if applySkippedStartedGames(skipped, attempted: picks, saved: appState.pickService.userPick) {
+            appState.pickService.errorMessage = UserFacingError.skippedStartedGamesMessage
+        } else if pendingWritePicks == picks {
+            writeInFlight = false
+        }
+    }
+
+    /// Rules denials only blame kickoff when the attempt actually touched a started game.
+    static func pickWriteErrorContext(
+        attempted: [String: String],
+        games: [SlateGame],
+        week: WeekSummary?,
+        now: Date = Date()
+    ) -> UserFacingError.Context {
+        guard let week,
+              PickService.includesStartedGame(attempted, games: games, week: week, now: now) else {
+            return .pickWrite
+        }
+        return .pickWriteStartedGame
+    }
+
     func resetPendingWrite() {
         pendingWritePicks = nil
         writeInFlight = false
@@ -431,7 +468,7 @@ final class PicksViewModel {
                 return
             }
             do {
-                try await appState.pickService.savePickDraft(
+                let skipped = try await appState.pickService.savePickDraft(
                     groupId: group.id,
                     weekId: week.id,
                     userId: user.id,
@@ -441,16 +478,25 @@ final class PicksViewModel {
                     week: week,
                     allowLatePicks: group.rules.allowLatePicks
                 )
-                if pendingWritePicks == picks {
-                    writeInFlight = false
-                }
+                settleSuccessfulWrite(picks, skipped: skipped, appState: appState)
             } catch {
+                // Server-confirmed copy: the optimistic local pick may still be in `userPick`
+                // until the rolled-back snapshot lands.
+                let serverPick = appState.pickService.lastConfirmedUserPick
                 revertFailedWrite(
                     picks,
-                    serverPicks: appState.pickService.userPick?.picks,
-                    serverConfidenceGameId: appState.pickService.userPick?.confidenceGameId
+                    serverPicks: serverPick?.picks,
+                    serverConfidenceGameId: serverPick?.confidenceGameId
                 )
-                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .pickWrite)
+                UserFacingError.apply(
+                    error,
+                    to: &appState.pickService.errorMessage,
+                    context: Self.pickWriteErrorContext(
+                        attempted: picks,
+                        games: appState.pickService.slateGames,
+                        week: week
+                    )
+                )
             }
         }
     }
@@ -474,7 +520,7 @@ final class PicksViewModel {
                 return
             }
             do {
-                try await appState.pickService.submitPicks(
+                let skipped = try await appState.pickService.submitPicks(
                     groupId: group.id,
                     weekId: week.id,
                     userId: user.id,
@@ -486,17 +532,26 @@ final class PicksViewModel {
                     week: week,
                     ineligibleGameIds: ineligibleGameIds
                 )
-                if pendingWritePicks == picks {
-                    writeInFlight = false
-                }
+                settleSuccessfulWrite(picks, skipped: skipped, appState: appState)
                 PickemsHaptics.success()
             } catch {
+                // Server-confirmed copy: the optimistic local pick may still be in `userPick`
+                // until the rolled-back snapshot lands.
+                let serverPick = appState.pickService.lastConfirmedUserPick
                 revertFailedWrite(
                     picks,
-                    serverPicks: appState.pickService.userPick?.picks,
-                    serverConfidenceGameId: appState.pickService.userPick?.confidenceGameId
+                    serverPicks: serverPick?.picks,
+                    serverConfidenceGameId: serverPick?.confidenceGameId
                 )
-                UserFacingError.apply(error, to: &appState.pickService.errorMessage, context: .pickWrite)
+                UserFacingError.apply(
+                    error,
+                    to: &appState.pickService.errorMessage,
+                    context: Self.pickWriteErrorContext(
+                        attempted: picks,
+                        games: appState.pickService.slateGames,
+                        week: week
+                    )
+                )
             }
         }
     }
