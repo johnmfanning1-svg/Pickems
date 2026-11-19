@@ -10,6 +10,7 @@ struct CommissionerAdminRow: View {
     let systemImage: String
     let summary: String
     let hint: String
+    var usesIsolatedListCard: Bool = false
     let action: () -> Void
 
     var body: some View {
@@ -34,7 +35,20 @@ struct CommissionerAdminRow: View {
         .accessibilityValue(summary)
         .accessibilityHint(hint)
         .accessibilityAddTraits(.isButton)
-        .listRowBackground(PickemsColors.cardBackground)
+        .modifier(CommissionerAdminRowListChrome(isolated: usesIsolatedListCard))
+    }
+}
+
+private struct CommissionerAdminRowListChrome: ViewModifier {
+    let isolated: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isolated {
+            content.pickemsIsolatedListRow()
+        } else {
+            content.listRowBackground(PickemsColors.cardBackground)
+        }
     }
 }
 

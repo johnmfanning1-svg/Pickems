@@ -80,8 +80,14 @@ struct CommissionerWeekAdminSections: View {
             }
 
             if let week {
-                LabeledContent("Status", value: week.status.rawValue.capitalized)
-                    .listRowBackground(PickemsColors.cardBackground)
+                Group {
+                    LabeledContent("Status", value: week.status.rawValue.capitalized)
+                }
+                .modifier(
+                    WeekStatusListRowChrome(
+                        isolated: isolatesRowAboveDestructiveCapsule(for: week)
+                    )
+                )
 
                 if !week.skipsSelection {
                     selectionDeadlineRow(week)
@@ -97,7 +103,7 @@ struct CommissionerWeekAdminSections: View {
                                 appState.picksViewModel.selectionBrowseIntent = .own
                                 present(.adminGameBrowse(week))
                             }
-                            .listRowBackground(PickemsColors.cardBackground)
+                            .pickemsIsolatedListRow()
                         }
                     } else {
                         lockSelectionsStartPickemsRow(week: week)
@@ -125,12 +131,23 @@ struct CommissionerWeekAdminSections: View {
         appState.selectObservedWeek(selected)
     }
 
+    private static let destructiveActionVerticalInset: CGFloat = 16
+
     private static let destructiveActionRowInsets = EdgeInsets(
-        top: 4,
+        top: destructiveActionVerticalInset,
         leading: 16,
-        bottom: 12,
+        bottom: destructiveActionVerticalInset,
         trailing: 16
     )
+
+    private func showsDestructiveWeekCapsule(for week: WeekSummary) -> Bool {
+        week.status == .selection && !week.skipsSelection
+    }
+
+    private func isolatesRowAboveDestructiveCapsule(for week: WeekSummary) -> Bool {
+        guard showsDestructiveWeekCapsule(for: week) else { return false }
+        return CommissionerSelectionDeadlineRow.resolve(week: week) == .hidden
+    }
 
     private func commissionerDestructiveCapsuleLabel(_ title: String, dimmed: Bool) -> some View {
         Text(title)
@@ -262,6 +279,7 @@ struct CommissionerWeekAdminSections: View {
 
     @ViewBuilder
     private func weekManageRows(_ week: WeekSummary) -> some View {
+        let isolateLeadingManageRow = showsDestructiveWeekCapsule(for: week)
         if canManageSelections {
             CommissionerAdminRow(
                 title: "Selections",
@@ -271,7 +289,8 @@ struct CommissionerWeekAdminSections: View {
                     nominations: pinnedNominations,
                     perMember: selectionsPerMember
                 ),
-                hint: "Opens each member's Selections to change them."
+                hint: "Opens each member's Selections to change them.",
+                usesIsolatedListCard: isolateLeadingManageRow
             ) {
                 present(.selections(week))
             }
@@ -281,7 +300,8 @@ struct CommissionerWeekAdminSections: View {
                 title: "Slate",
                 systemImage: "list.bullet.rectangle",
                 summary: CommissionerAdminSummary.slate(gameCount: pinnedDisplaySlate.count),
-                hint: "Opens the slate to edit spreads or remove a Selection."
+                hint: "Opens the slate to edit spreads or remove a Selection.",
+                usesIsolatedListCard: isolateLeadingManageRow && !canManageSelections
             ) {
                 present(.slate(week))
             }
@@ -328,7 +348,8 @@ struct CommissionerWeekAdminSections: View {
             title: "Selection Deadline",
             systemImage: systemImage,
             summary: summary,
-            hint: "Opens the Selection deadline editor."
+            hint: "Opens the Selection deadline editor.",
+            usesIsolatedListCard: showsDestructiveWeekCapsule(for: week)
         ) {
             present(.selectionDeadline(week))
         }
@@ -338,7 +359,11 @@ struct CommissionerWeekAdminSections: View {
         Button("Set Selection Deadline") {
             present(.selectionDeadline(week))
         }
-        .listRowBackground(PickemsColors.cardBackground)
+        .modifier(
+            SelectionDeadlineSetButtonListChrome(
+                isolated: showsDestructiveWeekCapsule(for: week)
+            )
+        )
     }
 
     @ViewBuilder
@@ -494,14 +519,39 @@ struct CommissionerWeekAdminSections: View {
     }
 }
 
+private struct WeekStatusListRowChrome: ViewModifier {
+    let isolated: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isolated {
+            content.pickemsIsolatedListRow()
+        } else {
+            content.listRowBackground(PickemsColors.cardBackground)
+        }
+    }
+}
+
+private struct SelectionDeadlineSetButtonListChrome: ViewModifier {
+    let isolated: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isolated {
+            content.pickemsIsolatedListRow()
+        } else {
+            content.listRowBackground(PickemsColors.cardBackground)
+        }
+    }
+}
+
 private struct DestructiveWeekActionRowStyle: ViewModifier {
     let insets: EdgeInsets
 
     func body(content: Content) -> some View {
         content
             .listRowInsets(insets)
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
+            .pickemsIsolatedListRow()
     }
 }
 
