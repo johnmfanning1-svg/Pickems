@@ -91,6 +91,7 @@ struct CommissionerWeekAdminSections: View {
                         memberCount: max(group.memberCount, 1)
                     )
                     if week.isSelectionDeadlinePassed {
+                        openWithGamesRow(week: week, uniqueGames: uniqueGames)
                         if uniqueGames < target {
                             Button("Fill Remaining Games") {
                                 appState.picksViewModel.selectionBrowseIntent = .own
@@ -98,7 +99,6 @@ struct CommissionerWeekAdminSections: View {
                             }
                             .listRowBackground(PickemsColors.cardBackground)
                         }
-                        openWithGamesRow(week: week, uniqueGames: uniqueGames)
                     } else {
                         lockSelectionsStartPickemsRow(week: week)
                     }
@@ -125,8 +125,32 @@ struct CommissionerWeekAdminSections: View {
         appState.selectObservedWeek(selected)
     }
 
+    private static let destructiveActionRowInsets = EdgeInsets(
+        top: 4,
+        leading: 16,
+        bottom: 12,
+        trailing: 16
+    )
+
+    private func commissionerDestructiveCapsuleLabel(_ title: String, dimmed: Bool) -> some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .foregroundStyle(PickemsColors.onWarning)
+            .background(PickemsColors.warning)
+            .clipShape(Capsule())
+            .opacity(dimmed ? 0.45 : 1)
+    }
+
+    private var destructiveWeekActionRowStyle: DestructiveWeekActionRowStyle {
+        DestructiveWeekActionRowStyle(insets: Self.destructiveActionRowInsets)
+    }
+
     private func lockSelectionsStartPickemsRow(week: WeekSummary) -> some View {
-        AnchoredActionConfirm(
+        let dimmed = uniqueGames == 0
+        return AnchoredActionConfirm(
             title: OpenWeekEarlyPrompt.earlyConfirmTitle,
             message: OpenWeekEarlyPrompt.earlyConfirmMessage,
             confirmTitle: OpenWeekEarlyPrompt.earlyButtonTitle,
@@ -140,17 +164,17 @@ struct CommissionerWeekAdminSections: View {
                 )
             }
         ) {
-            Text(OpenWeekEarlyPrompt.earlyButtonTitle)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .foregroundStyle(PickemsColors.warning)
+            commissionerDestructiveCapsuleLabel(OpenWeekEarlyPrompt.earlyButtonTitle, dimmed: dimmed)
         }
-        .disabled(uniqueGames == 0)
+        .buttonStyle(.plain)
+        .disabled(dimmed)
         .accessibilityLabel(OpenWeekEarlyPrompt.earlyAccessibilityLabel)
-        .listRowBackground(PickemsColors.cardBackground)
+        .modifier(destructiveWeekActionRowStyle)
     }
 
     private func openWithGamesRow(week: WeekSummary, uniqueGames: Int) -> some View {
         let title = OpenWeekEarlyPrompt.openWithGamesButtonTitle(uniqueGames: uniqueGames)
+        let dimmed = uniqueGames == 0
         return AnchoredActionConfirm(
             title: OpenWeekEarlyPrompt.openWithGamesConfirmTitle(uniqueGames: uniqueGames),
             message: OpenWeekEarlyPrompt.openWithGamesConfirmMessage,
@@ -165,13 +189,12 @@ struct CommissionerWeekAdminSections: View {
                 )
             }
         ) {
-            Text(title)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .foregroundStyle(PickemsColors.warning)
+            commissionerDestructiveCapsuleLabel(title, dimmed: dimmed)
         }
-        .disabled(uniqueGames == 0)
+        .buttonStyle(.plain)
+        .disabled(dimmed)
         .accessibilityLabel(OpenWeekEarlyPrompt.openWithGamesAccessibilityLabel(uniqueGames: uniqueGames))
-        .listRowBackground(PickemsColors.cardBackground)
+        .modifier(destructiveWeekActionRowStyle)
     }
 
     @ViewBuilder
@@ -468,6 +491,17 @@ struct CommissionerWeekAdminSections: View {
         let weekValue = week?.selectionsPerMember ?? 0
         if weekValue > 0 { return weekValue }
         return max(group.rules.selectionsPerMember, 1)
+    }
+}
+
+private struct DestructiveWeekActionRowStyle: ViewModifier {
+    let insets: EdgeInsets
+
+    func body(content: Content) -> some View {
+        content
+            .listRowInsets(insets)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
     }
 }
 

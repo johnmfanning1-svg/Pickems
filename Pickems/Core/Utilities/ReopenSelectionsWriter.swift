@@ -7,7 +7,7 @@ enum ReopenSelectionsWriter {
         case deadlineSaveFailed
     }
 
-  static func perform(
+    static func perform(
         deadline: Date?,
         groupId: String,
         weekId: String,

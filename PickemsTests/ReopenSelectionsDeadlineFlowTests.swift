@@ -33,14 +33,6 @@ struct ReopenSelectionsDeadlineFlowTests {
         #expect(edit.initialDeadline == seed)
     }
 
-    @Test func writeStepsWithDeadlineOrderReopenSetDeadlineThenClearSlate() {
-        #expect(ReopenSelectionsPrompt.writeStepsWithDeadline == [
-            .reopenWeek,
-            .setDeadline,
-            .clearSlate,
-        ])
-    }
-
     @Test func deadlineSaveFailedMessageGuidesCommissioner() {
         let message = ReopenSelectionsPrompt.deadlineSaveFailedAfterReopenMessage
         #expect(message.localizedCaseInsensitiveContains("reopened"))

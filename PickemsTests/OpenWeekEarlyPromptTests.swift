@@ -4,7 +4,7 @@ import Testing
 
 struct OpenWeekEarlyPromptTests {
     @Test func earlyButtonTitleMatchesConfirmAction() {
-        #expect(OpenWeekEarlyPrompt.earlyButtonTitle == "Lock Selections, Start Pickems")
+        #expect(OpenWeekEarlyPrompt.earlyButtonTitle == "Lock Selections Early, Start Pickems")
         #expect(OpenWeekEarlyPrompt.earlyConfirmTitle.contains("Lock Selections"))
         #expect(OpenWeekEarlyPrompt.earlyConfirmMessage.localizedCaseInsensitiveContains("Selections"))
         #expect(OpenWeekEarlyPrompt.earlyAccessibilityLabel == OpenWeekEarlyPrompt.earlyButtonTitle)
