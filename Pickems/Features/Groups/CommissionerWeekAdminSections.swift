@@ -41,7 +41,7 @@ struct CommissionerWeekAdminSections: View {
     }
 
     var body: some View {
-        weekStatusSection
+        weekStatusSections
         pickemsAdminSection
         tiesSection
     }
@@ -58,64 +58,108 @@ struct CommissionerWeekAdminSections: View {
         )
     }
 
+    private static let thisWeekFooter = """
+    Deadlines, slate, Pickems, and ties for the week you pick. Switching here also switches Selections and Pickems.
+    """
+
     @ViewBuilder
-    private var weekStatusSection: some View {
-        Section {
-            if !displayedWeeks.isEmpty {
-                WeekChipBar(
-                    weeks: displayedWeeks,
-                    selectedWeekId: week?.id,
-                    activeWeekId: activeESPNWeekId,
-                    dateRangeLabel: { appState.groupService.dateRangeLabel(for: $0.id) },
-                    accessibilityHint: "Admin this week. Also switches Selections and Pickems.",
-                    showsCaption: false,
-                    horizontalPadding: 0
-                ) { selected in
-                    selectAdminWeek(selected)
-                }
-                .buttonStyle(.borderless)
-                .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-            }
-
-            if let week {
-                LabeledContent("Status", value: week.status.rawValue.capitalized)
-                    .listRowBackground(PickemsColors.cardBackground)
-
-                if !week.skipsSelection {
-                    selectionDeadlineRow(week)
-                }
-                if week.status == .selection, !week.skipsSelection {
-                    let target = group.rules.expectedSlateSize(
-                        memberCount: max(group.memberCount, 1)
-                    )
-                    if week.isSelectionDeadlinePassed {
-                        openWithGamesRow(week: week, uniqueGames: uniqueGames)
-                        if uniqueGames < target {
-                            Button("Fill Remaining Games") {
-                                appState.picksViewModel.selectionBrowseIntent = .own
-                                present(.adminGameBrowse(week))
-                            }
-                            .listRowBackground(PickemsColors.cardBackground)
-                        }
-                    } else {
-                        lockSelectionsStartPickemsRow(week: week)
-                    }
-                } else if !week.skipsSelection, WeekTransition.canReopenSelections(week) {
-                    reopenSelectionsRow(week)
-                }
-
-                weekManageRows(week)
-            } else if displayedWeeks.isEmpty {
+    private var weekStatusSections: some View {
+        if let week {
+            weekStatusPrimarySection(week)
+            weekStatusDestructiveCapsuleSection(week)
+            weekStatusManageSection(week)
+        } else if displayedWeeks.isEmpty {
+            Section {
                 Text("No active week.")
                     .foregroundStyle(PickemsColors.textSecondary)
                     .listRowBackground(PickemsColors.cardBackground)
+            } header: {
+                Text("This Week")
+            } footer: {
+                Text(Self.thisWeekFooter)
+            }
+        } else {
+            Section {
+                weekChipBar
+            } header: {
+                Text("This Week")
+            } footer: {
+                Text(Self.thisWeekFooter)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var weekChipBar: some View {
+        if !displayedWeeks.isEmpty {
+            WeekChipBar(
+                weeks: displayedWeeks,
+                selectedWeekId: week?.id,
+                activeWeekId: activeESPNWeekId,
+                dateRangeLabel: { appState.groupService.dateRangeLabel(for: $0.id) },
+                accessibilityHint: "Admin this week. Also switches Selections and Pickems.",
+                showsCaption: false,
+                horizontalPadding: 0
+            ) { selected in
+                selectAdminWeek(selected)
+            }
+            .buttonStyle(.borderless)
+            .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
+    }
+
+    @ViewBuilder
+    private func weekStatusPrimarySection(_ week: WeekSummary) -> some View {
+        Section {
+            weekChipBar
+
+            LabeledContent("Status", value: week.status.rawValue.capitalized)
+                .listRowBackground(PickemsColors.cardBackground)
+
+            if !week.skipsSelection {
+                selectionDeadlineRow(week)
             }
         } header: {
             Text("This Week")
+        }
+    }
+
+    @ViewBuilder
+    private func weekStatusDestructiveCapsuleSection(_ week: WeekSummary) -> some View {
+        if week.status == .selection, !week.skipsSelection {
+            Section {
+                if week.isSelectionDeadlinePassed {
+                    openWithGamesRow(week: week, uniqueGames: uniqueGames)
+                } else {
+                    lockSelectionsStartPickemsRow(week: week)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func weekStatusManageSection(_ week: WeekSummary) -> some View {
+        Section {
+            if week.status == .selection, !week.skipsSelection, week.isSelectionDeadlinePassed {
+                let target = group.rules.expectedSlateSize(
+                    memberCount: max(group.memberCount, 1)
+                )
+                if uniqueGames < target {
+                    Button("Fill Remaining Games") {
+                        appState.picksViewModel.selectionBrowseIntent = .own
+                        present(.adminGameBrowse(week))
+                    }
+                    .listRowBackground(PickemsColors.cardBackground)
+                }
+            } else if !week.skipsSelection, WeekTransition.canReopenSelections(week) {
+                reopenSelectionsRow(week)
+            }
+
+            weekManageRows(week)
         } footer: {
-            Text("Deadlines, slate, Pickems, and ties for the week you pick. Switching here also switches Selections and Pickems.")
+            Text(Self.thisWeekFooter)
         }
     }
 
@@ -125,10 +169,12 @@ struct CommissionerWeekAdminSections: View {
         appState.selectObservedWeek(selected)
     }
 
+    private static let destructiveActionVerticalInset: CGFloat = 16
+
     private static let destructiveActionRowInsets = EdgeInsets(
-        top: 4,
+        top: destructiveActionVerticalInset,
         leading: 16,
-        bottom: 12,
+        bottom: destructiveActionVerticalInset,
         trailing: 16
     )
 
