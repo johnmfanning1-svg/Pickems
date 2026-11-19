@@ -5,7 +5,16 @@ struct SeasonLedgerDetailedView: View {
     let members: [GroupMember]
     let currentUserId: String?
 
-    @State private var expandedWeekIds: Set<String> = []
+    @State private var expandedWeekIds: Set<String>
+
+    init(data: SeasonLedgerSeasonData, members: [GroupMember], currentUserId: String?) {
+        self.data = data
+        self.members = members
+        self.currentUserId = currentUserId
+        _expandedWeekIds = State(
+            initialValue: SeasonLedgerWeekExpansion.initialExpandedWeekIds(data: data)
+        )
+    }
 
     private let matchupWidth: CGFloat = 112
     private let metaWidth: CGFloat = 44

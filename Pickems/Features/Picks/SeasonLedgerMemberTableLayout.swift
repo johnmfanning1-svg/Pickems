@@ -36,6 +36,9 @@ enum SeasonLedgerMemberTableLayout {
     static func memberBandContentWidth(memberCount: Int, fixedBandWidth: CGFloat) -> CGFloat {
         CGFloat(memberCount) * fixedBandWidth
     }
+
+    /// Min offset delta before propagating horizontal scroll between pinned bands.
+    static let horizontalScrollSyncEpsilon: CGFloat = 0.5
 }
 
 @Observable
@@ -145,6 +148,7 @@ struct SeasonLedgerSyncedHorizontalMemberScroll<Content: View>: View {
 
     @State private var scrollPosition = ScrollPosition(edge: .leading)
     @State private var isApplyingRemote = false
+    @State private var localOffsetX: CGFloat = 0
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -155,14 +159,20 @@ struct SeasonLedgerSyncedHorizontalMemberScroll<Content: View>: View {
         .onScrollGeometryChange(for: CGFloat.self) { geometry in
             geometry.contentOffset.x
         } action: { _, newX in
+            let clamped = max(0, newX)
+            localOffsetX = clamped
             guard !isApplyingRemote else { return }
-            sync.contentOffsetX = max(0, newX)
+            if abs(sync.contentOffsetX - clamped) >= SeasonLedgerMemberTableLayout.horizontalScrollSyncEpsilon {
+                sync.contentOffsetX = clamped
+            }
         }
         .onChange(of: sync.contentOffsetX) { _, newX in
+            guard abs(localOffsetX - newX) >= SeasonLedgerMemberTableLayout.horizontalScrollSyncEpsilon else { return }
             isApplyingRemote = true
             var updated = scrollPosition
             updated.scrollTo(x: newX)
             scrollPosition = updated
+            localOffsetX = newX
             Task { @MainActor in
                 isApplyingRemote = false
             }
@@ -176,9 +186,13 @@ private struct SeasonLedgerMemberColumnWidthKey: EnvironmentKey {
     static let defaultValue: CGFloat = 0
 }
 
+private enum SeasonLedgerScrollSyncEnvironmentDefault {
+    @MainActor static let shared = SeasonLedgerMemberScrollSync()
+}
+
 private struct SeasonLedgerScrollSyncKey: EnvironmentKey {
     static var defaultValue: SeasonLedgerMemberScrollSync {
-        MainActor.assumeIsolated { SeasonLedgerMemberScrollSync() }
+        MainActor.assumeIsolated { SeasonLedgerScrollSyncEnvironmentDefault.shared }
     }
 }
 
