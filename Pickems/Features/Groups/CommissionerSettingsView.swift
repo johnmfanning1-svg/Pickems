@@ -114,13 +114,13 @@ struct CommissionerSettingsView: View {
             CommissionerWeekAdminSections(
                 group: group,
                 present: { (request: CommissionerSheetRequest) in presentCommissionerSheet(request) },
+                onReopenSelectionsConfirmed: { (week: WeekSummary) in presentReopenSelectionDeadline(week) },
                 managePicks: { (member: GroupMember, week: WeekSummary, slate: [SlateGame]) in
                     capturedPicksMember = member
                     capturedPicksWeek = week
                     capturedPicksSlate = slate
                     picksRoute = CommissionerPicksRoute(memberId: member.id, weekId: week.id)
-                },
-                onReopenSelectionsConfirmed: { (week: WeekSummary) in presentReopenSelectionDeadline(week) }
+                }
             )
             if appState.canOperateWeek, !appState.isCommissioner {
                 coordinatorPickLockSection
