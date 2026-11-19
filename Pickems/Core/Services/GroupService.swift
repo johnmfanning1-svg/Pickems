@@ -582,12 +582,21 @@ final class GroupService {
     /// Commissioner sets the nomination deadline for one league's week.
     /// `groupId` is the league the editor captured. A shared week id must not
     /// copy the deadline onto another league still on screen.
+    /// Unit tests only. When set, replaces the Firestore `setSelectionDeadline` write.
+    var unitTestSetSelectionDeadline: (
+        (String, String, Date, String) async throws -> Void
+    )?
+
     func setSelectionDeadline(
         groupId: String,
         weekId: String,
         deadline: Date,
         setByUserId: String
     ) async throws {
+        if let unitTestSetSelectionDeadline {
+            try await unitTestSetSelectionDeadline(groupId, weekId, deadline, setByUserId)
+            return
+        }
         let setAt = Date()
         let updates: [String: Any] = [
             "selectionDeadline": Timestamp(date: deadline),
@@ -637,7 +646,14 @@ final class GroupService {
     }
 
     /// Commissioner returns the week to `.selection` so members can remake Selections.
+    /// Unit tests only. When set, replaces the Firestore reopen-to-selection write.
+    var unitTestReopenWeekForSelections: ((String, String) async throws -> Void)?
+
     func reopenWeekForSelections(groupId: String, weekId: String) async throws {
+        if let unitTestReopenWeekForSelections {
+            try await unitTestReopenWeekForSelections(groupId, weekId)
+            return
+        }
         guard let group = groups.first(where: { $0.id == groupId }) ?? selectedGroup,
               group.id == groupId else {
             throw GroupError.groupNotFound

@@ -1313,12 +1313,26 @@ final class PickService {
     /// Commissioner-mode slates often have games and no nominations. Those games
     /// are copied to nominations first, then **kept** so Settings / Selections
     /// do not go empty. Member-mode (nominations already exist) still deletes games.
+    /// Unit tests only. When set, replaces the Firestore slate-clear write.
+    var unitTestClearSlateGamesForSelectionReopen: (
+        (String, String, String, String) async throws -> Void
+    )?
+
     func clearSlateGamesForSelectionReopen(
         groupId: String,
         weekId: String,
         commissionerUserId: String,
         commissionerName: String
     ) async throws {
+        if let unitTestClearSlateGamesForSelectionReopen {
+            try await unitTestClearSlateGamesForSelectionReopen(
+                groupId,
+                weekId,
+                commissionerUserId,
+                commissionerName
+            )
+            return
+        }
         let weekRef = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
         let gamesSnap = try await weekRef.collection("games").getDocuments()

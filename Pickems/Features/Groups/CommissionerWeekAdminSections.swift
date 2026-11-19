@@ -98,27 +98,9 @@ struct CommissionerWeekAdminSections: View {
                             }
                             .listRowBackground(PickemsColors.cardBackground)
                         }
-                        Button("Open With \(uniqueGames) Game\(uniqueGames == 1 ? "" : "s")") {
-                            picksVM.openWeekWithCurrentSlate(
-                                groupId: groupId,
-                                week: week,
-                                rules: group.rules,
-                                appState: appState
-                            )
-                        }
-                        .disabled(uniqueGames == 0)
-                        .listRowBackground(PickemsColors.cardBackground)
+                        openWithGamesRow(week: week, uniqueGames: uniqueGames)
                     } else {
-                        Button("Open Week Early") {
-                            picksVM.openWeekWithCurrentSlate(
-                                groupId: groupId,
-                                week: week,
-                                rules: group.rules,
-                                appState: appState
-                            )
-                        }
-                        .disabled(uniqueGames == 0)
-                        .listRowBackground(PickemsColors.cardBackground)
+                        lockSelectionsStartPickemsRow(week: week)
                     }
                 } else if !week.skipsSelection, WeekTransition.canReopenSelections(week) {
                     reopenSelectionsRow(week)
@@ -141,6 +123,55 @@ struct CommissionerWeekAdminSections: View {
         guard selected.id != week?.id else { return }
         PickemsHaptics.selection()
         appState.selectObservedWeek(selected)
+    }
+
+    private func lockSelectionsStartPickemsRow(week: WeekSummary) -> some View {
+        AnchoredActionConfirm(
+            title: OpenWeekEarlyPrompt.earlyConfirmTitle,
+            message: OpenWeekEarlyPrompt.earlyConfirmMessage,
+            confirmTitle: OpenWeekEarlyPrompt.earlyButtonTitle,
+            destructive: true,
+            onConfirm: {
+                picksVM.openWeekWithCurrentSlate(
+                    groupId: groupId,
+                    week: week,
+                    rules: group.rules,
+                    appState: appState
+                )
+            }
+        ) {
+            Text(OpenWeekEarlyPrompt.earlyButtonTitle)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .foregroundStyle(PickemsColors.warning)
+        }
+        .disabled(uniqueGames == 0)
+        .accessibilityLabel(OpenWeekEarlyPrompt.earlyAccessibilityLabel)
+        .listRowBackground(PickemsColors.cardBackground)
+    }
+
+    private func openWithGamesRow(week: WeekSummary, uniqueGames: Int) -> some View {
+        let title = OpenWeekEarlyPrompt.openWithGamesButtonTitle(uniqueGames: uniqueGames)
+        return AnchoredActionConfirm(
+            title: OpenWeekEarlyPrompt.openWithGamesConfirmTitle(uniqueGames: uniqueGames),
+            message: OpenWeekEarlyPrompt.openWithGamesConfirmMessage,
+            confirmTitle: title,
+            destructive: true,
+            onConfirm: {
+                picksVM.openWeekWithCurrentSlate(
+                    groupId: groupId,
+                    week: week,
+                    rules: group.rules,
+                    appState: appState
+                )
+            }
+        ) {
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .foregroundStyle(PickemsColors.warning)
+        }
+        .disabled(uniqueGames == 0)
+        .accessibilityLabel(OpenWeekEarlyPrompt.openWithGamesAccessibilityLabel(uniqueGames: uniqueGames))
+        .listRowBackground(PickemsColors.cardBackground)
     }
 
     @ViewBuilder
