@@ -118,6 +118,7 @@ struct SeasonLedgerPinnedTable<HeaderLeading: View, HeaderMembers: View, Body: V
 
     @ViewBuilder
     private func memberBand<Members: View>(@ViewBuilder members: () -> Members) -> some View {
+        let band = members()
         if usesScroll {
             SeasonLedgerSyncedHorizontalMemberScroll(
                 contentWidth: SeasonLedgerMemberTableLayout.memberBandContentWidth(
@@ -126,11 +127,11 @@ struct SeasonLedgerPinnedTable<HeaderLeading: View, HeaderMembers: View, Body: V
                 ),
                 sync: scrollSync
             ) {
-                members()
+                band
             }
             .accessibilityIdentifier(SeasonLedgerMemberTableLayout.sharedMemberScrollAccessibilityId)
         } else {
-            members()
+            band
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -259,7 +260,8 @@ struct SeasonLedgerTableBodyBand<Leading: View, Members: View>: View {
     @Environment(\.seasonLedgerFixedMemberBandWidth) private var fixedBandWidth
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
+        let memberBand = members()
+        return HStack(alignment: .top, spacing: 0) {
             leading()
                 .frame(width: leadingWidth, alignment: .leading)
             if scrollsHorizontally {
@@ -270,10 +272,10 @@ struct SeasonLedgerTableBodyBand<Leading: View, Members: View>: View {
                     ),
                     sync: scrollSync
                 ) {
-                    members()
+                    memberBand
                 }
             } else {
-                members()
+                memberBand
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
