@@ -227,8 +227,8 @@ struct CommissionerScoringSection: View {
             captured: nil,
             current: service.currentWeek,
             currentGroupId: service.currentWeekGroupId,
-            available: service.availableWeeks,
-            availableBelongsToPin: service.availableWeeksBelong(to: groupId)
+            available: service.commissionerAvailableWeeks,
+            availableBelongsToPin: service.commissionerAvailableWeeksBelong(to: groupId)
         )
     }
 

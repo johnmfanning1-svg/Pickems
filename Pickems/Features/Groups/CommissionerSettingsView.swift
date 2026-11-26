@@ -621,8 +621,8 @@ struct CommissionerSettingsView: View {
             captured: capturedPicksWeek,
             current: service.currentWeek,
             currentGroupId: service.currentWeekGroupId,
-            available: service.availableWeeks,
-            availableBelongsToPin: service.availableWeeksBelong(to: groupId)
+            available: service.commissionerAvailableWeeks,
+            availableBelongsToPin: service.commissionerAvailableWeeksBelong(to: groupId)
         )
     }
 
@@ -712,7 +712,7 @@ struct CommissionerSettingsView: View {
     }
 
     private func loadCommissionerWeekContext() async {
-        await appState.groupService.loadAvailableWeeks(groupId: groupId)
+        await appState.groupService.loadCommissionerAvailableWeeks(groupId: groupId)
         await appState.picksViewModel.ensureTeamRanks(appState: appState)
     }
 
@@ -728,8 +728,8 @@ struct CommissionerSettingsView: View {
         if let weekId = target.weekId,
            service.selectedGroup?.id == groupId,
            service.currentWeek?.id != weekId,
-           service.availableWeeksBelong(to: groupId),
-           let week = service.availableWeeks.first(where: { $0.id == weekId }) {
+           service.commissionerAvailableWeeksBelong(to: groupId),
+           let week = service.commissionerAvailableWeeks.first(where: { $0.id == weekId }) {
             appState.selectObservedWeek(week)
         }
         let weekId = target.weekId ?? service.currentWeek?.id
@@ -792,8 +792,8 @@ struct CommissionerSettingsView: View {
             captured: nil,
             current: service.currentWeek,
             currentGroupId: service.currentWeekGroupId,
-            available: service.availableWeeks,
-            availableBelongsToPin: service.availableWeeksBelong(to: groupId)
+            available: service.commissionerAvailableWeeks,
+            availableBelongsToPin: service.commissionerAvailableWeeksBelong(to: groupId)
         )
     }
 
@@ -1041,8 +1041,8 @@ struct CommissionerSettingsView: View {
         if service.currentWeekGroupId == groupId, let current = service.currentWeek {
             weeks.append(current)
         }
-        if service.availableWeeksBelong(to: groupId) {
-            weeks.append(contentsOf: service.availableWeeks)
+        if service.commissionerAvailableWeeksBelong(to: groupId) {
+            weeks.append(contentsOf: service.commissionerAvailableWeeks)
         }
         return weeks
     }

@@ -20,8 +20,10 @@ final class GroupService {
     var availableWeeks: [WeekSummary] = []
     /// League `availableWeeks` was loaded for. Week ids are shared across leagues,
     /// so a deadline mirror must not treat a matching id as this list.
-    @ObservationIgnored
-    private var availableWeeksGroupId: String?
+    private(set) var availableWeeksGroupId: String?
+    /// Commissioner Settings chip list — separate from Picks so a pin does not race the live selection.
+    var commissionerAvailableWeeks: [WeekSummary] = []
+    private(set) var commissionerAvailableWeeksGroupId: String?
     var seasonDateRangeByWeekId: [String: String] = [:]
     var cfbWeek: CFBWeekInfo?
     var seasonArchives: [SeasonArchive] = []
@@ -66,6 +68,10 @@ final class GroupService {
     private var deepLinkWeekHold: String?
     @ObservationIgnored
     private var deepLinkWeekApplyInFlight = false
+    @ObservationIgnored
+    private var availableWeeksLoadToken = 0
+    @ObservationIgnored
+    private var commissionerAvailableWeeksLoadToken = 0
 
     func loadGroups(for userId: String) {
         groupListener?.remove()
@@ -187,6 +193,7 @@ final class GroupService {
             deepLinkWeekApplyInFlight = false
             weekSelectionPinned = false
         }
+        invalidateAvailableWeeksLoads()
         availableWeeks = []
         availableWeeksGroupId = nil
         seasonDateRangeByWeekId = [:]
@@ -268,6 +275,10 @@ final class GroupService {
         availableWeeksGroupId == groupId
     }
 
+    func commissionerAvailableWeeksBelong(to groupId: String) -> Bool {
+        commissionerAvailableWeeksGroupId == groupId
+    }
+
     /// Switch the observed week for the selected group (Picks week tabs). Defaults stay on the active ESPN week.
     func selectWeek(weekId: String) async {
         guard let groupId = selectedGroup?.id else { return }
@@ -293,49 +304,108 @@ final class GroupService {
         )
     }
 
+    /// Rules and member count for the explicit `groupId` being loaded — not only
+    /// the live selection, so a pinned Commissioner Settings sheet can render chips.
+    private func leagueForWeekLoading(groupId: String) -> PickemGroup? {
+        if let selectedGroup, selectedGroup.id == groupId { return selectedGroup }
+        return groups.first { $0.id == groupId }
+    }
+
+    private func invalidateAvailableWeeksLoads() {
+        availableWeeksLoadToken += 1
+    }
+
+    private func beginAvailableWeeksLoad() -> Int {
+        availableWeeksLoadToken += 1
+        return availableWeeksLoadToken
+    }
+
+    private func beginCommissionerAvailableWeeksLoad() -> Int {
+        commissionerAvailableWeeksLoadToken += 1
+        return commissionerAvailableWeeksLoadToken
+    }
+
+    private func sortedAvailableWeeksForChipBar(groupId: String) async throws -> [WeekSummary] {
+        var weeks = try await fetchPastWeeks(groupId: groupId, limit: 20)
+        if observedGroupId == groupId,
+           let current = currentWeek,
+           !weeks.contains(where: { $0.id == current.id }) {
+            weeks.append(current)
+        }
+        let year = currentWeek?.seasonYear
+            ?? cfbWeek?.seasonYear
+            ?? CFBSeasonCalendar.seasonYear()
+        let calendarWeeks = await ESPNService.shared.seasonWeeks(year: year)
+        seasonDateRangeByWeekId = Dictionary(
+            uniqueKeysWithValues: calendarWeeks.map { ($0.id, $0.dateRangeLabel) }
+        )
+        let league = leagueForWeekLoading(groupId: groupId)
+        let rules = league?.rules ?? .default
+        let memberCount = max(league?.memberCount ?? 1, 1)
+        var byId = Dictionary(uniqueKeysWithValues: weeks.map { ($0.id, $0) })
+        for slot in calendarWeeks where byId[slot.id] == nil {
+            byId[slot.id] = CFBWeekSync.makeWeekSummary(
+                id: slot.id,
+                info: CFBWeekInfo(
+                    seasonYear: slot.seasonYear,
+                    weekNumber: slot.espnWeekNumber,
+                    seasonType: cfbWeek?.seasonType ?? 2,
+                    label: slot.dateRangeLabel
+                ),
+                rules: rules,
+                memberCount: memberCount
+            )
+        }
+        return Self.sortedWeeksAscending(Array(byId.values))
+    }
+
     /// Loads weeks for the horizontal Picks tab bar, filling future ESPN weeks that are not minted yet.
     func loadAvailableWeeks(groupId: String) async {
+        let requestToken = beginAvailableWeeksLoad()
         do {
-            var weeks = try await fetchPastWeeks(groupId: groupId, limit: 20)
-            if observedGroupId == groupId,
-               let current = currentWeek,
-               !weeks.contains(where: { $0.id == current.id }) {
-                weeks.append(current)
-            }
-            let year = currentWeek?.seasonYear
-                ?? cfbWeek?.seasonYear
-                ?? CFBSeasonCalendar.seasonYear()
-            let calendarWeeks = await ESPNService.shared.seasonWeeks(year: year)
-            seasonDateRangeByWeekId = Dictionary(
-                uniqueKeysWithValues: calendarWeeks.map { ($0.id, $0.dateRangeLabel) }
-            )
-            let rules = selectedGroup?.rules ?? .default
-            let memberCount = max(selectedGroup?.memberIds.count ?? members.count, 1)
-            var byId = Dictionary(uniqueKeysWithValues: weeks.map { ($0.id, $0) })
-            for slot in calendarWeeks where byId[slot.id] == nil {
-                byId[slot.id] = CFBWeekSync.makeWeekSummary(
-                    id: slot.id,
-                    info: CFBWeekInfo(
-                        seasonYear: slot.seasonYear,
-                        weekNumber: slot.espnWeekNumber,
-                        seasonType: cfbWeek?.seasonType ?? 2,
-                        label: slot.dateRangeLabel
-                    ),
-                    rules: rules,
-                    memberCount: memberCount
-                )
-            }
-            guard selectedGroup?.id == groupId else { return }
-            availableWeeks = Self.sortedWeeksAscending(Array(byId.values))
+            let sorted = try await sortedAvailableWeeksForChipBar(groupId: groupId)
+            guard AvailableWeeksLoadCommit.shouldCommit(
+                requestToken: requestToken,
+                latestToken: availableWeeksLoadToken
+            ), selectedGroup?.id == groupId else { return }
+            availableWeeks = sorted
             availableWeeksGroupId = groupId
         } catch {
-            guard selectedGroup?.id == groupId else { return }
+            guard AvailableWeeksLoadCommit.shouldCommit(
+                requestToken: requestToken,
+                latestToken: availableWeeksLoadToken
+            ), selectedGroup?.id == groupId else { return }
             if let current = currentWeek, observedGroupId == groupId {
                 availableWeeks = [current]
             } else {
                 availableWeeks = []
             }
             availableWeeksGroupId = groupId
+        }
+    }
+
+    /// Week chips for Commissioner Settings on the pinned `groupId` (not the shared Picks slot).
+    func loadCommissionerAvailableWeeks(groupId: String) async {
+        let requestToken = beginCommissionerAvailableWeeksLoad()
+        do {
+            let sorted = try await sortedAvailableWeeksForChipBar(groupId: groupId)
+            guard AvailableWeeksLoadCommit.shouldCommit(
+                requestToken: requestToken,
+                latestToken: commissionerAvailableWeeksLoadToken
+            ) else { return }
+            commissionerAvailableWeeks = sorted
+            commissionerAvailableWeeksGroupId = groupId
+        } catch {
+            guard AvailableWeeksLoadCommit.shouldCommit(
+                requestToken: requestToken,
+                latestToken: commissionerAvailableWeeksLoadToken
+            ) else { return }
+            if let current = currentWeek, observedGroupId == groupId {
+                commissionerAvailableWeeks = [current]
+            } else {
+                commissionerAvailableWeeks = []
+            }
+            commissionerAvailableWeeksGroupId = groupId
         }
     }
 

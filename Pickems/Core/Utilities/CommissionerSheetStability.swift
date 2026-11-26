@@ -150,11 +150,32 @@ enum CommissionerPinnedLeague {
         espnWeekId ?? pinnedWeekId
     }
 
+    /// Commissioner Settings week carousel while `availableWeeks` loads for the pin.
+    enum WeekChipBarState: Equatable {
+        case loading
+        case empty
+        case ready([WeekSummary])
+
+        /// `availableWeeks` must be read every evaluation so Observation tracks it
+        /// even before `availableWeeksBelong` becomes true.
+        static func resolve(belongsToPin: Bool, availableWeeks: [WeekSummary]) -> WeekChipBarState {
+            guard belongsToPin else { return .loading }
+            return availableWeeks.isEmpty ? .empty : .ready(availableWeeks)
+        }
+    }
+
     /// Selections this member owes. A week value of 0 was never snapshotted.
     /// Fall back to the rules pinned on this sheet, not the live selected league.
     static func selectionsPerMember(weekValue: Int, pinnedRulesValue: Int) -> Int {
         let resolved = weekValue > 0 ? weekValue : pinnedRulesValue
         return max(resolved, 1)
+    }
+}
+
+/// Guards async week-list loads so an older request cannot overwrite a newer league.
+enum AvailableWeeksLoadCommit {
+    static func shouldCommit(requestToken: Int, latestToken: Int) -> Bool {
+        requestToken == latestToken
     }
 }
 

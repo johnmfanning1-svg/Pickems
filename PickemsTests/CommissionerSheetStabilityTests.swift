@@ -193,6 +193,39 @@ struct CommissionerSheetStabilityTests {
         #expect(resolved.spread == 6.5)
     }
 
+    @Test func staleWeekLoadDoesNotCommit() {
+        #expect(!AvailableWeeksLoadCommit.shouldCommit(requestToken: 1, latestToken: 2))
+    }
+
+    @Test func freshestWeekLoadCommits() {
+        #expect(AvailableWeeksLoadCommit.shouldCommit(requestToken: 2, latestToken: 2))
+    }
+
+    @Test func weekChipBarStaysLoadingUntilWeeksBelongToPin() {
+        let loading = CommissionerPinnedLeague.WeekChipBarState.resolve(
+            belongsToPin: false,
+            availableWeeks: [week(deadline: 1)]
+        )
+        #expect(loading == .loading)
+    }
+
+    @Test func weekChipBarShowsEmptyWhenThePinHasNoWeeks() {
+        let empty = CommissionerPinnedLeague.WeekChipBarState.resolve(
+            belongsToPin: true,
+            availableWeeks: []
+        )
+        #expect(empty == .empty)
+    }
+
+    @Test func weekChipBarShowsChipsWhenWeeksBelongToPin() {
+        let sample = week(deadline: 42)
+        let ready = CommissionerPinnedLeague.WeekChipBarState.resolve(
+            belongsToPin: true,
+            availableWeeks: [sample]
+        )
+        #expect(ready == .ready([sample]))
+    }
+
     private func week(deadline: TimeInterval) -> WeekSummary {
         WeekSummary(
             id: "2026-W7",
