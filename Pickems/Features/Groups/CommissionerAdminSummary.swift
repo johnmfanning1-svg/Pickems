@@ -39,10 +39,17 @@ enum CommissionerAdminSummary {
     /// Selection deadline row. Nil while Selections are open and no deadline is set
     /// (the screen shows "Set Selection Deadline" instead). Closed weeks use the
     /// same static copy as the deadline card, never a countdown.
-    static func selectionDeadlineSummary(week: WeekSummary, now: Date = Date()) -> String? {
-        switch SelectionDeadlineDisplayResolver.resolve(week: week, now: now) {
+    static func selectionDeadlineSummary(
+        week: WeekSummary,
+        rules: GroupRules? = nil,
+        now: Date = Date()
+    ) -> String? {
+        switch SelectionDeadlineDisplayResolver.resolve(week: week, rules: rules, now: now) {
         case .open(let deadline):
             return deadlineValue(deadline)
+        case .openFromLeagueDefault(let deadline):
+            let label = PickDeadlineCalculator.lockTimeLabel(for: deadline)
+            return "League default · \(label)"
         case .locked(let copy):
             return copy.compact
         case .needsDeadline, nil:
@@ -60,13 +67,17 @@ enum CommissionerSelectionDeadlineRow: Equatable {
     case setPrompt
     case hidden
 
-    static func resolve(week: WeekSummary, now: Date = Date()) -> Self {
+    static func resolve(week: WeekSummary, rules: GroupRules? = nil, now: Date = Date()) -> Self {
         if WeekTransition.canReopenSelections(week) {
             return .hidden
         }
-        switch SelectionDeadlineDisplayResolver.resolve(week: week, now: now) {
-        case .open, .locked:
-            guard let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: week, now: now) else {
+        switch SelectionDeadlineDisplayResolver.resolve(week: week, rules: rules, now: now) {
+        case .open, .openFromLeagueDefault, .locked:
+            guard let summary = CommissionerAdminSummary.selectionDeadlineSummary(
+                week: week,
+                rules: rules,
+                now: now
+            ) else {
                 return .hidden
             }
             return .editor(summary)
@@ -74,6 +85,7 @@ enum CommissionerSelectionDeadlineRow: Equatable {
             let prompt = WorkspaceDeadlineDisplay.commissionerPrompt(
                 kind: .selections,
                 week: week,
+                rules: rules,
                 isCommissioner: true,
                 now: now
             )

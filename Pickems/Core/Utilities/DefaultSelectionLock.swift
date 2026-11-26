@@ -201,6 +201,30 @@ extension CFBWeekCalendar {
     }
 }
 
+enum DefaultSelectionLockRulesSave {
+    /// Minted selection weeks that should receive the league default after rules save.
+    static func weeksToStamp(
+        among weeks: [WeekSummary],
+        lock: DefaultSelectionLock,
+        rules: GroupRules,
+        now: Date = Date()
+    ) -> [(week: WeekSummary, deadline: Date)] {
+        guard lock.enabled, rules.selectionMode == .member else { return [] }
+        return weeks.compactMap { week in
+            guard week.status == .selection,
+                  !week.skipsSelection,
+                  week.selectionDeadline == nil,
+                  let deadline = DefaultSelectionLockMath.futureDeadline(
+                      for: lock,
+                      seasonYear: week.seasonYear,
+                      weekNumber: week.weekNumber,
+                      now: now
+                  ) else { return nil }
+            return (week, deadline)
+        }
+    }
+}
+
 enum DefaultSelectionLockStamp {
     static let setBy = "default"
 

@@ -166,6 +166,114 @@ struct DefaultSelectionLockTests {
         #expect(week.selectionDeadlineSetBy == "commish")
     }
 
+    @Test func rulesSaveStampCandidatesCoversMultipleSelectionWeeks() {
+        var rules = GroupRules.default
+        let lock = DefaultSelectionLock(
+            enabled: true,
+            weekday: 4,
+            hour: 19,
+            minute: 0,
+            timeZone: "America/New_York"
+        )
+        rules.defaultSelectionLock = lock
+        let current = selectionWeek(weekNumber: 6)
+        let upcoming = selectionWeek(weekNumber: 14)
+        let stamped = selectionWeek(
+            weekNumber: 7,
+            selectionDeadline: Date(timeIntervalSince1970: 1),
+            selectionDeadlineSetBy: "commish"
+        )
+        let skipWeekZero = weekZeroMintedAsPicking()
+        let targets = DefaultSelectionLockRulesSave.weeksToStamp(
+            among: [current, upcoming, stamped, skipWeekZero],
+            lock: lock,
+            rules: rules,
+            now: Self.beforeSep16
+        )
+        let ids = Set(targets.map { $0.week.id })
+        #expect(ids == Set(["2026-W6", "2026-W14"]))
+        #expect(targets.allSatisfy { $0.week.selectionDeadlineSetBy == nil })
+    }
+
+    @Test func rulesSaveStampCandidatesSkipPastInstant() {
+        var rules = GroupRules.default
+        let lock = DefaultSelectionLock(
+            enabled: true,
+            weekday: 3,
+            hour: 23,
+            minute: 59,
+            timeZone: "America/New_York"
+        )
+        rules.defaultSelectionLock = lock
+        let week = selectionWeek(weekNumber: 3)
+        var eastern = Calendar(identifier: .gregorian)
+        eastern.timeZone = TimeZone(identifier: "America/New_York")!
+        let after = eastern.date(from: DateComponents(year: 2026, month: 9, day: 17, hour: 0))!
+        #expect(DefaultSelectionLockRulesSave.weeksToStamp(
+            among: [week],
+            lock: lock,
+            rules: rules,
+            now: after
+        ).isEmpty)
+    }
+
+    @Test func rulesSaveStampCandidatesSkipSkipsSelection() {
+        var rules = GroupRules.default
+        rules.defaultSelectionLock = DefaultSelectionLock(
+            enabled: true,
+            weekday: 3,
+            hour: 23,
+            minute: 59,
+            timeZone: "America/New_York"
+        )
+        let week = weekZeroMintedAsPicking()
+        #expect(week.skipsSelection)
+        #expect(DefaultSelectionLockRulesSave.weeksToStamp(
+            among: [week],
+            lock: rules.defaultSelectionLock!,
+            rules: rules,
+            now: Self.beforeSep16
+        ).isEmpty)
+    }
+
+    private func selectionWeek(
+        weekNumber: Int,
+        selectionDeadline: Date? = nil,
+        selectionDeadlineSetBy: String? = nil
+    ) -> WeekSummary {
+        WeekSummary(
+            id: "2026-W\(weekNumber)",
+            seasonYear: 2026,
+            weekNumber: weekNumber,
+            status: .selection,
+            slateSize: 12,
+            selectionMode: .member,
+            selectionsPerMember: 3,
+            lockedAt: nil,
+            pickDeadline: nil,
+            nominationCount: 0,
+            selectionDeadline: selectionDeadline,
+            selectionDeadlineSetAt: selectionDeadline == nil ? nil : Date(),
+            selectionDeadlineSetBy: selectionDeadlineSetBy
+        )
+    }
+
+    private func weekZeroMintedAsPicking() -> WeekSummary {
+        WeekSummary(
+            id: "2026-W0",
+            seasonYear: 2026,
+            weekNumber: 0,
+            status: .selection,
+            slateSize: 12,
+            selectionMode: .member,
+            selectionsPerMember: 3,
+            lockedAt: nil,
+            pickDeadline: nil,
+            nominationCount: 0,
+            slateSource: CFBWeekCalendar.weekZeroSlateSource
+        )
+    }
+
     @Test func parityThursdayTableMatchesTypeScriptWeeks() {
         let lock = DefaultSelectionLock(enabled: true, weekday: 4, hour: 19, minute: 0, timeZone: "America/New_York")
         let cases: [(Int, Int, Int)] = [

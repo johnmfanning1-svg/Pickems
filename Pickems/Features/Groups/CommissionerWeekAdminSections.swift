@@ -354,9 +354,10 @@ struct CommissionerWeekAdminSections: View {
 
     @ViewBuilder
     private func selectionDeadlineRow(_ week: WeekSummary) -> some View {
-        switch CommissionerSelectionDeadlineRow.resolve(week: week) {
+        let rules = group.rules
+        switch CommissionerSelectionDeadlineRow.resolve(week: week, rules: rules) {
         case .editor(let summary):
-            let counting = SelectionDeadlineDisplayResolver.resolve(week: week)?.isCountingDown == true
+            let counting = SelectionDeadlineDisplayResolver.resolve(week: week, rules: rules)?.isCountingDown == true
             selectionDeadlineEditor(
                 summary: summary,
                 systemImage: counting ? "clock" : "lock",

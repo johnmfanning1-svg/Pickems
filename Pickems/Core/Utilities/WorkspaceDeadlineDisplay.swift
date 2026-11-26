@@ -29,7 +29,7 @@ struct WorkspaceDeadlineSnapshot: Equatable {
 
     var hasContent: Bool {
         switch selectionState {
-        case .open, .locked:
+        case .open, .openFromLeagueDefault, .locked:
             return true
         case .needsDeadline:
             return showSetSelectionDeadlinePrompt || pickemsDeadline != nil
@@ -41,7 +41,7 @@ struct WorkspaceDeadlineSnapshot: Equatable {
     /// A Selection countdown or a Pickems lock is still moving.
     /// A locked Selections row does not keep the clock alive by itself.
     var clockIsLive: Bool {
-        if case .open = selectionState { return true }
+        if selectionState?.openDeadline != nil { return true }
         return pickemsDeadline != nil
     }
 
@@ -60,7 +60,7 @@ struct WorkspaceDeadlineSnapshot: Equatable {
         guard allowsCommissionerEdits else { return false }
         switch kind {
         case .selections:
-            if case .open = selectionState, selectionDeadline != nil { return true }
+            if selectionState?.openDeadline != nil, selectionDeadline != nil { return true }
             return showSetSelectionDeadlinePrompt
         case .pickems:
             if hasStoredPickemsDeadline, pickemsDeadline != nil { return true }
@@ -95,17 +95,19 @@ enum WorkspaceDeadlineDisplay {
         week: WeekSummary,
         isCommissioner: Bool,
         games: [SlateGame],
+        rules: GroupRules? = nil,
         now: Date = Date()
     ) -> WorkspaceDeadlineSnapshot {
-        let selectionState = SelectionDeadlineDisplayResolver.resolve(week: week, now: now)
+        let selectionState = SelectionDeadlineDisplayResolver.resolve(week: week, rules: rules, now: now)
         // Stored deadline, including after Selections close. Count down only when `selectionState` is `.open`.
-        let selection: Date? = week.skipsSelection ? nil : week.selectionDeadline
+        let selection: Date? = week.skipsSelection ? nil : (week.selectionDeadline ?? selectionState?.openDeadline)
         let pickemsOpen = WeekTransition.arePickemsOpen(week)
         let rollingLive = pickemsOpen && week.isRollingLock
         let pickems = pickemsDeadline(week: week, games: games, now: now)
         let ask: WorkspaceDeadlineKind? = commissionerPrompt(
             kind: kind,
             week: week,
+            rules: rules,
             isCommissioner: isCommissioner,
             now: now
         )
@@ -132,13 +134,14 @@ enum WorkspaceDeadlineDisplay {
     static func commissionerPrompt(
         kind: WorkspaceDeadlineKind,
         week: WeekSummary,
+        rules: GroupRules? = nil,
         isCommissioner: Bool,
         now: Date = Date()
     ) -> WorkspaceDeadlineKind? {
         guard isCommissioner else { return nil }
         switch kind {
         case .selections:
-            let needsSelectionDeadline = SelectionDeadlineDisplayResolver.resolve(week: week, now: now) == .needsDeadline
+            let needsSelectionDeadline = SelectionDeadlineDisplayResolver.resolve(week: week, rules: rules, now: now) == .needsDeadline
             return needsSelectionDeadline ? .selections : nil
         case .pickems:
             let needsPickemsDeadline: Bool = week.status == .picking
