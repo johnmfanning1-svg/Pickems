@@ -555,7 +555,12 @@ final class GroupService {
         // A stale sync for the previous league must not install its week over the
         // one on screen. Matching week ids are not the same document.
         guard selectedGroup?.id == groupId else { return }
-        if weekSelectionPinned, let current = currentWeek, current.id != week.id {
+        guard WeekObservationSnapshotPolicy.shouldApply(
+            weekSelectionPinned: weekSelectionPinned,
+            currentWeekId: currentWeek?.id,
+            snapshotWeekId: week.id,
+            observedWeekId: observedWeekId
+        ) else {
             return
         }
         // Same week id in another league is a different document. Replace it.
@@ -2108,7 +2113,12 @@ final class GroupService {
                     guard let snapshot, snapshot.exists else { return }
                     do {
                         let week = try snapshot.data(as: WeekSummary.self)
-                        if self.weekSelectionPinned, let current = self.currentWeek, current.id != week.id {
+                        guard WeekObservationSnapshotPolicy.shouldApply(
+                            weekSelectionPinned: self.weekSelectionPinned,
+                            currentWeekId: self.currentWeek?.id,
+                            snapshotWeekId: week.id,
+                            observedWeekId: weekId
+                        ) else {
                             return
                         }
                         self.currentWeek = week

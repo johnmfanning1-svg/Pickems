@@ -236,33 +236,58 @@ struct CommissionerSheetStabilityTests {
             weeksBelongToPin: true
         )
         #expect(resolved?.id == "2026-W12")
-        #expect(!CommissionerAdminWeekSelection.shouldApplyLoadedWeekToObservation(
-            userChosenWeekId: "2026-W12",
-            proposedWeekId: "2026-W7"
-        ))
     }
 
     @Test func chipHighlightMatchesContentWeekId() {
-        let highlight = CommissionerAdminWeekSelection.chipHighlightWeekId(
+        let live = week(id: "2026-W7", number: 7, deadline: 20)
+        let browsed = week(id: "2026-W14", number: 14, deadline: 15)
+        let fallbackBody = CommissionerAdminWeekSelection.displayedWeek(
             userChosenWeekId: "2026-W14",
-            contentWeekId: "2026-W7"
+            observedWeek: live,
+            commissionerWeeks: [browsed, live],
+            weeksBelongToPin: false
         )
-        #expect(highlight == "2026-W14")
-        let fallback = CommissionerAdminWeekSelection.chipHighlightWeekId(
-            userChosenWeekId: nil,
-            contentWeekId: "2026-W7"
+        #expect(fallbackBody?.id == live.id)
+
+        let pendingBody = CommissionerAdminWeekSelection.displayedWeek(
+            userChosenWeekId: "2026-W14",
+            observedWeek: live,
+            commissionerWeeks: [browsed, live],
+            weeksBelongToPin: true
         )
-        #expect(fallback == "2026-W7")
+        #expect(pendingBody?.id == "2026-W14")
+        #expect(pendingBody?.id != live.id)
+    }
+
+    @Test func adminRowsWaitUntilObservationMatchesDisplayedWeek() {
+        #expect(!CommissionerAdminWeekSelection.adminWeekMatchesObservation(
+            adminWeekId: "2026-W14",
+            observedWeekId: "2026-W7"
+        ))
+        #expect(CommissionerAdminWeekSelection.adminWeekMatchesObservation(
+            adminWeekId: "2026-W12",
+            observedWeekId: "2026-W12"
+        ))
+    }
+
+    @Test func pinnedListenerAcceptsSnapshotForObservedWeekWhenSeedMissed() {
+        #expect(WeekObservationSnapshotPolicy.shouldApply(
+            weekSelectionPinned: true,
+            currentWeekId: "2026-W13",
+            snapshotWeekId: "2026-W12",
+            observedWeekId: "2026-W12"
+        ))
+        #expect(!WeekObservationSnapshotPolicy.shouldApply(
+            weekSelectionPinned: true,
+            currentWeekId: "2026-W13",
+            snapshotWeekId: "2026-W7",
+            observedWeekId: "2026-W12"
+        ))
     }
 
     @Test func weekListScrollStaysPutAfterUserTap() {
         #expect(!WeekChipBarScrollSync.shouldScrollOnWeekListChange(userHasChosenWeek: true))
         #expect(WeekChipBarScrollSync.shouldScrollOnWeekListChange(userHasChosenWeek: false))
-    }
-
-    @Test func scrollToCenterDoesNotChangeSelectionTarget() {
-        #expect(WeekChipBarScrollSync.scrollTargetWeekId(selectedWeekId: "2026-W12") == "2026-W12")
-        #expect(WeekChipBarScrollSync.scrollTargetWeekId(selectedWeekId: nil) == nil)
     }
 
     private func week(

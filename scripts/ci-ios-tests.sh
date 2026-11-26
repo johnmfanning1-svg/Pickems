@@ -39,7 +39,7 @@ set -e
 # Ledger refresh banner adds 4. Reopen Selections confirm adds 4.
 # ReopenSelectionsWriter success-path tests replace write-order constant (+1 net). Do not lower this.
 # Season Ledger polish adds 4 (collapsed weeks + column width).
-MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-815}"
+MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-816}"
 grep -iE "error:|Test case .* failed|\*\* TEST" "$OUT/logs/test.log" | tail -n 200 || true
 summary="$OUT/logs/test-summary.json"
 if ! xcrun xcresulttool get test-results summary --path "$OUT/TestResults.xcresult" --format json > "$summary" 2>"$OUT/logs/xcresulttool.err"; then

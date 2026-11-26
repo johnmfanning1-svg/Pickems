@@ -36,7 +36,7 @@ struct WeekChipBar: View {
                 }
                 .onAppear { scrollToSelected(proxy) }
                 .onChange(of: selectedWeekId) { _, newId in
-                    guard WeekChipBarScrollSync.scrollTargetWeekId(selectedWeekId: newId) != nil else { return }
+                    guard newId != nil else { return }
                     scrollToSelected(proxy)
                 }
                 .onChange(of: weeks.map(\.id)) { _, _ in

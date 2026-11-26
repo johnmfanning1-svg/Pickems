@@ -182,7 +182,7 @@ enum AvailableWeeksLoadCommit {
 /// Commissioner Settings week chips share the admin section's week. The user
 /// can pick a chip before Firestore/ESPN catch up; that choice wins over a late load.
 enum CommissionerAdminWeekSelection {
-     /// Week for admin rows and chip highlight. `userChosenWeekId` is set synchronously on tap.
+    /// Week for admin rows and chip highlight. `userChosenWeekId` is set synchronously on tap.
     static func displayedWeek(
         userChosenWeekId: String?,
         observedWeek: WeekSummary?,
@@ -198,20 +198,30 @@ enum CommissionerAdminWeekSelection {
         return observedWeek
     }
 
-    static func chipHighlightWeekId(
-        userChosenWeekId: String?,
-        contentWeekId: String?
-    ) -> String? {
-        userChosenWeekId ?? contentWeekId
-    }
-
-    /// Late commissioner week-list load must not replace an in-flight user browse.
-    static func shouldApplyLoadedWeekToObservation(
-        userChosenWeekId: String?,
-        proposedWeekId: String
+    /// Commissioner Settings rows that write week state must not run until observation
+    /// matches the week shown in the chip and section body.
+    static func adminWeekMatchesObservation(
+        adminWeekId: String?,
+        observedWeekId: String?
     ) -> Bool {
-        guard let userChosenWeekId else { return true }
-        return userChosenWeekId == proposedWeekId
+        guard let adminWeekId, let observedWeekId else { return false }
+        return adminWeekId == observedWeekId
+    }
+}
+
+/// Pinned week browsing can leave `currentWeek` stale until the new listener fires.
+/// Snapshots for the week we are observing must install even when the seed missed.
+enum WeekObservationSnapshotPolicy {
+    static func shouldApply(
+        weekSelectionPinned: Bool,
+        currentWeekId: String?,
+        snapshotWeekId: String,
+        observedWeekId: String?
+    ) -> Bool {
+        guard weekSelectionPinned else { return true }
+        if snapshotWeekId == observedWeekId { return true }
+        if let currentWeekId, currentWeekId != snapshotWeekId { return false }
+        return true
     }
 }
 
@@ -220,10 +230,6 @@ enum CommissionerAdminWeekSelection {
 enum WeekChipBarScrollSync {
     static func shouldScrollOnWeekListChange(userHasChosenWeek: Bool) -> Bool {
         !userHasChosenWeek
-    }
-
-    static func scrollTargetWeekId(selectedWeekId: String?) -> String? {
-        selectedWeekId
     }
 }
 
