@@ -40,9 +40,10 @@ struct LeaguePickemsEntryView: View {
                                 ? "Each game's picks show here at that game's kickoff. Later games stay hidden."
                                 : "Everyone's Pickems show here after lock. Picks stay hidden until then."
                         )
-                    } else if let rules = appState.groupService.selectedGroup?.rules,
-                              let state = SelectionDeadlineDisplayResolver.resolve(week: week, rules: rules),
-                              state.openDeadline != nil {
+                    } else if let state = SelectionDeadlineDisplayResolver.resolve(
+                        week: week,
+                        rules: appState.groupService.selectedGroup?.rules
+                    ), week.selectionDeadline != nil || state.isLeagueDefault {
                         selectionDeadlineFallback(state)
                     } else {
                         EmptyStateView(

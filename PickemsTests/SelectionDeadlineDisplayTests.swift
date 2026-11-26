@@ -248,6 +248,25 @@ struct SelectionDeadlineDisplayTests {
         #expect(snapshot.clockIsLive)
     }
 
+    @Test func leaguePickemsEntryShowsLockedAfterStoredDeadlinePassed() {
+        let due = now.addingTimeInterval(-60)
+        let week = week(status: .selection, selectionDeadline: due)
+        let state = SelectionDeadlineDisplayResolver.resolve(week: week, rules: nil, now: now)
+        guard case .locked = state else {
+            Issue.record("passed stored deadline should resolve to locked for League Pickems row")
+            return
+        }
+        #expect(week.selectionDeadline != nil || state?.isLeagueDefault == true)
+    }
+
+    @Test func leaguePickemsEntryShowsStoredDeadlineWithoutGroupRules() {
+        let due = now.addingTimeInterval(3600)
+        let week = week(status: .selection, selectionDeadline: due)
+        let state = SelectionDeadlineDisplayResolver.resolve(week: week, rules: nil, now: now)
+        #expect(state == .open(deadline: due))
+        #expect(week.selectionDeadline != nil || state?.isLeagueDefault == true)
+    }
+
     @Test func leagueDefaultDisplaySkippedWhenInstantPast() {
         var rules = GroupRules.default
         rules.defaultSelectionLock = DefaultSelectionLock(
