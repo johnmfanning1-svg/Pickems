@@ -46,9 +46,13 @@ struct CommissionerWeekAdminSections: View {
         tiesSection
     }
 
-    private var displayedWeeks: [WeekSummary] {
-        guard appState.groupService.availableWeeksBelong(to: groupId) else { return [] }
-        return appState.groupService.availableWeeks
+    private var weekChipBarState: CommissionerPinnedLeague.WeekChipBarState {
+        let service = appState.groupService
+        let weeks = service.availableWeeks
+        return CommissionerPinnedLeague.WeekChipBarState.resolve(
+            belongsToPin: service.availableWeeksBelong(to: groupId),
+            availableWeeks: weeks
+        )
     }
 
     private var activeESPNWeekId: String? {
@@ -68,32 +72,58 @@ struct CommissionerWeekAdminSections: View {
             weekStatusPrimarySection(week)
             weekStatusDestructiveCapsuleSection(week)
             weekStatusManageSection(week)
-        } else if displayedWeeks.isEmpty {
-            Section {
-                Text("No active week.")
-                    .foregroundStyle(PickemsColors.textSecondary)
-                    .listRowBackground(PickemsColors.cardBackground)
-            } header: {
-                Text("This Week")
-            } footer: {
-                Text(Self.thisWeekFooter)
-            }
         } else {
-            Section {
-                weekChipBar
-            } header: {
-                Text("This Week")
-            } footer: {
-                Text(Self.thisWeekFooter)
+            switch weekChipBarState {
+            case .loading:
+                Section {
+                    weekChipBarLoadingRow
+                } header: {
+                    Text("This Week")
+                } footer: {
+                    Text(Self.thisWeekFooter)
+                }
+            case .empty:
+                Section {
+                    Text("No active week.")
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .listRowBackground(PickemsColors.cardBackground)
+                } header: {
+                    Text("This Week")
+                } footer: {
+                    Text(Self.thisWeekFooter)
+                }
+            case .ready:
+                Section {
+                    weekChipBar
+                } header: {
+                    Text("This Week")
+                } footer: {
+                    Text(Self.thisWeekFooter)
+                }
             }
         }
     }
 
+    private var weekChipBarLoadingRow: some View {
+        ProgressView()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .accessibilityLabel("Loading weeks")
+    }
+
     @ViewBuilder
     private var weekChipBar: some View {
-        if !displayedWeeks.isEmpty {
+        switch weekChipBarState {
+        case .loading:
+            weekChipBarLoadingRow
+        case .empty:
+            EmptyView()
+        case .ready(let weeks):
             WeekChipBar(
-                weeks: displayedWeeks,
+                weeks: weeks,
                 selectedWeekId: week?.id,
                 activeWeekId: activeESPNWeekId,
                 dateRangeLabel: { appState.groupService.dateRangeLabel(for: $0.id) },

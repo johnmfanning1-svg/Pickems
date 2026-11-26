@@ -20,8 +20,7 @@ final class GroupService {
     var availableWeeks: [WeekSummary] = []
     /// League `availableWeeks` was loaded for. Week ids are shared across leagues,
     /// so a deadline mirror must not treat a matching id as this list.
-    @ObservationIgnored
-    private var availableWeeksGroupId: String?
+    private(set) var availableWeeksGroupId: String?
     var seasonDateRangeByWeekId: [String: String] = [:]
     var cfbWeek: CFBWeekInfo?
     var seasonArchives: [SeasonArchive] = []
@@ -293,6 +292,13 @@ final class GroupService {
         )
     }
 
+    /// Rules and member count for the explicit `groupId` being loaded — not only
+    /// the live selection, so a pinned Commissioner Settings sheet can render chips.
+    private func leagueForWeekLoading(groupId: String) -> PickemGroup? {
+        if let selectedGroup, selectedGroup.id == groupId { return selectedGroup }
+        return groups.first { $0.id == groupId }
+    }
+
     /// Loads weeks for the horizontal Picks tab bar, filling future ESPN weeks that are not minted yet.
     func loadAvailableWeeks(groupId: String) async {
         do {
@@ -309,8 +315,9 @@ final class GroupService {
             seasonDateRangeByWeekId = Dictionary(
                 uniqueKeysWithValues: calendarWeeks.map { ($0.id, $0.dateRangeLabel) }
             )
-            let rules = selectedGroup?.rules ?? .default
-            let memberCount = max(selectedGroup?.memberIds.count ?? members.count, 1)
+            let league = leagueForWeekLoading(groupId: groupId)
+            let rules = league?.rules ?? .default
+            let memberCount = max(league?.memberIds.count ?? members.count, 1)
             var byId = Dictionary(uniqueKeysWithValues: weeks.map { ($0.id, $0) })
             for slot in calendarWeeks where byId[slot.id] == nil {
                 byId[slot.id] = CFBWeekSync.makeWeekSummary(
@@ -325,11 +332,9 @@ final class GroupService {
                     memberCount: memberCount
                 )
             }
-            guard selectedGroup?.id == groupId else { return }
             availableWeeks = Self.sortedWeeksAscending(Array(byId.values))
             availableWeeksGroupId = groupId
         } catch {
-            guard selectedGroup?.id == groupId else { return }
             if let current = currentWeek, observedGroupId == groupId {
                 availableWeeks = [current]
             } else {
