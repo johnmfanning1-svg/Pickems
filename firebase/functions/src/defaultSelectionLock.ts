@@ -11,6 +11,7 @@ export interface DefaultSelectionLock {
   timeZone: string;
 }
 
+/** Raw instant inside the week window, including past. Null when the weekday is missing from the window. */
 export function defaultSelectionDeadline(
   lock: DefaultSelectionLock | null | undefined,
   seasonYear: number,
@@ -20,16 +21,34 @@ export function defaultSelectionDeadline(
   const window = weekWindow(seasonYear, weekNumber);
   if (!window) return null;
 
-  const start = startOfZonedDay(window.start, lock.timeZone);
-  const end = startOfZonedDay(window.end, lock.timeZone);
-  let day = start;
-  while (day.getTime() <= end.getTime()) {
-    if (isoWeekday(day, lock.timeZone) === lock.weekday) {
-      return zonedWallTime(day, lock.timeZone, lock.hour, lock.minute);
+  try {
+    let { year, month, day } = zonedParts(window.start, lock.timeZone);
+    const end = zonedParts(window.end, lock.timeZone);
+    while (true) {
+      const probe = zonedWallTimeFromParts(year, month, day, lock.timeZone, 0, 0);
+      if (isoWeekday(probe, lock.timeZone) === lock.weekday) {
+        return zonedWallTimeFromParts(year, month, day, lock.timeZone, lock.hour, lock.minute);
+      }
+      if (year > end.year || (year === end.year && month > end.month) ||
+          (year === end.year && month === end.month && day >= end.day)) {
+        return null;
+      }
+      ({ year, month, day } = addCalendarDay(year, month, day));
     }
-    day = new Date(day.getTime() + 24 * 3600_000);
+  } catch {
+    return null;
   }
-  return null;
+}
+
+export function futureDefaultSelectionDeadline(
+  lock: DefaultSelectionLock | null | undefined,
+  seasonYear: number,
+  weekNumber: number,
+  nowMs: number = Date.now()
+): Date | null {
+  const raw = defaultSelectionDeadline(lock, seasonYear, weekNumber);
+  if (!raw) return null;
+  return raw.getTime() > nowMs ? raw : null;
 }
 
 export function leagueHasDefaultSelectionLock(rules: { defaultSelectionLock?: DefaultSelectionLock | null } | undefined): boolean {
@@ -51,16 +70,16 @@ export function shouldStampDefaultSelection(params: {
   return leagueHasDefaultSelectionLock({ defaultSelectionLock: params.lock ?? undefined });
 }
 
+function addCalendarDay(year: number, month: number, day: number): { year: number; month: number; day: number } {
+  const next = new Date(Date.UTC(year, month - 1, day + 1));
+  return { year: next.getUTCFullYear(), month: next.getUTCMonth() + 1, day: next.getUTCDate() };
+}
+
 function isoWeekday(date: Date, timeZone: string): number {
   const fmt = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" });
   const short = fmt.format(date);
   const map: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
   return map[short] ?? 0;
-}
-
-function startOfZonedDay(instant: Date, timeZone: string): Date {
-  const parts = zonedParts(instant, timeZone);
-  return zonedWallTimeFromParts(parts.year, parts.month, parts.day, timeZone, 0, 0);
 }
 
 function zonedParts(date: Date, timeZone: string): { year: number; month: number; day: number } {
@@ -75,11 +94,6 @@ function zonedParts(date: Date, timeZone: string): { year: number; month: number
     month: Number(parts.find((p) => p.type === "month")?.value ?? "0"),
     day: Number(parts.find((p) => p.type === "day")?.value ?? "0"),
   };
-}
-
-function zonedWallTime(dayStart: Date, timeZone: string, hour: number, minute: number): Date {
-  const parts = zonedParts(dayStart, timeZone);
-  return zonedWallTimeFromParts(parts.year, parts.month, parts.day, timeZone, hour, minute);
 }
 
 function zonedWallTimeFromParts(

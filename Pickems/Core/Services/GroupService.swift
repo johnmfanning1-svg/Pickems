@@ -1539,7 +1539,7 @@ final class GroupService {
               week.selectionDeadline == nil else { return }
         let changed = previousRules?.defaultSelectionLock != rules.defaultSelectionLock
         guard changed else { return }
-        guard let deadline = DefaultSelectionLockMath.deadline(
+        guard let deadline = DefaultSelectionLockMath.futureDeadline(
             for: lock,
             seasonYear: week.seasonYear,
             weekNumber: week.weekNumber
@@ -1555,13 +1555,26 @@ final class GroupService {
     }
 
     private func setDefaultSelectionDeadline(groupId: String, weekId: String, deadline: Date) async throws {
+        guard deadline > Date() else { return }
+        let weekRef = db.week(groupId: groupId, weekId: weekId)
         let setAt = Date()
         let updates: [String: Any] = [
             "selectionDeadline": Timestamp(date: deadline),
             "selectionDeadlineSetAt": Timestamp(date: setAt),
             "selectionDeadlineSetBy": DefaultSelectionLockStamp.setBy,
         ]
-        try await db.week(groupId: groupId, weekId: weekId).updateData(updates)
+        let stamped = try await db.runTransaction { transaction, errorPointer in
+            do {
+                let snap = try transaction.getDocument(weekRef)
+                guard snap.exists, snap.data()?["selectionDeadline"] == nil else { return false as Any? }
+                transaction.updateData(updates, forDocument: weekRef)
+                return true as Any?
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
+            }
+        } as? Bool
+        guard stamped == true else { return }
         updateDisplayedWeek(groupId: groupId, weekId: weekId) { week in
             SelectionDeadlineLocal.apply(
                 deadline: deadline,

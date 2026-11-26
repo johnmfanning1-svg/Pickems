@@ -3,6 +3,12 @@ import Testing
 @testable import Pickems
 
 struct DefaultSelectionLockTests {
+    private static let beforeSep16 = {
+        var eastern = Calendar(identifier: .gregorian)
+        eastern.timeZone = TimeZone(identifier: "America/New_York")!
+        return eastern.date(from: DateComponents(year: 2026, month: 9, day: 15, hour: 12))!
+    }()
+
     @Test func decodesDefaultSelectionLockFromRules() throws {
         let json = Data(#"""
         {
@@ -40,6 +46,11 @@ struct DefaultSelectionLockTests {
         #expect(DefaultSelectionLockMath.isoWeekday(from: parts.weekday!) == 3)
     }
 
+    @Test func week1HasNoWednesdayForDefault() {
+        let lock = DefaultSelectionLock(enabled: true, weekday: 3, hour: 23, minute: 59, timeZone: "America/New_York")
+        #expect(DefaultSelectionLockMath.deadline(for: lock, seasonYear: 2026, weekNumber: 1) == nil)
+    }
+
     @Test func dstEarlyNovemberUsesLockZone() {
         let lock = DefaultSelectionLock(enabled: true, weekday: 2, hour: 18, minute: 0, timeZone: "America/New_York")
         let deadline = DefaultSelectionLockMath.deadline(for: lock, seasonYear: 2026, weekNumber: 10)
@@ -63,14 +74,20 @@ struct DefaultSelectionLockTests {
         #expect(parts.hour == 19)
     }
 
-    @Test func pastInstantStillReturned() {
-        let lock = DefaultSelectionLock(enabled: true, weekday: 1, hour: 9, minute: 0, timeZone: "America/New_York")
-        let deadline = DefaultSelectionLockMath.deadline(for: lock, seasonYear: 2026, weekNumber: 1)
-        #expect(deadline != nil)
-        #expect(deadline! < Date())
+    @Test func pastInstantDoesNotStampFuturePath() {
+        let lock = DefaultSelectionLock(enabled: true, weekday: 3, hour: 23, minute: 59, timeZone: "America/New_York")
+        var eastern = Calendar(identifier: .gregorian)
+        eastern.timeZone = TimeZone(identifier: "America/New_York")!
+        let after = eastern.date(from: DateComponents(year: 2026, month: 9, day: 17, hour: 0))!
+        #expect(DefaultSelectionLockMath.futureDeadline(
+            for: lock,
+            seasonYear: 2026,
+            weekNumber: 3,
+            now: after
+        ) == nil)
     }
 
-    @Test func makeWeekSummaryStampsDefaultWhenEnabled() {
+    @Test func makeWeekSummaryStampsDefaultWhenEnabledAndFuture() {
         var rules = GroupRules.default
         var lock = DefaultSelectionLock.disabled
         lock.enabled = true
@@ -82,13 +99,33 @@ struct DefaultSelectionLockTests {
             id: "2026-W3",
             info: CFBWeekInfo(seasonYear: 2026, weekNumber: 3, seasonType: 2, label: ""),
             rules: rules,
-            memberCount: 4
+            memberCount: 4,
+            now: Self.beforeSep16
         )
         #expect(week.selectionDeadline != nil)
         #expect(week.selectionDeadlineSetBy == DefaultSelectionLockStamp.setBy)
     }
 
-    @Test func makeWeekSummaryDoesNotOverwriteStampLogicOnWeekZero() {
+    @Test func makeWeekSummarySkipsPastDefaultAtMint() {
+        var rules = GroupRules.default
+        rules.defaultSelectionLock = DefaultSelectionLock(
+            enabled: true,
+            weekday: 3,
+            hour: 23,
+            minute: 59,
+            timeZone: "America/New_York"
+        )
+        let week = CFBWeekSync.makeWeekSummary(
+            id: "2026-W3",
+            info: CFBWeekInfo(seasonYear: 2026, weekNumber: 3, seasonType: 2, label: ""),
+            rules: rules,
+            memberCount: 4,
+            now: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        #expect(week.selectionDeadline == nil)
+    }
+
+    @Test func makeWeekSummaryDoesNotStampWeekZero() {
         var rules = GroupRules.default
         rules.defaultSelectionLock = DefaultSelectionLock(
             enabled: true,
@@ -101,7 +138,8 @@ struct DefaultSelectionLockTests {
             id: "2026-W0",
             info: CFBWeekInfo(seasonYear: 2026, weekNumber: 1, seasonType: 2, label: ""),
             rules: rules,
-            memberCount: 4
+            memberCount: 4,
+            now: Self.beforeSep16
         )
         #expect(week.skipsSelection)
         #expect(week.selectionDeadline == nil)
@@ -124,7 +162,31 @@ struct DefaultSelectionLockTests {
             selectionDeadlineSetBy: "commish"
         )
         let lock = DefaultSelectionLock(enabled: true, weekday: 3, hour: 23, minute: 59, timeZone: "America/New_York")
-        DefaultSelectionLockStamp.apply(to: &week, lock: lock)
+        DefaultSelectionLockStamp.apply(to: &week, lock: lock, stampedAt: Self.beforeSep16)
         #expect(week.selectionDeadlineSetBy == "commish")
+    }
+
+    @Test func parityThursdayTableMatchesTypeScriptWeeks() {
+        let lock = DefaultSelectionLock(enabled: true, weekday: 4, hour: 19, minute: 0, timeZone: "America/New_York")
+        let cases: [(Int, Int, Int)] = [
+            (1, 9, 3),
+            (2, 9, 10),
+            (3, 9, 17),
+            (10, 11, 5),
+            (15, 12, 10),
+        ]
+        var eastern = Calendar(identifier: .gregorian)
+        eastern.timeZone = TimeZone(identifier: "America/New_York")!
+        for (weekNumber, month, day) in cases {
+            guard let d = DefaultSelectionLockMath.deadline(for: lock, seasonYear: 2026, weekNumber: weekNumber) else {
+                Issue.record("missing deadline for week \(weekNumber)")
+                continue
+            }
+            let parts = eastern.dateComponents([.month, .day, .hour], from: d)
+            #expect(parts.month == month)
+            #expect(parts.day == day)
+            #expect(parts.hour == 19)
+        }
+        #expect(DefaultSelectionLockMath.deadline(for: lock, seasonYear: 2026, weekNumber: 0) == nil)
     }
 }

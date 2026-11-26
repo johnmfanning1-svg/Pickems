@@ -20,8 +20,7 @@ import {
 import { espnScoreboardWeek } from "./cfbWeekCalendar";
 import {
   DEFAULT_SELECTION_STAMP,
-  defaultSelectionDeadline,
-  leagueHasDefaultSelectionLock,
+  futureDefaultSelectionDeadline,
   shouldStampDefaultSelection,
   type DefaultSelectionLock,
 } from "./defaultSelectionLock";
@@ -159,6 +158,24 @@ export const onWeekStatusChange = onDocumentUpdated(
   }
 );
 
+async function stampDefaultSelectionDeadlineIfEmpty(
+  weekRef: DocumentReference,
+  deadline: Date
+): Promise<boolean> {
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(weekRef);
+    if (!snap.exists) return false;
+    const existing = snap.data()?.selectionDeadline;
+    if (existing) return false;
+    tx.update(weekRef, {
+      selectionDeadline: Timestamp.fromDate(deadline),
+      selectionDeadlineSetAt: FieldValue.serverTimestamp(),
+      selectionDeadlineSetBy: DEFAULT_SELECTION_STAMP,
+    });
+    return true;
+  });
+}
+
 /**
  * When a week doc is created in selection (member mode), nudge the commissioner
  * to set a nomination deadline.
@@ -175,12 +192,14 @@ export const onWeekCreated = onDocumentCreated(
 
     const groupId = event.params.groupId;
     const weekId = event.params.weekId;
+    const weekRef = event.data?.ref ?? db.collection("groups").doc(groupId).collection("weeks").doc(weekId);
     const group = await db.collection("groups").doc(groupId).get();
     const groupData = group.data();
     const rules = groupData?.rules as { defaultSelectionLock?: DefaultSelectionLock } | undefined;
     const lock = rules?.defaultSelectionLock;
     const seasonYear = (data.seasonYear as number | undefined) ?? new Date().getFullYear();
     const weekNumber = data.weekNumber as number | undefined;
+    const nowMs = Date.now();
 
     if (
       shouldStampDefaultSelection({
@@ -192,18 +211,12 @@ export const onWeekCreated = onDocumentCreated(
         existingDeadline: data.selectionDeadline,
       })
     ) {
-      const deadline = defaultSelectionDeadline(lock, seasonYear, weekNumber ?? 0);
+      const deadline = futureDefaultSelectionDeadline(lock, seasonYear, weekNumber ?? 0, nowMs);
       if (deadline) {
-        await event.data?.ref.update({
-          selectionDeadline: Timestamp.fromDate(deadline),
-          selectionDeadlineSetAt: FieldValue.serverTimestamp(),
-          selectionDeadlineSetBy: DEFAULT_SELECTION_STAMP,
-        });
-        return;
+        const stamped = await stampDefaultSelectionDeadlineIfEmpty(weekRef, deadline);
+        if (stamped) return;
       }
     }
-
-    if (leagueHasDefaultSelectionLock(rules)) return;
 
     const commissionerId = groupData?.commissionerId as string | undefined;
     if (!commissionerId) return;
@@ -230,70 +243,69 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
   const groups = await db.collection("groups").get();
 
   for (const groupDoc of groups.docs) {
-    const groupData = groupDoc.data();
-    const commissionerId = groupData.commissionerId as string | undefined;
-    const memberIds = (groupData.memberIds as string[]) ?? [];
-    const rules = groupData.rules as { defaultSelectionLock?: DefaultSelectionLock } | undefined;
-    const defaultLock = rules?.defaultSelectionLock;
-    const hasDefaultLock = leagueHasDefaultSelectionLock(rules);
-    if (!commissionerId) continue;
+    try {
+      const groupData = groupDoc.data();
+      const commissionerId = groupData.commissionerId as string | undefined;
+      const memberIds = (groupData.memberIds as string[]) ?? [];
+      const rules = groupData.rules as { defaultSelectionLock?: DefaultSelectionLock } | undefined;
+      const defaultLock = rules?.defaultSelectionLock;
+      if (!commissionerId) continue;
 
-    const weeks = await groupDoc.ref
-      .collection("weeks")
-      .where("status", "==", "selection")
-      .get();
+      const weeks = await groupDoc.ref
+        .collection("weeks")
+        .where("status", "==", "selection")
+        .get();
 
-    for (const weekDoc of weeks.docs) {
-      const week = weekDoc.data();
-      if (week.selectionMode !== "member" && week.selectionMode !== "commissioner") continue;
+      for (const weekDoc of weeks.docs) {
+        const week = weekDoc.data();
+        if (week.selectionMode !== "member" && week.selectionMode !== "commissioner") continue;
 
-      const groupId = groupDoc.id;
-      const weekId = weekDoc.id;
-      const weekNum = week.weekNumber ?? "";
-      let deadline = week.selectionDeadline as Timestamp | undefined;
-      const payload = { groupId, weekId };
-      const isMemberWeek = week.selectionMode !== "commissioner";
+        const groupId = groupDoc.id;
+        const weekId = weekDoc.id;
+        const weekNum = week.weekNumber ?? "";
+        let deadline = week.selectionDeadline as Timestamp | undefined;
+        const payload = { groupId, weekId };
+        const isMemberWeek = week.selectionMode !== "commissioner";
 
-      if (
-        isMemberWeek &&
-        !deadline &&
-        shouldStampDefaultSelection({
-          lock: defaultLock,
-          selectionMode: week.selectionMode as string,
-          weekNumber: week.weekNumber as number | undefined,
-          slateSource: week.slateSource as string | null | undefined,
-          status: week.status as string,
-          existingDeadline: week.selectionDeadline,
-        })
-      ) {
-        const computed = defaultSelectionDeadline(
-          defaultLock,
-          (week.seasonYear as number | undefined) ?? new Date().getFullYear(),
-          (week.weekNumber as number) ?? 0
-        );
-        if (computed && computed.getTime() > nowMs) {
-          await weekDoc.ref.update({
-            selectionDeadline: Timestamp.fromDate(computed),
-            selectionDeadlineSetAt: FieldValue.serverTimestamp(),
-            selectionDeadlineSetBy: DEFAULT_SELECTION_STAMP,
-          });
-          deadline = Timestamp.fromDate(computed);
+        if (
+          isMemberWeek &&
+          !deadline &&
+          shouldStampDefaultSelection({
+            lock: defaultLock,
+            selectionMode: week.selectionMode as string,
+            weekNumber: week.weekNumber as number | undefined,
+            slateSource: week.slateSource as string | null | undefined,
+            status: week.status as string,
+            existingDeadline: week.selectionDeadline,
+          })
+        ) {
+          const computed = futureDefaultSelectionDeadline(
+            defaultLock,
+            (week.seasonYear as number | undefined) ?? new Date().getFullYear(),
+            (week.weekNumber as number) ?? 0,
+            nowMs
+          );
+          if (computed) {
+            const stamped = await stampDefaultSelectionDeadlineIfEmpty(weekDoc.ref, computed);
+            if (stamped) {
+              deadline = Timestamp.fromDate(computed);
+            }
+          }
         }
-      }
 
-      const deadlineMs = deadline ? deadline.toMillis() : null;
-      const deadlinePassed = deadlineMs != null && deadlineMs <= nowMs;
+        const deadlineMs = deadline ? deadline.toMillis() : null;
+        const deadlinePassed = deadlineMs != null && deadlineMs <= nowMs;
 
-      if (isMemberWeek && !deadline && !week.selectionDeadlineNudgeSent && !hasDefaultLock) {
-        await sendToUser(
-          commissionerId,
-          "Set Selection deadline",
-          `Week ${weekNum} needs a Selection deadline so members finish before kickoff.`,
-          "set_selection_deadline",
-          payload
-        );
-        await weekDoc.ref.update({ selectionDeadlineNudgeSent: true });
-      }
+        if (isMemberWeek && !deadline && !week.selectionDeadlineNudgeSent) {
+          await sendToUser(
+            commissionerId,
+            "Set Selection deadline",
+            `Week ${weekNum} needs a Selection deadline so members finish before kickoff.`,
+            "set_selection_deadline",
+            payload
+          );
+          await weekDoc.ref.update({ selectionDeadlineNudgeSent: true });
+        }
 
       if (isMemberWeek && deadline && deadline.toMillis() > nowMs) {
         const msUntil = deadline.toMillis() - nowMs;
@@ -422,6 +434,12 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
         );
         await weekDoc.ref.update({ selectionDeadlinePassedNotified: true });
       }
+    }
+    } catch (err) {
+      logger.error("selectionDeadlineJobs: group iteration failed", {
+        groupId: groupDoc.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 });

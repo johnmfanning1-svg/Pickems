@@ -1249,6 +1249,45 @@ describe("P0: invite join, season record, lock snapshot", () => {
         selectionDeadlineSetBy: MEMBER,
       })
     );
+    await assertFails(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "weeks", "2026-W8"), {
+        id: "2026-W8",
+        seasonYear: 2026,
+        weekNumber: 8,
+        status: "selection",
+        slateSize: 12,
+        selectionMode: "member",
+        selectionsPerMember: 3,
+        nominationCount: 0,
+        selectionDeadline: future(),
+        selectionDeadlineSetAt: new Date(),
+        selectionDeadlineSetBy: "default",
+      })
+    );
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), "groups", GROUP_ID),
+        {
+          rules: {
+            selectionMode: "member",
+            selectionsPerMember: 3,
+            slateSize: 12,
+            pickDeadline: "firstKickoff",
+            tieBreaker: "commissionerOverride",
+            customDeadlineHour: 18,
+            customDeadlineMinute: 0,
+            defaultSelectionLock: {
+              enabled: true,
+              weekday: 3,
+              hour: 23,
+              minute: 59,
+              timeZone: "America/New_York",
+            },
+          },
+        },
+        { merge: true }
+      );
+    });
     await assertSucceeds(
       setDoc(doc(memberDb, "groups", GROUP_ID, "weeks", "2026-W8"), {
         id: "2026-W8",
@@ -1260,6 +1299,21 @@ describe("P0: invite join, season record, lock snapshot", () => {
         selectionsPerMember: 3,
         nominationCount: 0,
         selectionDeadline: future(),
+        selectionDeadlineSetAt: new Date(),
+        selectionDeadlineSetBy: "default",
+      })
+    );
+    await assertFails(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "weeks", "2026-W7"), {
+        id: "2026-W7",
+        seasonYear: 2026,
+        weekNumber: 7,
+        status: "selection",
+        slateSize: 12,
+        selectionMode: "member",
+        selectionsPerMember: 3,
+        nominationCount: 0,
+        selectionDeadline: new Date(Date.now() - 60_000),
         selectionDeadlineSetAt: new Date(),
         selectionDeadlineSetBy: "default",
       })

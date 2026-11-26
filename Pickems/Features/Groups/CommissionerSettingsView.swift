@@ -183,13 +183,7 @@ struct CommissionerSettingsView: View {
     private var defaultSelectionLockBinding: Binding<DefaultSelectionLock> {
         Binding(
             get: {
-                rules.defaultSelectionLock ?? DefaultSelectionLock(
-                    enabled: false,
-                    weekday: 3,
-                    hour: 23,
-                    minute: 59,
-                    timeZone: TimeZone.current.identifier
-                )
+                rules.defaultSelectionLock ?? .disabled
             },
             set: { rules.defaultSelectionLock = $0 }
         )
@@ -302,6 +296,7 @@ struct CommissionerSettingsView: View {
                 selection: defaultLockTimeBinding,
                 displayedComponents: [.hourAndMinute]
             )
+            .environment(\.timeZone, defaultSelectionLockBinding.wrappedValue.configuredTimeZone())
             .listRowBackground(PickemsColors.cardBackground)
 
             Picker("Time zone", selection: Binding(

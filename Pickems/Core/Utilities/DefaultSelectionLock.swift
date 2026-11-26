@@ -18,8 +18,6 @@ struct DefaultSelectionLock: Codable, Equatable {
         timeZone: TimeZone.current.identifier
     )
 
-    var isActive: Bool { enabled }
-
     func configuredTimeZone() -> TimeZone {
         TimeZone(identifier: timeZone) ?? .current
     }
@@ -68,6 +66,17 @@ enum DefaultSelectionLockMath {
     static func isoWeekday(from calendarWeekday: Int) -> Int {
         // Calendar: Sun=1 … Sat=7 → ISO: Mon=1 … Sun=7
         calendarWeekday == 1 ? 7 : calendarWeekday - 1
+    }
+
+    /// Stamping path: nil when the computed instant is not strictly after `now`.
+    static func futureDeadline(
+        for lock: DefaultSelectionLock,
+        seasonYear: Int,
+        weekNumber: Int,
+        now: Date = Date()
+    ) -> Date? {
+        guard let raw = deadline(for: lock, seasonYear: seasonYear, weekNumber: weekNumber) else { return nil }
+        return raw > now ? raw : nil
     }
 
     static func isoWeekdayLabel(_ iso: Int) -> String {
@@ -201,10 +210,11 @@ enum DefaultSelectionLockStamp {
               !week.skipsSelection,
               week.selectionMode == .member,
               week.selectionDeadline == nil,
-              let deadline = DefaultSelectionLockMath.deadline(
+              let deadline = DefaultSelectionLockMath.futureDeadline(
                 for: lock,
                 seasonYear: week.seasonYear,
-                weekNumber: week.weekNumber
+                weekNumber: week.weekNumber,
+                now: stampedAt
               ) else { return }
         week.selectionDeadline = deadline
         week.selectionDeadlineSetAt = stampedAt

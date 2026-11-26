@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SELECTION_STAMP,
   defaultSelectionDeadline,
-  leagueHasDefaultSelectionLock,
+  futureDefaultSelectionDeadline,
   shouldStampDefaultSelection,
 } from "./defaultSelectionLock";
 
@@ -36,9 +36,67 @@ describe("defaultSelectionLock", () => {
     expect(day.minute).toBe("59");
   });
 
-  it("detects league default", () => {
-    expect(leagueHasDefaultSelectionLock({ defaultSelectionLock: lock })).toBe(true);
-    expect(leagueHasDefaultSelectionLock({ defaultSelectionLock: { ...lock, enabled: false } })).toBe(false);
+  it("returns null when weekday is missing in week window (2026 W1 Wed)", () => {
+    expect(defaultSelectionDeadline(lock, 2026, 1)).toBeNull();
+  });
+
+  it("future helper rejects past instants", () => {
+    const past = Date.UTC(2026, 8, 16, 23, 59, 0, 0);
+    expect(futureDefaultSelectionDeadline(lock, 2026, 3, past)).toBeNull();
+    const before = Date.UTC(2026, 8, 15, 12, 0, 0, 0);
+    expect(futureDefaultSelectionDeadline(lock, 2026, 3, before)).not.toBeNull();
+  });
+
+  it("handles invalid time zone safely", () => {
+    const bad = { ...lock, timeZone: "Not/A_Zone" };
+    expect(defaultSelectionDeadline(bad, 2026, 3)).toBeNull();
+  });
+
+  it("parity table weeks 0–15 for Thursday 7pm Eastern", () => {
+    const thuLock = { enabled: true, weekday: 4, hour: 19, minute: 0, timeZone: "America/New_York" };
+    const expectations: Record<number, string | null> = {
+      0: null,
+      1: "2026-09-03",
+      2: "2026-09-10",
+      3: "2026-09-17",
+      10: "2026-11-05",
+      15: "2026-12-10",
+    };
+    for (const [weekStr, ymd] of Object.entries(expectations)) {
+      const week = Number(weekStr);
+      const d = defaultSelectionDeadline(thuLock, 2026, week);
+      if (ymd === null) {
+        expect(d).toBeNull();
+        continue;
+      }
+      expect(d).not.toBeNull();
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(d!);
+      const got = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+      const expectedYmd = `${got.year}-${got.month}-${got.day}`;
+      expect(expectedYmd).toBe(ymd);
+    }
+  });
+
+  it("DST week 10 Tuesday 6pm Eastern", () => {
+    const tue = { enabled: true, weekday: 2, hour: 18, minute: 0, timeZone: "America/New_York" };
+    const d = defaultSelectionDeadline(tue, 2026, 10);
+    expect(d).not.toBeNull();
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      hour12: false,
+    }).formatToParts(d!);
+    const got = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+    expect(got.month).toBe("11");
+    expect(got.day).toBe("03");
+    expect(got.hour).toBe("18");
   });
 
   it("skips week zero and commissioner mode", () => {

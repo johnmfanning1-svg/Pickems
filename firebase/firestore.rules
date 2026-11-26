@@ -292,13 +292,23 @@ service cloud.firestore {
     // an open picking week, stamp a lock snapshot / pickDeadline, or set
     // per-week pickMode (scoring mode stays commissioner-only). Week 0 is the
     // fixed-slate exception the app creates already in `picking`.
-    function memberWeekCreate(weekId) {
+    function defaultSelectionLockEnabled(groupId) {
+      let lock = groupRules(groupId).get('defaultSelectionLock', {});
+      return lock.get('enabled', false) == true;
+    }
+
+    function memberDefaultSelectionDeadlineCreate(groupId, data) {
+      return defaultSelectionLockEnabled(groupId)
+        && data.selectionDeadline is timestamp
+        && data.selectionDeadline > request.time
+        && data.selectionDeadlineSetBy == 'default'
+        && data.keys().hasAll(['selectionDeadline', 'selectionDeadlineSetAt', 'selectionDeadlineSetBy']);
+    }
+
+    function memberWeekCreate(groupId, weekId) {
       let data = request.resource.data;
       let deadlineOk = !data.keys().hasAny(['selectionDeadline', 'selectionDeadlineSetAt', 'selectionDeadlineSetBy'])
-        || (
-          data.selectionDeadlineSetBy == 'default'
-          && data.keys().hasAll(['selectionDeadline', 'selectionDeadlineSetAt', 'selectionDeadlineSetBy'])
-        );
+        || memberDefaultSelectionDeadlineCreate(groupId, data);
       return deadlineOk
         && data.nominationCount == 0
         && !data.keys().hasAny(['pickLockMode', 'weekLockAt', 'gameIds', 'gameKickoffs', 'remainingLockAt', 'pickDeadline', 'pickMode'])
@@ -870,7 +880,7 @@ service cloud.firestore {
         // Coordinators mint the same initial week a member can. pickMode and
         // an already-open picking week are not part of that create.
         allow create: if isCommissioner(groupId)
-          || (isGroupMember(groupId) && memberWeekCreate(weekId));
+          || (isGroupMember(groupId) && memberWeekCreate(groupId, weekId));
         // Admins bypass the field-level allow-lists so the portal can repair
         // arbitrary week fields — that is the point of the portal.
         // Coordinators get week operations except per-week pickMode.
