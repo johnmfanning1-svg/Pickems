@@ -7,6 +7,7 @@ struct SelectionDeadlineSheet: View {
 
     let weekLabel: String
     let initialDeadline: Date?
+    let suggestedDeadline: Date?
     var onSave: (_ groupId: String, _ weekId: String, _ deadline: Date) -> Void
 
     @State private var deadline: Date
@@ -19,13 +20,15 @@ struct SelectionDeadlineSheet: View {
         weekId: String,
         weekLabel: String,
         initialDeadline: Date?,
+        suggestedDeadline: Date? = nil,
         onSave: @escaping (_ groupId: String, _ weekId: String, _ deadline: Date) -> Void
     ) {
         self.weekLabel = weekLabel
         self.initialDeadline = initialDeadline
+        self.suggestedDeadline = suggestedDeadline
         self.onSave = onSave
-        let defaultDeadline = Calendar.current.date(byAdding: .hour, value: 48, to: Date()) ?? Date()
-        _deadline = State(initialValue: initialDeadline ?? defaultDeadline)
+        let fallback = Calendar.current.date(byAdding: .hour, value: 48, to: Date()) ?? Date()
+        _deadline = State(initialValue: initialDeadline ?? suggestedDeadline ?? fallback)
         _groupId = State(initialValue: groupId)
         _weekId = State(initialValue: weekId)
     }

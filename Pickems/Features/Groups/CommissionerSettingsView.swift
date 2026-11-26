@@ -169,10 +169,54 @@ struct CommissionerSettingsView: View {
 
     private var slateConfigurationFooter: String {
         if rules.selectionMode == .member {
-            let base = "Each member selects this many games. Weekly game target = members × Selections. You’ll set a Selection deadline each week."
+            var base = "Each member selects this many games. Weekly game target = members × Selections."
+            if rules.defaultSelectionLock?.enabled == true {
+                base += " Default Selection deadline applies to new weeks automatically; you can still override any week."
+            } else {
+                base += " Turn on a default Selection deadline or set one per week in This Week."
+            }
             return "\(base) \(SelectionVetoPolicy.settingsFooter(memberCount: liveGroup.memberCount))"
         }
         return "You choose every game for the group each week."
+    }
+
+    private var defaultSelectionLockBinding: Binding<DefaultSelectionLock> {
+        Binding(
+            get: {
+                rules.defaultSelectionLock ?? DefaultSelectionLock(
+                    enabled: false,
+                    weekday: 3,
+                    hour: 23,
+                    minute: 59,
+                    timeZone: TimeZone.current.identifier
+                )
+            },
+            set: { rules.defaultSelectionLock = $0 }
+        )
+    }
+
+    private var defaultLockTimeBinding: Binding<Date> {
+        Binding(
+            get: {
+                let lock = defaultSelectionLockBinding.wrappedValue
+                var calendar = Calendar(identifier: .gregorian)
+                calendar.timeZone = lock.configuredTimeZone()
+                return calendar.date(
+                    bySettingHour: lock.hour,
+                    minute: lock.minute,
+                    second: 0,
+                    of: Date()
+                ) ?? Date()
+            },
+            set: { newValue in
+                var lock = defaultSelectionLockBinding.wrappedValue
+                var calendar = Calendar(identifier: .gregorian)
+                calendar.timeZone = lock.configuredTimeZone()
+                lock.hour = calendar.component(.hour, from: newValue)
+                lock.minute = calendar.component(.minute, from: newValue)
+                defaultSelectionLockBinding.wrappedValue = lock
+            }
+        )
     }
 
     private var slateConfigurationSection: some View {
@@ -204,6 +248,8 @@ struct CommissionerSettingsView: View {
                     )
                     .listRowBackground(PickemsColors.cardBackground)
                 }
+
+                defaultSelectionLockRows
             } else {
                 Stepper("Games per week: \(rules.slateSize)", value: $rules.slateSize, in: 1...20)
                     .listRowBackground(PickemsColors.cardBackground)
@@ -211,7 +257,70 @@ struct CommissionerSettingsView: View {
         } header: {
             sectionHeader("Slate Configuration", help: PickemsHelp.commissionerSettings)
         } footer: {
-            Text(slateConfigurationFooter)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(slateConfigurationFooter)
+                if let lock = rules.defaultSelectionLock, lock.showsLateWeekWarning() {
+                    Text("This default is late in the CFB week — members may have little time before kickoff.")
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var defaultSelectionLockRows: some View {
+        Toggle(
+            "Default Selection deadline",
+            isOn: Binding(
+                get: { defaultSelectionLockBinding.wrappedValue.enabled },
+                set: { enabled in
+                    var lock = defaultSelectionLockBinding.wrappedValue
+                    lock.enabled = enabled
+                    defaultSelectionLockBinding.wrappedValue = lock
+                }
+            )
+        )
+        .listRowBackground(PickemsColors.cardBackground)
+
+        if defaultSelectionLockBinding.wrappedValue.enabled {
+            Picker("Weekday", selection: Binding(
+                get: { defaultSelectionLockBinding.wrappedValue.weekday },
+                set: { day in
+                    var lock = defaultSelectionLockBinding.wrappedValue
+                    lock.weekday = day
+                    defaultSelectionLockBinding.wrappedValue = lock
+                }
+            )) {
+                ForEach(1...7, id: \.self) { iso in
+                    Text(DefaultSelectionLockMath.isoWeekdayLabel(iso)).tag(iso)
+                }
+            }
+            .listRowBackground(PickemsColors.cardBackground)
+
+            DatePicker(
+                "Time",
+                selection: defaultLockTimeBinding,
+                displayedComponents: [.hourAndMinute]
+            )
+            .listRowBackground(PickemsColors.cardBackground)
+
+            Picker("Time zone", selection: Binding(
+                get: { defaultSelectionLockBinding.wrappedValue.timeZone },
+                set: { zone in
+                    var lock = defaultSelectionLockBinding.wrappedValue
+                    lock.timeZone = zone
+                    defaultSelectionLockBinding.wrappedValue = lock
+                }
+            )) {
+                Text("Device (\(TimeZone.current.identifier))").tag(TimeZone.current.identifier)
+                Text("Eastern (America/New_York)").tag("America/New_York")
+                if defaultSelectionLockBinding.wrappedValue.timeZone != TimeZone.current.identifier
+                    && defaultSelectionLockBinding.wrappedValue.timeZone != "America/New_York" {
+                    Text(defaultSelectionLockBinding.wrappedValue.timeZone)
+                        .tag(defaultSelectionLockBinding.wrappedValue.timeZone)
+                }
+            }
+            .listRowBackground(PickemsColors.cardBackground)
         }
     }
 
@@ -639,7 +748,8 @@ struct CommissionerSettingsView: View {
             route = CommissionerDeadlinePresentation.pendingSelection(
                 settingsGroupId: groupId,
                 weekId: weekId,
-                displayedWeek: week
+                displayedWeek: week,
+                rules: rules
             )
         case .pickems:
             guard let week else { return }
@@ -653,7 +763,8 @@ struct CommissionerSettingsView: View {
         guard let sheet = CommissionerDeadlinePresentation.route(
             for: request,
             settingsGroupId: groupId,
-            selectedGroupId: appState.groupService.selectedGroup?.id
+            selectedGroupId: appState.groupService.selectedGroup?.id,
+            rules: rules
         ) else { return }
         route = sheet
     }
@@ -696,7 +807,8 @@ struct CommissionerSettingsView: View {
             groupId: edit.capture.groupId,
             weekId: edit.capture.weekId,
             weekLabel: edit.capture.weekLabel,
-            initialDeadline: edit.initialDeadline
+            initialDeadline: edit.initialDeadline,
+            suggestedDeadline: edit.suggestedDeadline
         ) { groupId, weekId, deadline in
             let write = DeadlineEditCapture(
                 groupId: groupId,

@@ -294,7 +294,13 @@ service cloud.firestore {
     // fixed-slate exception the app creates already in `picking`.
     function memberWeekCreate(weekId) {
       let data = request.resource.data;
-      return data.nominationCount == 0
+      let deadlineOk = !data.keys().hasAny(['selectionDeadline', 'selectionDeadlineSetAt', 'selectionDeadlineSetBy'])
+        || (
+          data.selectionDeadlineSetBy == 'default'
+          && data.keys().hasAll(['selectionDeadline', 'selectionDeadlineSetAt', 'selectionDeadlineSetBy'])
+        );
+      return deadlineOk
+        && data.nominationCount == 0
         && !data.keys().hasAny(['pickLockMode', 'weekLockAt', 'gameIds', 'gameKickoffs', 'remainingLockAt', 'pickDeadline', 'pickMode'])
         && (
           data.status == 'selection'

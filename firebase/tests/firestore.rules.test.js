@@ -1234,6 +1234,36 @@ describe("P0: invite join, season record, lock snapshot", () => {
         nominationCount: 0,
       })
     );
+    await assertFails(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "weeks", "2026-W8"), {
+        id: "2026-W8",
+        seasonYear: 2026,
+        weekNumber: 8,
+        status: "selection",
+        slateSize: 12,
+        selectionMode: "member",
+        selectionsPerMember: 3,
+        nominationCount: 0,
+        selectionDeadline: future(),
+        selectionDeadlineSetAt: new Date(),
+        selectionDeadlineSetBy: MEMBER,
+      })
+    );
+    await assertSucceeds(
+      setDoc(doc(memberDb, "groups", GROUP_ID, "weeks", "2026-W8"), {
+        id: "2026-W8",
+        seasonYear: 2026,
+        weekNumber: 8,
+        status: "selection",
+        slateSize: 12,
+        selectionMode: "member",
+        selectionsPerMember: 3,
+        nominationCount: 0,
+        selectionDeadline: future(),
+        selectionDeadlineSetAt: new Date(),
+        selectionDeadlineSetBy: "default",
+      })
+    );
     await assertSucceeds(
       setDoc(doc(memberDb, "groups", GROUP_ID, "weeks", "2026-W0"), {
         id: "2026-W0",

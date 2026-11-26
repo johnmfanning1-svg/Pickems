@@ -709,6 +709,19 @@ struct GroupRulesTests {
         #expect(rules.pickMode == .ats)
     }
 
+    @Test func missingDefaultSelectionLockDecodesAsNil() throws {
+        let rules = try JSONDecoder().decode(GroupRules.self, from: Data(#"""
+        {
+          "selectionMode": "member",
+          "selectionsPerMember": 3,
+          "slateSize": 12,
+          "pickDeadline": "firstKickoff",
+          "tieBreaker": "commissionerOverride"
+        }
+        """#.utf8))
+        #expect(rules.defaultSelectionLock == nil)
+    }
+
     @Test func missingPickModeDecodesAsATS() throws {
         let json = Data(#"""
         {

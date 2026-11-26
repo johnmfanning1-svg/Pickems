@@ -18,6 +18,13 @@ import {
   type EspnEvent,
 } from "./espn";
 import { espnScoreboardWeek } from "./cfbWeekCalendar";
+import {
+  DEFAULT_SELECTION_STAMP,
+  defaultSelectionDeadline,
+  leagueHasDefaultSelectionLock,
+  shouldStampDefaultSelection,
+  type DefaultSelectionLock,
+} from "./defaultSelectionLock";
 import { kickoffsMillisByEspnEventId } from "./selectionCatalog";
 import { sendToUser, sendToUsers } from "./notifications";
 import { pushLiveActivityUpdates } from "./liveActivityPush";
@@ -169,7 +176,36 @@ export const onWeekCreated = onDocumentCreated(
     const groupId = event.params.groupId;
     const weekId = event.params.weekId;
     const group = await db.collection("groups").doc(groupId).get();
-    const commissionerId = group.data()?.commissionerId as string | undefined;
+    const groupData = group.data();
+    const rules = groupData?.rules as { defaultSelectionLock?: DefaultSelectionLock } | undefined;
+    const lock = rules?.defaultSelectionLock;
+    const seasonYear = (data.seasonYear as number | undefined) ?? new Date().getFullYear();
+    const weekNumber = data.weekNumber as number | undefined;
+
+    if (
+      shouldStampDefaultSelection({
+        lock,
+        selectionMode: data.selectionMode as string,
+        weekNumber,
+        slateSource: data.slateSource as string | null | undefined,
+        status: data.status as string,
+        existingDeadline: data.selectionDeadline,
+      })
+    ) {
+      const deadline = defaultSelectionDeadline(lock, seasonYear, weekNumber ?? 0);
+      if (deadline) {
+        await event.data?.ref.update({
+          selectionDeadline: Timestamp.fromDate(deadline),
+          selectionDeadlineSetAt: FieldValue.serverTimestamp(),
+          selectionDeadlineSetBy: DEFAULT_SELECTION_STAMP,
+        });
+        return;
+      }
+    }
+
+    if (leagueHasDefaultSelectionLock(rules)) return;
+
+    const commissionerId = groupData?.commissionerId as string | undefined;
     if (!commissionerId) return;
 
     await sendToUser(
@@ -194,8 +230,12 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
   const groups = await db.collection("groups").get();
 
   for (const groupDoc of groups.docs) {
-    const commissionerId = groupDoc.data().commissionerId as string | undefined;
-    const memberIds = (groupDoc.data().memberIds as string[]) ?? [];
+    const groupData = groupDoc.data();
+    const commissionerId = groupData.commissionerId as string | undefined;
+    const memberIds = (groupData.memberIds as string[]) ?? [];
+    const rules = groupData.rules as { defaultSelectionLock?: DefaultSelectionLock } | undefined;
+    const defaultLock = rules?.defaultSelectionLock;
+    const hasDefaultLock = leagueHasDefaultSelectionLock(rules);
     if (!commissionerId) continue;
 
     const weeks = await groupDoc.ref
@@ -210,13 +250,41 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
       const groupId = groupDoc.id;
       const weekId = weekDoc.id;
       const weekNum = week.weekNumber ?? "";
-      const deadline = week.selectionDeadline as Timestamp | undefined;
+      let deadline = week.selectionDeadline as Timestamp | undefined;
       const payload = { groupId, weekId };
-      const deadlineMs = deadline ? deadline.toMillis() : null;
-      const deadlinePassed = deadlineMs != null && deadlineMs <= nowMs;
       const isMemberWeek = week.selectionMode !== "commissioner";
 
-      if (isMemberWeek && !deadline && !week.selectionDeadlineNudgeSent) {
+      if (
+        isMemberWeek &&
+        !deadline &&
+        shouldStampDefaultSelection({
+          lock: defaultLock,
+          selectionMode: week.selectionMode as string,
+          weekNumber: week.weekNumber as number | undefined,
+          slateSource: week.slateSource as string | null | undefined,
+          status: week.status as string,
+          existingDeadline: week.selectionDeadline,
+        })
+      ) {
+        const computed = defaultSelectionDeadline(
+          defaultLock,
+          (week.seasonYear as number | undefined) ?? new Date().getFullYear(),
+          (week.weekNumber as number) ?? 0
+        );
+        if (computed && computed.getTime() > nowMs) {
+          await weekDoc.ref.update({
+            selectionDeadline: Timestamp.fromDate(computed),
+            selectionDeadlineSetAt: FieldValue.serverTimestamp(),
+            selectionDeadlineSetBy: DEFAULT_SELECTION_STAMP,
+          });
+          deadline = Timestamp.fromDate(computed);
+        }
+      }
+
+      const deadlineMs = deadline ? deadline.toMillis() : null;
+      const deadlinePassed = deadlineMs != null && deadlineMs <= nowMs;
+
+      if (isMemberWeek && !deadline && !week.selectionDeadlineNudgeSent && !hasDefaultLock) {
         await sendToUser(
           commissionerId,
           "Set Selection deadline",

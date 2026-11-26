@@ -36,6 +36,16 @@ export interface GroupRules {
   vetoEnabled?: boolean;
   /** Votes required. The app and Cloud Functions clamp this to league size − 1. */
   vetoVotesNeeded?: number;
+  defaultSelectionLock?: DefaultSelectionLock | null;
+}
+
+export interface DefaultSelectionLock {
+  enabled: boolean;
+  /** ISO 8601: 1 = Monday … 7 = Sunday */
+  weekday: number;
+  hour: number;
+  minute: number;
+  timeZone: string;
 }
 
 export const DEFAULT_GROUP_RULES: GroupRules = {
