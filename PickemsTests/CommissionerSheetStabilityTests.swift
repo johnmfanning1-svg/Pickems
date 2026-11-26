@@ -270,6 +270,38 @@ struct CommissionerSheetStabilityTests {
         ))
     }
 
+    @Test func userChosenWeekClearsWhenGroupObservationCatchesUp() {
+        #expect(CommissionerAdminWeekSelection.shouldClearUserChosenWeek(
+            observedWeekId: "2026-W12",
+            userChosenWeekId: "2026-W12"
+        ))
+        #expect(!CommissionerAdminWeekSelection.shouldClearUserChosenWeek(
+            observedWeekId: "2026-W7",
+            userChosenWeekId: "2026-W12"
+        ))
+        #expect(!CommissionerAdminWeekSelection.shouldClearUserChosenWeek(
+            observedWeekId: "2026-W12",
+            userChosenWeekId: nil
+        ))
+    }
+
+    @Test func writeRowsWaitForPickServiceObservedWeek() {
+        #expect(CommissionerAdminWeekSelection.adminWeekReadyForWrites(
+            adminWeekId: "2026-W12",
+            groupObservedWeekId: "2026-W12",
+            pickObservingGroupId: "g1",
+            pickObservedWeekId: "2026-W12",
+            settingsGroupId: "g1"
+        ))
+        #expect(!CommissionerAdminWeekSelection.adminWeekReadyForWrites(
+            adminWeekId: "2026-W12",
+            groupObservedWeekId: "2026-W12",
+            pickObservingGroupId: "g1",
+            pickObservedWeekId: "2026-W7",
+            settingsGroupId: "g1"
+        ))
+    }
+
     @Test func pinnedListenerAcceptsSnapshotForObservedWeekWhenSeedMissed() {
         #expect(WeekObservationSnapshotPolicy.shouldApply(
             weekSelectionPinned: true,

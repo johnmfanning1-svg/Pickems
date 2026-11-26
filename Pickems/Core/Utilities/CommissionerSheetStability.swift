@@ -207,6 +207,35 @@ enum CommissionerAdminWeekSelection {
         guard let adminWeekId, let observedWeekId else { return false }
         return adminWeekId == observedWeekId
     }
+
+    /// Group and Pick listeners can lag after `selectObservedWeek`; slate and Pickems
+    /// rows must wait until both services observe the displayed week.
+    static func adminWeekReadyForWrites(
+        adminWeekId: String?,
+        groupObservedWeekId: String?,
+        pickObservingGroupId: String?,
+        pickObservedWeekId: String?,
+        settingsGroupId: String
+    ) -> Bool {
+        guard adminWeekMatchesObservation(
+            adminWeekId: adminWeekId,
+            observedWeekId: groupObservedWeekId
+        ) else {
+            return false
+        }
+        guard pickObservingGroupId == settingsGroupId else { return false }
+        guard let adminWeekId else { return false }
+        return pickObservedWeekId == adminWeekId
+    }
+
+    /// Pending chip choice clears once Firestore observation catches up.
+    static func shouldClearUserChosenWeek(
+        observedWeekId: String?,
+        userChosenWeekId: String?
+    ) -> Bool {
+        guard let userChosenWeekId, let observedWeekId else { return false }
+        return observedWeekId == userChosenWeekId
+    }
 }
 
 /// Pinned week browsing can leave `currentWeek` stale until the new listener fires.
