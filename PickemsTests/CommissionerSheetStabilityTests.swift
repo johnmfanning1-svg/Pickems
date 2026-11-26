@@ -193,6 +193,14 @@ struct CommissionerSheetStabilityTests {
         #expect(resolved.spread == 6.5)
     }
 
+    @Test func staleWeekLoadDoesNotCommit() {
+        #expect(!AvailableWeeksLoadCommit.shouldCommit(requestToken: 1, latestToken: 2))
+    }
+
+    @Test func freshestWeekLoadCommits() {
+        #expect(AvailableWeeksLoadCommit.shouldCommit(requestToken: 2, latestToken: 2))
+    }
+
     @Test func weekChipBarStaysLoadingUntilWeeksBelongToPin() {
         let loading = CommissionerPinnedLeague.WeekChipBarState.resolve(
             belongsToPin: false,

@@ -172,6 +172,13 @@ enum CommissionerPinnedLeague {
     }
 }
 
+/// Guards async week-list loads so an older request cannot overwrite a newer league.
+enum AvailableWeeksLoadCommit {
+    static func shouldCommit(requestToken: Int, latestToken: Int) -> Bool {
+        requestToken == latestToken
+    }
+}
+
 /// Spread editor draft versus a later slate snapshot.
 enum SpreadDraftRefresh {
     struct Draft: Equatable {

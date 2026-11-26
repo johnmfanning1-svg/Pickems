@@ -41,16 +41,17 @@ struct CommissionerWeekAdminSections: View {
     }
 
     var body: some View {
-        weekStatusSections
+        let chipState = resolvedWeekChipBarState()
+        weekStatusSections(chipState: chipState)
         pickemsAdminSection
         tiesSection
     }
 
-    private var weekChipBarState: CommissionerPinnedLeague.WeekChipBarState {
+    private func resolvedWeekChipBarState() -> CommissionerPinnedLeague.WeekChipBarState {
         let service = appState.groupService
-        let weeks = service.availableWeeks
+        let weeks = service.commissionerAvailableWeeks
         return CommissionerPinnedLeague.WeekChipBarState.resolve(
-            belongsToPin: service.availableWeeksBelong(to: groupId),
+            belongsToPin: service.commissionerAvailableWeeksBelong(to: groupId),
             availableWeeks: weeks
         )
     }
@@ -67,13 +68,13 @@ struct CommissionerWeekAdminSections: View {
     """
 
     @ViewBuilder
-    private var weekStatusSections: some View {
+    private func weekStatusSections(chipState: CommissionerPinnedLeague.WeekChipBarState) -> some View {
         if let week {
-            weekStatusPrimarySection(week)
+            weekStatusPrimarySection(week, chipState: chipState)
             weekStatusDestructiveCapsuleSection(week)
             weekStatusManageSection(week)
         } else {
-            switch weekChipBarState {
+            switch chipState {
             case .loading:
                 Section {
                     weekChipBarLoadingRow
@@ -94,7 +95,7 @@ struct CommissionerWeekAdminSections: View {
                 }
             case .ready:
                 Section {
-                    weekChipBar
+                    weekChipBar(chipState: chipState)
                 } header: {
                     Text("This Week")
                 } footer: {
@@ -115,8 +116,8 @@ struct CommissionerWeekAdminSections: View {
     }
 
     @ViewBuilder
-    private var weekChipBar: some View {
-        switch weekChipBarState {
+    private func weekChipBar(chipState: CommissionerPinnedLeague.WeekChipBarState) -> some View {
+        switch chipState {
         case .loading:
             weekChipBarLoadingRow
         case .empty:
@@ -141,9 +142,12 @@ struct CommissionerWeekAdminSections: View {
     }
 
     @ViewBuilder
-    private func weekStatusPrimarySection(_ week: WeekSummary) -> some View {
+    private func weekStatusPrimarySection(
+        _ week: WeekSummary,
+        chipState: CommissionerPinnedLeague.WeekChipBarState
+    ) -> some View {
         Section {
-            weekChipBar
+            weekChipBar(chipState: chipState)
 
             LabeledContent("Status", value: week.status.rawValue.capitalized)
                 .listRowBackground(PickemsColors.cardBackground)
@@ -315,8 +319,8 @@ struct CommissionerWeekAdminSections: View {
         if let current = appState.groupService.currentWeek, current.id == weekId {
             return current
         }
-        guard appState.groupService.availableWeeksBelong(to: groupId) else { return nil }
-        return appState.groupService.availableWeeks.first { $0.id == weekId }
+        guard appState.groupService.commissionerAvailableWeeksBelong(to: groupId) else { return nil }
+        return appState.groupService.commissionerAvailableWeeks.first { $0.id == weekId }
     }
 
     // MARK: - Selections / Slate rows
