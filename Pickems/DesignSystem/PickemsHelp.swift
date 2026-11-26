@@ -191,7 +191,7 @@ enum PickemsHelp {
         title: "Selection Deadline",
         message: "Set when members must finish making Selections so there’s still time to make Pickems before kickoff.",
         tips: [
-            "You’ll get a push at the start of each week to set this.",
+            "With a league default on, new weeks start with that deadline; change it here any time.",
             "After it passes, you can fill remaining games or open the week with fewer.",
             "Pickems still lock at the earliest slate kickoff, unless the commissioner turned on rolling lock."
         ]
@@ -314,7 +314,7 @@ enum PickemsHelp {
         tips: [
             "League type (ATS or Straight Up) lives in Scoring. Before Selections start it applies to this week. Once Selections start you choose this week or next week. Once Pickems open it starts next week.",
             "Commissioner Selects: set total games per week and build the slate yourself.",
-            "Changes apply to future weeks. Set a Selection deadline each week in member mode.",
+            "In member mode, set a default Selection deadline here or override individual weeks in This Week.",
             "Pickems Lock chooses entire-slate lock at first kickoff, or rolling lock at each game.",
             "On a private league, Only commissioner can invite hides Invite Friends for members.",
             "List in Browse puts the league on the Browse screen. Anyone signed in can join. You can choose that when you create the league, or here.",

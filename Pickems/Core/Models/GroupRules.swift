@@ -156,6 +156,8 @@ struct GroupRules: Codable, Equatable {
     var vetoEnabled: Bool
     /// Votes required to remove one Selection. Clamped to 1…(league size − 1) when used.
     var vetoVotesNeeded: Int
+    /// Optional league default for member Selection deadlines. Missing = off.
+    var defaultSelectionLock: DefaultSelectionLock? = nil
 
     /// Expected unique games for a week under the active mode.
     /// Member mode is always `members × Selections per person`, never the unused
@@ -177,6 +179,7 @@ struct GroupRules: Codable, Equatable {
         case allowConfidencePick, allowLatePicks, latePickPenaltyWins
         case pickMode
         case vetoEnabled, vetoVotesNeeded
+        case defaultSelectionLock
     }
 
     init(
@@ -192,7 +195,8 @@ struct GroupRules: Codable, Equatable {
         latePickPenaltyWins: Int = 1,
         pickMode: PickMode = .ats,
         vetoEnabled: Bool = false,
-        vetoVotesNeeded: Int = SelectionVetoPolicy.defaultVotesNeeded
+        vetoVotesNeeded: Int = SelectionVetoPolicy.defaultVotesNeeded,
+        defaultSelectionLock: DefaultSelectionLock? = nil
     ) {
         self.selectionMode = selectionMode
         self.selectionsPerMember = selectionsPerMember
@@ -207,6 +211,7 @@ struct GroupRules: Codable, Equatable {
         self.pickMode = pickMode
         self.vetoEnabled = vetoEnabled
         self.vetoVotesNeeded = vetoVotesNeeded
+        self.defaultSelectionLock = defaultSelectionLock
     }
 
     func encode(to encoder: Encoder) throws {
@@ -224,6 +229,7 @@ struct GroupRules: Codable, Equatable {
         try container.encode(pickMode, forKey: .pickMode)
         try container.encode(vetoEnabled, forKey: .vetoEnabled)
         try container.encode(vetoVotesNeeded, forKey: .vetoVotesNeeded)
+        try container.encodeIfPresent(defaultSelectionLock, forKey: .defaultSelectionLock)
     }
 
     init(from decoder: Decoder) throws {
@@ -242,6 +248,7 @@ struct GroupRules: Codable, Equatable {
         vetoEnabled = try container.decodeIfPresent(Bool.self, forKey: .vetoEnabled) ?? false
         vetoVotesNeeded = try container.decodeIfPresent(Int.self, forKey: .vetoVotesNeeded)
             ?? SelectionVetoPolicy.defaultVotesNeeded
+        defaultSelectionLock = try container.decodeIfPresent(DefaultSelectionLock.self, forKey: .defaultSelectionLock)
     }
 
     static let `default` = GroupRules(

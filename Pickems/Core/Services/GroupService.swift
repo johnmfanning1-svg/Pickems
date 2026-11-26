@@ -1500,6 +1500,8 @@ final class GroupService {
     }
 
     func updateRules(groupId: String, rules: GroupRules) async throws {
+        let previousRules = groups.first(where: { $0.id == groupId })?.rules
+            ?? selectedGroup?.rules
         try await db.collection("groups").document(groupId).updateData([
             "rules": try Firestore.Encoder().encode(rules)
         ])
@@ -1514,6 +1516,73 @@ final class GroupService {
             rules: rules,
             memberCount: selectedGroup?.memberCount
         )
+        await applyDefaultSelectionDeadlineAfterRulesSave(
+            groupId: groupId,
+            rules: rules,
+            previousRules: previousRules
+        )
+    }
+
+    /// When the default lock is newly enabled or changed, stamp the current selection week if empty.
+    private func applyDefaultSelectionDeadlineAfterRulesSave(
+        groupId: String,
+        rules: GroupRules,
+        previousRules: GroupRules?
+    ) async {
+        guard observedGroupId == groupId,
+              let lock = rules.defaultSelectionLock,
+              lock.enabled,
+              rules.selectionMode == .member,
+              let week = currentWeek,
+              week.status == .selection,
+              !week.skipsSelection,
+              week.selectionDeadline == nil else { return }
+        let changed = previousRules?.defaultSelectionLock != rules.defaultSelectionLock
+        guard changed else { return }
+        guard let deadline = DefaultSelectionLockMath.futureDeadline(
+            for: lock,
+            seasonYear: week.seasonYear,
+            weekNumber: week.weekNumber
+        ) else { return }
+        do {
+            try await setDefaultSelectionDeadline(groupId: groupId, weekId: week.id, deadline: deadline)
+        } catch {
+            AppLog.error(AppLog.firestore, "default selection deadline apply failed", error: error, metadata: [
+                "group_id": groupId,
+                "week_id": week.id,
+            ])
+        }
+    }
+
+    private func setDefaultSelectionDeadline(groupId: String, weekId: String, deadline: Date) async throws {
+        guard deadline > Date() else { return }
+        let weekRef = db.week(groupId: groupId, weekId: weekId)
+        let setAt = Date()
+        let updates: [String: Any] = [
+            "selectionDeadline": Timestamp(date: deadline),
+            "selectionDeadlineSetAt": Timestamp(date: setAt),
+            "selectionDeadlineSetBy": DefaultSelectionLockStamp.setBy,
+        ]
+        let stamped = try await db.runTransaction { transaction, errorPointer in
+            do {
+                let snap = try transaction.getDocument(weekRef)
+                guard snap.exists, snap.data()?["selectionDeadline"] == nil else { return false as Any? }
+                transaction.updateData(updates, forDocument: weekRef)
+                return true as Any?
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
+            }
+        } as? Bool
+        guard stamped == true else { return }
+        updateDisplayedWeek(groupId: groupId, weekId: weekId) { week in
+            SelectionDeadlineLocal.apply(
+                deadline: deadline,
+                setAt: setAt,
+                setBy: DefaultSelectionLockStamp.setBy,
+                to: &week
+            )
+        }
     }
 
     /// Commissioner or coordinator switch to rolling lock through the

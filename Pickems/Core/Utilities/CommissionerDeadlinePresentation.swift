@@ -28,7 +28,8 @@ enum CommissionerDeadlinePresentation {
     static func route(
         for request: CommissionerSheetRequest,
         settingsGroupId: String,
-        selectedGroupId: String?
+        selectedGroupId: String?,
+        rules: GroupRules? = nil
     ) -> CommissionerSheet? {
         switch request {
         case .adminGameBrowse(let week):
@@ -38,7 +39,7 @@ enum CommissionerDeadlinePresentation {
             return .members
         case .selectionDeadline(let week):
             guard selectedGroupId == settingsGroupId else { return nil }
-            return .selectionDeadline(selectionEdit(settingsGroupId: settingsGroupId, week: week))
+            return .selectionDeadline(selectionEdit(settingsGroupId: settingsGroupId, week: week, rules: rules))
         case .pickDeadline(let week):
             guard selectedGroupId == settingsGroupId else { return nil }
             return .pickDeadline(pickEdit(settingsGroupId: settingsGroupId, week: week))
@@ -54,10 +55,27 @@ enum CommissionerDeadlinePresentation {
         }
     }
 
-    static func selectionEdit(settingsGroupId: String, week: WeekSummary) -> SelectionDeadlineEdit {
-        SelectionDeadlineEdit(
+    static func selectionEdit(
+        settingsGroupId: String,
+        week: WeekSummary,
+        rules: GroupRules? = nil
+    ) -> SelectionDeadlineEdit {
+        let suggested = suggestedDefaultDeadline(for: week, rules: rules)
+        return SelectionDeadlineEdit(
             capture: capture(settingsGroupId: settingsGroupId, week: week),
-            initialDeadline: week.selectionDeadline
+            initialDeadline: week.selectionDeadline,
+            suggestedDeadline: suggested
+        )
+    }
+
+    static func suggestedDefaultDeadline(for week: WeekSummary, rules: GroupRules?) -> Date? {
+        guard week.selectionDeadline == nil,
+              let lock = rules?.defaultSelectionLock,
+              lock.enabled else { return nil }
+        return DefaultSelectionLockMath.deadline(
+            for: lock,
+            seasonYear: week.seasonYear,
+            weekNumber: week.weekNumber
         )
     }
 
@@ -78,7 +96,8 @@ enum CommissionerDeadlinePresentation {
     static func pendingSelection(
         settingsGroupId: String,
         weekId: String,
-        displayedWeek: WeekSummary?
+        displayedWeek: WeekSummary?,
+        rules: GroupRules? = nil
     ) -> CommissionerSheet {
         .selectionDeadline(
             SelectionDeadlineEdit(
@@ -88,7 +107,8 @@ enum CommissionerDeadlinePresentation {
                     weekLabel: displayedWeek?.displayLabel ?? "This week",
                     isRollingLock: displayedWeek?.isRollingLock ?? false
                 ),
-                initialDeadline: displayedWeek?.selectionDeadline
+                initialDeadline: displayedWeek?.selectionDeadline,
+                suggestedDeadline: displayedWeek.map { suggestedDefaultDeadline(for: $0, rules: rules) } ?? nil
             )
         )
     }

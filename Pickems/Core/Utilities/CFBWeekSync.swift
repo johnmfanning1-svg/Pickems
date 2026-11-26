@@ -65,7 +65,7 @@ enum CFBWeekSync {
         let seasonYear = parsed?.seasonYear ?? info.seasonYear
         let weekNumber = parsed?.weekNumber ?? CFBWeekCalendar.resolve(espn: info, now: now).weekNumber
         let isFixed = weekNumber == 0
-        return WeekSummary(
+        var week = WeekSummary(
             id: id,
             seasonYear: seasonYear,
             weekNumber: weekNumber,
@@ -81,6 +81,10 @@ enum CFBWeekSync {
             selectionDeadlineSetBy: nil,
             slateSource: isFixed ? CFBWeekCalendar.weekZeroSlateSource : nil
         )
+        if let lock = rules.defaultSelectionLock {
+            DefaultSelectionLockStamp.apply(to: &week, lock: lock, stampedAt: now)
+        }
+        return week
     }
 
     private static func resolvedFallback(on date: Date) -> CFBAppWeek {

@@ -18,6 +18,13 @@ import {
   type EspnEvent,
 } from "./espn";
 import { espnScoreboardWeek } from "./cfbWeekCalendar";
+import {
+  DEFAULT_SELECTION_STAMP,
+  futureDefaultSelectionDeadline,
+  shouldStampDefaultSelection,
+  type DefaultSelectionLock,
+} from "./defaultSelectionLock";
+import { shouldSendSelectionDeadlineNudge } from "./selectionDeadlineNudge";
 import { kickoffsMillisByEspnEventId } from "./selectionCatalog";
 import { sendToUser, sendToUsers } from "./notifications";
 import { pushLiveActivityUpdates } from "./liveActivityPush";
@@ -152,6 +159,24 @@ export const onWeekStatusChange = onDocumentUpdated(
   }
 );
 
+async function stampDefaultSelectionDeadlineIfEmpty(
+  weekRef: DocumentReference,
+  deadline: Date
+): Promise<boolean> {
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(weekRef);
+    if (!snap.exists) return false;
+    const existing = snap.data()?.selectionDeadline;
+    if (existing) return false;
+    tx.update(weekRef, {
+      selectionDeadline: Timestamp.fromDate(deadline),
+      selectionDeadlineSetAt: FieldValue.serverTimestamp(),
+      selectionDeadlineSetBy: DEFAULT_SELECTION_STAMP,
+    });
+    return true;
+  });
+}
+
 /**
  * When a week doc is created in selection (member mode), nudge the commissioner
  * to set a nomination deadline.
@@ -168,8 +193,42 @@ export const onWeekCreated = onDocumentCreated(
 
     const groupId = event.params.groupId;
     const weekId = event.params.weekId;
+    const weekRef = event.data?.ref ?? db.collection("groups").doc(groupId).collection("weeks").doc(weekId);
     const group = await db.collection("groups").doc(groupId).get();
-    const commissionerId = group.data()?.commissionerId as string | undefined;
+    const groupData = group.data();
+    const rules = groupData?.rules as { defaultSelectionLock?: DefaultSelectionLock } | undefined;
+    const lock = rules?.defaultSelectionLock;
+    const seasonYear = (data.seasonYear as number | undefined) ?? new Date().getFullYear();
+    const weekNumber = data.weekNumber as number | undefined;
+    const nowMs = Date.now();
+
+    if (
+      shouldStampDefaultSelection({
+        lock,
+        selectionMode: data.selectionMode as string,
+        weekNumber,
+        slateSource: data.slateSource as string | null | undefined,
+        status: data.status as string,
+        existingDeadline: data.selectionDeadline,
+      })
+    ) {
+      const deadline = futureDefaultSelectionDeadline(lock, seasonYear, weekNumber ?? 0, nowMs);
+      if (deadline) {
+        const stamped = await stampDefaultSelectionDeadlineIfEmpty(weekRef, deadline);
+        if (stamped) return;
+      }
+    }
+
+    const latestWeek = await weekRef.get();
+    const latest = latestWeek.data();
+    if (!shouldSendSelectionDeadlineNudge({
+      selectionDeadline: latest?.selectionDeadline,
+      selectionDeadlineNudgeSent: latest?.selectionDeadlineNudgeSent ?? data.selectionDeadlineNudgeSent,
+    })) {
+      return;
+    }
+
+    const commissionerId = groupData?.commissionerId as string | undefined;
     if (!commissionerId) return;
 
     await sendToUser(
@@ -194,38 +253,69 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
   const groups = await db.collection("groups").get();
 
   for (const groupDoc of groups.docs) {
-    const commissionerId = groupDoc.data().commissionerId as string | undefined;
-    const memberIds = (groupDoc.data().memberIds as string[]) ?? [];
-    if (!commissionerId) continue;
+    try {
+      const groupData = groupDoc.data();
+      const commissionerId = groupData.commissionerId as string | undefined;
+      const memberIds = (groupData.memberIds as string[]) ?? [];
+      const rules = groupData.rules as { defaultSelectionLock?: DefaultSelectionLock } | undefined;
+      const defaultLock = rules?.defaultSelectionLock;
+      if (!commissionerId) continue;
 
-    const weeks = await groupDoc.ref
-      .collection("weeks")
-      .where("status", "==", "selection")
-      .get();
+      const weeks = await groupDoc.ref
+        .collection("weeks")
+        .where("status", "==", "selection")
+        .get();
 
-    for (const weekDoc of weeks.docs) {
-      const week = weekDoc.data();
-      if (week.selectionMode !== "member" && week.selectionMode !== "commissioner") continue;
+      for (const weekDoc of weeks.docs) {
+        const week = weekDoc.data();
+        if (week.selectionMode !== "member" && week.selectionMode !== "commissioner") continue;
 
-      const groupId = groupDoc.id;
-      const weekId = weekDoc.id;
-      const weekNum = week.weekNumber ?? "";
-      const deadline = week.selectionDeadline as Timestamp | undefined;
-      const payload = { groupId, weekId };
-      const deadlineMs = deadline ? deadline.toMillis() : null;
-      const deadlinePassed = deadlineMs != null && deadlineMs <= nowMs;
-      const isMemberWeek = week.selectionMode !== "commissioner";
+        const groupId = groupDoc.id;
+        const weekId = weekDoc.id;
+        const weekNum = week.weekNumber ?? "";
+        let deadline = week.selectionDeadline as Timestamp | undefined;
+        const payload = { groupId, weekId };
+        const isMemberWeek = week.selectionMode !== "commissioner";
 
-      if (isMemberWeek && !deadline && !week.selectionDeadlineNudgeSent) {
-        await sendToUser(
-          commissionerId,
-          "Set Selection deadline",
-          `Week ${weekNum} needs a Selection deadline so members finish before kickoff.`,
-          "set_selection_deadline",
-          payload
-        );
-        await weekDoc.ref.update({ selectionDeadlineNudgeSent: true });
-      }
+        if (
+          isMemberWeek &&
+          !deadline &&
+          shouldStampDefaultSelection({
+            lock: defaultLock,
+            selectionMode: week.selectionMode as string,
+            weekNumber: week.weekNumber as number | undefined,
+            slateSource: week.slateSource as string | null | undefined,
+            status: week.status as string,
+            existingDeadline: week.selectionDeadline,
+          })
+        ) {
+          const computed = futureDefaultSelectionDeadline(
+            defaultLock,
+            (week.seasonYear as number | undefined) ?? new Date().getFullYear(),
+            (week.weekNumber as number) ?? 0,
+            nowMs
+          );
+          if (computed) {
+            const stamped = await stampDefaultSelectionDeadlineIfEmpty(weekDoc.ref, computed);
+            if (stamped) {
+              deadline = Timestamp.fromDate(computed);
+            }
+          }
+        }
+
+        const deadlineMs = deadline ? deadline.toMillis() : null;
+        const deadlinePassed = deadlineMs != null && deadlineMs <= nowMs;
+
+        if (isMemberWeek && !deadline && !week.selectionDeadlineNudgeSent) {
+          await sendToUser(
+            commissionerId,
+            "Set Selection deadline",
+            `Week ${weekNum} needs a Selection deadline so members finish before kickoff.`,
+            "set_selection_deadline",
+            payload
+          );
+          await weekDoc.ref.update({ selectionDeadlineNudgeSent: true });
+        }
 
       if (isMemberWeek && deadline && deadline.toMillis() > nowMs) {
         const msUntil = deadline.toMillis() - nowMs;
@@ -354,6 +444,12 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
         );
         await weekDoc.ref.update({ selectionDeadlinePassedNotified: true });
       }
+    }
+    } catch (err) {
+      logger.error("selectionDeadlineJobs: group iteration failed", {
+        groupId: groupDoc.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 });
