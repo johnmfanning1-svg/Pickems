@@ -286,7 +286,7 @@ final class GroupService {
         weekSelectionPinned = activeWeekId.map { $0 != weekId } ?? (observedWeekId != weekId)
         // Seed immediately so Picks/pick listeners don't briefly attach to the previous week.
         // Only from this league's chip list — `2026-W7` exists in every league.
-        if availableWeeksGroupId == groupId, let known = availableWeeks.first(where: { $0.id == weekId }) {
+        if let known = seededWeekSummary(groupId: groupId, weekId: weekId) {
             currentWeek = known
         }
         // Attach the new week observer before any await. Leaving the previous week's
@@ -309,6 +309,19 @@ final class GroupService {
     private func leagueForWeekLoading(groupId: String) -> PickemGroup? {
         if let selectedGroup, selectedGroup.id == groupId { return selectedGroup }
         return groups.first { $0.id == groupId }
+    }
+
+    /// Picks tab bar and Commissioner Settings can seed the same browse week.
+    func seededWeekSummary(groupId: String, weekId: String) -> WeekSummary? {
+        if availableWeeksGroupId == groupId,
+           let week = availableWeeks.first(where: { $0.id == weekId }) {
+            return week
+        }
+        if commissionerAvailableWeeksGroupId == groupId,
+           let week = commissionerAvailableWeeks.first(where: { $0.id == weekId }) {
+            return week
+        }
+        return nil
     }
 
     private func invalidateAvailableWeeksLoads() {
@@ -542,7 +555,12 @@ final class GroupService {
         // A stale sync for the previous league must not install its week over the
         // one on screen. Matching week ids are not the same document.
         guard selectedGroup?.id == groupId else { return }
-        if weekSelectionPinned, let current = currentWeek, current.id != week.id {
+        guard WeekObservationSnapshotPolicy.shouldApply(
+            weekSelectionPinned: weekSelectionPinned,
+            currentWeekId: currentWeek?.id,
+            snapshotWeekId: week.id,
+            observedWeekId: observedWeekId
+        ) else {
             return
         }
         // Same week id in another league is a different document. Replace it.
@@ -2095,7 +2113,12 @@ final class GroupService {
                     guard let snapshot, snapshot.exists else { return }
                     do {
                         let week = try snapshot.data(as: WeekSummary.self)
-                        if self.weekSelectionPinned, let current = self.currentWeek, current.id != week.id {
+                        guard WeekObservationSnapshotPolicy.shouldApply(
+                            weekSelectionPinned: self.weekSelectionPinned,
+                            currentWeekId: self.currentWeek?.id,
+                            snapshotWeekId: week.id,
+                            observedWeekId: weekId
+                        ) else {
                             return
                         }
                         self.currentWeek = week
@@ -2431,6 +2454,9 @@ final class GroupService {
         currentWeek = nil
         availableWeeks = []
         availableWeeksGroupId = nil
+        commissionerAvailableWeeks = []
+        commissionerAvailableWeeksGroupId = nil
+        commissionerAvailableWeeksLoadToken += 1
         seasonDateRangeByWeekId = [:]
         cfbWeek = nil
         standings = nil

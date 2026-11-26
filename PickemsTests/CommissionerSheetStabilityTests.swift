@@ -226,11 +226,111 @@ struct CommissionerSheetStabilityTests {
         #expect(ready == .ready([sample]))
     }
 
-    private func week(deadline: TimeInterval) -> WeekSummary {
+    @Test func userChosenWeekSurvivesLateLoadSnapshot() {
+        let live = week(deadline: 20)
+        let browsed = week(id: "2026-W12", number: 12, deadline: 15)
+        let resolved = CommissionerAdminWeekSelection.displayedWeek(
+            userChosenWeekId: "2026-W12",
+            observedWeek: live,
+            commissionerWeeks: [browsed, live],
+            weeksBelongToPin: true
+        )
+        #expect(resolved?.id == "2026-W12")
+    }
+
+    @Test func chipHighlightMatchesContentWeekId() {
+        let live = week(id: "2026-W7", number: 7, deadline: 20)
+        let browsed = week(id: "2026-W14", number: 14, deadline: 15)
+        let fallbackBody = CommissionerAdminWeekSelection.displayedWeek(
+            userChosenWeekId: "2026-W14",
+            observedWeek: live,
+            commissionerWeeks: [browsed, live],
+            weeksBelongToPin: false
+        )
+        #expect(fallbackBody?.id == live.id)
+
+        let pendingBody = CommissionerAdminWeekSelection.displayedWeek(
+            userChosenWeekId: "2026-W14",
+            observedWeek: live,
+            commissionerWeeks: [browsed, live],
+            weeksBelongToPin: true
+        )
+        #expect(pendingBody?.id == "2026-W14")
+        #expect(pendingBody?.id != live.id)
+    }
+
+    @Test func adminRowsWaitUntilObservationMatchesDisplayedWeek() {
+        #expect(!CommissionerAdminWeekSelection.adminWeekMatchesObservation(
+            adminWeekId: "2026-W14",
+            observedWeekId: "2026-W7"
+        ))
+        #expect(CommissionerAdminWeekSelection.adminWeekMatchesObservation(
+            adminWeekId: "2026-W12",
+            observedWeekId: "2026-W12"
+        ))
+    }
+
+    @Test func userChosenWeekClearsWhenGroupObservationCatchesUp() {
+        #expect(CommissionerAdminWeekSelection.shouldClearUserChosenWeek(
+            observedWeekId: "2026-W12",
+            userChosenWeekId: "2026-W12"
+        ))
+        #expect(!CommissionerAdminWeekSelection.shouldClearUserChosenWeek(
+            observedWeekId: "2026-W7",
+            userChosenWeekId: "2026-W12"
+        ))
+        #expect(!CommissionerAdminWeekSelection.shouldClearUserChosenWeek(
+            observedWeekId: "2026-W12",
+            userChosenWeekId: nil
+        ))
+    }
+
+    @Test func writeRowsWaitForPickServiceObservedWeek() {
+        #expect(CommissionerAdminWeekSelection.adminWeekReadyForWrites(
+            adminWeekId: "2026-W12",
+            groupObservedWeekId: "2026-W12",
+            pickObservingGroupId: "g1",
+            pickObservedWeekId: "2026-W12",
+            settingsGroupId: "g1"
+        ))
+        #expect(!CommissionerAdminWeekSelection.adminWeekReadyForWrites(
+            adminWeekId: "2026-W12",
+            groupObservedWeekId: "2026-W12",
+            pickObservingGroupId: "g1",
+            pickObservedWeekId: "2026-W7",
+            settingsGroupId: "g1"
+        ))
+    }
+
+    @Test func pinnedListenerAcceptsSnapshotForObservedWeekWhenSeedMissed() {
+        #expect(WeekObservationSnapshotPolicy.shouldApply(
+            weekSelectionPinned: true,
+            currentWeekId: "2026-W13",
+            snapshotWeekId: "2026-W12",
+            observedWeekId: "2026-W12"
+        ))
+        #expect(!WeekObservationSnapshotPolicy.shouldApply(
+            weekSelectionPinned: true,
+            currentWeekId: "2026-W13",
+            snapshotWeekId: "2026-W7",
+            observedWeekId: "2026-W12"
+        ))
+    }
+
+    @Test func weekListScrollStaysPutAfterUserTap() {
+        #expect(!WeekChipBarScrollSync.shouldScrollOnWeekListChange(userHasChosenWeek: true))
+        #expect(WeekChipBarScrollSync.shouldScrollOnWeekListChange(userHasChosenWeek: false))
+    }
+
+    private func week(
+        id: String = "2026-W7",
+        number: Int = 7,
+        deadline: TimeInterval
+    ) -> WeekSummary {
         WeekSummary(
-            id: "2026-W7",
+            id: id,
             seasonYear: 2026,
-            weekNumber: 7,
+            weekNumber: number,
             status: .picking,
             slateSize: 2,
             selectionMode: .member,

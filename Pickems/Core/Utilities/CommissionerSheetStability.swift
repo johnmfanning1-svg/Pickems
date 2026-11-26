@@ -179,6 +179,89 @@ enum AvailableWeeksLoadCommit {
     }
 }
 
+/// Commissioner Settings week chips share the admin section's week. The user
+/// can pick a chip before Firestore/ESPN catch up; that choice wins over a late load.
+enum CommissionerAdminWeekSelection {
+    /// Week for admin rows and chip highlight. `userChosenWeekId` is set synchronously on tap.
+    static func displayedWeek(
+        userChosenWeekId: String?,
+        observedWeek: WeekSummary?,
+        commissionerWeeks: [WeekSummary],
+        weeksBelongToPin: Bool
+    ) -> WeekSummary? {
+        let targetId = userChosenWeekId ?? observedWeek?.id
+        guard let targetId else { return observedWeek }
+        if let observedWeek, observedWeek.id == targetId { return observedWeek }
+        if weeksBelongToPin, let listed = commissionerWeeks.first(where: { $0.id == targetId }) {
+            return listed
+        }
+        return observedWeek
+    }
+
+    /// Commissioner Settings rows that write week state must not run until observation
+    /// matches the week shown in the chip and section body.
+    static func adminWeekMatchesObservation(
+        adminWeekId: String?,
+        observedWeekId: String?
+    ) -> Bool {
+        guard let adminWeekId, let observedWeekId else { return false }
+        return adminWeekId == observedWeekId
+    }
+
+    /// Group and Pick listeners can lag after `selectObservedWeek`; slate and Pickems
+    /// rows must wait until both services observe the displayed week.
+    static func adminWeekReadyForWrites(
+        adminWeekId: String?,
+        groupObservedWeekId: String?,
+        pickObservingGroupId: String?,
+        pickObservedWeekId: String?,
+        settingsGroupId: String
+    ) -> Bool {
+        guard adminWeekMatchesObservation(
+            adminWeekId: adminWeekId,
+            observedWeekId: groupObservedWeekId
+        ) else {
+            return false
+        }
+        guard pickObservingGroupId == settingsGroupId else { return false }
+        guard let adminWeekId else { return false }
+        return pickObservedWeekId == adminWeekId
+    }
+
+    /// Pending chip choice clears once Firestore observation catches up.
+    static func shouldClearUserChosenWeek(
+        observedWeekId: String?,
+        userChosenWeekId: String?
+    ) -> Bool {
+        guard let userChosenWeekId, let observedWeekId else { return false }
+        return observedWeekId == userChosenWeekId
+    }
+}
+
+/// Pinned week browsing can leave `currentWeek` stale until the new listener fires.
+/// Snapshots for the week we are observing must install even when the seed missed.
+enum WeekObservationSnapshotPolicy {
+    static func shouldApply(
+        weekSelectionPinned: Bool,
+        currentWeekId: String?,
+        snapshotWeekId: String,
+        observedWeekId: String?
+    ) -> Bool {
+        guard weekSelectionPinned else { return true }
+        if snapshotWeekId == observedWeekId { return true }
+        if let currentWeekId, currentWeekId != snapshotWeekId { return false }
+        return true
+    }
+}
+
+/// Horizontal chip bars scroll to center the selection. Scrolling must never write selection;
+/// after the user taps, do not re-center when only the week list payload changes.
+enum WeekChipBarScrollSync {
+    static func shouldScrollOnWeekListChange(userHasChosenWeek: Bool) -> Bool {
+        !userHasChosenWeek
+    }
+}
+
 /// Spread editor draft versus a later slate snapshot.
 enum SpreadDraftRefresh {
     struct Draft: Equatable {

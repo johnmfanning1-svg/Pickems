@@ -16,10 +16,7 @@ struct CommissionerWeekAdminSections: View {
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var groupId: String { group.id }
-    private var week: WeekSummary? {
-        guard appState.groupService.currentWeekGroupId == groupId else { return nil }
-        return appState.groupService.currentWeek
-    }
+    private var week: WeekSummary? { adminWeek }
     private var pinnedMembers: [GroupMember] {
         guard appState.groupService.membersGroupId == groupId else { return [] }
         return appState.groupService.members
@@ -40,11 +37,53 @@ struct CommissionerWeekAdminSections: View {
         Set(pinnedNominations.map(\.espnEventId) + pinnedSlate.map(\.espnEventId)).count
     }
 
+    /// Set synchronously on chip tap so late commissioner week loads cannot snap back.
+    @State private var userChosenWeekId: String?
+
+    private var observedWeek: WeekSummary? {
+        guard appState.groupService.currentWeekGroupId == groupId else { return nil }
+        return appState.groupService.currentWeek
+    }
+
+    /// One source of truth for chip highlight and admin section body.
+    private var adminWeek: WeekSummary? {
+        let service = appState.groupService
+        return CommissionerAdminWeekSelection.displayedWeek(
+            userChosenWeekId: userChosenWeekId,
+            observedWeek: observedWeek,
+            commissionerWeeks: service.commissionerAvailableWeeks,
+            weeksBelongToPin: service.commissionerAvailableWeeksBelong(to: groupId)
+        )
+    }
+
+    private var adminWeekReadyForWrites: Bool {
+        CommissionerAdminWeekSelection.adminWeekReadyForWrites(
+            adminWeekId: adminWeek?.id,
+            groupObservedWeekId: observedWeek?.id,
+            pickObservingGroupId: appState.pickService.observingGroupId,
+            pickObservedWeekId: appState.pickService.observedWeekId,
+            settingsGroupId: groupId
+        )
+    }
+
     var body: some View {
         let chipState = resolvedWeekChipBarState()
-        weekStatusSections(chipState: chipState)
-        pickemsAdminSection
-        tiesSection
+        Group {
+            weekStatusSections(chipState: chipState)
+            pickemsAdminSection
+            tiesSection
+        }
+        .onChange(of: observedWeek?.id) { _, observedId in
+            if CommissionerAdminWeekSelection.shouldClearUserChosenWeek(
+                observedWeekId: observedId,
+                userChosenWeekId: userChosenWeekId
+            ) {
+                userChosenWeekId = nil
+            }
+        }
+        .onChange(of: group.id) { _, _ in
+            userChosenWeekId = nil
+        }
     }
 
     private func resolvedWeekChipBarState() -> CommissionerPinnedLeague.WeekChipBarState {
@@ -125,12 +164,15 @@ struct CommissionerWeekAdminSections: View {
         case .ready(let weeks):
             WeekChipBar(
                 weeks: weeks,
-                selectedWeekId: week?.id,
+                selectedWeekId: adminWeek?.id,
                 activeWeekId: activeESPNWeekId,
                 dateRangeLabel: { appState.groupService.dateRangeLabel(for: $0.id) },
                 accessibilityHint: "Admin this week. Also switches Selections and Pickems.",
                 showsCaption: false,
-                horizontalPadding: 0
+                horizontalPadding: 0,
+                scrollWhenWeekListChanges: WeekChipBarScrollSync.shouldScrollOnWeekListChange(
+                    userHasChosenWeek: userChosenWeekId != nil
+                )
             ) { selected in
                 selectAdminWeek(selected)
             }
@@ -152,7 +194,7 @@ struct CommissionerWeekAdminSections: View {
             LabeledContent("Status", value: week.status.rawValue.capitalized)
                 .listRowBackground(PickemsColors.cardBackground)
 
-            if !week.skipsSelection {
+            if adminWeekReadyForWrites, !week.skipsSelection {
                 selectionDeadlineRow(week)
             }
         } header: {
@@ -162,7 +204,7 @@ struct CommissionerWeekAdminSections: View {
 
     @ViewBuilder
     private func weekStatusDestructiveCapsuleSection(_ week: WeekSummary) -> some View {
-        if week.status == .selection, !week.skipsSelection {
+        if week.status == .selection, !week.skipsSelection, adminWeekReadyForWrites {
             Section {
                 if week.isSelectionDeadlinePassed {
                     openWithGamesRow(week: week, uniqueGames: uniqueGames)
@@ -176,22 +218,24 @@ struct CommissionerWeekAdminSections: View {
     @ViewBuilder
     private func weekStatusManageSection(_ week: WeekSummary) -> some View {
         Section {
-            if week.status == .selection, !week.skipsSelection, week.isSelectionDeadlinePassed {
-                let target = group.rules.expectedSlateSize(
-                    memberCount: max(group.memberCount, 1)
-                )
-                if uniqueGames < target {
-                    Button("Fill Remaining Games") {
-                        appState.picksViewModel.selectionBrowseIntent = .own
-                        present(.adminGameBrowse(week))
+            if adminWeekReadyForWrites {
+                if week.status == .selection, !week.skipsSelection, week.isSelectionDeadlinePassed {
+                    let target = group.rules.expectedSlateSize(
+                        memberCount: max(group.memberCount, 1)
+                    )
+                    if uniqueGames < target {
+                        Button("Fill Remaining Games") {
+                            appState.picksViewModel.selectionBrowseIntent = .own
+                            present(.adminGameBrowse(week))
+                        }
+                        .listRowBackground(PickemsColors.cardBackground)
                     }
-                    .listRowBackground(PickemsColors.cardBackground)
+                } else if !week.skipsSelection, WeekTransition.canReopenSelections(week) {
+                    reopenSelectionsRow(week)
                 }
-            } else if !week.skipsSelection, WeekTransition.canReopenSelections(week) {
-                reopenSelectionsRow(week)
-            }
 
-            weekManageRows(week)
+                weekManageRows(week)
+            }
         } footer: {
             Text(Self.thisWeekFooter)
         }
@@ -199,6 +243,7 @@ struct CommissionerWeekAdminSections: View {
 
     private func selectAdminWeek(_ selected: WeekSummary) {
         guard selected.id != week?.id else { return }
+        userChosenWeekId = selected.id
         PickemsHaptics.selection()
         appState.selectObservedWeek(selected)
     }
@@ -474,7 +519,7 @@ struct CommissionerWeekAdminSections: View {
 
     @ViewBuilder
     private var pickemsAdminSection: some View {
-        if let week, WeekTransition.arePickemsOpen(week) {
+        if let week, adminWeekReadyForWrites, WeekTransition.arePickemsOpen(week) {
             Section {
                 pickemsDeadlineRow(week)
 
@@ -519,7 +564,7 @@ struct CommissionerWeekAdminSections: View {
 
     @ViewBuilder
     private var tiesSection: some View {
-        if let week, ScoringEngine.canShowCommissionerTieBreak(
+        if let week, adminWeekReadyForWrites, ScoringEngine.canShowCommissionerTieBreak(
             week: week,
             games: pinnedSlate,
             tieBreaker: group.rules.tieBreaker
