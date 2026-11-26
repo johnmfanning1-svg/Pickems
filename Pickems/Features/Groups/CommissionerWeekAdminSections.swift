@@ -16,10 +16,7 @@ struct CommissionerWeekAdminSections: View {
 
     private var picksVM: PicksViewModel { appState.picksViewModel }
     private var groupId: String { group.id }
-    private var week: WeekSummary? {
-        guard appState.groupService.currentWeekGroupId == groupId else { return nil }
-        return appState.groupService.currentWeek
-    }
+    private var week: WeekSummary? { adminWeek }
     private var pinnedMembers: [GroupMember] {
         guard appState.groupService.membersGroupId == groupId else { return [] }
         return appState.groupService.members
@@ -38,6 +35,25 @@ struct CommissionerWeekAdminSections: View {
     }
     private var uniqueGames: Int {
         Set(pinnedNominations.map(\.espnEventId) + pinnedSlate.map(\.espnEventId)).count
+    }
+
+    /// Set synchronously on chip tap so late commissioner week loads cannot snap back.
+    @State private var userChosenWeekId: String?
+
+    private var observedWeek: WeekSummary? {
+        guard appState.groupService.currentWeekGroupId == groupId else { return nil }
+        return appState.groupService.currentWeek
+    }
+
+    /// One source of truth for chip highlight and admin section body.
+    private var adminWeek: WeekSummary? {
+        let service = appState.groupService
+        return CommissionerAdminWeekSelection.displayedWeek(
+            userChosenWeekId: userChosenWeekId,
+            observedWeek: observedWeek,
+            commissionerWeeks: service.commissionerAvailableWeeks,
+            weeksBelongToPin: service.commissionerAvailableWeeksBelong(to: groupId)
+        )
     }
 
     var body: some View {
@@ -125,12 +141,18 @@ struct CommissionerWeekAdminSections: View {
         case .ready(let weeks):
             WeekChipBar(
                 weeks: weeks,
-                selectedWeekId: week?.id,
+                selectedWeekId: CommissionerAdminWeekSelection.chipHighlightWeekId(
+                    userChosenWeekId: userChosenWeekId,
+                    contentWeekId: week?.id
+                ),
                 activeWeekId: activeESPNWeekId,
                 dateRangeLabel: { appState.groupService.dateRangeLabel(for: $0.id) },
                 accessibilityHint: "Admin this week. Also switches Selections and Pickems.",
                 showsCaption: false,
-                horizontalPadding: 0
+                horizontalPadding: 0,
+                scrollWhenWeekListChanges: WeekChipBarScrollSync.shouldScrollOnWeekListChange(
+                    userHasChosenWeek: userChosenWeekId != nil
+                )
             ) { selected in
                 selectAdminWeek(selected)
             }
@@ -199,6 +221,7 @@ struct CommissionerWeekAdminSections: View {
 
     private func selectAdminWeek(_ selected: WeekSummary) {
         guard selected.id != week?.id else { return }
+        userChosenWeekId = selected.id
         PickemsHaptics.selection()
         appState.selectObservedWeek(selected)
     }

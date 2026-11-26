@@ -226,11 +226,54 @@ struct CommissionerSheetStabilityTests {
         #expect(ready == .ready([sample]))
     }
 
-    private func week(deadline: TimeInterval) -> WeekSummary {
+    @Test func userChosenWeekSurvivesLateLoadSnapshot() {
+        let live = week(deadline: 20)
+        let browsed = week(id: "2026-W12", number: 12, deadline: 15)
+        let resolved = CommissionerAdminWeekSelection.displayedWeek(
+            userChosenWeekId: "2026-W12",
+            observedWeek: live,
+            commissionerWeeks: [browsed, live],
+            weeksBelongToPin: true
+        )
+        #expect(resolved?.id == "2026-W12")
+        #expect(!CommissionerAdminWeekSelection.shouldApplyLoadedWeekToObservation(
+            userChosenWeekId: "2026-W12",
+            proposedWeekId: "2026-W7"
+        ))
+    }
+
+    @Test func chipHighlightMatchesContentWeekId() {
+        let highlight = CommissionerAdminWeekSelection.chipHighlightWeekId(
+            userChosenWeekId: "2026-W14",
+            contentWeekId: "2026-W7"
+        )
+        #expect(highlight == "2026-W14")
+        let fallback = CommissionerAdminWeekSelection.chipHighlightWeekId(
+            userChosenWeekId: nil,
+            contentWeekId: "2026-W7"
+        )
+        #expect(fallback == "2026-W7")
+    }
+
+    @Test func weekListScrollStaysPutAfterUserTap() {
+        #expect(!WeekChipBarScrollSync.shouldScrollOnWeekListChange(userHasChosenWeek: true))
+        #expect(WeekChipBarScrollSync.shouldScrollOnWeekListChange(userHasChosenWeek: false))
+    }
+
+    @Test func scrollToCenterDoesNotChangeSelectionTarget() {
+        #expect(WeekChipBarScrollSync.scrollTargetWeekId(selectedWeekId: "2026-W12") == "2026-W12")
+        #expect(WeekChipBarScrollSync.scrollTargetWeekId(selectedWeekId: nil) == nil)
+    }
+
+    private func week(
+        id: String = "2026-W7",
+        number: Int = 7,
+        deadline: TimeInterval
+    ) -> WeekSummary {
         WeekSummary(
-            id: "2026-W7",
+            id: id,
             seasonYear: 2026,
-            weekNumber: 7,
+            weekNumber: number,
             status: .picking,
             slateSize: 2,
             selectionMode: .member,

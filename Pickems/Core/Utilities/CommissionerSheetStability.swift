@@ -179,6 +179,54 @@ enum AvailableWeeksLoadCommit {
     }
 }
 
+/// Commissioner Settings week chips share the admin section's week. The user
+/// can pick a chip before Firestore/ESPN catch up; that choice wins over a late load.
+enum CommissionerAdminWeekSelection {
+     /// Week for admin rows and chip highlight. `userChosenWeekId` is set synchronously on tap.
+    static func displayedWeek(
+        userChosenWeekId: String?,
+        observedWeek: WeekSummary?,
+        commissionerWeeks: [WeekSummary],
+        weeksBelongToPin: Bool
+    ) -> WeekSummary? {
+        let targetId = userChosenWeekId ?? observedWeek?.id
+        guard let targetId else { return observedWeek }
+        if let observedWeek, observedWeek.id == targetId { return observedWeek }
+        if weeksBelongToPin, let listed = commissionerWeeks.first(where: { $0.id == targetId }) {
+            return listed
+        }
+        return observedWeek
+    }
+
+    static func chipHighlightWeekId(
+        userChosenWeekId: String?,
+        contentWeekId: String?
+    ) -> String? {
+        userChosenWeekId ?? contentWeekId
+    }
+
+    /// Late commissioner week-list load must not replace an in-flight user browse.
+    static func shouldApplyLoadedWeekToObservation(
+        userChosenWeekId: String?,
+        proposedWeekId: String
+    ) -> Bool {
+        guard let userChosenWeekId else { return true }
+        return userChosenWeekId == proposedWeekId
+    }
+}
+
+/// Horizontal chip bars scroll to center the selection. Scrolling must never write selection;
+/// after the user taps, do not re-center when only the week list payload changes.
+enum WeekChipBarScrollSync {
+    static func shouldScrollOnWeekListChange(userHasChosenWeek: Bool) -> Bool {
+        !userHasChosenWeek
+    }
+
+    static func scrollTargetWeekId(selectedWeekId: String?) -> String? {
+        selectedWeekId
+    }
+}
+
 /// Spread editor draft versus a later slate snapshot.
 enum SpreadDraftRefresh {
     struct Draft: Equatable {

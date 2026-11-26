@@ -10,6 +10,8 @@ struct WeekChipBar: View {
     var accessibilityHint: String = "View this week"
     var showsCaption: Bool = true
     var horizontalPadding: CGFloat = 16
+    /// When false, a commissioner/Picks load finishing must not yank the scroll position after a tap.
+    var scrollWhenWeekListChanges: Bool = true
     let onSelect: (WeekSummary) -> Void
 
     var body: some View {
@@ -33,8 +35,14 @@ struct WeekChipBar: View {
                     .padding(.horizontal, horizontalPadding)
                 }
                 .onAppear { scrollToSelected(proxy) }
-                .onChange(of: selectedWeekId) { _, _ in scrollToSelected(proxy) }
-                .onChange(of: weeks.map(\.id)) { _, _ in scrollToSelected(proxy) }
+                .onChange(of: selectedWeekId) { _, newId in
+                    guard WeekChipBarScrollSync.scrollTargetWeekId(selectedWeekId: newId) != nil else { return }
+                    scrollToSelected(proxy)
+                }
+                .onChange(of: weeks.map(\.id)) { _, _ in
+                    guard scrollWhenWeekListChanges else { return }
+                    scrollToSelected(proxy)
+                }
             }
         }
     }
