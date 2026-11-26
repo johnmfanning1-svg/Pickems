@@ -24,6 +24,7 @@ import {
   shouldStampDefaultSelection,
   type DefaultSelectionLock,
 } from "./defaultSelectionLock";
+import { shouldSendSelectionDeadlineNudge } from "./selectionDeadlineNudge";
 import { kickoffsMillisByEspnEventId } from "./selectionCatalog";
 import { sendToUser, sendToUsers } from "./notifications";
 import { pushLiveActivityUpdates } from "./liveActivityPush";
@@ -216,6 +217,15 @@ export const onWeekCreated = onDocumentCreated(
         const stamped = await stampDefaultSelectionDeadlineIfEmpty(weekRef, deadline);
         if (stamped) return;
       }
+    }
+
+    const latestWeek = await weekRef.get();
+    const latest = latestWeek.data();
+    if (!shouldSendSelectionDeadlineNudge({
+      selectionDeadline: latest?.selectionDeadline,
+      selectionDeadlineNudgeSent: latest?.selectionDeadlineNudgeSent ?? data.selectionDeadlineNudgeSent,
+    })) {
+      return;
     }
 
     const commissionerId = groupData?.commissionerId as string | undefined;

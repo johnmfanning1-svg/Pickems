@@ -1244,7 +1244,7 @@ describe("P0: invite join, season record, lock snapshot", () => {
         selectionMode: "member",
         selectionsPerMember: 3,
         nominationCount: 0,
-        selectionDeadline: future(),
+        selectionDeadline: far,
         selectionDeadlineSetAt: new Date(),
         selectionDeadlineSetBy: MEMBER,
       })
@@ -1259,7 +1259,7 @@ describe("P0: invite join, season record, lock snapshot", () => {
         selectionMode: "member",
         selectionsPerMember: 3,
         nominationCount: 0,
-        selectionDeadline: future(),
+        selectionDeadline: far,
         selectionDeadlineSetAt: new Date(),
         selectionDeadlineSetBy: "default",
       })
@@ -1298,7 +1298,7 @@ describe("P0: invite join, season record, lock snapshot", () => {
         selectionMode: "member",
         selectionsPerMember: 3,
         nominationCount: 0,
-        selectionDeadline: future(),
+        selectionDeadline: far,
         selectionDeadlineSetAt: new Date(),
         selectionDeadlineSetBy: "default",
       })
