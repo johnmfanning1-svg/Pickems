@@ -34,9 +34,9 @@ struct WeekDeadlineHeader: View {
     @ViewBuilder
     private var selectionSection: some View {
         switch snapshot.selectionState {
-        case .open(let deadline):
+        case .open(let deadline), .openFromLeagueDefault(let deadline):
             TimelineView(.periodic(from: .now, by: 30)) { context in
-                openSelectionRow(deadline: deadline, now: context.date)
+                openSelectionRow(deadline: deadline, leagueDefault: snapshot.selectionState?.isLeagueDefault == true, now: context.date)
             }
         case .locked(let copy):
             SelectionLockedRow(copy: copy)
@@ -64,7 +64,7 @@ struct WeekDeadlineHeader: View {
 
     private var showsSelectionRow: Bool {
         switch snapshot.selectionState {
-        case .open, .locked:
+        case .open, .openFromLeagueDefault, .locked:
             return true
         case .needsDeadline:
             return snapshot.showSetSelectionDeadlinePrompt
@@ -105,11 +105,13 @@ struct WeekDeadlineHeader: View {
         }
     }
 
-    private func openSelectionRow(deadline: Date, now: Date) -> some View {
-        DeadlineHeroRow(
+    private func openSelectionRow(deadline: Date, leagueDefault: Bool, now: Date) -> some View {
+        let time = PickDeadlineCalculator.lockTimeLabel(for: deadline)
+        let openTitle = leagueDefault ? "League default · Due \(time)" : "Due \(time)"
+        return DeadlineHeroRow(
             eyebrow: "Selections",
             deadline: deadline,
-            openTitle: "Due \(PickDeadlineCalculator.lockTimeLabel(for: deadline))",
+            openTitle: openTitle,
             lockedTitle: "Locked",
             help: PickemsHelp.selectionDeadline,
             now: now,
@@ -171,7 +173,7 @@ struct WeekDeadlineHeader: View {
 
     /// Warning only while something on the card is still counting down.
     private func accentColor(now: Date) -> Color {
-        if case .open(let deadline) = snapshot.selectionState,
+        if let deadline = snapshot.selectionState?.openDeadline,
            !PickDeadlineCalculator.isPast(deadline, now: now) {
             return PickemsColors.warning
         }

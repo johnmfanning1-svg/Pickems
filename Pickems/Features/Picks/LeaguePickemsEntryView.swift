@@ -40,8 +40,9 @@ struct LeaguePickemsEntryView: View {
                                 ? "Each game's picks show here at that game's kickoff. Later games stay hidden."
                                 : "Everyone's Pickems show here after lock. Picks stay hidden until then."
                         )
-                    } else if let state = SelectionDeadlineDisplayResolver.resolve(week: week),
-                              week.selectionDeadline != nil {
+                    } else if let rules = appState.groupService.selectedGroup?.rules,
+                              let state = SelectionDeadlineDisplayResolver.resolve(week: week, rules: rules),
+                              state.openDeadline != nil {
                         selectionDeadlineFallback(state)
                     } else {
                         EmptyStateView(
@@ -94,7 +95,7 @@ struct LeaguePickemsEntryView: View {
                 message: "The league chart opens after Pickems lock.",
                 help: PickemsHelp.leaguePickems(for: appState.selectedPickMode)
             )
-        case .open, .needsDeadline:
+        case .open, .openFromLeagueDefault, .needsDeadline:
             EmptyStateView(
                 icon: "lock.open",
                 title: "Pickems lock after the slate is set",

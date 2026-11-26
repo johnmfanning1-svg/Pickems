@@ -171,7 +171,7 @@ struct CommissionerSettingsView: View {
         if rules.selectionMode == .member {
             var base = "Each member selects this many games. Weekly game target = members × Selections."
             if rules.defaultSelectionLock?.enabled == true {
-                base += " Default Selection deadline applies to new weeks automatically; you can still override any week."
+                base += " Default Selection deadline applies to new weeks and to upcoming weeks with no deadline yet; you can still override any week."
             } else {
                 base += " Turn on a default Selection deadline or set one per week in This Week."
             }

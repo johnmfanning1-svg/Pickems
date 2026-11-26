@@ -473,7 +473,8 @@ struct PicksView: View {
                 kind: kind == .selections ? .selections : .pickems,
                 week: week,
                 isCommissioner: appState.canOperateWeek,
-                games: games
+                games: games,
+                rules: appState.groupService.selectedGroup?.rules
             ),
             onSetDeadline: { (deadline: WorkspaceDeadlineKind) in
                 appState.openCommissionerDeadlineEditor(

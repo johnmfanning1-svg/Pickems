@@ -201,6 +201,70 @@ struct SelectionDeadlineDisplayTests {
         #expect(CommissionerSelectionDeadlineRow.resolve(week: week, now: now) == .setPrompt)
     }
 
+    @Test func leagueDefaultFillsDisplayWithoutStoredDeadline() throws {
+        var eastern = Calendar(identifier: .gregorian)
+        eastern.timeZone = TimeZone(identifier: "America/New_York")!
+        let lateSeason = eastern.date(from: DateComponents(year: 2026, month: 11, day: 28, hour: 12))!
+        var rules = GroupRules.default
+        var lock = DefaultSelectionLock.disabled
+        lock.enabled = true
+        lock.weekday = 4
+        lock.hour = 19
+        lock.minute = 0
+        lock.timeZone = "America/New_York"
+        rules.defaultSelectionLock = lock
+        let unset = week(status: .selection, weekNumber: 14)
+        guard let deadline = DefaultSelectionLockMath.futureDeadline(
+            for: lock,
+            seasonYear: 2026,
+            weekNumber: 14,
+            now: lateSeason
+        ) else {
+            Issue.record("expected future league-default instant for week 14")
+            return
+        }
+        let state = SelectionDeadlineDisplayResolver.resolve(week: unset, rules: rules, now: lateSeason)
+        #expect(state == .openFromLeagueDefault(deadline: deadline))
+        #expect(state?.isCountingDown == true)
+        let summary = CommissionerAdminSummary.selectionDeadlineSummary(week: unset, rules: rules, now: lateSeason)
+        #expect(summary?.hasPrefix("League default · ") == true)
+        let row = CommissionerSelectionDeadlineRow.resolve(week: unset, rules: rules, now: lateSeason)
+        if case .editor(let text) = row {
+            #expect(text.hasPrefix("League default · "))
+        } else {
+            Issue.record("league default should show editor row, not set prompt")
+        }
+        let snapshot = WorkspaceDeadlineDisplay.snapshot(
+            kind: .selections,
+            week: unset,
+            isCommissioner: true,
+            games: [],
+            rules: rules,
+            now: lateSeason
+        )
+        #expect(snapshot.selectionState == .openFromLeagueDefault(deadline: deadline))
+        #expect(snapshot.selectionDeadline == deadline)
+        #expect(!snapshot.showSetSelectionDeadlinePrompt)
+        #expect(snapshot.clockIsLive)
+    }
+
+    @Test func leagueDefaultDisplaySkippedWhenInstantPast() {
+        var rules = GroupRules.default
+        rules.defaultSelectionLock = DefaultSelectionLock(
+            enabled: true,
+            weekday: 3,
+            hour: 23,
+            minute: 59,
+            timeZone: "America/New_York"
+        )
+        let unset = week(status: .selection, weekNumber: 3)
+        var eastern = Calendar(identifier: .gregorian)
+        eastern.timeZone = TimeZone(identifier: "America/New_York")!
+        let after = eastern.date(from: DateComponents(year: 2026, month: 9, day: 17, hour: 0))!
+        #expect(SelectionDeadlineDisplayResolver.resolve(week: unset, rules: rules, now: after) == .needsDeadline)
+        #expect(CommissionerSelectionDeadlineRow.resolve(week: unset, rules: rules, now: after) == .setPrompt)
+    }
+
     @Test func lockedSelectionDeadlineRowHiddenWhileReopenAvailable() {
         let due = now.addingTimeInterval(-3600)
         let passed = week(status: .picking, selectionDeadline: due)

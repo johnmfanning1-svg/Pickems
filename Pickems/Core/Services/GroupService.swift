@@ -1523,34 +1523,39 @@ final class GroupService {
         )
     }
 
-    /// When the default lock is newly enabled or changed, stamp the current selection week if empty.
+    /// When the default lock is newly enabled or changed, stamp every open selection week if empty.
     private func applyDefaultSelectionDeadlineAfterRulesSave(
         groupId: String,
         rules: GroupRules,
         previousRules: GroupRules?
     ) async {
-        guard observedGroupId == groupId,
+        guard observedGroupId == groupId else { return }
+        let changed = previousRules?.defaultSelectionLock != rules.defaultSelectionLock
+        guard changed,
               let lock = rules.defaultSelectionLock,
               lock.enabled,
-              rules.selectionMode == .member,
-              let week = currentWeek,
-              week.status == .selection,
-              !week.skipsSelection,
-              week.selectionDeadline == nil else { return }
-        let changed = previousRules?.defaultSelectionLock != rules.defaultSelectionLock
-        guard changed else { return }
-        guard let deadline = DefaultSelectionLockMath.futureDeadline(
-            for: lock,
-            seasonYear: week.seasonYear,
-            weekNumber: week.weekNumber
-        ) else { return }
-        do {
-            try await setDefaultSelectionDeadline(groupId: groupId, weekId: week.id, deadline: deadline)
-        } catch {
-            AppLog.error(AppLog.firestore, "default selection deadline apply failed", error: error, metadata: [
-                "group_id": groupId,
-                "week_id": week.id,
-            ])
+              rules.selectionMode == .member else { return }
+
+        var candidates = availableWeeksGroupId == groupId ? availableWeeks : []
+        if currentWeekGroupId == groupId,
+           let current = currentWeek,
+           !candidates.contains(where: { $0.id == current.id }) {
+            candidates.append(current)
+        }
+        let targets = DefaultSelectionLockRulesSave.weeksToStamp(among: candidates, lock: lock, rules: rules)
+        for target in targets {
+            do {
+                try await setDefaultSelectionDeadline(
+                    groupId: groupId,
+                    weekId: target.week.id,
+                    deadline: target.deadline
+                )
+            } catch {
+                AppLog.error(AppLog.firestore, "default selection deadline apply failed", error: error, metadata: [
+                    "group_id": groupId,
+                    "week_id": target.week.id,
+                ])
+            }
         }
     }
 

@@ -53,12 +53,19 @@ struct SelectionDeadlineBanner: View {
 
     var body: some View {
         switch state {
-        case .open(let deadline):
+        case .open(let deadline), .openFromLeagueDefault(let deadline):
+            let time = PickDeadlineCalculator.lockTimeLabel(for: deadline)
+            let title: String = {
+                if case .openFromLeagueDefault = state {
+                    return "League default · Due \(time)"
+                }
+                return "Due \(time)"
+            }()
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 DeadlineHeroCard(
                     eyebrow: "Selections",
                     deadline: deadline,
-                    openTitle: "Due \(PickDeadlineCalculator.lockTimeLabel(for: deadline))",
+                    openTitle: title,
                     lockedTitle: "Locked",
                     help: PickemsHelp.selectionDeadline,
                     now: context.date

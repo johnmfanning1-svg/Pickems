@@ -7,13 +7,33 @@ import Foundation
 enum SelectionDeadlineDisplay: Equatable {
     /// Deadline is set and Selections are still open.
     case open(deadline: Date)
+    /// No stored deadline; league default applies and is still in the future.
+    case openFromLeagueDefault(deadline: Date)
     /// Selections are open and no deadline is set. Commissioners see the set prompt.
     case needsDeadline
     /// Static locked or closed copy. No timer and no set-deadline prompt.
     case locked(SelectionLockCopy)
 
     var isCountingDown: Bool {
-        if case .open = self { return true }
+        switch self {
+        case .open, .openFromLeagueDefault:
+            return true
+        case .needsDeadline, .locked:
+            return false
+        }
+    }
+
+    var openDeadline: Date? {
+        switch self {
+        case .open(let deadline), .openFromLeagueDefault(let deadline):
+            return deadline
+        case .needsDeadline, .locked:
+            return nil
+        }
+    }
+
+    var isLeagueDefault: Bool {
+        if case .openFromLeagueDefault = self { return true }
         return false
     }
 }
@@ -32,13 +52,25 @@ struct SelectionLockCopy: Equatable {
 
 enum SelectionDeadlineDisplayResolver {
     /// Nil when this week has no Selection phase (Week 0).
-    static func resolve(week: WeekSummary, now: Date = Date()) -> SelectionDeadlineDisplay? {
+    static func resolve(week: WeekSummary, rules: GroupRules? = nil, now: Date = Date()) -> SelectionDeadlineDisplay? {
         guard !week.skipsSelection else { return nil }
         if isClosed(week, now: now) {
             return .locked(lockCopy(week: week, now: now))
         }
         if let deadline = week.selectionDeadline {
             return .open(deadline: deadline)
+        }
+        if let rules,
+           rules.selectionMode == .member,
+           let lock = rules.defaultSelectionLock,
+           lock.enabled,
+           let deadline = DefaultSelectionLockMath.futureDeadline(
+               for: lock,
+               seasonYear: week.seasonYear,
+               weekNumber: week.weekNumber,
+               now: now
+           ) {
+            return .openFromLeagueDefault(deadline: deadline)
         }
         return .needsDeadline
     }
