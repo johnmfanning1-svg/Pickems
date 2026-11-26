@@ -41,10 +41,14 @@ describe("defaultSelectionLock", () => {
   });
 
   it("future helper rejects past instants", () => {
-    const past = Date.UTC(2026, 8, 16, 23, 59, 0, 0);
-    expect(futureDefaultSelectionDeadline(lock, 2026, 3, past)).toBeNull();
-    const before = Date.UTC(2026, 8, 15, 12, 0, 0, 0);
-    expect(futureDefaultSelectionDeadline(lock, 2026, 3, before)).not.toBeNull();
+    const raw = defaultSelectionDeadline(lock, 2026, 3);
+    expect(raw).not.toBeNull();
+    const afterDeadlineMs = raw!.getTime() + 60_000;
+    expect(futureDefaultSelectionDeadline(lock, 2026, 3, afterDeadlineMs)).toBeNull();
+    const beforeDeadlineMs = raw!.getTime() - 60_000;
+    expect(futureDefaultSelectionDeadline(lock, 2026, 3, beforeDeadlineMs)?.getTime()).toBe(
+      raw!.getTime()
+    );
   });
 
   it("handles invalid time zone safely", () => {
