@@ -58,7 +58,7 @@ enum CommissionerDeadlinePresentation {
     static func selectionEdit(
         settingsGroupId: String,
         week: WeekSummary,
-        rules: GroupRules?
+        rules: GroupRules? = nil
     ) -> SelectionDeadlineEdit {
         let suggested = suggestedDefaultDeadline(for: week, rules: rules)
         return SelectionDeadlineEdit(
