@@ -1,6 +1,5 @@
 /** ESPN scoreboard fetch planning for `lockAndScoreWeeks`. */
 
-import type { EspnEvent } from "./espn";
 import { espnScoreboardWeek } from "./cfbWeekCalendar";
 import {
   BOWL_SEASON_TYPE,
