@@ -1,13 +1,15 @@
 /** Merge ESPN postseason catalog into a Mode B week — late CFP games included. */
 
-import { FieldValue, Timestamp, type DocumentReference } from "firebase-admin/firestore";
+import { Timestamp, type DocumentReference } from "firebase-admin/firestore";
 import type { EspnEvent } from "./espn";
-import { liveSpreadFromEvent, parseEventScores, resolveSpreadTeamId } from "./espn";
+import { liveSpreadFromEvent, resolveSpreadTeamId } from "./espn";
 import {
   BOWL_CATALOG_SLATE_SOURCE,
   isBowlFullSlateWeek,
 } from "./bowlWeek";
 import { kickoffMillis, lockSnapshotFromGames } from "./pickLock";
+import { kickoffsMillisByEspnEventId } from "./selectionCatalog";
+import { gameEffectivelyLocked } from "./spreadLock";
 
 function slatePayloadFromEspn(event: EspnEvent): Record<string, unknown> | null {
   const competition = event.competitions?.[0];
@@ -55,15 +57,40 @@ function slatePayloadFromEspn(event: EspnEvent): Record<string, unknown> | null 
   };
 }
 
+/**
+ * Full-catalog kickoffs + `liveIds` for Mode B rolling locks.
+ * Written by `syncBowlCatalogSlate` and `publishSelectionKickoffCatalog` (lockAndScoreWeeks).
+ */
+export async function publishBowlGameLockMirror(
+  weekRef: DocumentReference,
+  catalogEvents: EspnEvent[]
+): Promise<void> {
+  const millisById = kickoffsMillisByEspnEventId(catalogEvents);
+  const ids = Object.keys(millisById);
+  if (ids.length === 0) return;
+  const kickoffs: Record<string, Timestamp> = {};
+  const phases: Record<string, string> = {};
+  for (const id of ids) {
+    kickoffs[id] = Timestamp.fromMillis(millisById[id]);
+    phases[id] = "pre";
+  }
+  await weekRef.collection("gameLock").doc("current").set(
+    { kickoffs, phases, liveIds: [], updatedAt: Timestamp.now() },
+    { merge: true }
+  );
+}
+
 export type BowlCatalogSyncResult = { created: number; updated: number; slateSize: number };
 
 /** Idempotently add catalog events (incl. newly scheduled CFP) to the week slate. */
 export async function syncBowlCatalogSlate(
   weekRef: DocumentReference,
+  weekId: string,
   weekData: Record<string, unknown>,
   catalogEvents: EspnEvent[]
 ): Promise<BowlCatalogSyncResult | null> {
-  if (!isBowlFullSlateWeek(weekData)) return null;
+  if (!isBowlFullSlateWeek(weekData, weekId)) return null;
+  const now = Date.now();
   const gamesRef = weekRef.collection("games");
   const existing = await gamesRef.get();
   const existingById = new Map(existing.docs.map((doc) => [doc.id, doc]));
@@ -71,13 +98,10 @@ export async function syncBowlCatalogSlate(
   let created = 0;
   let updated = 0;
 
-  const kickoffs: Array<{ id: string; kickoff: unknown }> = [];
-
   for (const event of catalogEvents) {
     const payload = slatePayloadFromEspn(event);
     if (!payload) continue;
     const id = event.id;
-    kickoffs.push({ id, kickoff: payload.kickoff });
     const gameRef = gamesRef.doc(id);
     const stored = existingById.get(id);
     if (!stored) {
@@ -85,14 +109,29 @@ export async function syncBowlCatalogSlate(
       created += 1;
     } else {
       const data = stored.data();
-      const parsed = parseEventScores(event);
       const patch: Record<string, unknown> = {};
-      if (typeof data.kickoff === "undefined" || data.kickoff == null) {
+      const newKickoffMs = kickoffMillis(payload.kickoff);
+      const oldKickoffMs = kickoffMillis(data.kickoff);
+      const openForKickoffUpdate = !gameEffectivelyLocked(weekData, {
+        id,
+        kickoff: data.kickoff,
+        status: data.status,
+      }, now);
+      if (
+        openForKickoffUpdate &&
+        newKickoffMs != null &&
+        oldKickoffMs != null &&
+        newKickoffMs !== oldKickoffMs
+      ) {
+        patch.kickoff = payload.kickoff;
+      } else if (openForKickoffUpdate && oldKickoffMs == null && newKickoffMs != null) {
         patch.kickoff = payload.kickoff;
       }
-      if (parsed) {
-        if (data.homeScore !== parsed.homeScore) patch.homeScore = parsed.homeScore;
-        if (data.awayScore !== parsed.awayScore) patch.awayScore = parsed.awayScore;
+      if (data.status !== "final" && data.status !== "inProgress") {
+        if (typeof payload.liveSpread === "number") {
+          patch.liveSpread = payload.liveSpread;
+          patch.liveSpreadTeamId = payload.liveSpreadTeamId;
+        }
       }
       if (Object.keys(patch).length > 0) {
         batch.update(gameRef, patch);
@@ -104,6 +143,8 @@ export async function syncBowlCatalogSlate(
   if (created + updated > 0) {
     await batch.commit();
   }
+
+  await publishBowlGameLockMirror(weekRef, catalogEvents);
 
   const allGames = await gamesRef.get();
   const slateSize = allGames.size;

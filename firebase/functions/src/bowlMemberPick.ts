@@ -3,8 +3,13 @@
 import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { isBowlFullSlateWeek } from "./bowlWeek";
-import { gameIsLocked, kickoffMillis } from "./pickLock";
+import { kickoffMillis } from "./pickLock";
 import { rejectedPickIds, type GameLockInput } from "./spreadLock";
+import {
+  assertConfidenceChangeAllowed,
+  assertLockTransitionAllowed,
+  validateConfidenceGameId,
+} from "./bowlMemberPickLogic";
 
 const db = () => getFirestore();
 
@@ -19,6 +24,11 @@ function requireString(value: unknown, label: string): string {
     throw new HttpsError("invalid-argument", `\`${label}\` is required.`);
   }
   return value.trim();
+}
+
+function mapCallableError(err: unknown): never {
+  const message = err instanceof Error ? err.message : String(err);
+  throw new HttpsError("failed-precondition", message);
 }
 
 /** Write or merge a member's pick sheet on a full-catalog bowl week. */
@@ -55,7 +65,7 @@ export const writeMemberBowlPick = onCall(async (request) => {
   const weekSnap = await weekRef.get();
   if (!weekSnap.exists) throw new HttpsError("not-found", "Week not found.");
   const week = weekSnap.data() ?? {};
-  if (!isBowlFullSlateWeek(week as { bowlFullSlate?: boolean; slateSource?: string })) {
+  if (!isBowlFullSlateWeek(week as { bowlFullSlate?: boolean; slateSource?: string }, weekId)) {
     throw new HttpsError("failed-precondition", "This week does not use the full bowl pick path.");
   }
   if (week.status !== "picking") {
@@ -99,6 +109,24 @@ export const writeMemberBowlPick = onCall(async (request) => {
     allowLatePicks: groupSnap.data()?.rules?.allowLatePicks === true,
   };
 
+  const confidenceExplicit = Object.prototype.hasOwnProperty.call(data, "confidenceGameId");
+  let resolvedConfidence: string | null;
+  try {
+    const validated = validateConfidenceGameId(data.confidenceGameId, slateIds, confidenceExplicit);
+    resolvedConfidence = confidenceExplicit
+      ? validated
+      : (typeof before?.confidenceGameId === "string" ? before.confidenceGameId : null);
+    assertConfidenceChangeAllowed({
+      beforeConfidence: before?.confidenceGameId,
+      afterConfidence: resolvedConfidence,
+      games,
+      week: weekForLock,
+      now,
+    });
+  } catch (err) {
+    mapCallableError(err);
+  }
+
   const blocked = rejectedPickIds({
     week: weekForLock,
     games,
@@ -106,15 +134,22 @@ export const writeMemberBowlPick = onCall(async (request) => {
     after: picks,
     now,
     beforeConfidence: before?.confidenceGameId,
-    afterConfidence: data.confidenceGameId ?? before?.confidenceGameId ?? null,
+    afterConfidence: resolvedConfidence,
   });
   if (blocked.length > 0) {
     throw new HttpsError("failed-precondition", `Picks are locked for: ${blocked.join(", ")}.`);
   }
 
+  const beforeLocked = before?.isLocked === true;
+  let isLocked: boolean;
+  try {
+    isLocked = assertLockTransitionAllowed(beforeLocked, data.isLocked);
+  } catch (err) {
+    mapCallableError(err);
+  }
+
   const memberSnap = await groupRef.collection("members").doc(userId).get();
   const displayName = (memberSnap.data()?.displayName as string | undefined) ?? "Unknown";
-  const isLocked = data.isLocked ?? (before?.isLocked as boolean | undefined) ?? false;
 
   const payload: Record<string, unknown> = {
     id: userId,
@@ -122,7 +157,7 @@ export const writeMemberBowlPick = onCall(async (request) => {
     displayName,
     picks,
     isLocked,
-    confidenceGameId: data.confidenceGameId ?? before?.confidenceGameId ?? null,
+    confidenceGameId: resolvedConfidence,
     submittedAt: isLocked ? before?.submittedAt ?? FieldValue.serverTimestamp() : null,
   };
   await pickRef.set(payload, { merge: true });

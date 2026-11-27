@@ -446,7 +446,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
         const snapshot = lockSnapshotFromGames(
           games,
           groupDoc.data().rules?.pickDeadline,
-          isBowlFullSlateWeek(week) ? { bowlFullSlate: true } : undefined
+          isBowlFullSlateWeek(week, weekId) ? { bowlFullSlate: true } : undefined
         );
         await weekDoc.ref.update({
           status: "picking",
@@ -630,6 +630,8 @@ async function loadScoreboardPages(
  * Selection weeks have no slate docs yet. Publish ESPN kickoffs onto
  * gameLock/current so a member swap has to use the real kickoff. An empty
  * scoreboard (fetch failure or no games) leaves an existing catalog in place.
+ * Mode B also runs `syncBowlCatalogSlate`, which writes the full-catalog
+ * kickoff map (and `liveIds` as games finalize) on `gameLock/current`.
  */
 async function publishSelectionKickoffCatalog(
   weekDoc: QueryDocumentSnapshot,
@@ -646,8 +648,8 @@ async function publishSelectionKickoffCatalog(
     ? bowlWeekCatalogEvents(weekDoc.id, data, postseasonByEspnWeek)
     : eventsByScoreboardWeek.get(espnScoreboardWeek(weekNumber)) ?? [];
   if (!events || events.length === 0) return;
-  if (isBowlFullSlateWeek(data)) {
-    await syncBowlCatalogSlate(weekDoc.ref, data, events);
+  if (isBowlFullSlateWeek(data, weekDoc.id)) {
+    await syncBowlCatalogSlate(weekDoc.ref, weekDoc.id, data, events);
   }
   const millisById = kickoffsMillisByEspnEventId(events);
   const ids = Object.keys(millisById);
@@ -725,10 +727,10 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
       const pickMode = resolveWeekPickMode(week.pickMode, leaguePickMode);
       const rolling = isRollingLock(week.pickLockMode);
 
-      if (isBowlFullSlateWeek(week)) {
+      if (isBowlFullSlateWeek(week, weekId)) {
         const catalogEvents = bowlWeekCatalogEvents(weekId, week, postseasonByEspnWeek);
         if (catalogEvents.length > 0) {
-          await syncBowlCatalogSlate(weekDoc.ref, week, catalogEvents);
+          await syncBowlCatalogSlate(weekDoc.ref, weekId, week, catalogEvents);
         }
       }
 

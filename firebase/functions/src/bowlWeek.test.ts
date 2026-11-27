@@ -5,6 +5,7 @@ import {
   bowlCountsTowardSeason,
   bowlSeasonConfigured,
   bowlWeekId,
+  isBowlFullSlateWeek,
   isBowlWeekId,
   parseBowlWeekId,
   resolveBowlSeasonRules,
@@ -43,6 +44,12 @@ describe("bowlWeek", () => {
   it("treats Mode B as configured when enabled", () => {
     expect(bowlSeasonConfigured({ bowlSeason: { isEnabled: true, mode: "modeB" } })).toBe(true);
     expect(parseBowlWeekId("2026-BOWL")).toEqual({ seasonYear: 2026, slot: "BOWL" });
+  });
+
+  it("isBowlFullSlateWeek requires 2026-BOWL id", () => {
+    const week = { bowlFullSlate: true, slateSource: "bowlCatalog" };
+    expect(isBowlFullSlateWeek(week, "2026-BOWL")).toBe(true);
+    expect(isBowlFullSlateWeek(week, "2026-BOWL1")).toBe(false);
   });
 
   it("maps bowl week ids to ESPN postseason scoreboard weeks", () => {

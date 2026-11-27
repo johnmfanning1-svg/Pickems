@@ -608,10 +608,11 @@ service cloud.firestore {
       return week.keys().hasAll(['pickLockMode']) && week.pickLockMode == 'rolling';
     }
 
-    // Mode B (every bowl game): full catalog exceeds rules gameIds cap; members use callable.
-    function isBowlFullSlateWeek(week) {
-      return (week.keys().hasAll(['bowlFullSlate']) && week.bowlFullSlate == true)
-        || (week.keys().hasAll(['slateSource']) && week.slateSource == 'bowlCatalog');
+    // Mode B (`2026-BOWL`): client pick writes denied — callable only.
+    function isBowlFullSlateWeek(week, weekId) {
+      return weekId.matches('^[0-9]{4}-BOWL$')
+        && ((week.keys().hasAll(['bowlFullSlate']) && week.bowlFullSlate == true)
+            || (week.keys().hasAll(['slateSource']) && week.slateSource == 'bowlCatalog'));
     }
 
     function remainingFrozen(week) {
@@ -643,16 +644,6 @@ service cloud.firestore {
     // Phase is NOT walked per id — 20 of those comparisons exceed the cap on a
     // denial. Non-pregame ids are `liveIds` (one hasAny). Cap is 20 ids, same
     // as before; rules cannot loop.
-    // Mode B: gameLock/current holds the full catalog; no 20-id unroll.
-    function pickSlateOpenFullCatalog(mirror, changed, newConfidence, oldConfidence) {
-      let kicks = mirror.get('kickoffs', {});
-      let liveIds = mirror.get('liveIds', []);
-      return !changed.hasAny(liveIds)
-        && (newConfidence == oldConfidence
-            || (confidenceStillOpen(kicks, liveIds, newConfidence)
-                && confidenceStillOpen(kicks, liveIds, oldConfidence)));
-    }
-
     function pickSlateOpen(week, mirror, changed, newConfidence, oldConfidence) {
       let kicks = mirror.get('kickoffs', week.get('gameKickoffs', {}));
       let liveIds = mirror.get('liveIds', []);
@@ -717,14 +708,11 @@ service cloud.firestore {
               && !weekLevelLocked(groupId, week));
       let lockPath = /databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)/gameLock/current;
       let mirror = exists(lockPath) ? get(lockPath).data : {};
-      let bowlFull = isBowlFullSlateWeek(week);
-      if (bowlFull) {
-        if (selfWrite && pickId == request.auth.uid) {
-          return false;
-        }
-        return windowOk && pickSlateOpenFullCatalog(mirror, changed, newConfidence, oldConfidence);
-      }
-      return windowOk && pickSlateOpen(week, mirror, changed, newConfidence, oldConfidence);
+      let bowlFull = isBowlFullSlateWeek(week, weekId);
+      let slateOk = bowlFull
+        ? false
+        : pickSlateOpen(week, mirror, changed, newConfidence, oldConfidence);
+      return windowOk && slateOk;
     }
 
     function pickWriteAllowed(groupId, weekId, pickId, isCreate) {
@@ -1001,6 +989,7 @@ service cloud.firestore {
             || pickWriteAllowed(groupId, weekId, pickId, false);
           // Members can remove their own pick; commissioner clears picks on league teardown.
           allow delete: if isSignedIn()
+            && !isBowlFullSlateWeek(weekData(groupId, weekId), weekId)
             && ((request.auth.uid == pickId && memberPickDeleteOpen(groupId, weekId))
                 || isCommissioner(groupId));
         }

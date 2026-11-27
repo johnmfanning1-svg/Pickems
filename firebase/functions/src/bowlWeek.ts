@@ -67,8 +67,12 @@ export function parseBowlWeekId(weekId: string): { seasonYear: number; slot: Bow
   return { seasonYear: year, slot: upper as "BOWL1" | "BOWL2" };
 }
 
-export function isBowlFullSlateWeek(week: { bowlFullSlate?: boolean; slateSource?: string } | undefined): boolean {
+export function isBowlFullSlateWeek(
+  week: { bowlFullSlate?: boolean; slateSource?: string } | undefined,
+  weekId?: string
+): boolean {
   if (!week) return false;
+  if (weekId != null && parseBowlWeekId(weekId)?.slot !== "BOWL") return false;
   if (week.bowlFullSlate === true) return true;
   return week.slateSource === BOWL_CATALOG_SLATE_SOURCE;
 }
