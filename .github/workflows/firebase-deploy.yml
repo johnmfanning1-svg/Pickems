@@ -108,7 +108,18 @@ jobs:
       - name: Deploy rules + functions
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          SUPPORT_INBOX_EMAIL: ${{ secrets.SUPPORT_INBOX_EMAIL }}
+          SUPPORT_WEB3FORMS_ACCESS_KEY: ${{ secrets.SUPPORT_WEB3FORMS_ACCESS_KEY }}
         run: |
+          # firebase-tools treats an empty-string param default as missing and
+          # aborts in --non-interactive mode. Write the support params to the
+          # gitignored dotenv from repo secrets (empty is fine: submitSupport
+          # falls back to adminConfig/support). Never commit these values.
+          umask 077
+          {
+            printf 'SUPPORT_INBOX_EMAIL=%s\n' "$SUPPORT_INBOX_EMAIL"
+            printf 'SUPPORT_WEB3FORMS_ACCESS_KEY=%s\n' "$SUPPORT_WEB3FORMS_ACCESS_KEY"
+          } > firebase/functions/.env.pickems-fb
           if [ -z "$FIREBASE_TOKEN" ]; then
             echo "Missing FIREBASE_TOKEN repository secret."
             echo "Create one with: npx firebase-tools@latest login:ci"
