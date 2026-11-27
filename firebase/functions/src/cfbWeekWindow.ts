@@ -37,7 +37,7 @@ const ESPN_2026: Array<{ weekNumber: number; label: string }> = [
 /** Bowl week windows (ESPN postseason). Keep in sync with iOS `CFBWeekCalendar` bowl labels. */
 const BOWL_2026_WINDOWS: Record<string, string> = {
   BOWL1: "Dec 13-Jan 25",
-  BOWL2: "Dec 30-Jan 25",
+  BOWL2: "Dec 18-Jan 28",
   BOWL: "Dec 13-Jan 25",
 };
 

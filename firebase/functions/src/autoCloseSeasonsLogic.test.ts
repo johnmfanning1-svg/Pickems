@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  AUTO_CLOSE_SEASONS_SCHEDULE,
   groupShouldSkipAutoClose,
+  isAutoCloseSeasonsRunMonth,
   isBowlWeekDocumentId,
   isOpenBowlWeek,
   seasonYearToArchive,
@@ -21,11 +23,34 @@ describe("autoCloseSeasonsLogic", () => {
     expect(isBowlWeekDocumentId("2026-W15")).toBe(false);
   });
 
-  it("treats unscored bowl weeks as open", () => {
-    expect(isOpenBowlWeek("2026-BOWL1", { status: "selection" })).toBe(true);
+  it("treats active bowl weeks as open but not empty placeholders", () => {
+    expect(isOpenBowlWeek("2026-BOWL1", { status: "selection" })).toBe(false);
+    expect(
+      isOpenBowlWeek("2026-BOWL1", {
+        status: "selection",
+        gameIds: ["evt1"],
+      })
+    ).toBe(true);
     expect(isOpenBowlWeek("2026-BOWL1", { status: "picking", seasonType: 3 })).toBe(true);
     expect(isOpenBowlWeek("2026-BOWL1", { status: "scored", seasonType: 3 })).toBe(false);
     expect(isOpenBowlWeek("2026-W15", { status: "picking" })).toBe(false);
+  });
+
+  it("retries close after an earlier February skip once bowls are scored", () => {
+    const skipped = groupShouldSkipAutoClose([
+      { id: "2026-BOWL1", data: { status: "picking", seasonType: 3 } },
+    ]);
+    expect(skipped).toBe(true);
+    const laterRun = groupShouldSkipAutoClose([
+      { id: "2026-BOWL1", data: { status: "scored", seasonType: 3 } },
+    ]);
+    expect(laterRun).toBe(false);
+  });
+
+  it("runs on daily February schedule", () => {
+    expect(AUTO_CLOSE_SEASONS_SCHEDULE).toBe("0 12 * 2 *");
+    expect(isAutoCloseSeasonsRunMonth(new Date("2027-02-15T17:00:00.000Z"))).toBe(true);
+    expect(isAutoCloseSeasonsRunMonth(new Date("2027-03-01T17:00:00.000Z"))).toBe(false);
   });
 
   it("skips season close when a bowl week is still open", () => {

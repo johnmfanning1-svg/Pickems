@@ -211,8 +211,7 @@ extension CFBWeekCalendar {
     }
 
     static func weekWindow(weekDocId: String, seasonYear: Int, weekNumber: Int) -> (start: Date, end: Date)? {
-        let weeks = fallbackSeasonWeeks(seasonYear: seasonYear)
-        if let slot = weeks.first(where: { $0.id == weekDocId }) {
+        if let slot = bowlCalendarSlots(seasonYear: seasonYear).first(where: { $0.id == weekDocId }) {
             return CFBWeekDateWindow.parse(label: slot.dateRangeLabel, seasonYear: seasonYear)
         }
         return weekWindow(seasonYear: seasonYear, weekNumber: weekNumber)

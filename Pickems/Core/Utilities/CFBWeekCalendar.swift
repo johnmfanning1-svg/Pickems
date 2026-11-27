@@ -7,7 +7,14 @@ struct CFBAppWeek: Equatable {
     let espnWeekNumber: Int
     let seasonType: Int
 
-    var id: String { "\(seasonYear)-W\(weekNumber)" }
+    var id: String {
+        if seasonType == CFBWeekCalendar.postseasonSeasonType, seasonYear == 2026 {
+            if espnWeekNumber == 1 { return "2026-BOWL1" }
+            if espnWeekNumber == 999 { return "2026-BOWL2" }
+            return "\(seasonYear)-BOWL\(espnWeekNumber)"
+        }
+        return "\(seasonYear)-W\(weekNumber)"
+    }
 
     var label: String { "Season \(seasonYear) | Week \(weekNumber)" }
 }
@@ -36,6 +43,8 @@ struct CFBSeasonWeek: Equatable, Identifiable {
     }
 
     var id: String { documentWeekId ?? "\(seasonYear)-W\(weekNumber)" }
+
+    var isBowlChipSlot: Bool { documentWeekId != nil }
 }
 
 /// ESPN regular-season calendar row (`leagues[].calendar[].entries[]`).
@@ -179,10 +188,10 @@ enum CFBWeekCalendar {
     }
 
     /// Offline / decode-miss fallback: 2026 ESPN windows, otherwise Week 1...15.
+    /// Regular-season chip bar + offline fallback. Postseason bowl slots are excluded until Mode A.
     static func fallbackSeasonWeeks(seasonYear: Int) -> [CFBSeasonWeek] {
         if seasonYear == 2026 {
             return appSeasonWeeks(seasonYear: 2026, espnWeeks: espn2026RegularSeason)
-                + appPostseasonSeasonWeeks(seasonYear: 2026, espnWeeks: espn2026Postseason)
         }
         return (1...15).map {
             CFBSeasonWeek(
@@ -192,6 +201,16 @@ enum CFBWeekCalendar {
                 dateRangeLabel: "Week \($0)"
             )
         }
+    }
+
+    /// ESPN postseason calendar for deadline windows only — not shown on the week chip bar in Phase 0.
+    static func bowlCalendarSlots(seasonYear: Int) -> [CFBSeasonWeek] {
+        guard seasonYear == 2026 else { return [] }
+        return appPostseasonSeasonWeeks(seasonYear: seasonYear, espnWeeks: espn2026Postseason)
+    }
+
+    static func seasonWeeksForChipBar(_ weeks: [CFBSeasonWeek]) -> [CFBSeasonWeek] {
+        weeks.filter { !$0.isBowlChipSlot }
     }
 
     private static let espn2026Postseason: [ESPNCalendarWeek] = [

@@ -18,7 +18,12 @@ import {
   type EspnEvent,
 } from "./espn";
 import { espnScoreboardWeek } from "./cfbWeekCalendar";
-import { groupShouldSkipAutoClose, seasonYearToArchive } from "./autoCloseSeasonsLogic";
+import {
+  AUTO_CLOSE_SEASONS_SCHEDULE,
+  groupShouldSkipAutoClose,
+  isAutoCloseSeasonsRunMonth,
+  seasonYearToArchive,
+} from "./autoCloseSeasonsLogic";
 import {
   DEFAULT_SELECTION_STAMP,
   futureDefaultSelectionDeadline,
@@ -1423,17 +1428,19 @@ async function scoreWeek(
   logger.info(`Scored week ${weekId} for group ${groupId}`, awards);
 }
 
-/** Auto-close seasons after the CFP championship (Feb 1 America/New_York). */
+/** Auto-close seasons after the CFP championship — daily noon ET in February (idempotent). */
 export const autoCloseSeasons = onSchedule(
-  { schedule: "0 12 1 2 *", timeZone: "America/New_York" },
+  { schedule: AUTO_CLOSE_SEASONS_SCHEDULE, timeZone: "America/New_York" },
   async () => {
-  const year = seasonYearToArchive(new Date());
+  const now = new Date();
+  if (!isAutoCloseSeasonsRunMonth(now)) return;
+  const year = seasonYearToArchive(now);
   const groups = await db.collection("groups").get();
   for (const groupDoc of groups.docs) {
     const weeksSnap = await groupDoc.ref.collection("weeks").get();
   if (
     groupShouldSkipAutoClose(
-      weeksSnap.docs.map((d) => ({ id: d.id, data: d.data() as { status?: unknown; seasonType?: unknown } }))
+      weeksSnap.docs.map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }))
     )
   ) {
     logger.info(`Skipping autoCloseSeasons for group ${groupDoc.id} — bowl week still open`);

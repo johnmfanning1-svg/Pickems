@@ -72,28 +72,15 @@ actor ESPNService {
         let regular = calendarBlocks.first(where: {
             $0.value == "2" || ($0.label ?? "").localizedCaseInsensitiveContains("regular")
         })
-        let postseason = calendarBlocks.first(where: {
-            $0.value == "3" || ($0.label ?? "").localizedCaseInsensitiveContains("post")
-        })
         let espnWeeks = (regular?.entries ?? []).compactMap { entry -> ESPNCalendarWeek? in
             guard let number = Int(entry.value ?? "") else { return nil }
             return ESPNCalendarWeek(espnWeekNumber: number, detail: entry.detail ?? "Week \(number)")
         }
-        let postseasonWeeks = (postseason?.entries ?? []).compactMap { entry -> ESPNCalendarWeek? in
-            guard let number = Int(entry.value ?? "") else { return nil }
-            return ESPNCalendarWeek(espnWeekNumber: number, detail: entry.detail ?? "Bowls")
-        }
-        var weeks: [CFBSeasonWeek]
+        let weeks: [CFBSeasonWeek]
         if espnWeeks.isEmpty {
             weeks = CFBWeekCalendar.fallbackSeasonWeeks(seasonYear: year)
         } else {
             weeks = CFBWeekCalendar.appSeasonWeeks(seasonYear: year, espnWeeks: espnWeeks)
-            if !postseasonWeeks.isEmpty {
-                weeks.append(contentsOf: CFBWeekCalendar.appPostseasonSeasonWeeks(
-                    seasonYear: year,
-                    espnWeeks: postseasonWeeks
-                ))
-            }
         }
         seasonWeeksCache = (year, weeks, Date())
     }

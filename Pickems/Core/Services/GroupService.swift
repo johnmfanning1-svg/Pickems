@@ -348,7 +348,9 @@ final class GroupService {
         let year = currentWeek?.seasonYear
             ?? cfbWeek?.seasonYear
             ?? CFBSeasonCalendar.seasonYear()
-        let calendarWeeks = await ESPNService.shared.seasonWeeks(year: year)
+        let calendarWeeks = CFBWeekCalendar.seasonWeeksForChipBar(
+            await ESPNService.shared.seasonWeeks(year: year)
+        )
         seasonDateRangeByWeekId = Dictionary(
             uniqueKeysWithValues: calendarWeeks.map { ($0.id, $0.dateRangeLabel) }
         )
@@ -501,8 +503,18 @@ final class GroupService {
 
     private static func sortedWeeksAscending(_ weeks: [WeekSummary]) -> [WeekSummary] {
         weeks.sorted {
-            if $0.seasonYear != $1.seasonYear { return $0.seasonYear < $1.seasonYear }
-            return $0.weekNumber < $1.weekNumber
+            let a = PickemsWeekSort.rank(
+                seasonYear: $0.seasonYear,
+                weekId: $0.id,
+                weekNumber: $0.weekNumber
+            )
+            let b = PickemsWeekSort.rank(
+                seasonYear: $1.seasonYear,
+                weekId: $1.id,
+                weekNumber: $1.weekNumber
+            )
+            if a.seasonYear != b.seasonYear { return a.seasonYear < b.seasonYear }
+            return a.ordinal < b.ordinal
         }
     }
 

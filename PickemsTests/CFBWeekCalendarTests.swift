@@ -88,16 +88,24 @@ struct CFBWeekCalendarTests {
     @Test func fallbackSeasonWeeksCoversFull2026RegularSeason() {
         let weeks = CFBWeekCalendar.fallbackSeasonWeeks(seasonYear: 2026)
         #expect(weeks.first?.id == "2026-W0")
-        #expect(weeks.contains { $0.id == "2026-W15" })
-        #expect(weeks.contains { $0.id == "2026-BOWL1" })
-        #expect(weeks.count == 18)
+        #expect(weeks.last?.id == "2026-W15")
+        #expect(weeks.count == 16)
+        #expect(!weeks.contains { $0.id == "2026-BOWL1" })
+    }
+
+    @Test func chipBarFilterDropsBowlSlots() {
+        let regular = CFBWeekCalendar.fallbackSeasonWeeks(seasonYear: 2026)
+        let withBowls = regular + CFBWeekCalendar.bowlCalendarSlots(seasonYear: 2026)
+        let chipBar = CFBWeekCalendar.seasonWeeksForChipBar(withBowls)
+        #expect(chipBar.count == 16)
+        #expect(chipBar.map(\.id) == regular.map(\.id))
     }
 
     @Test func resolveDoesNotRemapPostseasonWeekOneToRegularWeekOne() {
         let info = CFBWeekInfo(seasonYear: 2026, weekNumber: 1, seasonType: 3, label: "")
         let app = CFBWeekCalendar.resolve(espn: info, now: date(2026, 12, 13))
         #expect(app.weekNumber == 1)
-        #expect(app.id == "2026-W1")
+        #expect(app.id == "2026-BOWL1")
         #expect(CFBWeekCalendar.documentWeekId(for: info) == "2026-BOWL1")
     }
 

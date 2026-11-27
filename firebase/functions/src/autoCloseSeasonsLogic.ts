@@ -11,17 +11,36 @@ export function isBowlWeekDocumentId(weekId: string): boolean {
   return /^\d{4}-BOWL\d*$/i.test(weekId);
 }
 
-/** Bowl weeks still in play block the annual archive until they are scored. */
-export function isOpenBowlWeek(weekId: string, week: { status?: unknown; seasonType?: unknown }): boolean {
+function isStalePlaceholderBowlWeek(week: Record<string, unknown>): boolean {
+  if (week.status !== "selection") return false;
+  const gameIds = week.gameIds;
+  const hasSlate = Array.isArray(gameIds) && gameIds.length > 0;
+  const nominations =
+    typeof week.nominationCount === "number" ? week.nominationCount : 0;
+  const hasDeadline = week.selectionDeadline != null;
+  return !hasSlate && nominations === 0 && !hasDeadline;
+}
+
+/** Active bowl weeks block archive; empty selection placeholders do not. */
+export function isOpenBowlWeek(weekId: string, week: Record<string, unknown>): boolean {
   if (!isBowlWeekDocumentId(weekId)) return false;
-  if (week.seasonType === POSTSEASON_SEASON_TYPE) {
-    return week.status !== "scored";
-  }
+  if (week.status === "scored") return false;
+  if (isStalePlaceholderBowlWeek(week)) return false;
   return week.status === "selection" || week.status === "picking" || week.status === "locked";
 }
 
+/** Cloud Scheduler cron — daily at noon Eastern through February (retries after skip). */
+export const AUTO_CLOSE_SEASONS_SCHEDULE = "0 12 * 2 *";
+
+export function isAutoCloseSeasonsRunMonth(runAt: Date, timeZone = "America/New_York"): boolean {
+  const month = Number(
+    new Intl.DateTimeFormat("en-US", { timeZone, month: "numeric" }).format(runAt)
+  );
+  return month === 2;
+}
+
 export function groupShouldSkipAutoClose(
-  weeks: Array<{ id: string; data: { status?: unknown; seasonType?: unknown } }>
+  weeks: Array<{ id: string; data: Record<string, unknown> }>
 ): boolean {
   return weeks.some((w) => isOpenBowlWeek(w.id, w.data));
 }
