@@ -24,6 +24,8 @@ import {
   resolveWeekPickMode,
 } from "./scoring";
 import { isRollingLock } from "./pickLock";
+import { accumulateMemberTotals, type MemberScore } from "./memberSeasonTotals";
+import { isBowlWeekId } from "./bowlWeek";
 import { rejectedPickIds, type GameLockInput } from "./spreadLock";
 import { assertWeekOperator, coordinatorsAfterCommissionerTransfer } from "./coordinators";
 
@@ -589,6 +591,7 @@ export const adminRescoreWeek = onCall(async (request) => {
     allowLatePicks?: boolean;
     latePickPenaltyWins?: number;
     pickMode?: unknown;
+    bowlSeason?: { countsTowardSeasonStandings?: boolean };
   };
   const lateOptions = {
     allowLatePicks: rules.allowLatePicks === true,
@@ -602,7 +605,7 @@ export const adminRescoreWeek = onCall(async (request) => {
     return sameSeason && (d.id === weekId || w.status === "scored");
   });
 
-  const seasonTotals = new Map<string, { wins: number; losses: number }>();
+  const scoreByWeekMember = new Map<string, Map<string, MemberScore>>();
   let targetGames: SlateGameDoc[] = [];
   let targetPicks: PickDoc[] = [];
   let targetPickMode = resolveWeekPickMode(week.pickMode, rules.pickMode);
@@ -627,7 +630,8 @@ export const adminRescoreWeek = onCall(async (request) => {
       seasonWeekId: weekDoc.id,
       seasonWeekNumber: weekData.weekNumber,
     });
-    // Score every roster member, not just pick docs — sitting out a slate is all losses.
+  // Score every roster member, not just pick docs — sitting out a slate is all losses.
+    const memberScores = new Map<string, MemberScore>();
     for (const member of members) {
       const pick = picks.find((p) => p.userId === member.id);
       const scored = applyLatePickPenalty(
@@ -642,13 +646,22 @@ export const adminRescoreWeek = onCall(async (request) => {
           deadline: weekData.pickDeadline,
         }
       );
-      const running = seasonTotals.get(member.id) ?? { wins: 0, losses: 0 };
-      seasonTotals.set(member.id, {
-        wins: running.wins + scored.wins,
-        losses: running.losses + scored.losses,
-      });
+      memberScores.set(member.id, { wins: scored.wins, losses: scored.losses });
     }
+    scoreByWeekMember.set(weekDoc.id, memberScores);
   }
+
+  const { season: seasonTotals, bowl: bowlTotals } = accumulateMemberTotals(
+    rules,
+    seasonWeeks.map((d) => {
+      const data = d.data() as { countsTowardSeasonStandingsAtScore?: boolean };
+      return {
+        weekId: d.id,
+        countsTowardSeasonStandingsAtScore: data.countsTowardSeasonStandingsAtScore,
+      };
+    }),
+    scoreByWeekMember
+  );
 
   const awards = computeWeekAwards(targetPicks, targetGames, targetPickMode);
   const batch = db().batch();
@@ -671,9 +684,12 @@ export const adminRescoreWeek = onCall(async (request) => {
       }
     );
     const season = seasonTotals.get(member.id) ?? { wins: 0, losses: 0 };
+    const bowl = bowlTotals.get(member.id) ?? { wins: 0, losses: 0 };
     batch.update(groupRef.collection("members").doc(member.id), {
       seasonWins: season.wins,
       seasonLosses: season.losses,
+      bowlWins: bowl.wins,
+      bowlLosses: bowl.losses,
     });
     return {
       id: member.id,
@@ -693,11 +709,23 @@ export const adminRescoreWeek = onCall(async (request) => {
     entries: ranked,
     updatedAt: FieldValue.serverTimestamp(),
   });
-  batch.update(weekSnap.ref, {
+  const existingWeek = weekSnap.data() as {
+    countsTowardSeasonStandingsAtScore?: boolean;
+  };
+  const bowlWeekScored = isBowlWeekId(weekId);
+  const weekScoreUpdate: Record<string, unknown> = {
     status: "scored",
     awards,
     scoredAt: FieldValue.serverTimestamp(),
-  });
+  };
+  if (bowlWeekScored) {
+    const existingStamp = existingWeek?.countsTowardSeasonStandingsAtScore;
+    weekScoreUpdate.countsTowardSeasonStandingsAtScore =
+      typeof existingStamp === "boolean"
+        ? existingStamp
+        : rules.bowlSeason?.countsTowardSeasonStandings === true;
+  }
+  batch.update(weekSnap.ref, weekScoreUpdate);
   await batch.commit();
 
   await writeAudit(

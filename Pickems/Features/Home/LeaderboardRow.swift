@@ -3,6 +3,7 @@ import SwiftUI
 struct LeaderboardRow: View {
     let entry: StandingEntry
     var showWeekly: Bool = false
+    var showBowl: Bool = false
     var streak: Int = 0
     var isPerfectSaturday: Bool = false
     var isCommissioner: Bool = false
@@ -16,8 +17,15 @@ struct LeaderboardRow: View {
     var opensProfile: Bool = false
     @Environment(\.themePalette) private var theme
 
-    private var recordWins: Int { showWeekly ? entry.weeklyWins : entry.seasonWins }
-    private var recordLosses: Int { showWeekly ? entry.weeklyLosses : entry.seasonLosses }
+    private var recordWins: Int {
+        if showWeekly { return entry.weeklyWins }
+        return entry.seasonWins
+    }
+
+    private var recordLosses: Int {
+        if showWeekly { return entry.weeklyLosses }
+        return entry.seasonLosses
+    }
 
     private var secondaryCaption: String {
         StandingsGap.leaderboardCaption(

@@ -114,6 +114,7 @@ enum LiveActivityController {
                 groupName: context.group.name,
                 weekId: context.weekId,
                 weekNumber: context.week.weekNumber,
+                weekLabel: CFBBowlSeason.userFacingWeekName(for: context.week),
                 userDisplayName: context.displayName
             )
             tokensDesired = true

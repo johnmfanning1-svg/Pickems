@@ -204,7 +204,7 @@ extension CFBWeekCalendar {
     /// Inclusive ESPN-shaped window for a Pickems week (`fallbackSeasonWeeks` labels).
     static func weekWindow(seasonYear: Int, weekNumber: Int) -> (start: Date, end: Date)? {
         let weeks = fallbackSeasonWeeks(seasonYear: seasonYear)
-        guard let slot = weeks.first(where: { $0.weekNumber == weekNumber && $0.documentWeekId == nil }) else {
+        guard let slot = weeks.first(where: { $0.weekNumber == weekNumber && $0.pickemsWeekId == nil }) else {
             return nil
         }
         return CFBWeekDateWindow.parse(label: slot.dateRangeLabel, seasonYear: seasonYear)

@@ -55,7 +55,7 @@ struct WeekChipBar: View {
             onSelect(week)
         } label: {
             VStack(spacing: 2) {
-                Text("Week \(week.weekNumber)")
+                Text(CFBBowlSeason.chipPrimaryLabel(for: week))
                     .font(.subheadline.weight(.semibold))
                 Text(range.isEmpty ? " " : range)
                     .font(.caption2.weight(.medium))

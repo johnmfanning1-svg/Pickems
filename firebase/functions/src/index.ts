@@ -25,6 +25,22 @@ import {
   seasonYearToArchive,
 } from "./autoCloseSeasonsLogic";
 import {
+  BOWL_SEASON_TYPE,
+  isBowlWeekId,
+  userFacingWeekLabel,
+} from "./bowlWeek";
+import {
+  buildScoreboardFetchTargets,
+  bowlWeekCatalogEvents,
+  postseasonEspnWeeksForWeekDocs,
+} from "./scoreboardLoad";
+import { revertBowlStandingsToggleIfLocked } from "./bowlRulesGuard";
+import {
+  COUNTS_TOWARD_SEASON_AT_SCORE,
+  countsTowardSeasonAtScoreFromRules,
+  bowlWeekCountsTowardSeason,
+} from "./bowlStandingsStamp";
+import {
   DEFAULT_SELECTION_STAMP,
   futureDefaultSelectionDeadline,
   shouldStampDefaultSelection,
@@ -157,7 +173,7 @@ export const onWeekStatusChange = onDocumentUpdated(
       await sendToUsers(
         memberIds,
         "Week locked in",
-        `Week ${after.weekNumber} is scored — check the leaderboard.`,
+        `${userFacingWeekLabel(weekId, after.weekNumber)} is scored — check the leaderboard.`,
         "week_scored",
         { groupId, weekId }
       );
@@ -240,7 +256,7 @@ export const onWeekCreated = onDocumentCreated(
     await sendToUser(
       commissionerId,
       "Set Selection deadline",
-      `Week ${data.weekNumber ?? ""} needs a Selection deadline so members finish before kickoff.`,
+      `${userFacingWeekLabel(weekId, data.weekNumber)} needs a Selection deadline so members finish before kickoff.`,
       "set_selection_deadline",
       { groupId, weekId }
     );
@@ -278,7 +294,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
 
         const groupId = groupDoc.id;
         const weekId = weekDoc.id;
-        const weekNum = week.weekNumber ?? "";
+        const weekLabel = userFacingWeekLabel(weekId, week.weekNumber);
         let deadline = week.selectionDeadline as Timestamp | undefined;
         const payload = { groupId, weekId };
         const isMemberWeek = week.selectionMode !== "commissioner";
@@ -317,7 +333,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
           await sendToUser(
             commissionerId,
             "Set Selection deadline",
-            `Week ${weekNum} needs a Selection deadline so members finish before kickoff.`,
+            `${weekLabel} needs a Selection deadline so members finish before kickoff.`,
             "set_selection_deadline",
             payload
           );
@@ -340,7 +356,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
           await sendToUsers(
             pending,
             `Selections due in ${hours}`,
-            `Week ${weekNum}: finish Selections before the deadline.`,
+            `${weekLabel}: finish Selections before the deadline.`,
             "selection_deadline_reminder",
             payload
           );
@@ -434,7 +450,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
         await sendToUsers(
           memberIds,
           "Pickems are open",
-          `Week ${weekNum}: make your Pickems. They lock at kickoff.`,
+          `${weekLabel}: make your Pickems. They lock at kickoff.`,
           "pickems_open",
           payload
         );
@@ -445,7 +461,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
         await sendToUser(
           commissionerId,
           "Selection deadline passed",
-          `Week ${weekNum}: fill remaining games or open with fewer.`,
+          `${weekLabel}: fill remaining games or open with fewer.`,
           "selection_deadline_passed",
           payload
         );
@@ -537,15 +553,15 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
       );
       const pending = memberIds.filter((id) => !submitted.has(id));
       const data = { groupId: groupDoc.id, weekId: weekDoc.id };
-      const weekNum = week.weekNumber;
+      const weekLabel = userFacingWeekLabel(weekDoc.id, week.weekNumber);
 
       if (need24h) {
         await sendToUsers(
           pending,
           rolling ? "First Pickems lock in 24 hours" : "Pickems lock in 24 hours",
           rolling
-            ? `Week ${weekNum}: the first game locks in 24 hours. Later games stay open.`
-            : `Week ${weekNum} Pickems lock in 24 hours. Submit before the deadline.`,
+            ? `${weekLabel}: the first game locks in 24 hours. Later games stay open.`
+            : `${weekLabel} Pickems lock in 24 hours. Submit before the deadline.`,
           "deadline_reminder",
           data
         );
@@ -557,8 +573,8 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
           pending,
           rolling ? "First Pickems lock in 1 hour" : "Pickems lock in 1 hour",
           rolling
-            ? `Week ${weekNum}: the first game locks in 1 hour. Later games stay open.`
-            : `Week ${weekNum} Pickems lock in 1 hour. Submit before the deadline.`,
+            ? `${weekLabel}: the first game locks in 1 hour. Later games stay open.`
+            : `${weekLabel} Pickems lock in 1 hour. Submit before the deadline.`,
           "deadline_reminder",
           data
         );
@@ -568,33 +584,40 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
   }
 });
 
-async function loadScoreboardPages(weekNumbers: Iterable<number>): Promise<{
+async function loadScoreboardPages(
+  weekNumbers: Iterable<number>,
+  postseasonEspnWeeks: Iterable<number>
+): Promise<{
   byWeek: Map<number, EspnEvent[]>;
+  postseasonByEspnWeek: Map<number, EspnEvent[]>;
   byId: Map<string, EspnEvent>;
 }> {
-  const weeks = [...new Set([...weekNumbers].map((n) => espnScoreboardWeek(n)))]
-    .filter((n) => Number.isFinite(n) && n > 0);
-  const targets: Array<number | undefined> = weeks.length === 0 ? [undefined] : weeks;
+  const targets = buildScoreboardFetchTargets(weekNumbers, postseasonEspnWeeks);
   const pages = await Promise.all(
-    targets.map(async (week) => {
+    targets.map(async ({ week, seasonType }) => {
       try {
         const events = await fetchScoreboard(
-          week == null ? { seasonType: 2 } : { week, seasonType: 2 }
+          week == null ? { seasonType } : { week, seasonType }
         );
-        return { week, events };
+        return { week, seasonType, events };
       } catch (err) {
         logger.error("ESPN fetch failed", err);
-        return { week, events: [] as EspnEvent[] };
+        return { week, seasonType, events: [] as EspnEvent[] };
       }
     })
   );
   const byWeek = new Map<number, EspnEvent[]>();
+  const postseasonByEspnWeek = new Map<number, EspnEvent[]>();
   const byId = new Map<string, EspnEvent>();
   for (const page of pages) {
-    if (page.week != null) byWeek.set(page.week, page.events);
+    if (page.seasonType === BOWL_SEASON_TYPE && page.week != null) {
+      postseasonByEspnWeek.set(page.week, page.events);
+    } else if (page.week != null) {
+      byWeek.set(page.week, page.events);
+    }
     for (const event of page.events) byId.set(event.id, event);
   }
-  return { byWeek, byId };
+  return { byWeek, postseasonByEspnWeek, byId };
 }
 
 /**
@@ -604,11 +627,18 @@ async function loadScoreboardPages(weekNumbers: Iterable<number>): Promise<{
  */
 async function publishSelectionKickoffCatalog(
   weekDoc: QueryDocumentSnapshot,
-  eventsByScoreboardWeek: Map<number, EspnEvent[]>
+  eventsByScoreboardWeek: Map<number, EspnEvent[]>,
+  postseasonByEspnWeek: Map<number, EspnEvent[]>
 ): Promise<void> {
   const weekNumber = weekDoc.data().weekNumber;
   if (typeof weekNumber !== "number") return;
-  const events = eventsByScoreboardWeek.get(espnScoreboardWeek(weekNumber));
+  const data = weekDoc.data();
+  const bowl =
+    isBowlWeekId(weekDoc.id) ||
+    (data.seasonType as number | undefined) === BOWL_SEASON_TYPE;
+  const events = bowl
+    ? bowlWeekCatalogEvents(weekDoc.id, data, postseasonByEspnWeek)
+    : eventsByScoreboardWeek.get(espnScoreboardWeek(weekNumber)) ?? [];
   if (!events || events.length === 0) return;
   const millisById = kickoffsMillisByEspnEventId(events);
   const ids = Object.keys(millisById);
@@ -641,6 +671,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
     selectionWeeks: QueryDocumentSnapshot[];
   }> = [];
   const weekNumbers = new Set<number>();
+  const postseasonEspnWeeks = new Set<number>();
 
   for (const groupDoc of groups.docs) {
     const memberIds = (groupDoc.data().memberIds as string[]) ?? [];
@@ -653,17 +684,24 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
     for (const weekDoc of weeks.docs) {
       const number = weekDoc.data().weekNumber;
       if (typeof number === "number") weekNumbers.add(number);
+      const data = weekDoc.data();
+      for (const w of postseasonEspnWeeksForWeekDocs([{ id: weekDoc.id, data }])) {
+        postseasonEspnWeeks.add(w);
+      }
       if (weekDoc.data().status === "selection") selectionWeeks.push(weekDoc);
       else scoringWeeks.push(weekDoc);
     }
     activeWeeksByGroup.push({ groupDoc, memberIds, scoringWeeks, selectionWeeks });
   }
 
-  const { byWeek, byId: eventById } = await loadScoreboardPages(weekNumbers);
+  const { byWeek, postseasonByEspnWeek, byId: eventById } = await loadScoreboardPages(
+    weekNumbers,
+    postseasonEspnWeeks
+  );
 
   for (const { selectionWeeks } of activeWeeksByGroup) {
     for (const weekDoc of selectionWeeks) {
-      await publishSelectionKickoffCatalog(weekDoc, byWeek);
+      await publishSelectionKickoffCatalog(weekDoc, byWeek, postseasonByEspnWeek);
     }
   }
 
@@ -714,7 +752,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
         await sendToUsers(
           memberIds,
           "Pickems are locked",
-          `Week ${week.weekNumber} is locked. Good luck.`,
+          `${userFacingWeekLabel(weekId, week.weekNumber)} is locked. Good luck.`,
           "deadline_locked",
           { groupId, weekId }
         );
@@ -1370,7 +1408,10 @@ async function scoreWeek(
       allowLatePicks?: boolean;
       latePickPenaltyWins?: number;
       pickMode?: unknown;
+      bowlSeason?: { countsTowardSeasonStandings?: boolean };
     };
+    const isBowl = isBowlWeekId(weekId) || (week?.seasonType as number | undefined) === BOWL_SEASON_TYPE;
+    const bowlTowardSeason = isBowl && bowlWeekCountsTowardSeason(rules, week ?? undefined);
     const deadline = week?.pickDeadline;
     const mode = resolveWeekPickMode(week?.pickMode ?? pickMode, rules.pickMode);
 
@@ -1393,9 +1434,22 @@ async function scoreWeek(
           deadline,
         }
       );
-      const seasonWins = (member.seasonWins ?? 0) + scored.wins;
-      const seasonLosses = (member.seasonLosses ?? 0) + scored.losses;
-      tx.update(membersCol.doc(member.id), { seasonWins, seasonLosses });
+      let seasonWins = member.seasonWins ?? 0;
+      let seasonLosses = member.seasonLosses ?? 0;
+      let bowlWins = member.bowlWins ?? 0;
+      let bowlLosses = member.bowlLosses ?? 0;
+      if (isBowl) {
+        bowlWins += scored.wins;
+        bowlLosses += scored.losses;
+        if (bowlTowardSeason) {
+          seasonWins += scored.wins;
+          seasonLosses += scored.losses;
+        }
+      } else {
+        seasonWins += scored.wins;
+        seasonLosses += scored.losses;
+      }
+      tx.update(membersCol.doc(member.id), { seasonWins, seasonLosses, bowlWins, bowlLosses });
       weeklyEntries.push({
         id: member.id,
         displayName: member.displayName,
@@ -1414,11 +1468,19 @@ async function scoreWeek(
       entries: ranked,
       updatedAt: FieldValue.serverTimestamp(),
     });
-    tx.update(weekRef, {
+    const weekUpdate: Record<string, unknown> = {
       status: "scored",
       awards,
       scoredAt: FieldValue.serverTimestamp(),
-    });
+    };
+    if (isBowl) {
+      const existingStamp = week?.[COUNTS_TOWARD_SEASON_AT_SCORE];
+      weekUpdate[COUNTS_TOWARD_SEASON_AT_SCORE] =
+        typeof existingStamp === "boolean"
+          ? existingStamp
+          : countsTowardSeasonAtScoreFromRules(rules);
+    }
+    tx.update(weekRef, weekUpdate);
   });
 
   if (skipped) {
@@ -1533,6 +1595,7 @@ export const syncPublicLeagueIndex = onDocumentUpdated("groups/{groupId}", async
   const after = change.after.data();
   if (!before || !after) return;
   const groupId = event.params.groupId;
+  await revertBowlStandingsToggleIfLocked(db, groupId, before, after, change.after.ref);
   const beforePickMode = (before.rules as { pickMode?: unknown } | undefined)?.pickMode;
   const afterPickMode = (after.rules as { pickMode?: unknown } | undefined)?.pickMode;
   // Old iOS clients replace the whole `rules` map and would drop pickMode.

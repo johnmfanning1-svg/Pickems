@@ -16,7 +16,11 @@ struct PickemsLiveActivityWidget: Widget {
                         .minimumScaleFactor(0.7)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text(context.state.rankText ?? "W\(context.attributes.weekNumber)")
+                    Text(context.state.rankText ?? WidgetWeekLabel.liveActivityWeekLine(
+                        weekId: context.attributes.weekId,
+                        weekNumber: context.attributes.weekNumber,
+                        weekLabel: context.attributes.weekLabel
+                    ))
                         .font(.title3.monospacedDigit().weight(.bold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
@@ -88,7 +92,11 @@ private struct LiveActivityLockScreen: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(primary)
                         .lineLimit(1)
-                    Text("W\(context.attributes.weekNumber)")
+                    Text(WidgetWeekLabel.liveActivityWeekLine(
+                        weekId: context.attributes.weekId,
+                        weekNumber: context.attributes.weekNumber,
+                        weekLabel: context.attributes.weekLabel
+                    ))
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(secondary)
                 }
@@ -227,6 +235,10 @@ private enum LiveActivityIsland {
         if let rank = context.state.rankText {
             return rank
         }
-        return "W\(context.attributes.weekNumber)"
+        return WidgetWeekLabel.liveActivityWeekLine(
+            weekId: context.attributes.weekId,
+            weekNumber: context.attributes.weekNumber,
+            weekLabel: context.attributes.weekLabel
+        )
     }
 }

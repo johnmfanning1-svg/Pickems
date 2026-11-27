@@ -6,17 +6,16 @@ struct CFBAppWeek: Equatable {
     let weekNumber: Int
     let espnWeekNumber: Int
     let seasonType: Int
+    let pickemsWeekId: String?
 
-    var id: String {
-        if seasonType == CFBWeekCalendar.postseasonSeasonType, seasonYear == 2026 {
-            if espnWeekNumber == 1 { return "2026-BOWL1" }
-            if espnWeekNumber == 999 { return "2026-BOWL2" }
-            return "\(seasonYear)-BOWL\(espnWeekNumber)"
+    var id: String { pickemsWeekId ?? "\(seasonYear)-W\(weekNumber)" }
+
+    var label: String {
+        if pickemsWeekId != nil {
+            return "Season \(seasonYear) | Bowl"
         }
-        return "\(seasonYear)-W\(weekNumber)"
+        return "Season \(seasonYear) | Week \(weekNumber)"
     }
-
-    var label: String { "Season \(seasonYear) | Week \(weekNumber)" }
 }
 
 /// One slot in the Selections week strip (ESPN regular season, plus the 2026 Week 0 split).
@@ -25,26 +24,26 @@ struct CFBSeasonWeek: Equatable, Identifiable {
     let weekNumber: Int
     let espnWeekNumber: Int
     let dateRangeLabel: String
-    /// When set, Firestore week doc id (e.g. `2026-BOWL1`) instead of `W` numbering.
-    let documentWeekId: String?
+    /// When set (bowl slots), this is the Firestore week doc id instead of `"{year}-W{n}"`.
+    let pickemsWeekId: String?
 
-    init(
+  init(
         seasonYear: Int,
         weekNumber: Int,
         espnWeekNumber: Int,
         dateRangeLabel: String,
-        documentWeekId: String? = nil
+        pickemsWeekId: String? = nil
     ) {
         self.seasonYear = seasonYear
         self.weekNumber = weekNumber
         self.espnWeekNumber = espnWeekNumber
         self.dateRangeLabel = dateRangeLabel
-        self.documentWeekId = documentWeekId
+        self.pickemsWeekId = pickemsWeekId
     }
 
-    var id: String { documentWeekId ?? "\(seasonYear)-W\(weekNumber)" }
+    var id: String { pickemsWeekId ?? "\(seasonYear)-W\(weekNumber)" }
 
-    var isBowlChipSlot: Bool { documentWeekId != nil }
+    var isBowlChipSlot: Bool { pickemsWeekId != nil }
 }
 
 /// ESPN regular-season calendar row (`leagues[].calendar[].entries[]`).
@@ -69,6 +68,23 @@ enum CFBWeekCalendar {
     }
 
     static func resolve(espn: CFBWeekInfo, now: Date = Date()) -> CFBAppWeek {
+        if espn.seasonType == CFBBowlSeason.postseasonSeasonType {
+            let seasonYear = CFBBowlSeason.canonicalSeasonYear(containing: now)
+            let docId = documentWeekId(for: espn, now: now)
+            let appWeekNumber = resolveAppWeekNumber(
+                seasonYear: seasonYear,
+                espnWeekNumber: espn.weekNumber,
+                seasonType: espn.seasonType,
+                now: now
+            )
+            return CFBAppWeek(
+                seasonYear: seasonYear,
+                weekNumber: appWeekNumber,
+                espnWeekNumber: espn.weekNumber,
+                seasonType: espn.seasonType,
+                pickemsWeekId: docId == "\(seasonYear)-W\(appWeekNumber)" ? nil : docId
+            )
+        }
         let weekNumber = resolveAppWeekNumber(
             seasonYear: espn.seasonYear,
             espnWeekNumber: espn.weekNumber,
@@ -79,7 +95,8 @@ enum CFBWeekCalendar {
             seasonYear: espn.seasonYear,
             weekNumber: weekNumber,
             espnWeekNumber: espn.weekNumber,
-            seasonType: espn.seasonType
+            seasonType: espn.seasonType,
+            pickemsWeekId: nil
         )
     }
 
@@ -126,7 +143,7 @@ enum CFBWeekCalendar {
                 weekNumber: appWeekNumber,
                 espnWeekNumber: entry.espnWeekNumber,
                 dateRangeLabel: entry.detail,
-                documentWeekId: docId
+                pickemsWeekId: docId
             )
         }
     }

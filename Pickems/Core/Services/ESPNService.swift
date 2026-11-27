@@ -116,16 +116,56 @@ actor ESPNService {
 
     func fetchScoreboard(
         for week: WeekSummary,
-        seasonType: Int = 2,
+        seasonType: Int? = nil,
         live: Bool = false,
         forceRefresh: Bool = false
     ) async throws -> [ESPNGame] {
+        let resolvedType = seasonType ?? week.resolvedSeasonType
         let games = try await fetchScoreboard(
             week: week.espnScoreboardWeek,
-            seasonType: seasonType,
+            seasonType: resolvedType,
             live: live,
             forceRefresh: forceRefresh
         )
+        if CFBBowlSeason.isBowlWeek(week), let slot = CFBBowlSeason.slot(for: week) {
+            let now = Date()
+            switch slot {
+            case .bowl1:
+                return games.filter {
+                    CFBBowlSeason.catalogEligible(
+                        game: $0,
+                        week: week,
+                        fromEspnPostseasonWeek: slot.espnWeekNumber,
+                        now: now
+                    )
+                }
+            case .bowl2:
+                let fromLateWeekOne = try await fetchScoreboard(
+                    week: CFBBowlSeason.Slot.bowl1.espnWeekNumber,
+                    seasonType: resolvedType,
+                    live: live,
+                    forceRefresh: forceRefresh
+                )
+                let lateWeekOne = fromLateWeekOne.filter {
+                    CFBBowlSeason.catalogEligible(
+                        game: $0,
+                        week: week,
+                        fromEspnPostseasonWeek: CFBBowlSeason.Slot.bowl1.espnWeekNumber,
+                        now: now
+                    )
+                }
+                let from999 = games.filter {
+                    CFBBowlSeason.catalogEligible(
+                        game: $0,
+                        week: week,
+                        fromEspnPostseasonWeek: slot.espnWeekNumber,
+                        now: now
+                    )
+                }
+                var seen = Set<String>()
+                return (lateWeekOne + from999).filter { seen.insert($0.espnEventId).inserted }
+            }
+        }
         return games.matching(seasonYear: week.seasonYear, appWeekNumber: week.weekNumber)
     }
 
@@ -166,6 +206,24 @@ actor ESPNService {
             live: true,
             forceRefresh: forceRefresh
         )
+        return try await liveGameCards(
+            espnGames: espnGames,
+            week: nil,
+            slateEventIds: slateEventIds,
+            userPicks: userPicks,
+            slateGames: slateGames,
+            pickMode: pickMode
+        )
+    }
+
+    private func liveGameCards(
+        espnGames: [ESPNGame],
+        week: WeekSummary?,
+        slateEventIds: Set<String>,
+        userPicks: [String: String],
+        slateGames: [SlateGame],
+        pickMode: PickMode
+    ) async throws -> [ESPNLiveGameCard] {
         let slateByEventId = Dictionary(slateGames.map { ($0.espnEventId, $0) }, uniquingKeysWith: { _, last in last })
         let slateIds = slateEventIds.union(Set(slateGames.map(\.espnEventId)))
 
@@ -237,7 +295,13 @@ actor ESPNService {
             cards.append(Self.card(from: slate, userPicks: userPicks, ranks: ranks, pickMode: pickMode))
         }
 
-        return cards.sorted { $0.kickoff < $1.kickoff }
+        let filtered: [ESPNLiveGameCard]
+        if let week, !CFBBowlSeason.isBowlWeek(week) {
+            filtered = cards.matching(seasonYear: week.seasonYear, appWeekNumber: week.weekNumber)
+        } else {
+            filtered = cards
+        }
+        return filtered.sorted { $0.kickoff < $1.kickoff }
     }
 
     func liveGameCards(
@@ -248,16 +312,15 @@ actor ESPNService {
         forceRefresh: Bool = false,
         pickMode: PickMode = .ats
     ) async throws -> [ESPNLiveGameCard] {
-        let cards = try await liveGameCards(
-            week: week.espnScoreboardWeek,
-            seasonType: 2,
+        let espnGames = try await fetchScoreboard(for: week, live: true, forceRefresh: forceRefresh)
+        return try await liveGameCards(
+            espnGames: espnGames,
+            week: week,
             slateEventIds: slateEventIds,
             userPicks: userPicks,
             slateGames: slateGames,
-            forceRefresh: forceRefresh,
             pickMode: pickMode
         )
-        return cards.matching(seasonYear: week.seasonYear, appWeekNumber: week.weekNumber)
     }
 
     /// Picks are stored under `SlateGame.id`, which is usually the ESPN event id but

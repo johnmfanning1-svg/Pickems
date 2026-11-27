@@ -130,7 +130,7 @@ struct DeadlinePhaseView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 2) {
-            WidgetEyebrow(text: "\(snapshot.groupName) · Wk \(snapshot.weekNumber)")
+            WidgetEyebrow(text: "\(snapshot.groupName) · \(snapshot.shortWeekEyebrow)")
             if stale {
                 WidgetUpdatedLine(date: snapshot.updatedAt)
             }
@@ -260,7 +260,7 @@ struct DeadlinePhaseView: View {
 
     private var accessibilityText: String {
         let remaining = WidgetInlineCopy.compactRemaining(deadline.timeIntervalSince(now))
-        var text = "\(snapshot.groupName). \(kind.label), \(remaining) remaining. Week \(snapshot.weekNumber)."
+        var text = "\(snapshot.groupName). \(kind.label), \(remaining) remaining. \(snapshot.userFacingWeekTitle)."
         if !progress.accessibilityDetail.isEmpty {
             text += " \(progress.accessibilityDetail)"
         }
@@ -328,7 +328,7 @@ struct ScoreboardPhaseView: View {
         VStack(alignment: .leading, spacing: WidgetStyle.rowSpacing) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    WidgetEyebrow(text: "Live · Wk \(snapshot.weekNumber)")
+                    WidgetEyebrow(text: "Live · \(snapshot.shortWeekEyebrow)")
                     Text(snapshot.groupName)
                         .font(WidgetStyle.titleFont)
                         .lineLimit(1)
@@ -380,7 +380,7 @@ struct ScoreboardPhaseView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
                 .widgetAccentable()
-            Text(pickProgress?.line ?? "Live · Week \(snapshot.weekNumber)")
+            Text(pickProgress?.line ?? "Live · \(snapshot.userFacingWeekTitle)")
                 .font(WidgetStyle.rowFont)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -406,7 +406,7 @@ struct ScoreboardPhaseView: View {
     }
 
     private var scoreboardLabel: String {
-        var text = "Week \(snapshot.weekNumber) scoreboard. \(snapshot.weeklyWins) wins, \(snapshot.weeklyLosses) losses, \(snapshot.groupName)."
+        var text = "\(snapshot.userFacingWeekTitle) scoreboard. \(snapshot.weeklyWins) wins, \(snapshot.weeklyLosses) losses, \(snapshot.groupName)."
         if let line = pickProgress?.line {
             text += " \(line)."
         }

@@ -33,6 +33,8 @@ export interface MemberDoc {
   avatarColorHex: string;
   seasonWins: number;
   seasonLosses: number;
+  bowlWins?: number;
+  bowlLosses?: number;
   joinedAt?: unknown;
 }
 

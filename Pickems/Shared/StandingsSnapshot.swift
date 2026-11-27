@@ -5,6 +5,10 @@ struct StandingsSnapshot: Codable, Equatable {
     var groupId: String
     var groupName: String
     var weekNumber: Int
+    /// Document id such as `2026-W7` or `2026-BOWL1`. Nil on older snapshots.
+    var weekId: String? = nil
+    /// User-facing week title when it differs from `Week N` (e.g. Bowl Bonanza).
+    var weekLabel: String? = nil
     var seasonYear: Int
     var userId: String
     var userDisplayName: String
@@ -91,6 +95,11 @@ struct StandingsSnapshot: Codable, Equatable {
 
     var weeklyRecord: String { "\(weeklyWins)-\(weeklyLosses)" }
     var seasonRecord: String { "\(seasonWins)-\(seasonLosses)" }
+
+    var deepLinkWeekId: String {
+        if let weekId, !weekId.isEmpty { return weekId }
+        return "\(seasonYear)-W\(weekNumber)"
+    }
 
     var showsPreseasonCountdown: Bool {
         guard let seasonKickoffAt else { return false }

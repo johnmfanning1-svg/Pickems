@@ -158,6 +158,7 @@ enum WidgetSnapshotService {
                 weekNumber: weekNumber,
                 seasonYear: standingsSeasonYear(from: appState, week: week),
                 ranked: ranked,
+                week: week,
                 extras: extras(from: appState, group: group, week: week, weekNumber: weekNumber),
                 timelineReload: timelineReload
             )
@@ -232,6 +233,7 @@ enum WidgetSnapshotService {
             weekNumber: weekNumber,
             seasonYear: standingsSeasonYear(from: appState, week: fetched.week),
             ranked: ranked,
+            week: fetched.week,
             extras: WidgetSnapshotBuilder.carryForward(
                 fresh,
                 previous: PickemsAppGroup.load(),
@@ -398,6 +400,7 @@ enum WidgetSnapshotService {
         weekNumber: Int,
         seasonYear: Int,
         ranked: [StandingEntry],
+        week: WeekSummary? = nil,
         extras: WidgetSnapshotBuilder.Extras = .empty,
         timelineReload: TimelineReload = .immediate
     ) {
@@ -408,6 +411,8 @@ enum WidgetSnapshotService {
             groupId: group.id,
             groupName: group.name,
             weekNumber: weekNumber,
+            weekId: week?.id,
+            weekLabel: week.map { CFBBowlSeason.userFacingWeekName(for: $0) },
             seasonYear: seasonYear,
             userId: userId,
             userDisplayName: userDisplayName,

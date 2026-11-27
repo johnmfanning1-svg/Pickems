@@ -193,6 +193,17 @@ extension AppState {
         }
     }
 
+    func rankedStandings(scope: LeaderboardScope.Scope) -> [StandingEntry] {
+        switch scope {
+        case .thisWeek:
+            return rankedStandings(weekly: true)
+        case .season:
+            return rankedStandings(weekly: false)
+        case .bowl:
+            return rankedBowlStandings()
+        }
+    }
+
     func rankedStandings(weekly: Bool) -> [StandingEntry] {
         let group = groupService.selectedGroup
         // Ignore a roster still attached to the previous league after a switch.
@@ -220,6 +231,35 @@ extension AppState {
             allPicks: pickService.allPicks,
             games: pickService.slateGames,
             tieBreakOrder: tieBreakOrder,
+            pickMode: selectedPickMode
+        )
+    }
+
+    func rankedBowlStandings() -> [StandingEntry] {
+        let group = groupService.selectedGroup
+        let members: [GroupMember]
+        if let groupId = group?.id, groupService.membersGroupId == groupId {
+            members = groupService.members
+        } else {
+            members = []
+        }
+        let synthetic = members.map { member -> StandingEntry in
+            var entry = StandingEntry.placeholder(from: member)
+            entry.seasonWins = member.bowlWins ?? 0
+            entry.seasonLosses = member.bowlLosses ?? 0
+            entry.weeklyWins = 0
+            entry.weeklyLosses = 0
+            return entry
+        }
+        guard !synthetic.isEmpty else { return [] }
+        let tieBreaker = group?.rules.tieBreaker ?? .commissionerOverride
+        return ScoringEngine.boardStandings(
+            entries: synthetic,
+            weekly: false,
+            tieBreaker: tieBreaker,
+            allPicks: [],
+            games: [],
+            tieBreakOrder: [],
             pickMode: selectedPickMode
         )
     }

@@ -120,6 +120,7 @@ struct PickemsLiveAttributes: ActivityAttributes {
     var groupName: String
     var weekId: String
     var weekNumber: Int
+    var weekLabel: String
     var userDisplayName: String
 
     init(
@@ -127,12 +128,14 @@ struct PickemsLiveAttributes: ActivityAttributes {
         groupName: String,
         weekId: String,
         weekNumber: Int,
+        weekLabel: String,
         userDisplayName: String
     ) {
         self.groupId = groupId
         self.groupName = groupName
         self.weekId = weekId
         self.weekNumber = weekNumber
+        self.weekLabel = weekLabel
         self.userDisplayName = userDisplayName
     }
 
@@ -142,6 +145,7 @@ struct PickemsLiveAttributes: ActivityAttributes {
         groupName = try container.decodeIfPresent(String.self, forKey: .groupName) ?? ""
         weekId = try container.decodeIfPresent(String.self, forKey: .weekId) ?? ""
         weekNumber = try container.decodeIfPresent(Int.self, forKey: .weekNumber) ?? 0
+        weekLabel = try container.decodeIfPresent(String.self, forKey: .weekLabel) ?? ""
         userDisplayName = try container.decodeIfPresent(String.self, forKey: .userDisplayName) ?? ""
     }
 
@@ -151,6 +155,7 @@ struct PickemsLiveAttributes: ActivityAttributes {
         try container.encode(groupName, forKey: .groupName)
         try container.encode(weekId, forKey: .weekId)
         try container.encode(weekNumber, forKey: .weekNumber)
+        try container.encode(weekLabel, forKey: .weekLabel)
         try container.encode(userDisplayName, forKey: .userDisplayName)
     }
 
@@ -159,6 +164,7 @@ struct PickemsLiveAttributes: ActivityAttributes {
         case groupName
         case weekId
         case weekNumber
+        case weekLabel
         case userDisplayName
     }
 }

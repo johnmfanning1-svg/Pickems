@@ -371,7 +371,7 @@ struct PickemsWidgetEntryView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            Text("Wk \(snapshot.weekNumber) \(snapshot.weeklyRecord) · Season \(snapshot.seasonRecord)")
+            Text("\(snapshot.shortWeekEyebrow) \(snapshot.weeklyRecord) · Season \(snapshot.seasonRecord)")
                 .font(WidgetStyle.rowFont)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -386,7 +386,7 @@ struct PickemsWidgetEntryView: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     WidgetEyebrow(text: snapshot.groupName)
-                    Text("Week \(snapshot.weekNumber)")
+                    Text(snapshot.userFacingWeekTitle)
                         .font(WidgetStyle.titleFont)
                         .lineLimit(1)
                 }
@@ -417,7 +417,7 @@ struct PickemsWidgetEntryView: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     WidgetEyebrow(text: snapshot.groupName)
-                    Text("Week \(snapshot.weekNumber)")
+                    Text(snapshot.userFacingWeekTitle)
                         .font(WidgetStyle.titleFont)
                 }
                 Spacer(minLength: 8)
@@ -441,7 +441,7 @@ struct PickemsWidgetEntryView: View {
         VStack(alignment: .leading, spacing: 2) {
             WidgetEyebrow(text: snapshot.groupName)
             rankHero(snapshot)
-            Text("Week \(snapshot.weekNumber) · \(snapshot.weeklyRecord)")
+            Text("\(snapshot.userFacingWeekTitle) · \(snapshot.weeklyRecord)")
                 .font(WidgetStyle.rowFont)
                 .lineLimit(1)
         }
@@ -520,7 +520,7 @@ struct PickemsWidgetEntryView: View {
     private func standingsAccessibilityLabel(_ snapshot: StandingsSnapshot) -> String {
         let winWord = snapshot.weeklyWins == 1 ? "win" : "wins"
         let lossWord = snapshot.weeklyLosses == 1 ? "loss" : "losses"
-        var text = "Week \(snapshot.weekNumber) standings. Rank \(snapshot.rank), \(snapshot.weeklyWins) \(winWord), \(snapshot.weeklyLosses) \(lossWord), \(snapshot.groupName)"
+        var text = "\(snapshot.userFacingWeekTitle) standings. Rank \(snapshot.rank), \(snapshot.weeklyWins) \(winWord), \(snapshot.weeklyLosses) \(lossWord), \(snapshot.groupName)"
         if let delta = WidgetStandingsCopy.deltaSymbol(rank: snapshot.rank, previousRank: snapshot.previousRank) {
             text += ". Moved \(delta)."
         }

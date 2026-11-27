@@ -747,12 +747,21 @@ struct GroupChip: View {
 }
 
 private struct LeaderboardScopePicker: View {
+    @Environment(AppState.self) private var appState
     @Binding var scope: LeaderboardScope.Scope
+
+    private var showsBowl: Bool {
+        guard let rules = appState.groupService.selectedGroup?.rules else { return false }
+        return LeaderboardScope.showsBowlScope(rules: rules)
+    }
 
     var body: some View {
         Picker("Standings", selection: $scope) {
             Text("This Week").tag(LeaderboardScope.Scope.thisWeek)
             Text("Season").tag(LeaderboardScope.Scope.season)
+            if showsBowl {
+                Text(CFBBowlSeason.userFacingBowlWeekName).tag(LeaderboardScope.Scope.bowl)
+            }
         }
         .pickerStyle(.segmented)
         .accessibilityLabel("Standings period")
@@ -767,9 +776,10 @@ struct LeaderboardView: View {
     @Binding var scope: LeaderboardScope.Scope
 
     private var showWeekly: Bool { scope.showsWeeklyRecord }
+    private var showBowl: Bool { scope.showsBowlRecord }
 
     private var allEntries: [StandingEntry] {
-        appState.rankedStandings(weekly: showWeekly)
+        appState.rankedStandings(scope: scope)
     }
 
     private var previewEntries: [StandingEntry] {
@@ -791,12 +801,17 @@ struct LeaderboardView: View {
         guard let first = allEntries.first(where: { $0.rank == 1 }) ?? allEntries.first else {
             return nil
         }
-        return showWeekly ? first.weeklyWins : first.seasonWins
+        if showWeekly { return first.weeklyWins }
+        if showBowl { return first.seasonWins }
+        return first.seasonWins
     }
 
     private var standingsSubtitle: String {
         if showWeekly {
             return "This week's Pickem record"
+        }
+        if showBowl {
+            return "Bowl season record (separate from regular season unless enabled)"
         }
         return "Season standings"
     }
@@ -865,6 +880,7 @@ struct LeaderboardView: View {
             LeaderboardStandingRow(
                 entry: entry,
                 showWeekly: showWeekly,
+                showBowl: showBowl,
                 isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
                 coordinatorRole: appState.groupService.selectedGroup?.coordinatorRole(for: entry.id),
                 canCompare: entry.id != appState.currentUserId,
@@ -923,16 +939,18 @@ struct FullLeaderboardView: View {
     @Binding var scope: LeaderboardScope.Scope
 
     private var showWeekly: Bool { scope.showsWeeklyRecord }
+    private var showBowl: Bool { scope.showsBowlRecord }
 
     private var entries: [StandingEntry] {
-        appState.rankedStandings(weekly: showWeekly)
+        appState.rankedStandings(scope: scope)
     }
 
     private var leaderWins: Int? {
         guard let first = entries.first(where: { $0.rank == 1 }) ?? entries.first else {
             return nil
         }
-        return showWeekly ? first.weeklyWins : first.seasonWins
+        if showWeekly { return first.weeklyWins }
+        return first.seasonWins
     }
 
     var body: some View {
@@ -962,6 +980,7 @@ struct FullLeaderboardView: View {
             LeaderboardStandingRow(
                 entry: entry,
                 showWeekly: showWeekly,
+                showBowl: showBowl,
                 isCommissioner: entry.id == appState.groupService.selectedGroup?.commissionerId,
                 coordinatorRole: appState.groupService.selectedGroup?.coordinatorRole(for: entry.id),
                 canCompare: entry.id != appState.currentUserId,
@@ -974,6 +993,7 @@ struct FullLeaderboardView: View {
 private struct LeaderboardStandingRow: View {
     let entry: StandingEntry
     let showWeekly: Bool
+    var showBowl: Bool = false
     let isCommissioner: Bool
     var coordinatorRole: LeagueCoordinatorRole? = nil
     let canCompare: Bool
@@ -984,6 +1004,7 @@ private struct LeaderboardStandingRow: View {
             LeaderboardRow(
                 entry: entry,
                 showWeekly: showWeekly,
+                showBowl: showBowl,
                 isCommissioner: isCommissioner,
                 coordinatorRole: coordinatorRole,
                 showsDisclosure: false,
