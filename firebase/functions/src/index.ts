@@ -26,11 +26,15 @@ import {
 } from "./autoCloseSeasonsLogic";
 import {
   BOWL_SEASON_TYPE,
-  ESPN_POSTSEASON_WEEK,
   bowlCountsTowardSeason,
   isBowlWeekId,
   userFacingWeekLabel,
 } from "./bowlWeek";
+import {
+  buildScoreboardFetchTargets,
+  bowlWeekCatalogEvents,
+  postseasonEspnWeeksForWeekDocs,
+} from "./scoreboardLoad";
 import {
   DEFAULT_SELECTION_STAMP,
   futureDefaultSelectionDeadline,
@@ -577,19 +581,13 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
 
 async function loadScoreboardPages(
   weekNumbers: Iterable<number>,
-  options?: { includePostseason?: boolean }
+  postseasonEspnWeeks: Iterable<number>
 ): Promise<{
   byWeek: Map<number, EspnEvent[]>;
-  postseason: EspnEvent[];
+  postseasonByEspnWeek: Map<number, EspnEvent[]>;
   byId: Map<string, EspnEvent>;
 }> {
-  const weeks = [...new Set([...weekNumbers].map((n) => espnScoreboardWeek(n)))]
-    .filter((n) => Number.isFinite(n) && n > 0);
-  const targets: Array<{ week?: number; seasonType: number }> =
-    weeks.length === 0 ? [{ seasonType: 2 }] : weeks.map((week) => ({ week, seasonType: 2 }));
-  if (options?.includePostseason) {
-    targets.push({ week: ESPN_POSTSEASON_WEEK, seasonType: BOWL_SEASON_TYPE });
-  }
+  const targets = buildScoreboardFetchTargets(weekNumbers, postseasonEspnWeeks);
   const pages = await Promise.all(
     targets.map(async ({ week, seasonType }) => {
       try {
@@ -604,17 +602,17 @@ async function loadScoreboardPages(
     })
   );
   const byWeek = new Map<number, EspnEvent[]>();
-  let postseason: EspnEvent[] = [];
+  const postseasonByEspnWeek = new Map<number, EspnEvent[]>();
   const byId = new Map<string, EspnEvent>();
   for (const page of pages) {
-    if (page.seasonType === BOWL_SEASON_TYPE) {
-      postseason = page.events;
+    if (page.seasonType === BOWL_SEASON_TYPE && page.week != null) {
+      postseasonByEspnWeek.set(page.week, page.events);
     } else if (page.week != null) {
       byWeek.set(page.week, page.events);
     }
     for (const event of page.events) byId.set(event.id, event);
   }
-  return { byWeek, postseason, byId };
+  return { byWeek, postseasonByEspnWeek, byId };
 }
 
 /**
@@ -625,16 +623,17 @@ async function loadScoreboardPages(
 async function publishSelectionKickoffCatalog(
   weekDoc: QueryDocumentSnapshot,
   eventsByScoreboardWeek: Map<number, EspnEvent[]>,
-  postseasonEvents: EspnEvent[]
+  postseasonByEspnWeek: Map<number, EspnEvent[]>
 ): Promise<void> {
   const weekNumber = weekDoc.data().weekNumber;
   if (typeof weekNumber !== "number") return;
+  const data = weekDoc.data();
   const bowl =
     isBowlWeekId(weekDoc.id) ||
-    (weekDoc.data().seasonType as number | undefined) === BOWL_SEASON_TYPE;
+    (data.seasonType as number | undefined) === BOWL_SEASON_TYPE;
   const events = bowl
-    ? postseasonEvents
-  : eventsByScoreboardWeek.get(espnScoreboardWeek(weekNumber));
+    ? bowlWeekCatalogEvents(weekDoc.id, data, postseasonByEspnWeek)
+    : eventsByScoreboardWeek.get(espnScoreboardWeek(weekNumber)) ?? [];
   if (!events || events.length === 0) return;
   const millisById = kickoffsMillisByEspnEventId(events);
   const ids = Object.keys(millisById);
@@ -667,7 +666,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
     selectionWeeks: QueryDocumentSnapshot[];
   }> = [];
   const weekNumbers = new Set<number>();
-  let needsPostseason = false;
+  const postseasonEspnWeeks = new Set<number>();
 
   for (const groupDoc of groups.docs) {
     const memberIds = (groupDoc.data().memberIds as string[]) ?? [];
@@ -680,11 +679,9 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
     for (const weekDoc of weeks.docs) {
       const number = weekDoc.data().weekNumber;
       if (typeof number === "number") weekNumbers.add(number);
-      if (
-        isBowlWeekId(weekDoc.id) ||
-        (weekDoc.data().seasonType as number | undefined) === BOWL_SEASON_TYPE
-      ) {
-        needsPostseason = true;
+      const data = weekDoc.data();
+      for (const w of postseasonEspnWeeksForWeekDocs([{ id: weekDoc.id, data }])) {
+        postseasonEspnWeeks.add(w);
       }
       if (weekDoc.data().status === "selection") selectionWeeks.push(weekDoc);
       else scoringWeeks.push(weekDoc);
@@ -692,13 +689,14 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
     activeWeeksByGroup.push({ groupDoc, memberIds, scoringWeeks, selectionWeeks });
   }
 
-  const { byWeek, postseason, byId: eventById } = await loadScoreboardPages(weekNumbers, {
-    includePostseason: needsPostseason,
-  });
+  const { byWeek, postseasonByEspnWeek, byId: eventById } = await loadScoreboardPages(
+    weekNumbers,
+    postseasonEspnWeeks
+  );
 
   for (const { selectionWeeks } of activeWeeksByGroup) {
     for (const weekDoc of selectionWeeks) {
-      await publishSelectionKickoffCatalog(weekDoc, byWeek, postseason);
+      await publishSelectionKickoffCatalog(weekDoc, byWeek, postseasonByEspnWeek);
     }
   }
 
@@ -1436,12 +1434,11 @@ async function scoreWeek(
       let bowlWins = member.bowlWins ?? 0;
       let bowlLosses = member.bowlLosses ?? 0;
       if (isBowl) {
+        bowlWins += scored.wins;
+        bowlLosses += scored.losses;
         if (bowlTowardSeason) {
           seasonWins += scored.wins;
           seasonLosses += scored.losses;
-        } else {
-          bowlWins += scored.wins;
-          bowlLosses += scored.losses;
         }
       } else {
         seasonWins += scored.wins;

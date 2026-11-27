@@ -6,6 +6,9 @@ import {
   isBowlWeekId,
   parseBowlWeekId,
   userFacingWeekLabel,
+  espnPostseasonWeekForBowlWeekId,
+  ESPN_BOWL2_POSTSEASON_WEEK,
+  ESPN_POSTSEASON_WEEK,
 } from "./bowlWeek";
 import { weekWindowForPickemsWeek } from "./cfbWeekWindow";
 
@@ -19,6 +22,11 @@ describe("bowlWeek", () => {
   it("reads season standings toggle", () => {
     expect(bowlCountsTowardSeason({ bowlSeason: { countsTowardSeasonStandings: true } })).toBe(true);
     expect(bowlCountsTowardSeason({ bowlSeason: { countsTowardSeasonStandings: false } })).toBe(false);
+  });
+
+  it("maps bowl week ids to ESPN postseason scoreboard weeks", () => {
+    expect(espnPostseasonWeekForBowlWeekId("2026-BOWL1")).toBe(ESPN_POSTSEASON_WEEK);
+    expect(espnPostseasonWeekForBowlWeekId("2026-BOWL2")).toBe(ESPN_BOWL2_POSTSEASON_WEEK);
   });
 
   it("labels bowl weeks for notifications", () => {

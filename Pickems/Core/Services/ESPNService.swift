@@ -129,7 +129,7 @@ actor ESPNService {
         )
         if CFBBowlSeason.isBowlWeek(week) {
             let now = Date()
-            return games.filter { CFBBowlSeason.catalogEligible(kickoff: $0.kickoff, now: now) }
+            return games.filter { CFBBowlSeason.catalogEligible(game: $0, week: week, now: now) }
         }
         return games.matching(seasonYear: week.seasonYear, appWeekNumber: week.weekNumber)
     }
@@ -255,13 +255,14 @@ actor ESPNService {
     ) async throws -> [ESPNLiveGameCard] {
         let cards = try await liveGameCards(
             week: week.espnScoreboardWeek,
-            seasonType: 2,
+            seasonType: week.resolvedSeasonType,
             slateEventIds: slateEventIds,
             userPicks: userPicks,
             slateGames: slateGames,
             forceRefresh: forceRefresh,
             pickMode: pickMode
         )
+        if CFBBowlSeason.isBowlWeek(week) { return cards }
         return cards.matching(seasonYear: week.seasonYear, appWeekNumber: week.weekNumber)
     }
 

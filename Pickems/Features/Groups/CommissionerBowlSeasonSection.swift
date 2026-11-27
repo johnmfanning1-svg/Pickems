@@ -7,6 +7,7 @@ struct CommissionerBowlSeasonSection: View {
     let canEditMode: Bool
     let pickemsWeekNumber: Int?
     let espnSeasonType: Int?
+    let leagueWeeks: [WeekSummary]
 
   @State private var pickCount: Int
 
@@ -15,13 +16,15 @@ struct CommissionerBowlSeasonSection: View {
     rules: Binding<GroupRules>,
     canEditMode: Bool,
     pickemsWeekNumber: Int?,
-    espnSeasonType: Int?
+    espnSeasonType: Int?,
+    leagueWeeks: [WeekSummary] = []
   ) {
     self.group = group
     _rules = rules
     self.canEditMode = canEditMode
     self.pickemsWeekNumber = pickemsWeekNumber
     self.espnSeasonType = espnSeasonType
+    self.leagueWeeks = leagueWeeks
     let settings = rules.wrappedValue.bowlSeason ?? .default
     _pickCount = State(initialValue: settings.resolvedPickCount(rules: rules.wrappedValue))
   }
@@ -126,8 +129,13 @@ struct CommissionerBowlSeasonSection: View {
         )
     }
 
+    private var standingsToggleLocked: Bool {
+        CFBBowlSeason.standingsToggleLocked(weeks: leagueWeeks)
+    }
+
     private var seasonStandingsToggle: some View {
         Toggle("Bowl results count toward season standings", isOn: seasonStandingsBinding)
+            .disabled(standingsToggleLocked)
             .listRowBackground(PickemsColors.cardBackground)
     }
 
@@ -135,6 +143,7 @@ struct CommissionerBowlSeasonSection: View {
         Binding(
             get: { settings.wrappedValue.countsTowardSeasonStandings },
             set: { on in
+                guard !standingsToggleLocked else { return }
                 var next = settings.wrappedValue
                 next.countsTowardSeasonStandings = on
                 settings.wrappedValue = next
@@ -161,6 +170,9 @@ struct CommissionerBowlSeasonSection: View {
     private var footer: String {
         if !canEditMode {
             return "Coordinators can run bowl weeks but cannot change the bowl mode."
+        }
+        if standingsToggleLocked {
+            return "A bowl week is already scored — season standings inclusion can’t be changed."
         }
         return """
         After the Dec 6 selection show, build a slate from the postseason catalog. \

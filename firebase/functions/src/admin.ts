@@ -605,6 +605,7 @@ export const adminRescoreWeek = onCall(async (request) => {
   });
 
   const seasonTotals = new Map<string, { wins: number; losses: number }>();
+  const bowlTotals = new Map<string, { wins: number; losses: number }>();
   let targetGames: SlateGameDoc[] = [];
   let targetPicks: PickDoc[] = [];
   let targetPickMode = resolveWeekPickMode(week.pickMode, rules.pickMode);
@@ -649,6 +650,13 @@ export const adminRescoreWeek = onCall(async (request) => {
           deadline: weekData.pickDeadline,
         }
       );
+      if (bowlWeek) {
+        const bowlRunning = bowlTotals.get(member.id) ?? { wins: 0, losses: 0 };
+        bowlTotals.set(member.id, {
+          wins: bowlRunning.wins + scored.wins,
+          losses: bowlRunning.losses + scored.losses,
+        });
+      }
       if (!bowlWeek || bowlInSeason) {
         const running = seasonTotals.get(member.id) ?? { wins: 0, losses: 0 };
         seasonTotals.set(member.id, {
@@ -680,9 +688,12 @@ export const adminRescoreWeek = onCall(async (request) => {
       }
     );
     const season = seasonTotals.get(member.id) ?? { wins: 0, losses: 0 };
+    const bowl = bowlTotals.get(member.id) ?? { wins: 0, losses: 0 };
     batch.update(groupRef.collection("members").doc(member.id), {
       seasonWins: season.wins,
       seasonLosses: season.losses,
+      bowlWins: bowl.wins,
+      bowlLosses: bowl.losses,
     });
     return {
       id: member.id,

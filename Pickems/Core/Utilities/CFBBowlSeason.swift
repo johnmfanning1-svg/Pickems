@@ -133,12 +133,21 @@ enum CFBBowlSeason {
         easternDate(year: year, month: 12, day: 6, hour: 15) ?? .distantPast
     }
 
-    static func catalogEligible(kickoff: Date, now: Date = Date()) -> Bool {
-        kickoff >= catalogOpens()
+    static func catalogEligible(kickoff: Date, week: WeekSummary? = nil, now: Date = Date()) -> Bool {
+        guard kickoff >= catalogOpens() else { return false }
+        if let slot = week.flatMap({ slot(for: $0) }), slot == .bowl1 {
+            return kickoff < slot.catalogEndExclusive
+        }
+        return true
     }
 
-    static func catalogEligible(game: ESPNGame, now: Date = Date()) -> Bool {
-        catalogEligible(kickoff: game.kickoff, now: now)
+    static func catalogEligible(game: ESPNGame, week: WeekSummary? = nil, now: Date = Date()) -> Bool {
+        catalogEligible(kickoff: game.kickoff, week: week, now: now)
+    }
+
+    /// Season-standings toggle cannot change after a bowl week has been scored (avoids double-count).
+    static func standingsToggleLocked(weeks: [WeekSummary]) -> Bool {
+        weeks.contains { isBowlWeek($0) && $0.status == .scored }
     }
 
     /// Commissioner Bowl block unlocks once regular-season Week 14 is underway.

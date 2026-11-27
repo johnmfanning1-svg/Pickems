@@ -90,4 +90,42 @@ struct CFBBowlSeasonTests {
         #expect(CFBBowlSeason.commissionerSettingsAvailable(pickemsWeekNumber: 14, espnSeasonType: 2))
         #expect(!CFBBowlSeason.commissionerSettingsAvailable(pickemsWeekNumber: 13, espnSeasonType: 2, now: Date(timeIntervalSince1970: 1_000_000)))
     }
+
+    @Test func bowl1CatalogExcludesJanuaryAfterEndExclusive() {
+        var eastern = Calendar(identifier: .gregorian)
+        eastern.timeZone = TimeZone(identifier: "America/New_York")!
+        let jan = eastern.date(from: DateComponents(year: 2027, month: 1, day: 10))!
+        let dec = eastern.date(from: DateComponents(year: 2026, month: 12, day: 20))!
+        let bowl1 = WeekSummary(
+            id: "2026-BOWL1",
+            seasonYear: 2026,
+            weekNumber: 1,
+            status: .selection,
+            slateSize: 8,
+            selectionMode: .commissioner,
+            selectionsPerMember: 1,
+            nominationCount: 0,
+            seasonType: 3,
+            bowlSlot: "BOWL1"
+        )
+        #expect(CFBBowlSeason.catalogEligible(kickoff: dec, week: bowl1))
+        #expect(!CFBBowlSeason.catalogEligible(kickoff: jan, week: bowl1))
+    }
+
+    @Test func standingsToggleLockedAfterScoredBowl() {
+        let scored = WeekSummary(
+            id: "2026-BOWL1",
+            seasonYear: 2026,
+            weekNumber: 1,
+            status: .scored,
+            slateSize: 8,
+            selectionMode: .commissioner,
+            selectionsPerMember: 1,
+            nominationCount: 0,
+            seasonType: 3,
+            bowlSlot: "BOWL1"
+        )
+        #expect(CFBBowlSeason.standingsToggleLocked(weeks: [scored]))
+        #expect(!CFBBowlSeason.standingsToggleLocked(weeks: []))
+    }
 }

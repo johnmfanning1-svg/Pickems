@@ -2,6 +2,7 @@
 
 export const BOWL_SEASON_TYPE = 3;
 export const ESPN_POSTSEASON_WEEK = 1;
+export const ESPN_BOWL2_POSTSEASON_WEEK = 999;
 
 export const BOWL_SORT_BASE = 900;
 
@@ -32,6 +33,13 @@ export function parseBowlWeekId(weekId: string): { seasonYear: number; slot: Bow
 
 export function isBowlWeekId(weekId: string): boolean {
   return parseBowlWeekId(weekId) != null;
+}
+
+/** ESPN postseason scoreboard week for bowl week docs — BOWL1→1, BOWL2→999. */
+export function espnPostseasonWeekForBowlWeekId(weekId: string): number | null {
+  const parsed = parseBowlWeekId(weekId);
+  if (!parsed) return null;
+  return parsed.slot === "BOWL2" ? ESPN_BOWL2_POSTSEASON_WEEK : ESPN_POSTSEASON_WEEK;
 }
 
 export function bowlSortWeekNumber(slot: BowlSlot): number {
