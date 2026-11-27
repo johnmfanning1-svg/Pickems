@@ -244,10 +244,10 @@ enum CFBBowlSeason {
             selectionDeadline: nil,
             selectionDeadlineSetAt: nil,
             selectionDeadlineSetBy: nil,
-            seasonType: postseasonSeasonType,
-            bowlSlot: slot.rawValue,
             slateSource: modeB ? bowlCatalogSlateSource : nil,
-            bowlFullSlate: modeB ? true : nil
+            bowlFullSlate: modeB ? true : nil,
+            seasonType: postseasonSeasonType,
+            bowlSlot: slot.rawValue
         )
         week.pickLockMode = .rolling
         if let lock = rules.defaultSelectionLock {
