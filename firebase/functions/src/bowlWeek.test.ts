@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { bowlCountsTowardSeason, bowlWeekId, isBowlWeekId, parseBowlWeekId } from "./bowlWeek";
+import {
+  BOWL_USER_FACING_WEEK_NAME,
+  bowlCountsTowardSeason,
+  bowlWeekId,
+  isBowlWeekId,
+  parseBowlWeekId,
+  userFacingWeekLabel,
+} from "./bowlWeek";
 import { weekWindowForPickemsWeek } from "./cfbWeekWindow";
 
 describe("bowlWeek", () => {
@@ -12,6 +19,11 @@ describe("bowlWeek", () => {
   it("reads season standings toggle", () => {
     expect(bowlCountsTowardSeason({ bowlSeason: { countsTowardSeasonStandings: true } })).toBe(true);
     expect(bowlCountsTowardSeason({ bowlSeason: { countsTowardSeasonStandings: false } })).toBe(false);
+  });
+
+  it("labels bowl weeks for notifications", () => {
+    expect(userFacingWeekLabel("2026-BOWL1", 1)).toBe(BOWL_USER_FACING_WEEK_NAME);
+    expect(userFacingWeekLabel("2026-W7", 7)).toBe("Week 7");
   });
 
   it("exposes bowl windows for default selection deadlines", () => {

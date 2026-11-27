@@ -4,6 +4,8 @@ import Foundation
 enum CFBBowlSeason {
     static let postseasonSeasonType = 3
     static let espnPostseasonWeek = 1
+    /// User-facing name for bowl pick weeks (`2026-BOWL1` / `BOWL2` doc ids unchanged).
+    static let userFacingBowlWeekName = "Bowl Bonanza"
 
     enum Slot: String, Codable, CaseIterable, Identifiable {
         case bowl1 = "BOWL1"
@@ -104,16 +106,16 @@ enum CFBBowlSeason {
         week.seasonType == postseasonSeasonType || isBowlWeekId(week.id)
     }
 
+    static func userFacingWeekName(for week: WeekSummary) -> String {
+        isBowlWeek(week) ? userFacingBowlWeekName : "Week \(week.weekNumber)"
+    }
+
     static func chipPrimaryLabel(for week: WeekSummary) -> String {
-        isBowlWeek(week) ? "Bowl" : "Week \(week.weekNumber)"
+        userFacingWeekName(for: week)
     }
 
     static func displayLabel(for week: WeekSummary) -> String {
-        if let slot = slot(for: week) {
-            let suffix = slot == .bowl2 ? " (NY6 & CFP)" : ""
-            return "Season \(week.seasonYear.pickemsYearString) | Bowl\(suffix)"
-        }
-        return "Season \(week.seasonYear.pickemsYearString) | Week \(week.weekNumber)"
+        "Season \(week.seasonYear.pickemsYearString) | \(userFacingWeekName(for: week))"
     }
 
     /// Keep CFB season year on 2026 through January bowl games.

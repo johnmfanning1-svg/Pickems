@@ -174,7 +174,7 @@ enum WidgetDeepLink {
     /// Existing app routes. Selections has no week path; Pickems, the scoreboard, and standings do.
     static func url(phase: WidgetPhase, snapshot: StandingsSnapshot?) -> URL? {
         guard let snapshot, !snapshot.groupId.isEmpty else { return nil }
-        let weekId = "\(snapshot.seasonYear)-W\(snapshot.weekNumber)"
+        let weekId = snapshot.deepLinkWeekId
         switch phase {
         case .deadline(_, .selections):
             return selectionsURL(groupId: snapshot.groupId)
@@ -197,7 +197,7 @@ enum WidgetDeepLink {
 
     static func gameURL(snapshot: StandingsSnapshot, gameId: String) -> URL? {
         guard !snapshot.groupId.isEmpty, !gameId.isEmpty else { return nil }
-        let weekId = "\(snapshot.seasonYear)-W\(snapshot.weekNumber)"
+        let weekId = snapshot.deepLinkWeekId
         return leagueURL(groupId: snapshot.groupId, weekId: weekId, tail: "game/\(gameId)")
     }
 

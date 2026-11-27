@@ -46,3 +46,16 @@ export function bowlSeasonConfigured(rules: { bowlSeason?: BowlSeasonRules | nul
 export function bowlCountsTowardSeason(rules: { bowlSeason?: BowlSeasonRules | null } | undefined): boolean {
   return rules?.bowlSeason?.countsTowardSeasonStandings === true;
 }
+
+/** User-facing bowl week title — keep in sync with iOS `CFBBowlSeason.userFacingBowlWeekName`. */
+export const BOWL_USER_FACING_WEEK_NAME = "Bowl Bonanza";
+
+export function userFacingWeekLabel(weekId: string | undefined, weekNumber: unknown): string {
+  if (weekId && isBowlWeekId(weekId)) return BOWL_USER_FACING_WEEK_NAME;
+  const n =
+    typeof weekNumber === "number" && Number.isFinite(weekNumber)
+      ? Math.trunc(weekNumber)
+      : null;
+  if (n == null || n <= 0) return "This week";
+  return `Week ${n}`;
+}

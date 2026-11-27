@@ -11,14 +11,24 @@ export function isBowlWeekDocumentId(weekId: string): boolean {
   return /^\d{4}-BOWL\d*$/i.test(weekId);
 }
 
-function isStalePlaceholderBowlWeek(week: Record<string, unknown>): boolean {
-  if (week.status !== "selection") return false;
+function bowlWeekHasMeaningfulActivity(week: Record<string, unknown>): boolean {
   const gameIds = week.gameIds;
   const hasSlate = Array.isArray(gameIds) && gameIds.length > 0;
   const nominations =
     typeof week.nominationCount === "number" ? week.nominationCount : 0;
-  const hasDeadline = week.selectionDeadline != null;
-  return !hasSlate && nominations === 0 && !hasDeadline;
+  if (hasSlate || nominations > 0) return true;
+  if (week.selectionDeadline != null && week.selectionDeadlineSetBy !== "default") {
+    return true;
+  }
+  if (week.pickDeadline != null) return true;
+  if (week.lockedAt != null) return true;
+  return false;
+}
+
+function isStalePlaceholderBowlWeek(week: Record<string, unknown>): boolean {
+  if (week.status === "scored") return false;
+  if (bowlWeekHasMeaningfulActivity(week)) return false;
+  return week.status === "selection" || week.status === "picking" || week.status === "locked";
 }
 
 /** Active bowl weeks block archive; empty selection placeholders do not. */

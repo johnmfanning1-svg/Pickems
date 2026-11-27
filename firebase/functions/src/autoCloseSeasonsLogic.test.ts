@@ -31,14 +31,25 @@ describe("autoCloseSeasonsLogic", () => {
         gameIds: ["evt1"],
       })
     ).toBe(true);
-    expect(isOpenBowlWeek("2026-BOWL1", { status: "picking", seasonType: 3 })).toBe(true);
+    expect(
+      isOpenBowlWeek("2026-BOWL1", { status: "picking", seasonType: 3, gameIds: ["evt1"] })
+    ).toBe(true);
+    expect(isOpenBowlWeek("2026-BOWL1", { status: "picking", seasonType: 3 })).toBe(false);
+    expect(
+      isOpenBowlWeek("2026-BOWL1", {
+        status: "locked",
+        seasonType: 3,
+        selectionDeadline: new Date(),
+        selectionDeadlineSetBy: "default",
+      })
+    ).toBe(false);
     expect(isOpenBowlWeek("2026-BOWL1", { status: "scored", seasonType: 3 })).toBe(false);
     expect(isOpenBowlWeek("2026-W15", { status: "picking" })).toBe(false);
   });
 
   it("retries close after an earlier February skip once bowls are scored", () => {
     const skipped = groupShouldSkipAutoClose([
-      { id: "2026-BOWL1", data: { status: "picking", seasonType: 3 } },
+      { id: "2026-BOWL1", data: { status: "picking", seasonType: 3, gameIds: ["g1"] } },
     ]);
     expect(skipped).toBe(true);
     const laterRun = groupShouldSkipAutoClose([
@@ -57,7 +68,7 @@ describe("autoCloseSeasonsLogic", () => {
     expect(
       groupShouldSkipAutoClose([
         { id: "2026-W15", data: { status: "scored" } },
-        { id: "2026-BOWL1", data: { status: "picking", seasonType: 3 } },
+        { id: "2026-BOWL1", data: { status: "picking", seasonType: 3, gameIds: ["g1"] } },
       ])
     ).toBe(true);
     expect(

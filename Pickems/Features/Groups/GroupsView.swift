@@ -760,7 +760,7 @@ private struct LeaderboardScopePicker: View {
             Text("This Week").tag(LeaderboardScope.Scope.thisWeek)
             Text("Season").tag(LeaderboardScope.Scope.season)
             if showsBowl {
-                Text("Bowls").tag(LeaderboardScope.Scope.bowl)
+                Text(CFBBowlSeason.userFacingBowlWeekName).tag(LeaderboardScope.Scope.bowl)
             }
         }
         .pickerStyle(.segmented)

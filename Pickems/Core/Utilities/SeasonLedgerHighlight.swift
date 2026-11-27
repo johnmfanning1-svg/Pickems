@@ -49,7 +49,7 @@ enum SeasonLedgerWeekTitle {
             return "Army Navy"
         }
         if lowered.contains("bowl") {
-            return "Bowls"
+            return CFBBowlSeason.userFacingBowlWeekName
         }
         return "Week \(week.weekNumber)"
     }

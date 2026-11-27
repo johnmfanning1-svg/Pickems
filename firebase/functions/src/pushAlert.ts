@@ -1,4 +1,5 @@
 import type { Message, Aps } from "firebase-admin/messaging";
+import { userFacingWeekLabel } from "./bowlWeek";
 import type { PickMode } from "./scoring";
 
 /** Lock-screen context line. APNs draws this under the title. */
@@ -119,9 +120,12 @@ export function multiGameSubtitle(leagueName: string, gameCount: number): string
   return composeSubtitle(leagueName, `${count} games`);
 }
 
-export function leadContextSubtitle(leagueName: string, weekNumber: unknown): string {
-  const week = finiteNumber(weekNumber);
-  const label = week == null ? "This week" : `Week ${formatNumber(week)}`;
+export function leadContextSubtitle(
+  leagueName: string,
+  weekNumber: unknown,
+  weekId?: string
+): string {
+  const label = userFacingWeekLabel(weekId, weekNumber);
   return composeSubtitle(leagueName, label);
 }
 
@@ -245,7 +249,7 @@ export function buildLeadPush(input: {
 }): BuiltPush {
   const threadId = leagueThreadId(input.groupId);
   return {
-    subtitle: leadContextSubtitle(input.leagueName as string, input.weekNumber),
+    subtitle: leadContextSubtitle(input.leagueName as string, input.weekNumber, input.weekId),
     threadId,
     collapseId: alertCollapseId(input.groupId, "lead", input.weekId),
     payloadType: "lead",

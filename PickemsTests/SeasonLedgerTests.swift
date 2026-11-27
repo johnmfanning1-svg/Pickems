@@ -307,6 +307,11 @@ struct SeasonLedgerTests {
         #expect(SeasonLedgerWeekTitle.rowTitle(for: week) == "Army Navy")
     }
 
+    @Test func bowlWeekTitleIsBowlBonanza() {
+        let week = weekSummary(id: "2026-BOWL1", number: 1)
+        #expect(SeasonLedgerWeekTitle.rowTitle(for: week) == "Bowl Bonanza")
+    }
+
     // MARK: - Helpers
 
     private func member(_ id: String, _ name: String) -> GroupMember {

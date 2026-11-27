@@ -29,6 +29,7 @@ import {
   ESPN_POSTSEASON_WEEK,
   bowlCountsTowardSeason,
   isBowlWeekId,
+  userFacingWeekLabel,
 } from "./bowlWeek";
 import {
   DEFAULT_SELECTION_STAMP,
@@ -163,7 +164,7 @@ export const onWeekStatusChange = onDocumentUpdated(
       await sendToUsers(
         memberIds,
         "Week locked in",
-        `Week ${after.weekNumber} is scored — check the leaderboard.`,
+        `${userFacingWeekLabel(weekId, after.weekNumber)} is scored — check the leaderboard.`,
         "week_scored",
         { groupId, weekId }
       );
@@ -246,7 +247,7 @@ export const onWeekCreated = onDocumentCreated(
     await sendToUser(
       commissionerId,
       "Set Selection deadline",
-      `Week ${data.weekNumber ?? ""} needs a Selection deadline so members finish before kickoff.`,
+      `${userFacingWeekLabel(weekId, data.weekNumber)} needs a Selection deadline so members finish before kickoff.`,
       "set_selection_deadline",
       { groupId, weekId }
     );
@@ -284,7 +285,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
 
         const groupId = groupDoc.id;
         const weekId = weekDoc.id;
-        const weekNum = week.weekNumber ?? "";
+        const weekLabel = userFacingWeekLabel(weekId, week.weekNumber);
         let deadline = week.selectionDeadline as Timestamp | undefined;
         const payload = { groupId, weekId };
         const isMemberWeek = week.selectionMode !== "commissioner";
@@ -323,7 +324,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
           await sendToUser(
             commissionerId,
             "Set Selection deadline",
-            `Week ${weekNum} needs a Selection deadline so members finish before kickoff.`,
+            `${weekLabel} needs a Selection deadline so members finish before kickoff.`,
             "set_selection_deadline",
             payload
           );
@@ -346,7 +347,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
           await sendToUsers(
             pending,
             `Selections due in ${hours}`,
-            `Week ${weekNum}: finish Selections before the deadline.`,
+            `${weekLabel}: finish Selections before the deadline.`,
             "selection_deadline_reminder",
             payload
           );
@@ -440,7 +441,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
         await sendToUsers(
           memberIds,
           "Pickems are open",
-          `Week ${weekNum}: make your Pickems. They lock at kickoff.`,
+          `${weekLabel}: make your Pickems. They lock at kickoff.`,
           "pickems_open",
           payload
         );
@@ -451,7 +452,7 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
         await sendToUser(
           commissionerId,
           "Selection deadline passed",
-          `Week ${weekNum}: fill remaining games or open with fewer.`,
+          `${weekLabel}: fill remaining games or open with fewer.`,
           "selection_deadline_passed",
           payload
         );
@@ -543,15 +544,15 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
       );
       const pending = memberIds.filter((id) => !submitted.has(id));
       const data = { groupId: groupDoc.id, weekId: weekDoc.id };
-      const weekNum = week.weekNumber;
+      const weekLabel = userFacingWeekLabel(weekDoc.id, week.weekNumber);
 
       if (need24h) {
         await sendToUsers(
           pending,
           rolling ? "First Pickems lock in 24 hours" : "Pickems lock in 24 hours",
           rolling
-            ? `Week ${weekNum}: the first game locks in 24 hours. Later games stay open.`
-            : `Week ${weekNum} Pickems lock in 24 hours. Submit before the deadline.`,
+            ? `${weekLabel}: the first game locks in 24 hours. Later games stay open.`
+            : `${weekLabel} Pickems lock in 24 hours. Submit before the deadline.`,
           "deadline_reminder",
           data
         );
@@ -563,8 +564,8 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
           pending,
           rolling ? "First Pickems lock in 1 hour" : "Pickems lock in 1 hour",
           rolling
-            ? `Week ${weekNum}: the first game locks in 1 hour. Later games stay open.`
-            : `Week ${weekNum} Pickems lock in 1 hour. Submit before the deadline.`,
+            ? `${weekLabel}: the first game locks in 1 hour. Later games stay open.`
+            : `${weekLabel} Pickems lock in 1 hour. Submit before the deadline.`,
           "deadline_reminder",
           data
         );
@@ -748,7 +749,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
         await sendToUsers(
           memberIds,
           "Pickems are locked",
-          `Week ${week.weekNumber} is locked. Good luck.`,
+          `${userFacingWeekLabel(weekId, week.weekNumber)} is locked. Good luck.`,
           "deadline_locked",
           { groupId, weekId }
         );

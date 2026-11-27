@@ -24,7 +24,7 @@ struct CFBBowlSeasonTests {
         #expect(app.seasonType == 3)
     }
 
-    @Test func chipLabelIsBowl() {
+    @Test func chipLabelIsBowlBonanza() {
         let week = WeekSummary(
             id: "2026-BOWL1",
             seasonYear: 2026,
@@ -37,8 +37,9 @@ struct CFBBowlSeasonTests {
             seasonType: 3,
             bowlSlot: "BOWL1"
         )
-        #expect(CFBBowlSeason.chipPrimaryLabel(for: week) == "Bowl")
-        #expect(week.displayLabel.contains("Bowl"))
+        #expect(CFBBowlSeason.chipPrimaryLabel(for: week) == "Bowl Bonanza")
+        #expect(week.displayLabel == "Season 2026 | Bowl Bonanza")
+        #expect(CFBBowlSeason.userFacingWeekName(for: week) == "Bowl Bonanza")
     }
 
     @Test func januaryStaysSeason2026() {

@@ -493,7 +493,10 @@ final class GroupService {
         guard let week = try? snapshot.data(as: WeekSummary.self) else { return false }
         if week.nominationCount > 0 { return true }
         if week.status != .selection { return true }
-        if week.selectionDeadline != nil { return true }
+        if week.selectionDeadline != nil,
+           week.selectionDeadlineSetBy != DefaultSelectionLockStamp.setBy {
+            return true
+        }
         if week.pickDeadline != nil { return true }
         if week.lockedAt != nil { return true }
         return false
