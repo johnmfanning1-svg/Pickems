@@ -237,10 +237,10 @@ struct CFBBowlSeasonTests {
             selectionMode: .commissioner,
             selectionsPerMember: 1,
             nominationCount: 0,
-            seasonType: 3,
-            bowlSlot: "BOWL",
             slateSource: CFBBowlSeason.bowlCatalogSlateSource,
-            bowlFullSlate: true
+            bowlFullSlate: true,
+            seasonType: 3,
+            bowlSlot: "BOWL"
         )
         #expect(CFBBowlSeason.catalogEligible(kickoff: celebration, week: bowl))
         #expect(CFBBowlSeason.catalogEligible(kickoff: cfpRound1, week: bowl))
