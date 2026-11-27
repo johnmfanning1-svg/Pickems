@@ -25,6 +25,7 @@ import {
 } from "./scoring";
 import { isRollingLock } from "./pickLock";
 import { accumulateMemberTotals, type MemberScore } from "./memberSeasonTotals";
+import { isBowlWeekId } from "./bowlWeek";
 import { rejectedPickIds, type GameLockInput } from "./spreadLock";
 import { assertWeekOperator, coordinatorsAfterCommissionerTransfer } from "./coordinators";
 
@@ -652,7 +653,13 @@ export const adminRescoreWeek = onCall(async (request) => {
 
   const { season: seasonTotals, bowl: bowlTotals } = accumulateMemberTotals(
     rules,
-    seasonWeeks.map((d) => ({ weekId: d.id })),
+    seasonWeeks.map((d) => {
+      const data = d.data() as { countsTowardSeasonStandingsAtScore?: boolean };
+      return {
+        weekId: d.id,
+        countsTowardSeasonStandingsAtScore: data.countsTowardSeasonStandingsAtScore,
+      };
+    }),
     scoreByWeekMember
   );
 
@@ -702,11 +709,23 @@ export const adminRescoreWeek = onCall(async (request) => {
     entries: ranked,
     updatedAt: FieldValue.serverTimestamp(),
   });
-  batch.update(weekSnap.ref, {
+  const existingWeek = weekSnap.data() as {
+    countsTowardSeasonStandingsAtScore?: boolean;
+  };
+  const bowlWeekScored = isBowlWeekId(weekId);
+  const weekScoreUpdate: Record<string, unknown> = {
     status: "scored",
     awards,
     scoredAt: FieldValue.serverTimestamp(),
-  });
+  };
+  if (bowlWeekScored) {
+    const existingStamp = existingWeek?.countsTowardSeasonStandingsAtScore;
+    weekScoreUpdate.countsTowardSeasonStandingsAtScore =
+      typeof existingStamp === "boolean"
+        ? existingStamp
+        : rules.bowlSeason?.countsTowardSeasonStandings === true;
+  }
+  batch.update(weekSnap.ref, weekScoreUpdate);
   await batch.commit();
 
   await writeAudit(

@@ -1,5 +1,5 @@
 import type { DocumentReference, Firestore } from "firebase-admin/firestore";
-import { isBowlWeekId } from "./bowlWeek";
+import { resolveLockedBowlStandingsStamp } from "./bowlStandingsStamp";
 
 type BowlRules = { bowlSeason?: { countsTowardSeasonStandings?: boolean } | null };
 
@@ -8,7 +8,10 @@ function countsTowardSeasonFlag(rules: unknown): boolean | undefined {
   return bowl?.countsTowardSeasonStandings;
 }
 
-/** Revert a commissioner flip of `countsTowardSeasonStandings` once any bowl week is scored. */
+/**
+ * Revert a commissioner flip of `countsTowardSeasonStandings` once any bowl week is scored.
+ * No-op when the doc already matches the stamped value (including after our own revert write).
+ */
 export async function revertBowlStandingsToggleIfLocked(
   db: Firestore,
   groupId: string,
@@ -19,11 +22,13 @@ export async function revertBowlStandingsToggleIfLocked(
   const beforeFlag = countsTowardSeasonFlag(before.rules);
   const afterFlag = countsTowardSeasonFlag(after.rules);
   if (beforeFlag === afterFlag) return false;
-  const weeks = await db.collection("groups").doc(groupId).collection("weeks").get();
-  const locked = weeks.docs.some((d) => isBowlWeekId(d.id) && d.data().status === "scored");
-  if (!locked) return false;
+
+  const stamped = await resolveLockedBowlStandingsStamp(db, groupId, before.rules);
+  if (stamped === null) return false;
+  if (afterFlag === stamped) return false;
+
   await groupRef.update({
-    "rules.bowlSeason.countsTowardSeasonStandings": beforeFlag === true,
+    "rules.bowlSeason.countsTowardSeasonStandings": stamped,
   });
   return true;
 }

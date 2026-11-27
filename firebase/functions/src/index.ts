@@ -26,7 +26,6 @@ import {
 } from "./autoCloseSeasonsLogic";
 import {
   BOWL_SEASON_TYPE,
-  bowlCountsTowardSeason,
   isBowlWeekId,
   userFacingWeekLabel,
 } from "./bowlWeek";
@@ -36,6 +35,11 @@ import {
   postseasonEspnWeeksForWeekDocs,
 } from "./scoreboardLoad";
 import { revertBowlStandingsToggleIfLocked } from "./bowlRulesGuard";
+import {
+  COUNTS_TOWARD_SEASON_AT_SCORE,
+  countsTowardSeasonAtScoreFromRules,
+  bowlWeekCountsTowardSeason,
+} from "./bowlStandingsStamp";
 import {
   DEFAULT_SELECTION_STAMP,
   futureDefaultSelectionDeadline,
@@ -1407,7 +1411,7 @@ async function scoreWeek(
       bowlSeason?: { countsTowardSeasonStandings?: boolean };
     };
     const isBowl = isBowlWeekId(weekId) || (week?.seasonType as number | undefined) === BOWL_SEASON_TYPE;
-    const bowlTowardSeason = isBowl && bowlCountsTowardSeason(rules);
+    const bowlTowardSeason = isBowl && bowlWeekCountsTowardSeason(rules, week ?? undefined);
     const deadline = week?.pickDeadline;
     const mode = resolveWeekPickMode(week?.pickMode ?? pickMode, rules.pickMode);
 
@@ -1464,11 +1468,19 @@ async function scoreWeek(
       entries: ranked,
       updatedAt: FieldValue.serverTimestamp(),
     });
-    tx.update(weekRef, {
+    const weekUpdate: Record<string, unknown> = {
       status: "scored",
       awards,
       scoredAt: FieldValue.serverTimestamp(),
-    });
+    };
+    if (isBowl) {
+      const existingStamp = week?.[COUNTS_TOWARD_SEASON_AT_SCORE];
+      weekUpdate[COUNTS_TOWARD_SEASON_AT_SCORE] =
+        typeof existingStamp === "boolean"
+          ? existingStamp
+          : countsTowardSeasonAtScoreFromRules(rules);
+    }
+    tx.update(weekRef, weekUpdate);
   });
 
   if (skipped) {
@@ -1583,9 +1595,7 @@ export const syncPublicLeagueIndex = onDocumentUpdated("groups/{groupId}", async
   const after = change.after.data();
   if (!before || !after) return;
   const groupId = event.params.groupId;
-  if (await revertBowlStandingsToggleIfLocked(db, groupId, before, after, change.after.ref)) {
-    return;
-  }
+  await revertBowlStandingsToggleIfLocked(db, groupId, before, after, change.after.ref);
   const beforePickMode = (before.rules as { pickMode?: unknown } | undefined)?.pickMode;
   const afterPickMode = (after.rules as { pickMode?: unknown } | undefined)?.pickMode;
   // Old iOS clients replace the whole `rules` map and would drop pickMode.

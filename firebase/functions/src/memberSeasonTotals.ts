@@ -1,11 +1,12 @@
 /** How scored weeks contribute to `seasonWins` vs `bowlWins` when toggling bowl standings. */
 
 import { bowlCountsTowardSeason, isBowlWeekId } from "./bowlWeek";
+import { bowlWeekCountsTowardSeason } from "./bowlStandingsStamp";
 
 export type ScoredWeekInput = {
   weekId: string;
   seasonType?: number;
-  countsTowardSeasonStandings?: boolean;
+  countsTowardSeasonStandingsAtScore?: boolean;
 };
 
 export type MemberScore = { wins: number; losses: number };
@@ -17,12 +18,13 @@ export function accumulateMemberTotals(
 ): { season: Map<string, MemberScore>; bowl: Map<string, MemberScore> } {
   const season = new Map<string, MemberScore>();
   const bowl = new Map<string, MemberScore>();
-  const towardSeason = bowlCountsTowardSeason(rules);
-
   for (const week of scoredWeeks) {
     const bowlWeek = isBowlWeekId(week.weekId);
     const memberScores = scoreByWeekMember.get(week.weekId);
     if (!memberScores) continue;
+    const towardSeason = bowlWeek
+      ? bowlWeekCountsTowardSeason(rules, week)
+      : bowlCountsTowardSeason(rules);
     for (const [memberId, scored] of memberScores) {
       if (bowlWeek) {
         const running = bowl.get(memberId) ?? { wins: 0, losses: 0 };

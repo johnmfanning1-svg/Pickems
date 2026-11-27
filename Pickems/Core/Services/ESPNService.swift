@@ -206,6 +206,24 @@ actor ESPNService {
             live: true,
             forceRefresh: forceRefresh
         )
+        return try await liveGameCards(
+            espnGames: espnGames,
+            week: nil,
+            slateEventIds: slateEventIds,
+            userPicks: userPicks,
+            slateGames: slateGames,
+            pickMode: pickMode
+        )
+    }
+
+    private func liveGameCards(
+        espnGames: [ESPNGame],
+        week: WeekSummary?,
+        slateEventIds: Set<String>,
+        userPicks: [String: String],
+        slateGames: [SlateGame],
+        pickMode: PickMode
+    ) async throws -> [ESPNLiveGameCard] {
         let slateByEventId = Dictionary(slateGames.map { ($0.espnEventId, $0) }, uniquingKeysWith: { _, last in last })
         let slateIds = slateEventIds.union(Set(slateGames.map(\.espnEventId)))
 
@@ -277,7 +295,13 @@ actor ESPNService {
             cards.append(Self.card(from: slate, userPicks: userPicks, ranks: ranks, pickMode: pickMode))
         }
 
-        return cards.sorted { $0.kickoff < $1.kickoff }
+        let filtered: [ESPNLiveGameCard]
+        if let week, !CFBBowlSeason.isBowlWeek(week) {
+            filtered = cards.matching(seasonYear: week.seasonYear, appWeekNumber: week.weekNumber)
+        } else {
+            filtered = cards
+        }
+        return filtered.sorted { $0.kickoff < $1.kickoff }
     }
 
     func liveGameCards(
@@ -288,17 +312,15 @@ actor ESPNService {
         forceRefresh: Bool = false,
         pickMode: PickMode = .ats
     ) async throws -> [ESPNLiveGameCard] {
-        let cards = try await liveGameCards(
-            week: week.espnScoreboardWeek,
-            seasonType: week.resolvedSeasonType,
+        let espnGames = try await fetchScoreboard(for: week, live: true, forceRefresh: forceRefresh)
+        return try await liveGameCards(
+            espnGames: espnGames,
+            week: week,
             slateEventIds: slateEventIds,
             userPicks: userPicks,
             slateGames: slateGames,
-            forceRefresh: forceRefresh,
             pickMode: pickMode
         )
-        if CFBBowlSeason.isBowlWeek(week) { return cards }
-        return cards.matching(seasonYear: week.seasonYear, appWeekNumber: week.weekNumber)
     }
 
     /// Picks are stored under `SlateGame.id`, which is usually the ESPN event id but
