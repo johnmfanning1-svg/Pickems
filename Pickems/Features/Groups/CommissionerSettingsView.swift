@@ -138,8 +138,6 @@ struct CommissionerSettingsView: View {
                     group: liveGroup,
                     rules: $rules,
                     canEditMode: appState.isCommissioner,
-                    pickemsWeekNumber: appState.groupService.currentWeek?.weekNumber,
-                    espnSeasonType: appState.groupService.cfbWeek?.seasonType,
                     leagueWeeks: appState.groupService.commissionerAvailableWeeks
                 )
                 slateConfigurationSection

@@ -17,7 +17,7 @@ enum LeaderboardScope {
     }
 
     static func showsBowlScope(rules: GroupRules) -> Bool {
-        rules.bowlSeason?.isConfigured == true
+        CFBBowlSeason.Settings.resolved(from: rules).isConfigured
     }
 
     /// A picker move the member made for one league. Cleared when they switch leagues.

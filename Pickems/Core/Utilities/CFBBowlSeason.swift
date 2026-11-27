@@ -53,7 +53,7 @@ enum CFBBowlSeason {
 
     struct Settings: Codable, Equatable {
         var mode: Mode
-        /// When false, bowl weeks stay off the chip bar until the commissioner enables them.
+        /// When false, bowl weeks stay off the chip bar. Omitted `rules.bowlSeason` uses `.default` (enabled).
         var isEnabled: Bool
         /// Target bowl games (defaults to league `slateSize`). Hard-capped at 20 in rules.
         var pickCount: Int?
@@ -66,7 +66,7 @@ enum CFBBowlSeason {
 
         static let `default` = Settings(
             mode: .modeA,
-            isEnabled: false,
+            isEnabled: true,
             pickCount: nil,
             countsTowardSeasonStandings: false,
             includesSecondWeek: false,
@@ -74,6 +74,11 @@ enum CFBBowlSeason {
         )
 
         var isConfigured: Bool { isEnabled && mode == .modeA }
+
+        /// Missing `rules.bowlSeason` is treated as Mode A enabled (no Firestore backfill).
+        static func resolved(from rules: GroupRules) -> Settings {
+            rules.bowlSeason ?? .default
+        }
 
         func resolvedPickCount(rules: GroupRules) -> Int {
             min(20, max(1, pickCount ?? rules.slateSize))
@@ -187,17 +192,6 @@ enum CFBBowlSeason {
         weeks.contains { isBowlWeek($0) && $0.status == .scored }
     }
 
-    /// Commissioner Bowl block unlocks once regular-season Week 14 is underway.
-    static func commissionerSettingsAvailable(
-        pickemsWeekNumber: Int?,
-        espnSeasonType: Int?,
-        now: Date = Date()
-    ) -> Bool {
-        if espnSeasonType == postseasonSeasonType { return true }
-        if let week = pickemsWeekNumber, week >= 14 { return true }
-        return now >= easternDate(year: 2026, month: 11, day: 30) ?? .distantFuture
-    }
-
     static func calendarSlots(seasonYear: Int, settings: Settings) -> [CFBSeasonWeek] {
         guard settings.isConfigured, seasonYear == 2026 else { return [] }
         var slots: [CFBSeasonWeek] = [.seasonWeek(seasonYear: seasonYear, slot: .bowl1)]
@@ -238,7 +232,7 @@ enum CFBBowlSeason {
             seasonType: postseasonSeasonType,
             bowlSlot: slot.rawValue
         )
-        if rules.bowlSeason?.suggestedRollingLock == true {
+        if settings.suggestedRollingLock {
             week.pickLockMode = .rolling
         }
         if let lock = rules.defaultSelectionLock {

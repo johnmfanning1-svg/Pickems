@@ -5,8 +5,6 @@ struct CommissionerBowlSeasonSection: View {
     let group: PickemGroup
     @Binding var rules: GroupRules
     let canEditMode: Bool
-    let pickemsWeekNumber: Int?
-    let espnSeasonType: Int?
     let leagueWeeks: [WeekSummary]
 
   @State private var pickCount: Int
@@ -15,15 +13,11 @@ struct CommissionerBowlSeasonSection: View {
     group: PickemGroup,
     rules: Binding<GroupRules>,
     canEditMode: Bool,
-    pickemsWeekNumber: Int?,
-    espnSeasonType: Int?,
     leagueWeeks: [WeekSummary] = []
   ) {
     self.group = group
     _rules = rules
     self.canEditMode = canEditMode
-    self.pickemsWeekNumber = pickemsWeekNumber
-    self.espnSeasonType = espnSeasonType
     self.leagueWeeks = leagueWeeks
     let settings = rules.wrappedValue.bowlSeason ?? .default
     _pickCount = State(initialValue: settings.resolvedPickCount(rules: rules.wrappedValue))
@@ -36,35 +30,26 @@ struct CommissionerBowlSeasonSection: View {
         )
     }
 
-    private var available: Bool {
-        CFBBowlSeason.commissionerSettingsAvailable(
-            pickemsWeekNumber: pickemsWeekNumber,
-            espnSeasonType: espnSeasonType
-        )
-    }
-
     var body: some View {
-        if available {
-            Section {
-                if canEditMode {
-                    Toggle("Run a Bowl Season week", isOn: enabledBinding)
-                        .listRowBackground(PickemsColors.cardBackground)
+        Section {
+            if canEditMode {
+                Toggle("Run a Bowl Season week", isOn: enabledBinding)
+                    .listRowBackground(PickemsColors.cardBackground)
 
-                    if settings.wrappedValue.isEnabled {
-                        modeRow
-                        pickCountRow
-                        rollingSuggestion
-                        secondWeekToggle
-                        seasonStandingsToggle
-                    }
-                } else {
-                    coordinatorSummary
+                if settings.wrappedValue.isEnabled {
+                    modeRow
+                    pickCountRow
+                    rollingSuggestion
+                    secondWeekToggle
+                    seasonStandingsToggle
                 }
-            } header: {
-                Text("Bowl Season")
-            } footer: {
-                Text(footer)
+            } else {
+                coordinatorSummary
             }
+        } header: {
+            Text("Bowl Season")
+        } footer: {
+            Text(footer)
         }
     }
 

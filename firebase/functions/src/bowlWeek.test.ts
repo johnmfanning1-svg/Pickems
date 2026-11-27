@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  BOWL_SEASON_DEFAULTS,
   BOWL_USER_FACING_WEEK_NAME,
   bowlCountsTowardSeason,
+  bowlSeasonConfigured,
   bowlWeekId,
   isBowlWeekId,
   parseBowlWeekId,
+  resolveBowlSeasonRules,
   userFacingWeekLabel,
   espnPostseasonWeekForBowlWeekId,
   ESPN_BOWL2_POSTSEASON_WEEK,
@@ -22,6 +25,19 @@ describe("bowlWeek", () => {
   it("reads season standings toggle", () => {
     expect(bowlCountsTowardSeason({ bowlSeason: { countsTowardSeasonStandings: true } })).toBe(true);
     expect(bowlCountsTowardSeason({ bowlSeason: { countsTowardSeasonStandings: false } })).toBe(false);
+    expect(bowlCountsTowardSeason({})).toBe(false);
+  });
+
+  it("treats missing bowlSeason as Mode A enabled", () => {
+    expect(resolveBowlSeasonRules(null)).toEqual(BOWL_SEASON_DEFAULTS);
+    expect(resolveBowlSeasonRules(undefined)).toEqual(BOWL_SEASON_DEFAULTS);
+    expect(bowlSeasonConfigured({})).toBe(true);
+    expect(bowlSeasonConfigured(undefined)).toBe(true);
+  });
+
+  it("respects explicit commissioner off", () => {
+    expect(bowlSeasonConfigured({ bowlSeason: { isEnabled: false, mode: "modeA" } })).toBe(false);
+    expect(resolveBowlSeasonRules({ isEnabled: false, mode: "modeA" }).isEnabled).toBe(false);
   });
 
   it("maps bowl week ids to ESPN postseason scoreboard weeks", () => {
