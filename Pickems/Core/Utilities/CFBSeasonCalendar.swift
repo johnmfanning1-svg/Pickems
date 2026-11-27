@@ -30,7 +30,13 @@ enum CFBSeasonCalendar {
     static func seasonYear(containing date: Date = Date()) -> Int {
         var eastern = Calendar(identifier: .gregorian)
         eastern.timeZone = TimeZone(identifier: "America/New_York") ?? .current
-        return eastern.component(.year, from: date)
+        let year = eastern.component(.year, from: date)
+        let month = eastern.component(.month, from: date)
+        // 2026-27 bowls and the CFP run through January; stay on season 2026 until February.
+        if year == 2027, month == 1 {
+            return 2026
+        }
+        return year
     }
 
     static func nextSeasonKickoff(on date: Date = Date()) -> Date {

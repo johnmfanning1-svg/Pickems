@@ -3,9 +3,12 @@ import {
   espnScoreboardWeek,
   includesGame,
   isWeekZeroKickoff,
+  pickemsWeekDocumentId,
+  parsePickemsWeekId,
   resolveAppWeekNumber,
   splitPickMap,
   submissionCoversSlate,
+  POSTSEASON_SEASON_TYPE,
 } from "./cfbWeekCalendar";
 
 describe("espnScoreboardWeek", () => {
@@ -35,6 +38,35 @@ describe("resolveAppWeekNumber", () => {
         now: new Date("2026-08-30T04:00:00.000Z"),
       })
     ).toBe(1);
+  });
+
+  it("skips week 0 split for postseason", () => {
+    expect(
+      resolveAppWeekNumber({
+        seasonYear: 2026,
+        espnWeekNumber: 1,
+        seasonType: POSTSEASON_SEASON_TYPE,
+        now: new Date("2026-12-13T17:00:00.000Z"),
+      })
+    ).toBe(1);
+  });
+
+  it("maps postseason ESPN week 1 to BOWL1 not W1", () => {
+    expect(
+      pickemsWeekDocumentId({
+        seasonYear: 2026,
+        espnWeekNumber: 1,
+        seasonType: POSTSEASON_SEASON_TYPE,
+      })
+    ).toBe("2026-BOWL1");
+  });
+
+  it("parses bowl week ids", () => {
+    expect(parsePickemsWeekId("2026-BOWL1")).toEqual({
+      seasonYear: 2026,
+      weekNumber: null,
+      bowlKey: "BOWL1",
+    });
   });
 
   it("passes ESPN week 2 and 2027 through", () => {

@@ -36,7 +36,8 @@ actor ESPNService {
         let data = try await fetchData(from: url, ignoreCache: forceRefresh)
 
         let decoded = try JSONDecoder().decode(ESPNScoreboardMetaResponse.self, from: data)
-        let season = decoded.season?.year ?? Calendar.current.component(.year, from: Date())
+        let season = decoded.season?.year
+            ?? CFBSeasonCalendar.seasonYear(containing: Date())
         let week = decoded.week?.number ?? 1
         let info = CFBWeekInfo(
             seasonYear: season,
@@ -67,16 +68,20 @@ actor ESPNService {
     }
 
     private func cacheSeasonWeeks(year: Int, from decoded: ESPNScoreboardMetaResponse) {
-        let regular = decoded.leagues?
-            .flatMap { $0.calendar ?? [] }
-            .first(where: { $0.value == "2" || ($0.label ?? "").localizedCaseInsensitiveContains("regular") })
+        let calendarBlocks = decoded.leagues?.flatMap { $0.calendar ?? [] } ?? []
+        let regular = calendarBlocks.first(where: {
+            $0.value == "2" || ($0.label ?? "").localizedCaseInsensitiveContains("regular")
+        })
         let espnWeeks = (regular?.entries ?? []).compactMap { entry -> ESPNCalendarWeek? in
             guard let number = Int(entry.value ?? "") else { return nil }
             return ESPNCalendarWeek(espnWeekNumber: number, detail: entry.detail ?? "Week \(number)")
         }
-        let weeks = espnWeeks.isEmpty
-            ? CFBWeekCalendar.fallbackSeasonWeeks(seasonYear: year)
-            : CFBWeekCalendar.appSeasonWeeks(seasonYear: year, espnWeeks: espnWeeks)
+        let weeks: [CFBSeasonWeek]
+        if espnWeeks.isEmpty {
+            weeks = CFBWeekCalendar.fallbackSeasonWeeks(seasonYear: year)
+        } else {
+            weeks = CFBWeekCalendar.appSeasonWeeks(seasonYear: year, espnWeeks: espnWeeks)
+        }
         seasonWeeksCache = (year, weeks, Date())
     }
 

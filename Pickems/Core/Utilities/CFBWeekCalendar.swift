@@ -7,7 +7,14 @@ struct CFBAppWeek: Equatable {
     let espnWeekNumber: Int
     let seasonType: Int
 
-    var id: String { "\(seasonYear)-W\(weekNumber)" }
+    var id: String {
+        if seasonType == CFBWeekCalendar.postseasonSeasonType, seasonYear == 2026 {
+            if espnWeekNumber == 1 { return "2026-BOWL1" }
+            if espnWeekNumber == 999 { return "2026-BOWL2" }
+            return "\(seasonYear)-BOWL\(espnWeekNumber)"
+        }
+        return "\(seasonYear)-W\(weekNumber)"
+    }
 
     var label: String { "Season \(seasonYear) | Week \(weekNumber)" }
 }
@@ -18,8 +25,26 @@ struct CFBSeasonWeek: Equatable, Identifiable {
     let weekNumber: Int
     let espnWeekNumber: Int
     let dateRangeLabel: String
+    /// When set, Firestore week doc id (e.g. `2026-BOWL1`) instead of `W` numbering.
+    let documentWeekId: String?
 
-    var id: String { "\(seasonYear)-W\(weekNumber)" }
+    init(
+        seasonYear: Int,
+        weekNumber: Int,
+        espnWeekNumber: Int,
+        dateRangeLabel: String,
+        documentWeekId: String? = nil
+    ) {
+        self.seasonYear = seasonYear
+        self.weekNumber = weekNumber
+        self.espnWeekNumber = espnWeekNumber
+        self.dateRangeLabel = dateRangeLabel
+        self.documentWeekId = documentWeekId
+    }
+
+    var id: String { documentWeekId ?? "\(seasonYear)-W\(weekNumber)" }
+
+    var isBowlChipSlot: Bool { documentWeekId != nil }
 }
 
 /// ESPN regular-season calendar row (`leagues[].calendar[].entries[]`).
@@ -32,6 +57,7 @@ struct ESPNCalendarWeek: Equatable {
 /// Week 0 = Saturday Aug 29 ET openers; Week 1 = the rest (Sep 3–7).
 enum CFBWeekCalendar {
     static let weekZeroSlateSource = "fixedBoard"
+    static let postseasonSeasonType = 3
 
     /// Midnight ET on Sunday Aug 30, 2026 — after this, current week is 2026-W1.
     static func weekZeroWindowEnd() -> Date {
@@ -46,6 +72,7 @@ enum CFBWeekCalendar {
         let weekNumber = resolveAppWeekNumber(
             seasonYear: espn.seasonYear,
             espnWeekNumber: espn.weekNumber,
+            seasonType: espn.seasonType,
             now: now
         )
         return CFBAppWeek(
@@ -56,9 +83,52 @@ enum CFBWeekCalendar {
         )
     }
 
-    static func resolveAppWeekNumber(seasonYear: Int, espnWeekNumber: Int, now: Date = Date()) -> Int {
+    static func resolveAppWeekNumber(
+        seasonYear: Int,
+        espnWeekNumber: Int,
+        seasonType: Int = 2,
+        now: Date = Date()
+    ) -> Int {
+        if seasonType == postseasonSeasonType {
+            return espnWeekNumber
+        }
         guard seasonYear == 2026, espnWeekNumber == 1 else { return espnWeekNumber }
         return now < weekZeroWindowEnd() ? 0 : 1
+    }
+
+    /// Firestore `weeks/{id}` for ESPN meta. Postseason must not mint `2026-W1`.
+    static func documentWeekId(for espn: CFBWeekInfo, now: Date = Date()) -> String {
+        if espn.seasonYear == 2026, espn.seasonType == postseasonSeasonType {
+            if espn.weekNumber == 1 { return "2026-BOWL1" }
+            if espn.weekNumber == 999 { return "2026-BOWL2" }
+            return "\(espn.seasonYear)-BOWL\(espn.weekNumber)"
+        }
+        return resolve(espn: espn, now: now).id
+    }
+
+    static func appPostseasonSeasonWeeks(seasonYear: Int, espnWeeks: [ESPNCalendarWeek]) -> [CFBSeasonWeek] {
+        espnWeeks.compactMap { entry in
+            let docId: String?
+            let appWeekNumber: Int
+            switch entry.espnWeekNumber {
+            case 1:
+                docId = "\(seasonYear)-BOWL1"
+                appWeekNumber = 1
+            case 999:
+                docId = "\(seasonYear)-BOWL2"
+                appWeekNumber = 2
+            default:
+                docId = "\(seasonYear)-BOWL\(entry.espnWeekNumber)"
+                appWeekNumber = entry.espnWeekNumber
+            }
+            return CFBSeasonWeek(
+                seasonYear: seasonYear,
+                weekNumber: appWeekNumber,
+                espnWeekNumber: entry.espnWeekNumber,
+                dateRangeLabel: entry.detail,
+                documentWeekId: docId
+            )
+        }
     }
 
     static func isWeekZeroKickoff(_ date: Date) -> Bool {
@@ -118,6 +188,7 @@ enum CFBWeekCalendar {
     }
 
     /// Offline / decode-miss fallback: 2026 ESPN windows, otherwise Week 1...15.
+    /// Regular-season chip bar + offline fallback. Postseason bowl slots are excluded until Mode A.
     static func fallbackSeasonWeeks(seasonYear: Int) -> [CFBSeasonWeek] {
         if seasonYear == 2026 {
             return appSeasonWeeks(seasonYear: 2026, espnWeeks: espn2026RegularSeason)
@@ -131,6 +202,21 @@ enum CFBWeekCalendar {
             )
         }
     }
+
+    /// ESPN postseason calendar for deadline windows only — not shown on the week chip bar in Phase 0.
+    static func bowlCalendarSlots(seasonYear: Int) -> [CFBSeasonWeek] {
+        guard seasonYear == 2026 else { return [] }
+        return appPostseasonSeasonWeeks(seasonYear: seasonYear, espnWeeks: espn2026Postseason)
+    }
+
+    static func seasonWeeksForChipBar(_ weeks: [CFBSeasonWeek]) -> [CFBSeasonWeek] {
+        weeks.filter { !$0.isBowlChipSlot }
+    }
+
+    private static let espn2026Postseason: [ESPNCalendarWeek] = [
+        ESPNCalendarWeek(espnWeekNumber: 1, detail: "Dec 13-Jan 25"),
+        ESPNCalendarWeek(espnWeekNumber: 999, detail: "Dec 18-Jan 28"),
+    ]
 
     private static let espn2026RegularSeason: [ESPNCalendarWeek] = [
         ESPNCalendarWeek(espnWeekNumber: 1, detail: "Aug 22-Sep 7"),

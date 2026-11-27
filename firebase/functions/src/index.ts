@@ -19,6 +19,12 @@ import {
 } from "./espn";
 import { espnScoreboardWeek } from "./cfbWeekCalendar";
 import {
+  AUTO_CLOSE_SEASONS_SCHEDULE,
+  groupShouldSkipAutoClose,
+  isAutoCloseSeasonsRunMonth,
+  seasonYearToArchive,
+} from "./autoCloseSeasonsLogic";
+import {
   DEFAULT_SELECTION_STAMP,
   futureDefaultSelectionDeadline,
   shouldStampDefaultSelection,
@@ -212,7 +218,7 @@ export const onWeekCreated = onDocumentCreated(
         existingDeadline: data.selectionDeadline,
       })
     ) {
-      const deadline = futureDefaultSelectionDeadline(lock, seasonYear, weekNumber ?? 0, nowMs);
+      const deadline = futureDefaultSelectionDeadline(lock, seasonYear, weekNumber ?? 0, nowMs, weekId);
       if (deadline) {
         const stamped = await stampDefaultSelectionDeadlineIfEmpty(weekRef, deadline);
         if (stamped) return;
@@ -293,7 +299,8 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
             defaultLock,
             (week.seasonYear as number | undefined) ?? new Date().getFullYear(),
             (week.weekNumber as number) ?? 0,
-            nowMs
+            nowMs,
+            weekId
           );
           if (computed) {
             const stamped = await stampDefaultSelectionDeadlineIfEmpty(weekDoc.ref, computed);
@@ -1421,11 +1428,24 @@ async function scoreWeek(
   logger.info(`Scored week ${weekId} for group ${groupId}`, awards);
 }
 
-/** Auto-close seasons after CFB championship window (early January). */
-export const autoCloseSeasons = onSchedule("0 12 15 1 *", async () => {
-  const year = new Date().getFullYear() - 1;
+/** Auto-close seasons after the CFP championship — daily noon ET in February (idempotent). */
+export const autoCloseSeasons = onSchedule(
+  { schedule: AUTO_CLOSE_SEASONS_SCHEDULE, timeZone: "America/New_York" },
+  async () => {
+  const now = new Date();
+  if (!isAutoCloseSeasonsRunMonth(now)) return;
+  const year = seasonYearToArchive(now);
   const groups = await db.collection("groups").get();
   for (const groupDoc of groups.docs) {
+    const weeksSnap = await groupDoc.ref.collection("weeks").get();
+  if (
+    groupShouldSkipAutoClose(
+      weeksSnap.docs.map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }))
+    )
+  ) {
+    logger.info(`Skipping autoCloseSeasons for group ${groupDoc.id} — bowl week still open`);
+    continue;
+  }
     const existing = await groupDoc.ref.collection("seasons").doc(String(year)).get();
     if (existing.exists) continue;
 
@@ -1502,7 +1522,8 @@ export const autoCloseSeasons = onSchedule("0 12 15 1 *", async () => {
       { groupId: groupDoc.id, seasonYear: String(year) }
     );
   }
-});
+  }
+);
 
 /** Keep public league index in sync when isPublic flips. */
 export const syncPublicLeagueIndex = onDocumentUpdated("groups/{groupId}", async (event) => {
