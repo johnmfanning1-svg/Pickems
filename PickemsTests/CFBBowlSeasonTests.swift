@@ -14,7 +14,7 @@ struct CFBBowlSeasonTests {
     @Test func parseWeekIdBowlViaSync() {
         let parsed = CFBWeekSync.parseWeekId("2026-BOWL2")
         #expect(parsed?.seasonYear == 2026)
-        #expect(parsed?.weekNumber == CFBBowlSeason.Slot.bowl2.sortWeekNumber)
+        #expect(parsed?.weekNumber == CFBBowlSeason.Slot.bowl2.pickemsWeekNumber)
     }
 
     @Test func postseasonEspnResolvesToBowlIdNotW1() {
@@ -28,7 +28,7 @@ struct CFBBowlSeasonTests {
         let week = WeekSummary(
             id: "2026-BOWL1",
             seasonYear: 2026,
-            weekNumber: 901,
+            weekNumber: 1,
             status: .selection,
             slateSize: 12,
             selectionMode: .commissioner,

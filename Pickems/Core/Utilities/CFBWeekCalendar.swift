@@ -70,12 +70,19 @@ enum CFBWeekCalendar {
     static func resolve(espn: CFBWeekInfo, now: Date = Date()) -> CFBAppWeek {
         if espn.seasonType == CFBBowlSeason.postseasonSeasonType {
             let seasonYear = CFBBowlSeason.canonicalSeasonYear(containing: now)
-            return CFBAppWeek(
+            let docId = documentWeekId(for: espn, now: now)
+            let appWeekNumber = resolveAppWeekNumber(
                 seasonYear: seasonYear,
-                weekNumber: CFBBowlSeason.Slot.bowl1.sortWeekNumber,
                 espnWeekNumber: espn.weekNumber,
                 seasonType: espn.seasonType,
-                pickemsWeekId: CFBBowlSeason.weekId(seasonYear: seasonYear, slot: .bowl1)
+                now: now
+            )
+            return CFBAppWeek(
+                seasonYear: seasonYear,
+                weekNumber: appWeekNumber,
+                espnWeekNumber: espn.weekNumber,
+                seasonType: espn.seasonType,
+                pickemsWeekId: docId == "\(seasonYear)-W\(appWeekNumber)" ? nil : docId
             )
         }
         let weekNumber = resolveAppWeekNumber(

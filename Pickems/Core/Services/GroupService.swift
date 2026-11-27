@@ -509,7 +509,7 @@ final class GroupService {
                     for: WeekSummary(
                         id: weekId,
                         seasonYear: bowl.seasonYear,
-                        weekNumber: bowl.slot.sortWeekNumber,
+                        weekNumber: bowl.slot.pickemsWeekNumber,
                         status: .selection,
                         slateSize: 1,
                         selectionMode: .commissioner,

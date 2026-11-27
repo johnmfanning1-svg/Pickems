@@ -2,7 +2,6 @@ import Foundation
 
 /// Postseason bowl weeks (Mode A: pick X games). Keep in sync with `firebase/functions/src/bowlWeek.ts`.
 enum CFBBowlSeason {
-    static let bowlSortBase = 900
     static let postseasonSeasonType = 3
     static let espnPostseasonWeek = 1
 
@@ -12,10 +11,18 @@ enum CFBBowlSeason {
 
         var id: String { rawValue }
 
-        var sortWeekNumber: Int {
+        /// Stored on `weeks/{id}.weekNumber` — mirrors ESPN postseason week numbers (1 / 999 → 1 / 2).
+        var pickemsWeekNumber: Int {
             switch self {
-            case .bowl1: return bowlSortBase + 1
-            case .bowl2: return bowlSortBase + 2
+            case .bowl1: return 1
+            case .bowl2: return 2
+            }
+        }
+
+        var espnWeekNumber: Int {
+            switch self {
+            case .bowl1: return 1
+            case .bowl2: return 999
             }
         }
 
@@ -169,7 +176,7 @@ enum CFBBowlSeason {
         var week = WeekSummary(
             id: id,
             seasonYear: seasonYear,
-            weekNumber: slot.sortWeekNumber,
+            weekNumber: slot.pickemsWeekNumber,
             status: .selection,
             slateSize: settings.resolvedPickCount(rules: rules),
             selectionMode: rules.selectionMode,
@@ -194,11 +201,15 @@ enum CFBBowlSeason {
 
     static func compareWeekOrder(_ lhs: WeekSummary, _ rhs: WeekSummary) -> Bool {
         if lhs.seasonYear != rhs.seasonYear { return lhs.seasonYear < rhs.seasonYear }
+        let lhsBowl = isBowlWeek(lhs)
+        let rhsBowl = isBowlWeek(rhs)
+        if lhsBowl != rhsBowl { return !lhsBowl && rhsBowl }
+        if lhsBowl { return lhs.id < rhs.id }
         return lhs.weekNumber < rhs.weekNumber
     }
 
     static func espnScoreboardWeek(for week: WeekSummary) -> Int {
-        if isBowlWeek(week) { return espnPostseasonWeek }
+        if let slot = slot(for: week) { return slot.espnWeekNumber }
         return CFBWeekCalendar.espnScoreboardWeek(week.weekNumber)
     }
 
@@ -223,8 +234,8 @@ private extension CFBSeasonWeek {
     static func seasonWeek(seasonYear: Int, slot: CFBBowlSeason.Slot) -> CFBSeasonWeek {
         CFBSeasonWeek(
             seasonYear: seasonYear,
-            weekNumber: slot.sortWeekNumber,
-            espnWeekNumber: CFBBowlSeason.espnPostseasonWeek,
+            weekNumber: slot.pickemsWeekNumber,
+            espnWeekNumber: slot.espnWeekNumber,
             dateRangeLabel: slot.chipDateRange,
             pickemsWeekId: CFBBowlSeason.weekId(seasonYear: seasonYear, slot: slot)
         )

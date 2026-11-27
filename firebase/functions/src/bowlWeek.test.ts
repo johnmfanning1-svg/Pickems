@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  bowlCountsTowardSeason,
-  bowlWeekId,
-  isBowlWeekId,
-  parseBowlWeekId,
-  bowlSortWeekNumber,
-} from "./bowlWeek";
-import { weekWindow } from "./cfbWeekWindow";
+import { bowlCountsTowardSeason, bowlWeekId, isBowlWeekId, parseBowlWeekId } from "./bowlWeek";
+import { weekWindowForPickemsWeek } from "./cfbWeekWindow";
 
 describe("bowlWeek", () => {
   it("parses bowl ids", () => {
@@ -21,8 +15,8 @@ describe("bowlWeek", () => {
   });
 
   it("exposes bowl windows for default selection deadlines", () => {
-    const w1 = weekWindow(2026, bowlSortWeekNumber("BOWL1"));
-    const w2 = weekWindow(2026, bowlSortWeekNumber("BOWL2"));
+    const w1 = weekWindowForPickemsWeek("2026-BOWL1", 2026, 1);
+    const w2 = weekWindowForPickemsWeek("2026-BOWL2", 2026, 2);
     expect(w1).not.toBeNull();
     expect(w2).not.toBeNull();
   });

@@ -18,7 +18,7 @@ enum CFBWeekSync {
 
     static func parseWeekId(_ id: String) -> (seasonYear: Int, weekNumber: Int)? {
         if let bowl = CFBBowlSeason.parseWeekId(id) {
-            return (bowl.seasonYear, bowl.slot.sortWeekNumber)
+            return (bowl.seasonYear, bowl.slot.pickemsWeekNumber)
         }
         let parts = id.split(separator: "-")
         guard parts.count == 2, let year = Int(parts[0]) else { return nil }
