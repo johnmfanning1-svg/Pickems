@@ -50,9 +50,37 @@ struct CFBBowlSeasonTests {
         #expect(CFBSeasonCalendar.seasonYear(containing: jan) == 2026)
     }
 
-    @Test func bowlCalendarSlotsOnlyWhenEnabled() {
+    @Test func bowlCalendarSlotsDefaultOnWhenRulesMissing() {
+        let rules = GroupRules.default
+        #expect(rules.bowlSeason == nil)
+        let slots = CFBBowlSeason.calendarSlots(
+            seasonYear: 2026,
+            settings: CFBBowlSeason.Settings.resolved(from: rules)
+        )
+        #expect(slots.count == 1)
+        #expect(slots.map(\.id) == ["2026-BOWL1"])
+        #expect(CFBBowlSeason.userFacingBowlWeekName == "Bowl Bonanza")
+    }
+
+    @Test func bowlCalendarSlotsEmptyWhenCommissionerTurnsOff() {
         var rules = GroupRules.default
-        #expect(CFBBowlSeason.calendarSlots(seasonYear: 2026, settings: rules.bowlSeason ?? .default).isEmpty)
+        rules.bowlSeason = CFBBowlSeason.Settings(
+            mode: .modeA,
+            isEnabled: false,
+            pickCount: nil,
+            countsTowardSeasonStandings: false,
+            includesSecondWeek: false,
+            suggestedRollingLock: true
+        )
+        let slots = CFBBowlSeason.calendarSlots(
+            seasonYear: 2026,
+            settings: CFBBowlSeason.Settings.resolved(from: rules)
+        )
+        #expect(slots.isEmpty)
+    }
+
+    @Test func bowlCalendarSlotsIncludeSecondWeekOnlyWhenOptIn() {
+        var rules = GroupRules.default
         rules.bowlSeason = CFBBowlSeason.Settings(
             mode: .modeA,
             isEnabled: true,
@@ -66,6 +94,27 @@ struct CFBBowlSeasonTests {
         #expect(slots.map(\.id) == ["2026-BOWL1", "2026-BOWL2"])
     }
 
+    @Test func bowlWheelOrderPutsBowl1AfterWeekFifteen() {
+        let w15 = WeekSummary(
+            id: "2026-W15",
+            seasonYear: 2026,
+            weekNumber: 15,
+            status: .selection,
+            slateSize: 10,
+            selectionMode: .commissioner,
+            selectionsPerMember: 1,
+            nominationCount: 0
+        )
+        let bowl1 = CFBBowlSeason.makeWeekSummary(
+            id: "2026-BOWL1",
+            slot: .bowl1,
+            rules: .default,
+            memberCount: 8
+        )
+        #expect(CFBBowlSeason.compareWeekOrder(w15, bowl1))
+        #expect(!CFBBowlSeason.compareWeekOrder(bowl1, w15))
+    }
+
     @Test func settingsDefaultPickCountUsesSlateSize() {
         var rules = GroupRules.default
         rules.slateSize = 10
@@ -74,21 +123,31 @@ struct CFBBowlSeasonTests {
     }
 
     @Test func leaderboardShowsBowlScopeWhenConfigured() {
+        #expect(LeaderboardScope.showsBowlScope(rules: .default))
         var rules = GroupRules.default
         rules.bowlSeason = CFBBowlSeason.Settings(
             mode: .modeA,
-            isEnabled: true,
+            isEnabled: false,
             pickCount: 12,
             countsTowardSeasonStandings: false,
             includesSecondWeek: false,
             suggestedRollingLock: true
         )
-        #expect(LeaderboardScope.showsBowlScope(rules: rules))
+        #expect(!LeaderboardScope.showsBowlScope(rules: rules))
     }
 
-    @Test func commissionerBlockAvailableWeek14() {
-        #expect(CFBBowlSeason.commissionerSettingsAvailable(pickemsWeekNumber: 14, espnSeasonType: 2))
-        #expect(!CFBBowlSeason.commissionerSettingsAvailable(pickemsWeekNumber: 13, espnSeasonType: 2, now: Date(timeIntervalSince1970: 1_000_000)))
+    @Test func commissionerBowlBlockNotGatedByCalendarWeek() {
+        #expect(CFBBowlSeason.Settings.resolved(from: .default).isConfigured)
+        var rules = GroupRules.default
+        rules.bowlSeason = CFBBowlSeason.Settings(
+            mode: .modeA,
+            isEnabled: false,
+            pickCount: nil,
+            countsTowardSeasonStandings: false,
+            includesSecondWeek: false,
+            suggestedRollingLock: true
+        )
+        #expect(!CFBBowlSeason.Settings.resolved(from: rules).isConfigured)
     }
 
     @Test func bowlSlotsPartitionPostseasonWeekOneGames() {

@@ -19,6 +19,35 @@ export type BowlSeasonRules = {
   suggestedRollingLock?: boolean;
 };
 
+/** Keep in sync with iOS `CFBBowlSeason.Settings.default`. Missing `rules.bowlSeason` uses this. */
+export const BOWL_SEASON_DEFAULTS: Readonly<
+  Required<
+    Pick<
+      BowlSeasonRules,
+      "mode" | "isEnabled" | "countsTowardSeasonStandings" | "includesSecondWeek" | "suggestedRollingLock"
+    >
+  >
+> = {
+  mode: "modeA",
+  isEnabled: true,
+  countsTowardSeasonStandings: false,
+  includesSecondWeek: false,
+  suggestedRollingLock: true,
+};
+
+export function resolveBowlSeasonRules(bowl: BowlSeasonRules | null | undefined): BowlSeasonRules {
+  if (bowl == null) return { ...BOWL_SEASON_DEFAULTS };
+  return {
+    mode: bowl.mode ?? BOWL_SEASON_DEFAULTS.mode,
+    isEnabled: bowl.isEnabled ?? BOWL_SEASON_DEFAULTS.isEnabled,
+    pickCount: bowl.pickCount,
+    countsTowardSeasonStandings:
+      bowl.countsTowardSeasonStandings ?? BOWL_SEASON_DEFAULTS.countsTowardSeasonStandings,
+    includesSecondWeek: bowl.includesSecondWeek ?? BOWL_SEASON_DEFAULTS.includesSecondWeek,
+    suggestedRollingLock: bowl.suggestedRollingLock ?? BOWL_SEASON_DEFAULTS.suggestedRollingLock,
+  };
+}
+
 export function bowlWeekId(seasonYear: number, slot: BowlSlot): string {
   return `${seasonYear}-${slot}`;
 }
@@ -49,8 +78,8 @@ export function bowlSortWeekNumber(slot: BowlSlot): number {
 }
 
 export function bowlSeasonConfigured(rules: { bowlSeason?: BowlSeasonRules | null } | undefined): boolean {
-  const bowl = rules?.bowlSeason;
-  return bowl?.isEnabled === true && bowl?.mode === "modeA";
+  const resolved = resolveBowlSeasonRules(rules?.bowlSeason);
+  return resolved.isEnabled === true && resolved.mode === "modeA";
 }
 
 export function bowlCountsTowardSeason(rules: { bowlSeason?: BowlSeasonRules | null } | undefined): boolean {
