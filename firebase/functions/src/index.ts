@@ -26,9 +26,11 @@ import {
 } from "./autoCloseSeasonsLogic";
 import {
   BOWL_SEASON_TYPE,
+  isBowlFullSlateWeek,
   isBowlWeekId,
   userFacingWeekLabel,
 } from "./bowlWeek";
+import { syncBowlCatalogSlate } from "./bowlCatalogSync";
 import {
   buildScoreboardFetchTargets,
   bowlWeekCatalogEvents,
@@ -146,6 +148,7 @@ export { detectShockTweets, runDetectShockTweets } from "./shockTweets";
 // Commissioner switch to rolling pick lock, optionally for the week in progress.
 export { setRollingLock } from "./rollingLock";
 export { setLeaguePickMode } from "./leaguePickMode";
+export { writeMemberBowlPick } from "./bowlMemberPick";
 
 // OC / DC appointment pushes, and cleanup when a seat holder leaves the roster.
 export { onCoordinatorRolesChanged } from "./coordinators";
@@ -440,7 +443,11 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
       });
 
       if (ready && !postSkip) {
-        const snapshot = lockSnapshotFromGames(games, groupDoc.data().rules?.pickDeadline);
+        const snapshot = lockSnapshotFromGames(
+          games,
+          groupDoc.data().rules?.pickDeadline,
+          isBowlFullSlateWeek(week, weekId) ? { bowlFullSlate: true } : undefined
+        );
         await weekDoc.ref.update({
           status: "picking",
           selectionDeadlinePassedNotified: true,
@@ -623,6 +630,8 @@ async function loadScoreboardPages(
  * Selection weeks have no slate docs yet. Publish ESPN kickoffs onto
  * gameLock/current so a member swap has to use the real kickoff. An empty
  * scoreboard (fetch failure or no games) leaves an existing catalog in place.
+ * Mode B also runs `syncBowlCatalogSlate`, which writes the full-catalog
+ * kickoff map (and `liveIds` as games finalize) on `gameLock/current`.
  */
 async function publishSelectionKickoffCatalog(
   weekDoc: QueryDocumentSnapshot,
@@ -639,6 +648,9 @@ async function publishSelectionKickoffCatalog(
     ? bowlWeekCatalogEvents(weekDoc.id, data, postseasonByEspnWeek)
     : eventsByScoreboardWeek.get(espnScoreboardWeek(weekNumber)) ?? [];
   if (!events || events.length === 0) return;
+  if (isBowlFullSlateWeek(data, weekDoc.id)) {
+    await syncBowlCatalogSlate(weekDoc.ref, weekDoc.id, data, events);
+  }
   const millisById = kickoffsMillisByEspnEventId(events);
   const ids = Object.keys(millisById);
   if (ids.length === 0) return;
@@ -714,6 +726,13 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
       const weekId = weekDoc.id;
       const pickMode = resolveWeekPickMode(week.pickMode, leaguePickMode);
       const rolling = isRollingLock(week.pickLockMode);
+
+      if (isBowlFullSlateWeek(week, weekId)) {
+        const catalogEvents = bowlWeekCatalogEvents(weekId, week, postseasonByEspnWeek);
+        if (catalogEvents.length > 0) {
+          await syncBowlCatalogSlate(weekDoc.ref, weekId, week, catalogEvents);
+        }
+      }
 
       const gamesSnap = await weekDoc.ref.collection("games").get();
       if (gamesSnap.empty) {

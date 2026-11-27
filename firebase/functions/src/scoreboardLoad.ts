@@ -22,7 +22,7 @@ export function postseasonEspnWeeksForWeekDocs(
       (doc.data.seasonType as number | undefined) === BOWL_SEASON_TYPE;
     if (!bowl) continue;
     const parsed = parseBowlWeekId(doc.id);
-    if (parsed?.slot === "BOWL2") {
+    if (parsed?.slot === "BOWL2" || parsed?.slot === "BOWL") {
       weeks.add(ESPN_POSTSEASON_WEEK);
       weeks.add(ESPN_BOWL2_POSTSEASON_WEEK);
     } else {

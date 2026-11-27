@@ -2985,6 +2985,87 @@ describe("public league browse index", () => {
     );
   });
 
+  describe("Mode B full bowl slate (2026-BOWL)", () => {
+    const BOWL_WEEK = "2026-BOWL";
+    const FUTURE = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    async function seedBowlWeek() {
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        const db = ctx.firestore();
+        await setDoc(doc(db, "groups", GROUP_ID, "weeks", BOWL_WEEK), {
+          id: BOWL_WEEK,
+          seasonYear: 2026,
+          weekNumber: 1,
+          status: "picking",
+          slateSize: 40,
+          nominationCount: 0,
+          slateSource: "bowlCatalog",
+          bowlFullSlate: true,
+          pickLockMode: "rolling",
+          pickDeadline: FUTURE,
+          seasonType: 3,
+        });
+        await setDoc(doc(db, "groups", GROUP_ID, "weeks", BOWL_WEEK, "games", "g-open"), {
+          id: "g-open",
+          espnEventId: "g-open",
+          kickoff: FUTURE,
+          status: "scheduled",
+          homeTeamId: "h1",
+          awayTeamId: "a1",
+          spread: 3,
+          spreadTeamId: "h1",
+        });
+        await setDoc(doc(db, "groups", GROUP_ID, "weeks", BOWL_WEEK, "gameLock", "current"), {
+          kickoffs: { "g-open": FUTURE },
+          phases: { "g-open": "pre" },
+          liveIds: [],
+        });
+        await setDoc(doc(db, "groups", GROUP_ID, "weeks", BOWL_WEEK, "picks", MEMBER), {
+          userId: MEMBER,
+          picks: {},
+          isLocked: false,
+        });
+      });
+    }
+
+    it("denies member, commissioner, and coordinator direct pick writes", async () => {
+      await seedBowlWeek();
+      const member = testEnv.authenticatedContext(MEMBER).firestore();
+      const commish = testEnv.authenticatedContext(COMMISH).firestore();
+      const pickPath = doc(member, "groups", GROUP_ID, "weeks", BOWL_WEEK, "picks", MEMBER);
+      await assertFails(
+        updateDoc(pickPath, {
+          picks: { "g-open": "h1" },
+        })
+      );
+      const commishForMember = doc(
+        commish,
+        "groups",
+        GROUP_ID,
+        "weeks",
+        BOWL_WEEK,
+        "picks",
+        OTHER_MEMBER
+      );
+      await assertFails(
+        setDoc(commishForMember, {
+          userId: OTHER_MEMBER,
+          picks: { "g-open": "h1" },
+          isLocked: false,
+        })
+      );
+    });
+
+    it("denies member pick delete on full catalog weeks", async () => {
+      await seedBowlWeek();
+      const member = testEnv.authenticatedContext(MEMBER).firestore();
+      await assertFails(
+        deleteDoc(doc(member, "groups", GROUP_ID, "weeks", BOWL_WEEK, "picks", MEMBER))
+      );
+    });
+
+  });
+
   it("lets the commissioner remove the index after the league goes private", async () => {
     await seedLeagues();
     await testEnv.withSecurityRulesDisabled(async (ctx) => {

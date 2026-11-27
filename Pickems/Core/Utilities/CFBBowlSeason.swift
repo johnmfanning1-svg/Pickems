@@ -1,29 +1,30 @@
 import Foundation
 
-/// Postseason bowl weeks (Mode A: pick X games). Keep in sync with `firebase/functions/src/bowlWeek.ts`.
+/// Postseason bowl weeks. Keep in sync with `firebase/functions/src/bowlWeek.ts`.
 enum CFBBowlSeason {
     static let postseasonSeasonType = 3
     static let espnPostseasonWeek = 1
-    /// User-facing name for bowl pick weeks (`2026-BOWL1` / `BOWL2` doc ids unchanged).
     static let userFacingBowlWeekName = "Bowl Bonanza"
+    static let bowlCatalogSlateSource = "bowlCatalog"
 
     enum Slot: String, Codable, CaseIterable, Identifiable {
         case bowl1 = "BOWL1"
         case bowl2 = "BOWL2"
+        /// Mode B: every postseason bowl in one `2026-BOWL` week.
+        case bowlAll = "BOWL"
 
         var id: String { rawValue }
 
-        /// Stored on `weeks/{id}.weekNumber` — mirrors ESPN postseason week numbers (1 / 999 → 1 / 2).
         var pickemsWeekNumber: Int {
             switch self {
-            case .bowl1: return 1
+            case .bowl1, .bowlAll: return 1
             case .bowl2: return 2
             }
         }
 
         var espnWeekNumber: Int {
             switch self {
-            case .bowl1: return 1
+            case .bowl1, .bowlAll: return 1
             case .bowl2: return 999
             }
         }
@@ -32,6 +33,7 @@ enum CFBBowlSeason {
             switch self {
             case .bowl1: return "Dec 12-Jan 1"
             case .bowl2: return "Jan 2-Jan 25"
+            case .bowlAll: return "Dec 13-Jan 25"
             }
         }
 
@@ -39,29 +41,34 @@ enum CFBBowlSeason {
             switch self {
             case .bowl1:
                 return easternDate(year: 2027, month: 1, day: 2) ?? .distantFuture
-            case .bowl2:
+            case .bowl2, .bowlAll:
                 return easternDate(year: 2027, month: 1, day: 26) ?? .distantFuture
             }
         }
     }
 
-    enum Mode: String, Codable {
+    enum Mode: String, Codable, CaseIterable, Identifiable {
         case modeA
-        /// Reserved for a future all-bowls week. Not exposed in commissioner UI yet.
         case modeB
+
+        var id: String { rawValue }
+
+        /// Commissioner-facing label (never "Mode A/B").
+        var commissionerLabel: String {
+            switch self {
+            case .modeA: return "Pick bowl games"
+            case .modeB: return "Every bowl game"
+            }
+        }
     }
 
     struct Settings: Codable, Equatable {
         var mode: Mode
-        /// When false, bowl weeks stay off the chip bar. Omitted `rules.bowlSeason` uses `.default` (enabled).
         var isEnabled: Bool
-        /// Target bowl games (defaults to league `slateSize`). Hard-capped at 20 in rules.
         var pickCount: Int?
-        /// When true, scored bowl weeks update `seasonWins` / `seasonLosses`. Default false.
         var countsTowardSeasonStandings: Bool
-        /// Mint `2026-BOWL2` for late December / CFP cluster.
+        /// Mode A only: mint `2026-BOWL2` for NY6 & CFP cluster.
         var includesSecondWeek: Bool
-        /// Mode A default: rolling lock is the recommended postseason policy.
         var suggestedRollingLock: Bool
 
         static let `default` = Settings(
@@ -73,9 +80,10 @@ enum CFBBowlSeason {
             suggestedRollingLock: true
         )
 
-        var isConfigured: Bool { isEnabled && mode == .modeA }
+        var isConfigured: Bool { isEnabled }
 
-        /// Missing `rules.bowlSeason` is treated as Mode A enabled (no Firestore backfill).
+        var isModeB: Bool { isEnabled && mode == .modeB }
+
         static func resolved(from rules: GroupRules) -> Settings {
             rules.bowlSeason ?? .default
         }
@@ -98,6 +106,10 @@ enum CFBBowlSeason {
 
     static func isBowlWeekId(_ id: String) -> Bool {
         parseWeekId(id) != nil
+    }
+
+    static func isBowlFullSlateWeek(_ week: WeekSummary) -> Bool {
+        week.bowlFullSlate == true || week.slateSource == bowlCatalogSlateSource
     }
 
     static func slot(for week: WeekSummary) -> Slot? {
@@ -123,7 +135,6 @@ enum CFBBowlSeason {
         "Season \(week.seasonYear.pickemsYearString) | \(userFacingWeekName(for: week))"
     }
 
-    /// Keep CFB season year on 2026 through January bowl games.
     static func canonicalSeasonYear(containing date: Date = Date()) -> Int {
         var eastern = Calendar(identifier: .gregorian)
         eastern.timeZone = TimeZone(identifier: "America/New_York") ?? .current
@@ -133,13 +144,16 @@ enum CFBBowlSeason {
         return year
     }
 
-    /// Selection Sunday — postseason catalog opens for bowl slates.
     static func catalogOpens(year: Int = 2026) -> Date {
         easternDate(year: year, month: 12, day: 6, hour: 15) ?? .distantPast
     }
 
     static func belongsToBowlSlot(kickoff: Date, slot: Slot, fromEspnPostseasonWeek: Int) -> Bool {
         guard kickoff >= catalogOpens() else { return false }
+        if slot == .bowlAll {
+            return fromEspnPostseasonWeek == Slot.bowl1.espnWeekNumber
+                || fromEspnPostseasonWeek == Slot.bowl2.espnWeekNumber
+        }
         let cutoff = Slot.bowl1.catalogEndExclusive
         if fromEspnPostseasonWeek == Slot.bowl2.espnWeekNumber {
             return slot == .bowl2
@@ -152,6 +166,8 @@ enum CFBBowlSeason {
         guard kickoff >= catalogOpens() else { return false }
         guard let slot = week.flatMap({ slot(for: $0) }) else { return true }
         switch slot {
+        case .bowlAll:
+            return true
         case .bowl1:
             return belongsToBowlSlot(
                 kickoff: kickoff,
@@ -187,22 +203,20 @@ enum CFBBowlSeason {
         )
     }
 
-    /// Season-standings toggle cannot change after a bowl week has been scored (avoids double-count).
     static func standingsToggleLocked(weeks: [WeekSummary]) -> Bool {
         weeks.contains { isBowlWeek($0) && $0.status == .scored }
     }
 
     static func calendarSlots(seasonYear: Int, settings: Settings) -> [CFBSeasonWeek] {
         guard settings.isConfigured, seasonYear == 2026 else { return [] }
+        if settings.mode == .modeB {
+            return [.seasonWeek(seasonYear: seasonYear, slot: .bowlAll)]
+        }
         var slots: [CFBSeasonWeek] = [.seasonWeek(seasonYear: seasonYear, slot: .bowl1)]
         if settings.includesSecondWeek {
             slots.append(.seasonWeek(seasonYear: seasonYear, slot: .bowl2))
         }
         return slots
-    }
-
-    static func resolvedPostseasonWeekId(seasonYear: Int, settings: Settings) -> String {
-        weekId(seasonYear: seasonYear, slot: .bowl1)
     }
 
     static func makeWeekSummary(
@@ -215,13 +229,14 @@ enum CFBBowlSeason {
         let parsed = parseWeekId(id)
         let seasonYear = parsed?.seasonYear ?? canonicalSeasonYear(containing: now)
         let settings = rules.bowlSeason ?? .default
+        let modeB = settings.mode == .modeB
         var week = WeekSummary(
             id: id,
             seasonYear: seasonYear,
             weekNumber: slot.pickemsWeekNumber,
             status: .selection,
-            slateSize: settings.resolvedPickCount(rules: rules),
-            selectionMode: rules.selectionMode,
+            slateSize: modeB ? 1 : settings.resolvedPickCount(rules: rules),
+            selectionMode: .commissioner,
             selectionsPerMember: rules.selectionsPerMember,
             lockedAt: nil,
             pickDeadline: nil,
@@ -229,12 +244,12 @@ enum CFBBowlSeason {
             selectionDeadline: nil,
             selectionDeadlineSetAt: nil,
             selectionDeadlineSetBy: nil,
+            slateSource: modeB ? bowlCatalogSlateSource : nil,
+            bowlFullSlate: modeB ? true : nil,
             seasonType: postseasonSeasonType,
             bowlSlot: slot.rawValue
         )
-        if settings.suggestedRollingLock {
-            week.pickLockMode = .rolling
-        }
+        week.pickLockMode = .rolling
         if let lock = rules.defaultSelectionLock {
             DefaultSelectionLockStamp.apply(to: &week, lock: lock, stampedAt: now)
         }

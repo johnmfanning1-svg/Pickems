@@ -8,7 +8,10 @@ export const ESPN_BOWL2_POSTSEASON_WEEK = 999;
 
 export const BOWL_SORT_BASE = 900;
 
-export type BowlSlot = "BOWL1" | "BOWL2";
+export const BOWL_MODE_B_WEEK_ID_SUFFIX = "BOWL";
+export const BOWL_CATALOG_SLATE_SOURCE = "bowlCatalog";
+
+export type BowlSlot = "BOWL1" | "BOWL2" | "BOWL";
 
 export type BowlSeasonRules = {
   mode?: "modeA" | "modeB";
@@ -58,8 +61,25 @@ export function parseBowlWeekId(weekId: string): { seasonYear: number; slot: Bow
   const year = Number(parts[0]);
   const slot = parts[1] as BowlSlot;
   if (!Number.isFinite(year)) return null;
-  if (slot !== "BOWL1" && slot !== "BOWL2") return null;
-  return { seasonYear: year, slot };
+  const upper = slot as string;
+  if (upper === "BOWL") return { seasonYear: year, slot: "BOWL" };
+  if (upper !== "BOWL1" && upper !== "BOWL2") return null;
+  return { seasonYear: year, slot: upper as "BOWL1" | "BOWL2" };
+}
+
+export function isBowlFullSlateWeek(
+  week: { bowlFullSlate?: boolean; slateSource?: string } | undefined,
+  weekId?: string
+): boolean {
+  if (!week) return false;
+  if (weekId != null && parseBowlWeekId(weekId)?.slot !== "BOWL") return false;
+  if (week.bowlFullSlate === true) return true;
+  return week.slateSource === BOWL_CATALOG_SLATE_SOURCE;
+}
+
+export function bowlSeasonModeBEnabled(rules: { bowlSeason?: BowlSeasonRules | null } | undefined): boolean {
+  const resolved = resolveBowlSeasonRules(rules?.bowlSeason);
+  return resolved.isEnabled === true && resolved.mode === "modeB";
 }
 
 export function isBowlWeekId(weekId: string): boolean {
@@ -74,12 +94,13 @@ export function espnPostseasonWeekForBowlWeekId(weekId: string): number | null {
 }
 
 export function bowlSortWeekNumber(slot: BowlSlot): number {
-  return slot === "BOWL1" ? BOWL_SORT_BASE + 1 : BOWL_SORT_BASE + 2;
+  if (slot === "BOWL1" || slot === "BOWL") return BOWL_SORT_BASE + 1;
+  return BOWL_SORT_BASE + 2;
 }
 
 export function bowlSeasonConfigured(rules: { bowlSeason?: BowlSeasonRules | null } | undefined): boolean {
   const resolved = resolveBowlSeasonRules(rules?.bowlSeason);
-  return resolved.isEnabled === true && resolved.mode === "modeA";
+  return resolved.isEnabled === true && (resolved.mode === "modeA" || resolved.mode === "modeB");
 }
 
 export function bowlCountsTowardSeason(rules: { bowlSeason?: BowlSeasonRules | null } | undefined): boolean {
@@ -119,11 +140,27 @@ export function postseasonCatalogOpensMs(seasonYear = 2026): number {
  * Partition ESPN postseason events into BOWL1 vs BOWL2 pools without gaps.
  * BOWL1: ESPN week 1 before catalog end. BOWL2: ESPN week 1 on/after end + all week 999.
  */
+/** Every FBS bowl after the selection show, from any ESPN postseason week. */
+export function postseasonEventBelongsToCatalog(
+  event: { date?: string },
+  sourceEspnWeek: number
+): boolean {
+  const kickoff = eventKickoffMs(event);
+  if (kickoff == null) return false;
+  if (kickoff < postseasonCatalogOpensMs()) return false;
+  return (
+    sourceEspnWeek === ESPN_POSTSEASON_WEEK || sourceEspnWeek === ESPN_BOWL2_POSTSEASON_WEEK
+  );
+}
+
 export function postseasonEventBelongsToBowlSlot(
   event: { date?: string },
   slot: BowlSlot,
   sourceEspnWeek: number
 ): boolean {
+  if (slot === "BOWL") {
+    return postseasonEventBelongsToCatalog(event, sourceEspnWeek);
+  }
   const kickoff = eventKickoffMs(event);
   if (kickoff == null) return false;
   if (kickoff < postseasonCatalogOpensMs()) return false;

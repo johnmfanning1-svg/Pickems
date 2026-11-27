@@ -39,6 +39,21 @@ describe("pickLock helpers", () => {
     expect(snap.gameIds).toEqual(["thu", "sun"]);
   });
 
+  it("bowl full slate keeps 20 gameIds but weekLockAt spans entire catalog", () => {
+    const base = Date.parse("2026-12-13T17:00:00Z");
+    const games = Array.from({ length: 25 }, (_, index) => ({
+      id: `g${index}`,
+      kickoff: new Date(base + index * 86_400_000),
+    }));
+    const snap = lockSnapshotFromGames(games, "firstKickoff", { bowlFullSlate: true });
+    expect(snap.bowlFullSlate).toBe(true);
+    expect(snap.slateSource).toBe("bowlCatalog");
+    expect((snap.gameIds as string[]).length).toBe(20);
+    const weekLock = (snap.weekLockAt as Timestamp).toMillis();
+    const lastGame = games[games.length - 1].kickoff as Date;
+    expect(weekLock).toBe(lastGame.getTime());
+  });
+
   it("snapshots last kickoff as weekLockAt in rolling mode", () => {
     const first = new Date("2026-09-05T19:00:00Z");
     const last = new Date("2026-09-07T19:00:00Z");

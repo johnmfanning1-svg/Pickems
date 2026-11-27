@@ -198,6 +198,84 @@ struct CFBBowlSeasonTests {
         #expect(!CFBBowlSeason.catalogEligible(kickoff: jan, week: bowl1))
     }
 
+    @Test func modeBUsesSingleBowlWeekAndCatalogSlate() {
+        var rules = GroupRules.default
+        rules.bowlSeason = CFBBowlSeason.Settings(
+            mode: .modeB,
+            isEnabled: true,
+            pickCount: nil,
+            countsTowardSeasonStandings: false,
+            includesSecondWeek: false,
+            suggestedRollingLock: true
+        )
+        let slots = CFBBowlSeason.calendarSlots(seasonYear: 2026, settings: rules.bowlSeason!)
+        #expect(slots.count == 1)
+        #expect(slots[0].id == "2026-BOWL")
+        let week = CFBBowlSeason.makeWeekSummary(
+            id: "2026-BOWL",
+            slot: .bowlAll,
+            rules: rules,
+            memberCount: 8
+        )
+        #expect(week.skipsSelection)
+        #expect(week.bowlFullSlate == true)
+        #expect(week.slateSource == CFBBowlSeason.bowlCatalogSlateSource)
+    }
+
+    @Test func modeBMakeWeekSummaryUsesRollingLock() {
+        var rules = GroupRules.default
+        rules.bowlSeason = CFBBowlSeason.Settings(
+            mode: .modeB,
+            isEnabled: true,
+            pickCount: nil,
+            countsTowardSeasonStandings: false,
+            includesSecondWeek: false,
+            suggestedRollingLock: true
+        )
+        let week = CFBBowlSeason.makeWeekSummary(
+            id: "2026-BOWL",
+            slot: .bowlAll,
+            rules: rules,
+            memberCount: 8
+        )
+        #expect(week.pickLockMode == .rolling)
+        #expect(week.isRollingLock)
+    }
+
+    @Test func modeBCatalogIncludesCFPBracketKickoffs() {
+        let opens = CFBBowlSeason.catalogOpens()
+        let celebration = opens.addingTimeInterval(6 * 86_400)
+        let cfpRound1 = opens.addingTimeInterval(10 * 86_400)
+        let cfpQuarter = opens.addingTimeInterval(30 * 86_400)
+        let championship = opens.addingTimeInterval(50 * 86_400)
+        let bowl = WeekSummary(
+            id: "2026-BOWL",
+            seasonYear: 2026,
+            weekNumber: 1,
+            status: .picking,
+            slateSize: 40,
+            selectionMode: .commissioner,
+            selectionsPerMember: 1,
+            nominationCount: 0,
+            slateSource: CFBBowlSeason.bowlCatalogSlateSource,
+            bowlFullSlate: true,
+            seasonType: 3,
+            bowlSlot: "BOWL"
+        )
+        #expect(CFBBowlSeason.catalogEligible(kickoff: celebration, week: bowl))
+        #expect(CFBBowlSeason.catalogEligible(kickoff: cfpRound1, week: bowl))
+        #expect(CFBBowlSeason.belongsToBowlSlot(
+            kickoff: cfpQuarter,
+            slot: .bowlAll,
+            fromEspnPostseasonWeek: CFBBowlSeason.Slot.bowl2.espnWeekNumber
+        ))
+        #expect(CFBBowlSeason.catalogEligible(kickoff: championship, week: bowl))
+    }
+
+    @Test func missingRulesStillDefaultToModeAPickSlate() {
+        #expect(CFBBowlSeason.Settings.resolved(from: .default).mode == .modeA)
+    }
+
     @Test func standingsToggleLockedAfterScoredBowl() {
         let scored = WeekSummary(
             id: "2026-BOWL1",

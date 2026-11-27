@@ -55,15 +55,21 @@ enum WeekTransition {
     /// Snapshot lock policy onto the week so later rule changes do not rewrite an in-progress week.
     static func lockSnapshotFields(
         rules: GroupRules,
-        games: [(id: String, kickoff: Date)]
+        games: [(id: String, kickoff: Date)],
+        bowlFullSlate: Bool = false
     ) -> [String: Any] {
-        let mode: DeadlinePolicy = rules.pickDeadline == .rolling ? .rolling : .firstKickoff
+        let mode: DeadlinePolicy = bowlFullSlate || rules.pickDeadline == .rolling ? .rolling : .firstKickoff
         let capped = Array(games.prefix(20))
         var fields: [String: Any] = [
             "pickLockMode": mode.rawValue
         ]
-        guard let first = capped.map(\.kickoff).min(),
-              let last = capped.map(\.kickoff).max() else {
+        if bowlFullSlate {
+            fields["bowlFullSlate"] = true
+            fields["slateSource"] = CFBBowlSeason.bowlCatalogSlateSource
+        }
+        let schedule = bowlFullSlate ? games : capped
+        guard let first = schedule.map(\.kickoff).min(),
+              let last = (bowlFullSlate ? games : capped).map(\.kickoff).max() else {
             return fields
         }
 
