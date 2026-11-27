@@ -222,6 +222,26 @@ struct CFBBowlSeasonTests {
         #expect(week.slateSource == CFBBowlSeason.bowlCatalogSlateSource)
     }
 
+    @Test func modeBMakeWeekSummaryUsesRollingLock() {
+        var rules = GroupRules.default
+        rules.bowlSeason = CFBBowlSeason.Settings(
+            mode: .modeB,
+            isEnabled: true,
+            pickCount: nil,
+            countsTowardSeasonStandings: false,
+            includesSecondWeek: false,
+            suggestedRollingLock: true
+        )
+        let week = CFBBowlSeason.makeWeekSummary(
+            id: "2026-BOWL",
+            slot: .bowlAll,
+            rules: rules,
+            memberCount: 8
+        )
+        #expect(week.pickLockMode == .rolling)
+        #expect(week.isRollingLock)
+    }
+
     @Test func modeBCatalogIncludesCFPBracketKickoffs() {
         let opens = CFBBowlSeason.catalogOpens()
         let celebration = opens.addingTimeInterval(6 * 86_400)
