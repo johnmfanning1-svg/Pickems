@@ -37,8 +37,7 @@ import {
 import { revertBowlStandingsToggleIfLocked } from "./bowlRulesGuard";
 import {
   COUNTS_TOWARD_SEASON_AT_SCORE,
-  countsTowardSeasonAtScoreFromRules,
-  bowlWeekCountsTowardSeason,
+  countsTowardSeasonStandingsAtScoreForNewlyScoredWeek,
 } from "./bowlStandingsStamp";
 import {
   DEFAULT_SELECTION_STAMP,
@@ -1399,11 +1398,13 @@ async function scoreWeek(
       return;
     }
 
-    const [groupSnap, membersSnap, picksSnap] = await Promise.all([
+    const [groupSnap, membersSnap, picksSnap, weeksSnap] = await Promise.all([
       tx.get(groupRef),
       tx.get(membersCol),
       tx.get(picksCol),
+      tx.get(groupRef.collection("weeks")),
     ]);
+    const groupWeeks = weeksSnap.docs.map((d) => ({ id: d.id, data: d.data() }));
     const rules = (groupSnap.data()?.rules ?? {}) as {
       allowLatePicks?: boolean;
       latePickPenaltyWins?: number;
@@ -1411,7 +1412,9 @@ async function scoreWeek(
       bowlSeason?: { countsTowardSeasonStandings?: boolean };
     };
     const isBowl = isBowlWeekId(weekId) || (week?.seasonType as number | undefined) === BOWL_SEASON_TYPE;
-    const bowlTowardSeason = isBowl && bowlWeekCountsTowardSeason(rules, week ?? undefined);
+    const bowlTowardSeason =
+      isBowl &&
+      countsTowardSeasonStandingsAtScoreForNewlyScoredWeek(rules, weekId, week, groupWeeks);
     const deadline = week?.pickDeadline;
     const mode = resolveWeekPickMode(week?.pickMode ?? pickMode, rules.pickMode);
 
@@ -1474,11 +1477,12 @@ async function scoreWeek(
       scoredAt: FieldValue.serverTimestamp(),
     };
     if (isBowl) {
-      const existingStamp = week?.[COUNTS_TOWARD_SEASON_AT_SCORE];
-      weekUpdate[COUNTS_TOWARD_SEASON_AT_SCORE] =
-        typeof existingStamp === "boolean"
-          ? existingStamp
-          : countsTowardSeasonAtScoreFromRules(rules);
+      weekUpdate[COUNTS_TOWARD_SEASON_AT_SCORE] = countsTowardSeasonStandingsAtScoreForNewlyScoredWeek(
+        rules,
+        weekId,
+        week,
+        groupWeeks
+      );
     }
     tx.update(weekRef, weekUpdate);
   });

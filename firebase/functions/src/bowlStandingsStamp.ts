@@ -5,6 +5,11 @@ export const COUNTS_TOWARD_SEASON_AT_SCORE = "countsTowardSeasonStandingsAtScore
 
 type RulesLike = { bowlSeason?: { countsTowardSeasonStandings?: boolean } | null };
 
+export type WeekStampSource = {
+  id: string;
+  data: Record<string, unknown>;
+};
+
 export function countsTowardSeasonAtScoreFromRules(rules: RulesLike): boolean {
   return bowlCountsTowardSeason(rules);
 }
@@ -19,19 +24,46 @@ export function bowlWeekCountsTowardSeason(
   return bowlCountsTowardSeason(rules);
 }
 
+/** First boolean `countsTowardSeasonStandingsAtScore` on any scored bowl week in the group. */
+export function stampedBowlStandingsFromScoredWeeks(
+  weeks: Iterable<WeekStampSource>,
+  options?: { excludeWeekId?: string }
+): boolean | null {
+  for (const week of weeks) {
+    if (options?.excludeWeekId && week.id === options.excludeWeekId) continue;
+    if (!isBowlWeekId(week.id)) continue;
+    if (week.data.status !== "scored") continue;
+    const stamp = week.data[COUNTS_TOWARD_SEASON_AT_SCORE];
+    if (typeof stamp === "boolean") return stamp;
+  }
+  return null;
+}
+
+/**
+ * Stamp written when a bowl week newly scores: week stamp if present, else any
+ * scored bowl stamp in the group, else live rules at score time.
+ */
+export function countsTowardSeasonStandingsAtScoreForNewlyScoredWeek(
+  rules: RulesLike,
+  weekId: string,
+  week: Record<string, unknown> | undefined,
+  groupWeeks: WeekStampSource[]
+): boolean {
+  const onWeek = week?.[COUNTS_TOWARD_SEASON_AT_SCORE];
+  if (typeof onWeek === "boolean") return onWeek;
+  const fromGroup = stampedBowlStandingsFromScoredWeeks(groupWeeks, { excludeWeekId: weekId });
+  if (fromGroup !== null) return fromGroup;
+  return countsTowardSeasonAtScoreFromRules(rules);
+}
+
 export async function stampedBowlStandingsValue(
   db: Firestore,
   groupId: string
 ): Promise<boolean | null> {
-  const weeks = await db.collection("groups").doc(groupId).collection("weeks").get();
-  for (const doc of weeks.docs) {
-    if (!isBowlWeekId(doc.id)) continue;
-    const data = doc.data();
-    if (data.status !== "scored") continue;
-    const stamp = data[COUNTS_TOWARD_SEASON_AT_SCORE];
-    if (typeof stamp === "boolean") return stamp;
-  }
-  return null;
+  const snap = await db.collection("groups").doc(groupId).collection("weeks").get();
+  return stampedBowlStandingsFromScoredWeeks(
+    snap.docs.map((doc) => ({ id: doc.id, data: doc.data() }))
+  );
 }
 
 /** Backfill legacy scored bowl weeks so guard reverts target a stable stamp. */
@@ -62,8 +94,8 @@ export async function resolveLockedBowlStandingsStamp(
 ): Promise<boolean | null> {
   const existing = await stampedBowlStandingsValue(db, groupId);
   if (existing !== null) return existing;
-  const weeks = await db.collection("groups").doc(groupId).collection("weeks");
-  const snap = await weeks.get();
+  const weeksRef = db.collection("groups").doc(groupId).collection("weeks");
+  const snap = await weeksRef.get();
   const hasScoredBowl = snap.docs.some(
     (d) => isBowlWeekId(d.id) && d.data().status === "scored"
   );
