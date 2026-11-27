@@ -40,4 +40,32 @@ describe("memberSeasonTotals", () => {
     expect(bowlStandingsToggleShouldLock(["2026-W15"])).toBe(false);
     expect(bowlStandingsToggleShouldLock(["2026-BOWL1"])).toBe(true);
   });
+
+  it("regular week rescore aggregation preserves bowl totals from other bowl weeks", () => {
+    const scores = new Map([
+      ["2026-W14", new Map([["u1", { wins: 4, losses: 2 }]])],
+      ["2026-BOWL1", new Map([["u1", { wins: 2, losses: 1 }]])],
+      ["2026-BOWL2", new Map([["u1", { wins: 1, losses: 0 }]])],
+    ]);
+    const { bowl, season } = accumulateMemberTotals(
+      { bowlSeason: { countsTowardSeasonStandings: false } },
+      [{ weekId: "2026-W14" }, { weekId: "2026-BOWL1" }, { weekId: "2026-BOWL2" }],
+      scores
+    );
+    expect(bowl.get("u1")).toEqual({ wins: 3, losses: 1 });
+    expect(season.get("u1")).toEqual({ wins: 4, losses: 2 });
+  });
+
+  it("rescore BOWL1 aggregation still includes BOWL2 bowl totals", () => {
+    const scores = new Map([
+      ["2026-BOWL1", new Map([["u1", { wins: 5, losses: 0 }]])],
+      ["2026-BOWL2", new Map([["u1", { wins: 2, losses: 2 }]])],
+    ]);
+    const { bowl } = accumulateMemberTotals(
+      { bowlSeason: { countsTowardSeasonStandings: false } },
+      [{ weekId: "2026-BOWL1" }, { weekId: "2026-BOWL2" }],
+      scores
+    );
+    expect(bowl.get("u1")).toEqual({ wins: 7, losses: 2 });
+  });
 });

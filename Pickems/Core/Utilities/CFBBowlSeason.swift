@@ -133,16 +133,53 @@ enum CFBBowlSeason {
         easternDate(year: year, month: 12, day: 6, hour: 15) ?? .distantPast
     }
 
-    static func catalogEligible(kickoff: Date, week: WeekSummary? = nil, now: Date = Date()) -> Bool {
+    static func belongsToBowlSlot(kickoff: Date, slot: Slot, fromEspnPostseasonWeek: Int) -> Bool {
         guard kickoff >= catalogOpens() else { return false }
-        if let slot = week.flatMap({ slot(for: $0) }), slot == .bowl1 {
-            return kickoff < slot.catalogEndExclusive
+        let cutoff = Slot.bowl1.catalogEndExclusive
+        if fromEspnPostseasonWeek == Slot.bowl2.espnWeekNumber {
+            return slot == .bowl2
         }
-        return true
+        guard fromEspnPostseasonWeek == Slot.bowl1.espnWeekNumber else { return false }
+        return slot == .bowl1 ? kickoff < cutoff : kickoff >= cutoff
     }
 
-    static func catalogEligible(game: ESPNGame, week: WeekSummary? = nil, now: Date = Date()) -> Bool {
-        catalogEligible(kickoff: game.kickoff, week: week, now: now)
+    static func catalogEligible(kickoff: Date, week: WeekSummary? = nil, now: Date = Date()) -> Bool {
+        guard kickoff >= catalogOpens() else { return false }
+        guard let slot = week.flatMap({ slot(for: $0) }) else { return true }
+        switch slot {
+        case .bowl1:
+            return belongsToBowlSlot(
+                kickoff: kickoff,
+                slot: .bowl1,
+                fromEspnPostseasonWeek: Slot.bowl1.espnWeekNumber
+            )
+        case .bowl2:
+            return belongsToBowlSlot(
+                kickoff: kickoff,
+                slot: .bowl2,
+                fromEspnPostseasonWeek: Slot.bowl1.espnWeekNumber
+            ) || belongsToBowlSlot(
+                kickoff: kickoff,
+                slot: .bowl2,
+                fromEspnPostseasonWeek: Slot.bowl2.espnWeekNumber
+            )
+        }
+    }
+
+    static func catalogEligible(
+        game: ESPNGame,
+        week: WeekSummary? = nil,
+        fromEspnPostseasonWeek: Int,
+        now: Date = Date()
+    ) -> Bool {
+        guard let slot = week.flatMap({ slot(for: $0) }) else {
+            return game.kickoff >= catalogOpens()
+        }
+        return belongsToBowlSlot(
+            kickoff: game.kickoff,
+            slot: slot,
+            fromEspnPostseasonWeek: fromEspnPostseasonWeek
+        )
     }
 
     /// Season-standings toggle cannot change after a bowl week has been scored (avoids double-count).

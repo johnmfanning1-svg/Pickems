@@ -127,9 +127,44 @@ actor ESPNService {
             live: live,
             forceRefresh: forceRefresh
         )
-        if CFBBowlSeason.isBowlWeek(week) {
+        if CFBBowlSeason.isBowlWeek(week), let slot = CFBBowlSeason.slot(for: week) {
             let now = Date()
-            return games.filter { CFBBowlSeason.catalogEligible(game: $0, week: week, now: now) }
+            switch slot {
+            case .bowl1:
+                return games.filter {
+                    CFBBowlSeason.catalogEligible(
+                        game: $0,
+                        week: week,
+                        fromEspnPostseasonWeek: slot.espnWeekNumber,
+                        now: now
+                    )
+                }
+            case .bowl2:
+                let fromLateWeekOne = try await fetchScoreboard(
+                    week: CFBBowlSeason.Slot.bowl1.espnWeekNumber,
+                    seasonType: resolvedType,
+                    live: live,
+                    forceRefresh: forceRefresh
+                )
+                let lateWeekOne = fromLateWeekOne.filter {
+                    CFBBowlSeason.catalogEligible(
+                        game: $0,
+                        week: week,
+                        fromEspnPostseasonWeek: CFBBowlSeason.Slot.bowl1.espnWeekNumber,
+                        now: now
+                    )
+                }
+                let from999 = games.filter {
+                    CFBBowlSeason.catalogEligible(
+                        game: $0,
+                        week: week,
+                        fromEspnPostseasonWeek: slot.espnWeekNumber,
+                        now: now
+                    )
+                }
+                var seen = Set<String>()
+                return (lateWeekOne + from999).filter { seen.insert($0.espnEventId).inserted }
+            }
         }
         return games.matching(seasonYear: week.seasonYear, appWeekNumber: week.weekNumber)
     }

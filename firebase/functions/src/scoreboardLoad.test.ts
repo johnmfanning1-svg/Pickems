@@ -4,6 +4,8 @@ import {
   BOWL_SEASON_TYPE,
   ESPN_BOWL2_POSTSEASON_WEEK,
   ESPN_POSTSEASON_WEEK,
+  bowl1CatalogEndExclusiveMs,
+  postseasonCatalogOpensMs,
 } from "./bowlWeek";
 import {
   bowlWeekCatalogEvents,
@@ -25,12 +27,21 @@ describe("scoreboardLoad", () => {
     expect(targets).toContainEqual({ week: ESPN_BOWL2_POSTSEASON_WEEK, seasonType: BOWL_SEASON_TYPE });
   });
 
-  it("routes BOWL2 catalog and scoring to postseason week 999 events", () => {
-    const titleGameId = "cfp-title-999";
+  it("routes BOWL2 catalog to late week-1 plus week 999 events", () => {
+    const opens = postseasonCatalogOpensMs();
+    const cutoff = bowl1CatalogEndExclusiveMs();
     const earlyBowlId = "bowl-dec-20";
+    const lateBowlId = "bowl-jan-10";
+    const titleGameId = "cfp-title-999";
     const postseasonByEspnWeek = new Map<number, EspnEvent[]>([
-      [ESPN_POSTSEASON_WEEK, [{ id: earlyBowlId } as EspnEvent]],
-      [ESPN_BOWL2_POSTSEASON_WEEK, [{ id: titleGameId } as EspnEvent]],
+      [
+        ESPN_POSTSEASON_WEEK,
+        [
+          { id: earlyBowlId, date: new Date(opens + 86_400_000).toISOString() } as EspnEvent,
+          { id: lateBowlId, date: new Date(cutoff + 86_400_000).toISOString() } as EspnEvent,
+        ],
+      ],
+      [ESPN_BOWL2_POSTSEASON_WEEK, [{ id: titleGameId, date: new Date(cutoff + 2e6).toISOString() } as EspnEvent]],
     ]);
     const bowl1 = bowlWeekCatalogEvents(
       "2026-BOWL1",
@@ -43,7 +54,7 @@ describe("scoreboardLoad", () => {
       postseasonByEspnWeek
     );
     expect(bowl1.map((e) => e.id)).toEqual([earlyBowlId]);
-    expect(bowl2.map((e) => e.id)).toEqual([titleGameId]);
+    expect(bowl2.map((e) => e.id)).toEqual([lateBowlId, titleGameId]);
     const merged = new Map<string, EspnEvent>();
     for (const events of postseasonByEspnWeek.values()) {
       for (const event of events) merged.set(event.id, event);

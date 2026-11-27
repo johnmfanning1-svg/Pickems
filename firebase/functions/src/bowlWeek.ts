@@ -1,5 +1,7 @@
 /** Bowl season week ids — keep in sync with iOS `CFBBowlSeason`. */
 
+import { easternWallTime } from "./cfbWeekWindow";
+
 export const BOWL_SEASON_TYPE = 3;
 export const ESPN_POSTSEASON_WEEK = 1;
 export const ESPN_BOWL2_POSTSEASON_WEEK = 999;
@@ -66,4 +68,40 @@ export function userFacingWeekLabel(weekId: string | undefined, weekNumber: unkn
       : null;
   if (n == null || n <= 0) return "This week";
   return `Week ${n}`;
+}
+
+/** Jan 2 after season year, 00:00 Eastern — BOWL1 catalog ends here (keep in sync with iOS). */
+export function bowl1CatalogEndExclusiveMs(seasonYear = 2026): number {
+  return easternWallTime(seasonYear + 1, 1, 2, 0, 0, 0, 0).getTime();
+}
+
+export function eventKickoffMs(event: { date?: string }): number | null {
+  if (!event.date) return null;
+  const ms = Date.parse(event.date);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+export function postseasonCatalogOpensMs(seasonYear = 2026): number {
+  // Dec 6 15:00 ET — matches iOS `catalogOpens`.
+  return easternWallTime(seasonYear, 12, 6, 15, 0, 0, 0).getTime();
+}
+
+/**
+ * Partition ESPN postseason events into BOWL1 vs BOWL2 pools without gaps.
+ * BOWL1: ESPN week 1 before catalog end. BOWL2: ESPN week 1 on/after end + all week 999.
+ */
+export function postseasonEventBelongsToBowlSlot(
+  event: { date?: string },
+  slot: BowlSlot,
+  sourceEspnWeek: number
+): boolean {
+  const kickoff = eventKickoffMs(event);
+  if (kickoff == null) return false;
+  if (kickoff < postseasonCatalogOpensMs()) return false;
+  const cutoff = bowl1CatalogEndExclusiveMs();
+  if (sourceEspnWeek === ESPN_BOWL2_POSTSEASON_WEEK) {
+    return slot === "BOWL2";
+  }
+  if (sourceEspnWeek !== ESPN_POSTSEASON_WEEK) return false;
+  return slot === "BOWL1" ? kickoff < cutoff : kickoff >= cutoff;
 }

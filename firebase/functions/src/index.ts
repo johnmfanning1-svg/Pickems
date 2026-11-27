@@ -35,6 +35,7 @@ import {
   bowlWeekCatalogEvents,
   postseasonEspnWeeksForWeekDocs,
 } from "./scoreboardLoad";
+import { revertBowlStandingsToggleIfLocked } from "./bowlRulesGuard";
 import {
   DEFAULT_SELECTION_STAMP,
   futureDefaultSelectionDeadline,
@@ -1582,6 +1583,9 @@ export const syncPublicLeagueIndex = onDocumentUpdated("groups/{groupId}", async
   const after = change.after.data();
   if (!before || !after) return;
   const groupId = event.params.groupId;
+  if (await revertBowlStandingsToggleIfLocked(db, groupId, before, after, change.after.ref)) {
+    return;
+  }
   const beforePickMode = (before.rules as { pickMode?: unknown } | undefined)?.pickMode;
   const afterPickMode = (after.rules as { pickMode?: unknown } | undefined)?.pickMode;
   // Old iOS clients replace the whole `rules` map and would drop pickMode.

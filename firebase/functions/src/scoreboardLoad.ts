@@ -4,11 +4,12 @@ import type { EspnEvent } from "./espn";
 import { espnScoreboardWeek } from "./cfbWeekCalendar";
 import {
   BOWL_SEASON_TYPE,
-  ESPN_POSTSEASON_WEEK,
   ESPN_BOWL2_POSTSEASON_WEEK,
-  espnPostseasonWeekForBowlWeekId,
+  ESPN_POSTSEASON_WEEK,
   isBowlWeekId,
+  parseBowlWeekId,
 } from "./bowlWeek";
+export { bowlWeekCatalogEvents } from "./bowlCatalogPartition";
 
 export type ScoreboardFetchTarget = { week?: number; seasonType: number };
 
@@ -21,8 +22,13 @@ export function postseasonEspnWeeksForWeekDocs(
       isBowlWeekId(doc.id) ||
       (doc.data.seasonType as number | undefined) === BOWL_SEASON_TYPE;
     if (!bowl) continue;
-    const espnWeek = espnPostseasonWeekForBowlWeekId(doc.id);
-    weeks.add(espnWeek ?? ESPN_POSTSEASON_WEEK);
+    const parsed = parseBowlWeekId(doc.id);
+    if (parsed?.slot === "BOWL2") {
+      weeks.add(ESPN_POSTSEASON_WEEK);
+      weeks.add(ESPN_BOWL2_POSTSEASON_WEEK);
+    } else {
+      weeks.add(ESPN_POSTSEASON_WEEK);
+    }
   }
   return weeks;
 }
@@ -40,17 +46,3 @@ export function buildScoreboardFetchTargets(
   }
   return targets;
 }
-
-export function bowlWeekCatalogEvents(
-  weekId: string,
-  weekData: Record<string, unknown>,
-  postseasonByEspnWeek: Map<number, EspnEvent[]>
-): EspnEvent[] {
-  const bowl =
-    isBowlWeekId(weekId) || (weekData.seasonType as number | undefined) === BOWL_SEASON_TYPE;
-  if (!bowl) return [];
-  const espnWeek = espnPostseasonWeekForBowlWeekId(weekId) ?? ESPN_POSTSEASON_WEEK;
-  return postseasonByEspnWeek.get(espnWeek) ?? [];
-}
-
-export { ESPN_BOWL2_POSTSEASON_WEEK };

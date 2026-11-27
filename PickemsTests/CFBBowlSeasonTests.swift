@@ -91,6 +91,33 @@ struct CFBBowlSeasonTests {
         #expect(!CFBBowlSeason.commissionerSettingsAvailable(pickemsWeekNumber: 13, espnSeasonType: 2, now: Date(timeIntervalSince1970: 1_000_000)))
     }
 
+    @Test func bowlSlotsPartitionPostseasonWeekOneGames() {
+        var eastern = Calendar(identifier: .gregorian)
+        eastern.timeZone = TimeZone(identifier: "America/New_York")!
+        let early = eastern.date(from: DateComponents(year: 2026, month: 12, day: 20))!
+        let late = eastern.date(from: DateComponents(year: 2027, month: 1, day: 10))!
+        #expect(CFBBowlSeason.belongsToBowlSlot(
+            kickoff: early,
+            slot: .bowl1,
+            fromEspnPostseasonWeek: 1
+        ))
+        #expect(!CFBBowlSeason.belongsToBowlSlot(
+            kickoff: late,
+            slot: .bowl1,
+            fromEspnPostseasonWeek: 1
+        ))
+        #expect(CFBBowlSeason.belongsToBowlSlot(
+            kickoff: late,
+            slot: .bowl2,
+            fromEspnPostseasonWeek: 1
+        ))
+        #expect(CFBBowlSeason.belongsToBowlSlot(
+            kickoff: late,
+            slot: .bowl2,
+            fromEspnPostseasonWeek: 999
+        ))
+    }
+
     @Test func bowl1CatalogExcludesJanuaryAfterEndExclusive() {
         var eastern = Calendar(identifier: .gregorian)
         eastern.timeZone = TimeZone(identifier: "America/New_York")!
