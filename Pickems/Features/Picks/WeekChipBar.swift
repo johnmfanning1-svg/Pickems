@@ -50,47 +50,64 @@ struct WeekChipBar: View {
     private func weekTab(_ week: WeekSummary) -> some View {
         let isSelected = week.id == selectedWeekId
         let isActive = week.id == activeWeekId
+        let range = dateRangeLabel(week) ?? ""
         return Button {
             onSelect(week)
         } label: {
             VStack(spacing: 2) {
                 Text("Week \(week.weekNumber)")
                     .font(.subheadline.weight(.semibold))
-                if let range = dateRangeLabel(week), !range.isEmpty {
-                    Text(range)
-                        .font(.caption2.weight(.medium))
-                        .opacity(isSelected ? 0.9 : 0.7)
-                }
-                if isActive {
-                    Text("Current")
-                        .font(.caption2.weight(.medium))
-                        .opacity(isSelected ? 0.9 : 0.7)
-                }
+                Text(range.isEmpty ? " " : range)
+                    .font(.caption2.weight(.medium))
+                    .opacity(range.isEmpty ? 0 : (isSelected ? 0.9 : 0.7))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background(isSelected ? theme.accent : PickemsColors.cardBackground)
             .foregroundStyle(isSelected ? theme.onAccent : PickemsColors.textPrimary)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                if isActive {
+                    Circle()
+                        .fill(isSelected ? theme.onAccent.opacity(0.92) : theme.accent)
+                        .frame(width: 7, height: 7)
+                        .offset(x: -5, y: 5)
+                        .accessibilityHidden(true)
+                }
+            }
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(
-                        isSelected ? Color.clear : PickemsColors.hairline,
-                        lineWidth: 1
+                        chipStrokeColor(isSelected: isSelected, isActive: isActive),
+                        lineWidth: chipStrokeWidth(isSelected: isSelected, isActive: isActive)
                     )
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel(for: week))
+        .accessibilityLabel(accessibilityLabel(for: week, isActive: isActive))
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         .accessibilityHint(isActive ? "Current week" : accessibilityHint)
     }
 
-    private func accessibilityLabel(for week: WeekSummary) -> String {
+    private func chipStrokeColor(isSelected: Bool, isActive: Bool) -> Color {
+        if isSelected { return .clear }
+        if isActive { return theme.accent.opacity(0.42) }
+        return PickemsColors.hairline
+    }
+
+    private func chipStrokeWidth(isSelected: Bool, isActive: Bool) -> CGFloat {
+        isActive && !isSelected ? 1.25 : 1
+    }
+
+    private func accessibilityLabel(for week: WeekSummary, isActive: Bool) -> String {
+        var label = "Week \(week.weekNumber)"
         if let range = dateRangeLabel(week), !range.isEmpty {
-            return "Week \(week.weekNumber), \(range)"
+            label += ", \(range)"
         }
-        return "Week \(week.weekNumber)"
+        if isActive {
+            label += ", current"
+        }
+        return label
     }
 
     private func scrollToSelected(_ proxy: ScrollViewProxy) {

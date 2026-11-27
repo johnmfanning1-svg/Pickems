@@ -106,6 +106,14 @@ struct CommissionerWeekAdminSections: View {
     Deadlines, slate, Pickems, and ties for the week you pick. Switching here also switches Selections and Pickems.
     """
 
+    /// Match Pickems tab chip insets (20pt) while letting the horizontal scroller breathe edge-to-edge in the List.
+    private static let weekChipHorizontalPadding: CGFloat = 20
+
+    private static let weekChipListRowInsets = EdgeInsets(top: 10, leading: 0, bottom: 4, trailing: 0)
+
+    private static let lockEarlyBlockedFooter =
+        "Add at least one game to the slate before you can lock selections early and start Pickems."
+
     @ViewBuilder
     private func weekStatusSections(chipState: CommissionerPinnedLeague.WeekChipBarState) -> some View {
         if let week {
@@ -148,9 +156,7 @@ struct CommissionerWeekAdminSections: View {
         ProgressView()
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
-            .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
+            .modifier(weekChipListRowChrome)
             .accessibilityLabel("Loading weeks")
     }
 
@@ -169,18 +175,19 @@ struct CommissionerWeekAdminSections: View {
                 dateRangeLabel: { appState.groupService.dateRangeLabel(for: $0.id) },
                 accessibilityHint: "Admin this week. Also switches Selections and Pickems.",
                 showsCaption: false,
-                horizontalPadding: 0,
+                horizontalPadding: Self.weekChipHorizontalPadding,
                 scrollWhenWeekListChanges: WeekChipBarScrollSync.shouldScrollOnWeekListChange(
                     userHasChosenWeek: userChosenWeekId != nil
                 )
             ) { selected in
                 selectAdminWeek(selected)
             }
-            .buttonStyle(.borderless)
-            .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
+            .modifier(weekChipListRowChrome)
         }
+    }
+
+    private var weekChipListRowChrome: WeekChipListRowChrome {
+        WeekChipListRowChrome(insets: Self.weekChipListRowInsets)
     }
 
     @ViewBuilder
@@ -205,11 +212,22 @@ struct CommissionerWeekAdminSections: View {
     @ViewBuilder
     private func weekStatusDestructiveCapsuleSection(_ week: WeekSummary) -> some View {
         if week.status == .selection, !week.skipsSelection, adminWeekReadyForWrites {
-            Section {
-                if week.isSelectionDeadlinePassed {
-                    openWithGamesRow(week: week, uniqueGames: uniqueGames)
-                } else {
+            if week.isSelectionDeadlinePassed {
+                if uniqueGames > 0 {
+                    Section {
+                        openWithGamesRow(week: week, uniqueGames: uniqueGames)
+                    }
+                }
+            } else if uniqueGames > 0 {
+                Section {
                     lockSelectionsStartPickemsRow(week: week)
+                }
+            } else {
+                Section {
+                    Text(Self.lockEarlyBlockedFooter)
+                        .font(.subheadline)
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .listRowBackground(PickemsColors.cardBackground)
                 }
             }
         }
@@ -248,25 +266,24 @@ struct CommissionerWeekAdminSections: View {
         appState.selectObservedWeek(selected)
     }
 
-    private static let destructiveActionVerticalInset: CGFloat = 16
+    private static let destructiveActionVerticalInset: CGFloat = 8
 
     private static let destructiveActionRowInsets = EdgeInsets(
         top: destructiveActionVerticalInset,
-        leading: 16,
+        leading: 20,
         bottom: destructiveActionVerticalInset,
-        trailing: 16
+        trailing: 20
     )
 
-    private func commissionerDestructiveCapsuleLabel(_ title: String, dimmed: Bool) -> some View {
+    private func commissionerDestructiveCapsuleLabel(_ title: String) -> some View {
         Text(title)
             .font(.subheadline.weight(.semibold))
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
             .foregroundStyle(PickemsColors.onLost)
-            .background(dimmed ? PickemsColors.lost.opacity(0.38) : PickemsColors.lost)
+            .background(PickemsColors.lost)
             .clipShape(Capsule())
-            .opacity(dimmed ? 0.72 : 1)
     }
 
     private var destructiveWeekActionRowStyle: DestructiveWeekActionRowStyle {
@@ -274,8 +291,7 @@ struct CommissionerWeekAdminSections: View {
     }
 
     private func lockSelectionsStartPickemsRow(week: WeekSummary) -> some View {
-        let dimmed = uniqueGames == 0
-        return AnchoredActionConfirm(
+        AnchoredActionConfirm(
             title: OpenWeekEarlyPrompt.earlyConfirmTitle,
             message: OpenWeekEarlyPrompt.earlyConfirmMessage,
             confirmTitle: OpenWeekEarlyPrompt.earlyButtonTitle,
@@ -289,17 +305,15 @@ struct CommissionerWeekAdminSections: View {
                 )
             }
         ) {
-            commissionerDestructiveCapsuleLabel(OpenWeekEarlyPrompt.earlyButtonTitle, dimmed: dimmed)
+            commissionerDestructiveCapsuleLabel(OpenWeekEarlyPrompt.earlyButtonTitle)
         }
         .buttonStyle(.plain)
-        .disabled(dimmed)
         .accessibilityLabel(OpenWeekEarlyPrompt.earlyAccessibilityLabel)
         .modifier(destructiveWeekActionRowStyle)
     }
 
     private func openWithGamesRow(week: WeekSummary, uniqueGames: Int) -> some View {
         let title = OpenWeekEarlyPrompt.openWithGamesButtonTitle(uniqueGames: uniqueGames)
-        let dimmed = uniqueGames == 0
         return AnchoredActionConfirm(
             title: OpenWeekEarlyPrompt.openWithGamesConfirmTitle(uniqueGames: uniqueGames),
             message: OpenWeekEarlyPrompt.openWithGamesConfirmMessage,
@@ -314,10 +328,9 @@ struct CommissionerWeekAdminSections: View {
                 )
             }
         ) {
-            commissionerDestructiveCapsuleLabel(title, dimmed: dimmed)
+            commissionerDestructiveCapsuleLabel(title)
         }
         .buttonStyle(.plain)
-        .disabled(dimmed)
         .accessibilityLabel(OpenWeekEarlyPrompt.openWithGamesAccessibilityLabel(uniqueGames: uniqueGames))
         .modifier(destructiveWeekActionRowStyle)
     }
@@ -617,6 +630,18 @@ struct CommissionerWeekAdminSections: View {
         let weekValue = week?.selectionsPerMember ?? 0
         if weekValue > 0 { return weekValue }
         return max(group.rules.selectionsPerMember, 1)
+    }
+}
+
+private struct WeekChipListRowChrome: ViewModifier {
+    let insets: EdgeInsets
+
+    func body(content: Content) -> some View {
+        content
+            .buttonStyle(.borderless)
+            .listRowInsets(insets)
+            .listRowBackground(PickemsColors.cardBackground)
+            .listRowSeparator(.hidden)
     }
 }
 
