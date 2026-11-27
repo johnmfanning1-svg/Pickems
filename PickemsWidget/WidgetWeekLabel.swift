@@ -42,9 +42,4 @@ extension StandingsSnapshot {
     var shortWeekEyebrow: String {
         WidgetWeekLabel.shortEyebrow(weekId: weekId, weekNumber: weekNumber, weekLabel: weekLabel)
     }
-
-    var deepLinkWeekId: String {
-        if let weekId, !weekId.isEmpty { return weekId }
-        return "\(seasonYear)-W\(weekNumber)"
-    }
 }

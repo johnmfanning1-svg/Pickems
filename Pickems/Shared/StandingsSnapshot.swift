@@ -96,6 +96,11 @@ struct StandingsSnapshot: Codable, Equatable {
     var weeklyRecord: String { "\(weeklyWins)-\(weeklyLosses)" }
     var seasonRecord: String { "\(seasonWins)-\(seasonLosses)" }
 
+    var deepLinkWeekId: String {
+        if let weekId, !weekId.isEmpty { return weekId }
+        return "\(seasonYear)-W\(weekNumber)"
+    }
+
     var showsPreseasonCountdown: Bool {
         guard let seasonKickoffAt else { return false }
         return Date() < seasonKickoffAt
