@@ -1,4 +1,4 @@
-import { weekWindow } from "./cfbWeekWindow";
+import { weekWindowForPickemsWeek } from "./cfbWeekWindow";
 import { isFixedSlate } from "./cfbWeekCalendar";
 
 export const DEFAULT_SELECTION_STAMP = "default";
@@ -15,10 +15,11 @@ export interface DefaultSelectionLock {
 export function defaultSelectionDeadline(
   lock: DefaultSelectionLock | null | undefined,
   seasonYear: number,
-  weekNumber: number
+  weekNumber: number,
+  weekId?: string
 ): Date | null {
   if (!lock?.enabled) return null;
-  const window = weekWindow(seasonYear, weekNumber);
+  const window = weekWindowForPickemsWeek(weekId ?? `${seasonYear}-W${weekNumber}`, seasonYear, weekNumber);
   if (!window) return null;
 
   try {
@@ -44,9 +45,10 @@ export function futureDefaultSelectionDeadline(
   lock: DefaultSelectionLock | null | undefined,
   seasonYear: number,
   weekNumber: number,
-  nowMs: number = Date.now()
+  nowMs: number = Date.now(),
+  weekId?: string
 ): Date | null {
-  const raw = defaultSelectionDeadline(lock, seasonYear, weekNumber);
+  const raw = defaultSelectionDeadline(lock, seasonYear, weekNumber, weekId);
   if (!raw) return null;
   return raw.getTime() > nowMs ? raw : null;
 }

@@ -36,12 +36,17 @@ enum DefaultSelectionLockMath {
     static func deadline(
         for lock: DefaultSelectionLock,
         seasonYear: Int,
-        weekNumber: Int
+        weekNumber: Int,
+        weekDocId: String? = nil
     ) -> Date? {
         guard lock.enabled else { return nil }
-        guard let window = CFBWeekCalendar.weekWindow(seasonYear: seasonYear, weekNumber: weekNumber) else {
-            return nil
+        let window: (start: Date, end: Date)?
+        if let weekDocId {
+            window = CFBWeekCalendar.weekWindow(weekDocId: weekDocId, seasonYear: seasonYear, weekNumber: weekNumber)
+        } else {
+            window = CFBWeekCalendar.weekWindow(seasonYear: seasonYear, weekNumber: weekNumber)
         }
+        guard let window else { return nil }
         guard let zone = TimeZone(identifier: lock.timeZone) else { return nil }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = zone
@@ -73,9 +78,12 @@ enum DefaultSelectionLockMath {
         for lock: DefaultSelectionLock,
         seasonYear: Int,
         weekNumber: Int,
-        now: Date = Date()
+        now: Date = Date(),
+        weekDocId: String? = nil
     ) -> Date? {
-        guard let raw = deadline(for: lock, seasonYear: seasonYear, weekNumber: weekNumber) else { return nil }
+        guard let raw = deadline(for: lock, seasonYear: seasonYear, weekNumber: weekNumber, weekDocId: weekDocId) else {
+            return nil
+        }
         return raw > now ? raw : nil
     }
 
@@ -196,8 +204,18 @@ extension CFBWeekCalendar {
     /// Inclusive ESPN-shaped window for a Pickems week (`fallbackSeasonWeeks` labels).
     static func weekWindow(seasonYear: Int, weekNumber: Int) -> (start: Date, end: Date)? {
         let weeks = fallbackSeasonWeeks(seasonYear: seasonYear)
-        guard let slot = weeks.first(where: { $0.weekNumber == weekNumber }) else { return nil }
+        guard let slot = weeks.first(where: { $0.weekNumber == weekNumber && $0.documentWeekId == nil }) else {
+            return nil
+        }
         return CFBWeekDateWindow.parse(label: slot.dateRangeLabel, seasonYear: seasonYear)
+    }
+
+    static func weekWindow(weekDocId: String, seasonYear: Int, weekNumber: Int) -> (start: Date, end: Date)? {
+        let weeks = fallbackSeasonWeeks(seasonYear: seasonYear)
+        if let slot = weeks.first(where: { $0.id == weekDocId }) {
+            return CFBWeekDateWindow.parse(label: slot.dateRangeLabel, seasonYear: seasonYear)
+        }
+        return weekWindow(seasonYear: seasonYear, weekNumber: weekNumber)
     }
 }
 

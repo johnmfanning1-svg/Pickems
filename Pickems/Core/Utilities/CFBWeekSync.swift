@@ -7,10 +7,20 @@ enum CFBWeekSync {
     static let lastKnownWeekIdKey = "pickems.cfb.lastKnownWeekId"
 
     static func weekId(for info: CFBWeekInfo, now: Date = Date()) -> String {
-        CFBWeekCalendar.resolve(espn: info, now: now).id
+        if info.seasonType == CFBWeekCalendar.postseasonSeasonType, info.seasonYear == 2026, info.weekNumber == 1 {
+            if let known = lastKnownWeekId(), known != "2026-W1" {
+                return known
+            }
+            return "2026-W15"
+        }
+        return CFBWeekCalendar.documentWeekId(for: info, now: now)
     }
 
     static func parseWeekId(_ id: String) -> (seasonYear: Int, weekNumber: Int)? {
+        if id.range(of: #"^\d{4}-BOWL\d*$"#, options: .regularExpression) != nil {
+            guard let year = Int(id.prefix(4)) else { return nil }
+            return (year, 0)
+        }
         let parts = id.split(separator: "-")
         guard parts.count == 2, let year = Int(parts[0]) else { return nil }
         let weekPart = parts[1]
@@ -20,7 +30,11 @@ enum CFBWeekSync {
 
     /// Persist a successful ESPN week so offline / failed refreshes reuse the same week doc id.
     static func persistLastKnownWeek(_ info: CFBWeekInfo, defaults: UserDefaults = .standard, now: Date = Date()) {
-        defaults.set(weekId(for: info, now: now), forKey: lastKnownWeekIdKey)
+        let id = weekId(for: info, now: now)
+        if id == "2026-W1", info.seasonType == CFBWeekCalendar.postseasonSeasonType {
+            return
+        }
+        defaults.set(id, forKey: lastKnownWeekIdKey)
     }
 
     static func lastKnownWeekId(defaults: UserDefaults = .standard) -> String? {

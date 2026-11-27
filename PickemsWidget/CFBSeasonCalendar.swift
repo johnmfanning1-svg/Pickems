@@ -26,7 +26,12 @@ enum CFBSeasonCalendar {
     static func seasonYear(containing date: Date = Date()) -> Int {
         var eastern = Calendar(identifier: .gregorian)
         eastern.timeZone = TimeZone(identifier: "America/New_York") ?? .current
-        return eastern.component(.year, from: date)
+        let year = eastern.component(.year, from: date)
+        let month = eastern.component(.month, from: date)
+        if year == 2027, month == 1 {
+            return 2026
+        }
+        return year
     }
 
     static func nextSeasonKickoff(on date: Date = Date()) -> Date {

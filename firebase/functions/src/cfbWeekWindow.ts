@@ -34,6 +34,13 @@ const ESPN_2026: Array<{ weekNumber: number; label: string }> = [
   { weekNumber: 15, label: "Dec 7-12" },
 ];
 
+/** Bowl week windows (ESPN postseason). Keep in sync with iOS `CFBWeekCalendar` bowl labels. */
+const BOWL_2026_WINDOWS: Record<string, string> = {
+  BOWL1: "Dec 13-Jan 25",
+  BOWL2: "Dec 30-Jan 25",
+  BOWL: "Dec 13-Jan 25",
+};
+
 function seasonKickoffEastern(seasonYear: number): Date {
   const day = seasonYear === 2026 ? 29 : seasonYear === 2025 ? 23 : 28;
   return easternWallTime(seasonYear, 8, day, 0, 0, 0, 0);
@@ -156,4 +163,18 @@ export function weekWindow(seasonYear: number, weekNumber: number): { start: Dat
     return parseWeekLabel(slot.label, seasonYear);
   }
   return parseWeekLabel(`Week ${weekNumber}`, seasonYear);
+}
+
+export function weekWindowForPickemsWeek(
+  weekId: string,
+  seasonYear: number,
+  weekNumber: number
+): { start: Date; end: Date } | null {
+  const bowl = weekId.match(/^\d{4}-(BOWL\d*)$/i);
+  if (bowl) {
+    const key = bowl[1].toUpperCase();
+    const label = BOWL_2026_WINDOWS[key];
+    if (label) return parseWeekLabel(label, seasonYear);
+  }
+  return weekWindow(seasonYear, weekNumber);
 }

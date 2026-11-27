@@ -4,6 +4,7 @@ export const WEEK_ZERO_SLATE_SOURCE = "fixedBoard";
 export const WEEK_ZERO_YEAR = 2026;
 export const WEEK_ZERO_ID = "2026-W0";
 export const WEEK_ONE_ID = "2026-W1";
+export const POSTSEASON_SEASON_TYPE = 3;
 
 /** Sunday Aug 30, 2026 00:00 America/New_York (EDT = UTC-4). */
 export const WEEK_ZERO_WINDOW_END = new Date("2026-08-30T04:00:00.000Z");
@@ -15,11 +16,51 @@ export function espnScoreboardWeek(appWeekNumber: number): number {
 export function resolveAppWeekNumber(options: {
   seasonYear: number;
   espnWeekNumber: number;
+  seasonType?: number;
   now?: Date;
 }): number {
-  const { seasonYear, espnWeekNumber, now = new Date() } = options;
+  const { seasonYear, espnWeekNumber, seasonType = 2, now = new Date() } = options;
+  if (seasonType === POSTSEASON_SEASON_TYPE) {
+    return espnWeekNumber;
+  }
   if (seasonYear !== WEEK_ZERO_YEAR || espnWeekNumber !== 1) return espnWeekNumber;
   return now < WEEK_ZERO_WINDOW_END ? 0 : 1;
+}
+
+/** Pickems week doc id — postseason ESPN week 1 must not reuse `2026-W1`. */
+export function pickemsWeekDocumentId(options: {
+  seasonYear: number;
+  espnWeekNumber: number;
+  seasonType?: number;
+  now?: Date;
+}): string {
+  const seasonType = options.seasonType ?? 2;
+  if (options.seasonYear === WEEK_ZERO_YEAR && seasonType === POSTSEASON_SEASON_TYPE) {
+    if (options.espnWeekNumber === 1) return "2026-BOWL1";
+    if (options.espnWeekNumber === 999) return "2026-BOWL2";
+    return `${options.seasonYear}-BOWL${options.espnWeekNumber}`;
+  }
+  const weekNumber = resolveAppWeekNumber(options);
+  return `${options.seasonYear}-W${weekNumber}`;
+}
+
+export function parsePickemsWeekId(
+  weekId: string
+): { seasonYear: number; weekNumber: number | null; bowlKey: string | null } | null {
+  const bowl = weekId.match(/^(\d{4})-BOWL(\d*)$/i);
+  if (bowl) {
+    const seasonYear = Number(bowl[1]);
+    const suffix = bowl[2];
+    const bowlKey = suffix.length === 0 ? "BOWL" : `BOWL${suffix}`;
+    return { seasonYear, weekNumber: null, bowlKey };
+  }
+  const regular = weekId.match(/^(\d{4})-W(\d+)$/);
+  if (!regular) return null;
+  return {
+    seasonYear: Number(regular[1]),
+    weekNumber: Number(regular[2]),
+    bowlKey: null,
+  };
 }
 
 export function easternYmd(date: Date): { year: number; month: number; day: number } {
