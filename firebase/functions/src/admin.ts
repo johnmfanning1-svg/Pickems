@@ -26,6 +26,7 @@ import {
 import { isRollingLock } from "./pickLock";
 import { accumulateMemberTotals, type MemberScore } from "./memberSeasonTotals";
 import { isBowlWeekId } from "./bowlWeek";
+import { countsTowardSeasonStandingsAtScoreForNewlyScoredWeek } from "./bowlStandingsStamp";
 import { rejectedPickIds, type GameLockInput } from "./spreadLock";
 import { assertWeekOperator, coordinatorsAfterCommissionerTransfer } from "./coordinators";
 
@@ -651,13 +652,20 @@ export const adminRescoreWeek = onCall(async (request) => {
     scoreByWeekMember.set(weekDoc.id, memberScores);
   }
 
+  const groupWeeks = allWeeksSnap.docs.map((d) => ({ id: d.id, data: d.data() }));
   const { season: seasonTotals, bowl: bowlTotals } = accumulateMemberTotals(
     rules,
     seasonWeeks.map((d) => {
-      const data = d.data() as { countsTowardSeasonStandingsAtScore?: boolean };
+      const data = d.data();
+      const atScore =
+        typeof data.countsTowardSeasonStandingsAtScore === "boolean"
+          ? data.countsTowardSeasonStandingsAtScore
+          : isBowlWeekId(d.id)
+            ? countsTowardSeasonStandingsAtScoreForNewlyScoredWeek(rules, d.id, data, groupWeeks)
+            : undefined;
       return {
         weekId: d.id,
-        countsTowardSeasonStandingsAtScore: data.countsTowardSeasonStandingsAtScore,
+        countsTowardSeasonStandingsAtScore: atScore,
       };
     }),
     scoreByWeekMember
@@ -709,9 +717,7 @@ export const adminRescoreWeek = onCall(async (request) => {
     entries: ranked,
     updatedAt: FieldValue.serverTimestamp(),
   });
-  const existingWeek = weekSnap.data() as {
-    countsTowardSeasonStandingsAtScore?: boolean;
-  };
+  const existingWeek = weekSnap.data();
   const bowlWeekScored = isBowlWeekId(weekId);
   const weekScoreUpdate: Record<string, unknown> = {
     status: "scored",
@@ -719,11 +725,13 @@ export const adminRescoreWeek = onCall(async (request) => {
     scoredAt: FieldValue.serverTimestamp(),
   };
   if (bowlWeekScored) {
-    const existingStamp = existingWeek?.countsTowardSeasonStandingsAtScore;
     weekScoreUpdate.countsTowardSeasonStandingsAtScore =
-      typeof existingStamp === "boolean"
-        ? existingStamp
-        : rules.bowlSeason?.countsTowardSeasonStandings === true;
+      countsTowardSeasonStandingsAtScoreForNewlyScoredWeek(
+        rules,
+        weekId,
+        existingWeek,
+        groupWeeks
+      );
   }
   batch.update(weekSnap.ref, weekScoreUpdate);
   await batch.commit();
