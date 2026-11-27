@@ -22,27 +22,36 @@ export function kickoffMillis(value: unknown): number | null {
   return null;
 }
 
+const RULES_GAME_ID_CAP = 20;
+
 export function lockSnapshotFromGames(
   games: Array<{ id: string; kickoff?: unknown }>,
-  pickLockMode: unknown
+  pickLockMode: unknown,
+  options?: { bowlFullSlate?: boolean }
 ): Record<string, unknown> {
-  const mode = resolvedPickLockMode(pickLockMode);
+  const mode = options?.bowlFullSlate ? "rolling" : resolvedPickLockMode(pickLockMode);
   const pairs = games
     .map((game) => {
       const ms = kickoffMillis(game.kickoff);
       return ms == null ? null : { id: game.id, ms };
     })
-    .filter((pair): pair is { id: string; ms: number } => pair != null)
-    .slice(0, 20);
+    .filter((pair): pair is { id: string; ms: number } => pair != null);
+  const allPairs = options?.bowlFullSlate ? pairs : pairs.slice(0, RULES_GAME_ID_CAP);
+  const capped = allPairs.slice(0, RULES_GAME_ID_CAP);
 
   const fields: Record<string, unknown> = { pickLockMode: mode };
-  if (pairs.length === 0) return fields;
+  if (options?.bowlFullSlate) {
+    fields.bowlFullSlate = true;
+    fields.slateSource = "bowlCatalog";
+  }
+  if (allPairs.length === 0) return fields;
 
-  const first = Math.min(...pairs.map((pair) => pair.ms));
-  const last = Math.max(...pairs.map((pair) => pair.ms));
+  const deadlineSource = options?.bowlFullSlate ? allPairs : capped;
+  const first = Math.min(...deadlineSource.map((pair) => pair.ms));
+  const last = Math.max(...allPairs.map((pair) => pair.ms));
   const gameKickoffs: Record<string, Timestamp> = {};
   const gameIds: string[] = [];
-  for (const pair of pairs) {
+  for (const pair of capped) {
     gameIds.push(pair.id);
     gameKickoffs[pair.id] = Timestamp.fromMillis(pair.ms);
   }

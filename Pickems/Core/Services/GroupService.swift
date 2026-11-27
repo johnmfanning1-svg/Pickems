@@ -654,20 +654,37 @@ final class GroupService {
                 }
                 kickoffs.append(slate.kickoff)
             }
+            let bowlCatalog = CFBBowlSeason.isBowlFullSlateWeek(week)
+            let postSeedSnap = try await gamesRef.getDocuments()
             var updates: [String: Any] = [
-                "slateSize": games.count,
-                "slateSource": CFBWeekCalendar.weekZeroSlateSource,
+                "slateSize": bowlCatalog ? postSeedSnap.documents.count : games.count,
+                "slateSource": bowlCatalog
+                    ? CFBBowlSeason.bowlCatalogSlateSource
+                    : CFBWeekCalendar.weekZeroSlateSource,
             ]
+            if bowlCatalog {
+                updates["bowlFullSlate"] = true
+            }
             if week.status == .selection {
                 updates["status"] = WeekStatus.picking.rawValue
             }
-            let lockGames = games.map { game -> (id: String, kickoff: Date) in
-                let slate = game.toSlateGame()
+            var lockGames = postSeedSnap.documents.compactMap { doc -> (id: String, kickoff: Date)? in
+                guard let slate = SlateGame.fromDocument(id: doc.documentID, data: doc.data()) else { return nil }
                 return (slate.id, slate.kickoff)
+            }
+            if lockGames.isEmpty {
+                lockGames = games.map { game -> (id: String, kickoff: Date) in
+                    let slate = game.toSlateGame()
+                    return (slate.id, slate.kickoff)
+                }
             }
             if (week.pickDeadline == nil || week.pickLockMode == nil), selectedGroup?.id == groupId {
                 let rules = selectedGroup?.rules ?? .default
-                for (key, value) in WeekTransition.lockSnapshotFields(rules: rules, games: lockGames) {
+                for (key, value) in WeekTransition.lockSnapshotFields(
+                    rules: rules,
+                    games: lockGames,
+                    bowlFullSlate: bowlCatalog
+                ) {
                     if key == "pickDeadline", week.pickDeadline != nil { continue }
                     updates[key] = value
                 }
@@ -677,8 +694,11 @@ final class GroupService {
             }
             try await weekRef.updateData(updates)
             if observedGroupId == groupId, currentWeek?.id == weekId {
-                currentWeek?.slateSize = games.count
-                currentWeek?.slateSource = CFBWeekCalendar.weekZeroSlateSource
+                currentWeek?.slateSize = bowlCatalog ? postSeedSnap.documents.count : games.count
+                currentWeek?.slateSource = bowlCatalog
+                    ? CFBBowlSeason.bowlCatalogSlateSource
+                    : CFBWeekCalendar.weekZeroSlateSource
+                currentWeek?.bowlFullSlate = bowlCatalog ? true : nil
                 if week.status == .selection {
                     currentWeek?.status = .picking
                 }

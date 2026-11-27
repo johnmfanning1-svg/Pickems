@@ -40,6 +40,11 @@ describe("bowlWeek", () => {
     expect(resolveBowlSeasonRules({ isEnabled: false, mode: "modeA" }).isEnabled).toBe(false);
   });
 
+  it("treats Mode B as configured when enabled", () => {
+    expect(bowlSeasonConfigured({ bowlSeason: { isEnabled: true, mode: "modeB" } })).toBe(true);
+    expect(parseBowlWeekId("2026-BOWL")).toEqual({ seasonYear: 2026, slot: "BOWL" });
+  });
+
   it("maps bowl week ids to ESPN postseason scoreboard weeks", () => {
     expect(espnPostseasonWeekForBowlWeekId("2026-BOWL1")).toBe(ESPN_POSTSEASON_WEEK);
     expect(espnPostseasonWeekForBowlWeekId("2026-BOWL2")).toBe(ESPN_BOWL2_POSTSEASON_WEEK);

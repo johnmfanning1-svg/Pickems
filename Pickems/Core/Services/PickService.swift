@@ -1719,6 +1719,42 @@ final class PickService {
             return confidenceGameId
         }()
 
+        let generation = userPickWriteGeneration
+        if let week, CFBBowlSeason.isBowlFullSlateWeek(week) {
+            var payload: [String: Any] = [
+                "groupId": groupId,
+                "weekId": weekId,
+                "picks": trimmed,
+                "isLocked": false,
+            ]
+            if let trimmedConfidence {
+                payload["confidenceGameId"] = trimmedConfidence
+            }
+            _ = try await CloudFunctionsClient.call("writeMemberBowlPick", data: payload)
+            let pick = UserPick(
+                id: userId,
+                userId: userId,
+                displayName: displayName,
+                picks: trimmed,
+                submittedAt: nil,
+                isLocked: false,
+                confidenceGameId: trimmedConfidence
+            )
+            guard generation == userPickWriteGeneration else { return skipped }
+            userPick = pick
+            mergeOwnPickIntoAllPicks(pick)
+            try await syncSubmission(
+                groupId: groupId,
+                weekId: weekId,
+                userId: userId,
+                displayName: displayName,
+                isLocked: false,
+                submittedAt: nil,
+                pickCount: trimmed.count
+            )
+            return skipped
+        }
+
         let ref = db.collection("groups").document(groupId)
             .collection("weeks").document(weekId)
             .collection("picks").document(userId)
@@ -1733,7 +1769,6 @@ final class PickService {
             isLocked: false,
             confidenceGameId: trimmedConfidence
         )
-        let generation = userPickWriteGeneration
         try await ref.setData(from: pick)
         guard generation == userPickWriteGeneration else { return skipped }
         userPick = pick
@@ -1815,10 +1850,6 @@ final class PickService {
             }
         }
 
-        let ref = db.collection("groups").document(groupId)
-            .collection("weeks").document(weekId)
-            .collection("picks").document(userId)
-
         let resolvedConfidence: String? = {
             if rolling, let week,
                let existingConfidence = userPick?.confidenceGameId,
@@ -1839,6 +1870,36 @@ final class PickService {
             confidenceGameId: resolvedConfidence
         )
         let generation = userPickWriteGeneration
+        if let week, CFBBowlSeason.isBowlFullSlateWeek(week) {
+            var payload: [String: Any] = [
+                "groupId": groupId,
+                "weekId": weekId,
+                "picks": cleaned,
+                "isLocked": true,
+            ]
+            if let resolvedConfidence {
+                payload["confidenceGameId"] = resolvedConfidence
+            }
+            _ = try await CloudFunctionsClient.call("writeMemberBowlPick", data: payload)
+            guard generation == userPickWriteGeneration else { return skipped }
+            userPick = pick
+            mergeOwnPickIntoAllPicks(pick)
+            try await syncSubmission(
+                groupId: groupId,
+                weekId: weekId,
+                userId: userId,
+                displayName: displayName,
+                isLocked: true,
+                submittedAt: pick.submittedAt,
+                pickCount: cleaned.count
+            )
+            return skipped
+        }
+
+        let ref = db.collection("groups").document(groupId)
+            .collection("weeks").document(weekId)
+            .collection("picks").document(userId)
+
         try await ref.setData(from: pick)
         guard generation == userPickWriteGeneration else { return skipped }
         userPick = pick

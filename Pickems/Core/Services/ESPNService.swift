@@ -130,6 +130,34 @@ actor ESPNService {
         if CFBBowlSeason.isBowlWeek(week), let slot = CFBBowlSeason.slot(for: week) {
             let now = Date()
             switch slot {
+            case .bowlAll:
+                let fromWeekOne = try await fetchScoreboard(
+                    week: CFBBowlSeason.Slot.bowl1.espnWeekNumber,
+                    seasonType: resolvedType,
+                    live: live,
+                    forceRefresh: forceRefresh
+                )
+                let from999 = try await fetchScoreboard(
+                    week: CFBBowlSeason.Slot.bowl2.espnWeekNumber,
+                    seasonType: resolvedType,
+                    live: live,
+                    forceRefresh: forceRefresh
+                )
+                let combined = (fromWeekOne + from999).filter {
+                    CFBBowlSeason.catalogEligible(
+                        game: $0,
+                        week: week,
+                        fromEspnPostseasonWeek: CFBBowlSeason.Slot.bowl1.espnWeekNumber,
+                        now: now
+                    ) || CFBBowlSeason.catalogEligible(
+                        game: $0,
+                        week: week,
+                        fromEspnPostseasonWeek: CFBBowlSeason.Slot.bowl2.espnWeekNumber,
+                        now: now
+                    )
+                }
+                var seen = Set<String>()
+                return combined.filter { seen.insert($0.espnEventId).inserted }
             case .bowl1:
                 return games.filter {
                     CFBBowlSeason.catalogEligible(

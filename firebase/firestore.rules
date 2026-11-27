@@ -318,6 +318,10 @@ service cloud.firestore {
               && weekId.matches('^[0-9]{4}-W0$')
               && data.weekNumber == 0
               && data.slateSource == 'fixedBoard')
+          || (data.status == 'picking'
+              && weekId.matches('^[0-9]{4}-BOWL$')
+              && data.slateSource == 'bowlCatalog'
+              && data.bowlFullSlate == true)
         );
     }
 
@@ -604,6 +608,12 @@ service cloud.firestore {
       return week.keys().hasAll(['pickLockMode']) && week.pickLockMode == 'rolling';
     }
 
+    // Mode B (every bowl game): full catalog exceeds rules gameIds cap; members use callable.
+    function isBowlFullSlateWeek(week) {
+      return (week.keys().hasAll(['bowlFullSlate']) && week.bowlFullSlate == true)
+        || (week.keys().hasAll(['slateSource']) && week.slateSource == 'bowlCatalog');
+    }
+
     function remainingFrozen(week) {
       return week.keys().hasAll(['remainingLockAt'])
         && week.remainingLockAt != null
@@ -633,6 +643,16 @@ service cloud.firestore {
     // Phase is NOT walked per id — 20 of those comparisons exceed the cap on a
     // denial. Non-pregame ids are `liveIds` (one hasAny). Cap is 20 ids, same
     // as before; rules cannot loop.
+    // Mode B: gameLock/current holds the full catalog; no 20-id unroll.
+    function pickSlateOpenFullCatalog(mirror, changed, newConfidence, oldConfidence) {
+      let kicks = mirror.get('kickoffs', {});
+      let liveIds = mirror.get('liveIds', []);
+      return !changed.hasAny(liveIds)
+        && (newConfidence == oldConfidence
+            || (confidenceStillOpen(kicks, liveIds, newConfidence)
+                && confidenceStillOpen(kicks, liveIds, oldConfidence)));
+    }
+
     function pickSlateOpen(week, mirror, changed, newConfidence, oldConfidence) {
       let kicks = mirror.get('kickoffs', week.get('gameKickoffs', {}));
       let liveIds = mirror.get('liveIds', []);
@@ -697,6 +717,13 @@ service cloud.firestore {
               && !weekLevelLocked(groupId, week));
       let lockPath = /databases/$(database)/documents/groups/$(groupId)/weeks/$(weekId)/gameLock/current;
       let mirror = exists(lockPath) ? get(lockPath).data : {};
+      let bowlFull = isBowlFullSlateWeek(week);
+      if (bowlFull) {
+        if (selfWrite && pickId == request.auth.uid) {
+          return false;
+        }
+        return windowOk && pickSlateOpenFullCatalog(mirror, changed, newConfidence, oldConfidence);
+      }
       return windowOk && pickSlateOpen(week, mirror, changed, newConfidence, oldConfidence);
     }
 

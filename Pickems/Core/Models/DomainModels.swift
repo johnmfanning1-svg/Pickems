@@ -227,8 +227,10 @@ struct WeekSummary: Codable, Identifiable, Equatable {
     var selectionDeadlineSetAt: Date? = nil
     var selectionDeadlineSetBy: String? = nil
     var awards: WeekAwards? = nil
-    /// `"fixedBoard"` for auto-slated weeks (Week 0). Nil on nomination-built weeks.
+    /// `"fixedBoard"` for auto-slated weeks (Week 0). `"bowlCatalog"` for Mode B bowl weeks.
     var slateSource: String? = nil
+    /// Full postseason catalog slate (Mode B). Members save picks via `writeMemberBowlPick`.
+    var bowlFullSlate: Bool? = nil
     /// Commissioner Override: user ids ranked above others who share this week's win total.
     /// Earlier in the list ranks higher. Only consulted when win totals match.
     var tieBreakOrder: [String]? = nil
@@ -247,7 +249,8 @@ struct WeekSummary: Codable, Identifiable, Equatable {
     }
 
     var skipsSelection: Bool {
-        CFBWeekCalendar.isFixedSlate(weekNumber: weekNumber, slateSource: slateSource)
+        CFBBowlSeason.isBowlFullSlateWeek(self)
+            || CFBWeekCalendar.isFixedSlate(weekNumber: weekNumber, slateSource: slateSource)
     }
 
     var espnScoreboardWeek: Int {

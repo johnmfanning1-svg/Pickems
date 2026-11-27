@@ -32,4 +32,36 @@ describe("bowlCatalogPartition", () => {
     expect(all).toEqual(new Set(["early", "late-jan", "cfp"]));
     expect([...ids1].some((id) => ids2.has(id))).toBe(false);
   });
+
+  it("Mode B week includes full CFP path plus every other bowl", () => {
+    const opens = postseasonCatalogOpensMs();
+    const cutoff = bowl1CatalogEndExclusiveMs();
+    const celebration = opens + 6 * 86_400_000;
+    const cfpFirst = opens + 10 * 86_400_000;
+    const cfpQuarter = cutoff + 3 * 86_400_000;
+    const cfpSemi = cutoff + 10 * 86_400_000;
+    const championship = cutoff + 20 * 86_400_000;
+    const postseasonByEspnWeek = new Map<number, EspnEvent[]>([
+      [
+        ESPN_POSTSEASON_WEEK,
+        [
+          event("celebration", celebration),
+          event("cfp-r1-a", cfpFirst),
+          event("cfp-r1-b", cfpFirst + 3_600_000),
+        ],
+      ],
+      [
+        ESPN_BOWL2_POSTSEASON_WEEK,
+        [
+          event("cfp-qf", cfpQuarter),
+          event("cfp-sf", cfpSemi),
+          event("natty", championship),
+        ],
+      ],
+    ]);
+    const all = bowlWeekCatalogEvents("2026-BOWL", { seasonType: 3 }, postseasonByEspnWeek);
+    expect(new Set(all.map((e) => e.id))).toEqual(
+      new Set(["celebration", "cfp-r1-a", "cfp-r1-b", "cfp-qf", "cfp-sf", "natty"])
+    );
+  });
 });

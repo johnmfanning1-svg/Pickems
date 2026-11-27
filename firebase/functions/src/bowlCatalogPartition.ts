@@ -18,6 +18,20 @@ export function bowlWeekCatalogEvents(
 
   const week1 = postseasonByEspnWeek.get(ESPN_POSTSEASON_WEEK) ?? [];
   const week999 = postseasonByEspnWeek.get(ESPN_BOWL2_POSTSEASON_WEEK) ?? [];
+  if (parsed.slot === "BOWL") {
+    const fromWeek1 = week1.filter((event) =>
+      postseasonEventBelongsToBowlSlot(event, "BOWL", ESPN_POSTSEASON_WEEK)
+    );
+    const from999 = week999.filter((event) =>
+      postseasonEventBelongsToBowlSlot(event, "BOWL", ESPN_BOWL2_POSTSEASON_WEEK)
+    );
+    const seen = new Set<string>();
+    return [...fromWeek1, ...from999].filter((event) => {
+      if (seen.has(event.id)) return false;
+      seen.add(event.id);
+      return true;
+    });
+  }
   const fromWeek1 = week1.filter((event) =>
     postseasonEventBelongsToBowlSlot(event, parsed.slot, ESPN_POSTSEASON_WEEK)
   );

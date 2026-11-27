@@ -26,9 +26,11 @@ import {
 } from "./autoCloseSeasonsLogic";
 import {
   BOWL_SEASON_TYPE,
+  isBowlFullSlateWeek,
   isBowlWeekId,
   userFacingWeekLabel,
 } from "./bowlWeek";
+import { syncBowlCatalogSlate } from "./bowlCatalogSync";
 import {
   buildScoreboardFetchTargets,
   bowlWeekCatalogEvents,
@@ -146,6 +148,7 @@ export { detectShockTweets, runDetectShockTweets } from "./shockTweets";
 // Commissioner switch to rolling pick lock, optionally for the week in progress.
 export { setRollingLock } from "./rollingLock";
 export { setLeaguePickMode } from "./leaguePickMode";
+export { writeMemberBowlPick } from "./bowlMemberPick";
 
 // OC / DC appointment pushes, and cleanup when a seat holder leaves the roster.
 export { onCoordinatorRolesChanged } from "./coordinators";
@@ -440,7 +443,11 @@ export const selectionDeadlineJobs = onSchedule("every 15 minutes", async () => 
       });
 
       if (ready && !postSkip) {
-        const snapshot = lockSnapshotFromGames(games, groupDoc.data().rules?.pickDeadline);
+        const snapshot = lockSnapshotFromGames(
+          games,
+          groupDoc.data().rules?.pickDeadline,
+          isBowlFullSlateWeek(week) ? { bowlFullSlate: true } : undefined
+        );
         await weekDoc.ref.update({
           status: "picking",
           selectionDeadlinePassedNotified: true,
@@ -639,6 +646,9 @@ async function publishSelectionKickoffCatalog(
     ? bowlWeekCatalogEvents(weekDoc.id, data, postseasonByEspnWeek)
     : eventsByScoreboardWeek.get(espnScoreboardWeek(weekNumber)) ?? [];
   if (!events || events.length === 0) return;
+  if (isBowlFullSlateWeek(data)) {
+    await syncBowlCatalogSlate(weekDoc.ref, data, events);
+  }
   const millisById = kickoffsMillisByEspnEventId(events);
   const ids = Object.keys(millisById);
   if (ids.length === 0) return;
@@ -714,6 +724,13 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
       const weekId = weekDoc.id;
       const pickMode = resolveWeekPickMode(week.pickMode, leaguePickMode);
       const rolling = isRollingLock(week.pickLockMode);
+
+      if (isBowlFullSlateWeek(week)) {
+        const catalogEvents = bowlWeekCatalogEvents(weekId, week, postseasonByEspnWeek);
+        if (catalogEvents.length > 0) {
+          await syncBowlCatalogSlate(weekDoc.ref, week, catalogEvents);
+        }
+      }
 
       const gamesSnap = await weekDoc.ref.collection("games").get();
       if (gamesSnap.empty) {

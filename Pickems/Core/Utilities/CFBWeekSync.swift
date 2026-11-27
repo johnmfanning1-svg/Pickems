@@ -100,9 +100,17 @@ enum CFBWeekSync {
         )
         if isBowl {
             let bowlRules = rules.bowlSeason ?? .default
-            week.slateSize = bowlRules.resolvedPickCount(rules: rules)
-            if bowlRules.suggestedRollingLock {
+            if bowlRules.mode == .modeB {
+                week.slateSize = 1
+                week.selectionMode = .commissioner
+                week.slateSource = CFBBowlSeason.bowlCatalogSlateSource
+                week.bowlFullSlate = true
                 week.pickLockMode = .rolling
+            } else {
+                week.slateSize = bowlRules.resolvedPickCount(rules: rules)
+                if bowlRules.suggestedRollingLock {
+                    week.pickLockMode = .rolling
+                }
             }
         }
         if let lock = rules.defaultSelectionLock {
