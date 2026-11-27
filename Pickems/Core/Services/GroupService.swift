@@ -348,14 +348,15 @@ final class GroupService {
         let year = currentWeek?.seasonYear
             ?? cfbWeek?.seasonYear
             ?? CFBSeasonCalendar.seasonYear()
+        let league = leagueForWeekLoading(groupId: groupId)
+        let rules = league?.rules ?? .default
         let calendarWeeks = CFBWeekCalendar.seasonWeeksForChipBar(
             await ESPNService.shared.seasonWeeks(year: year)
         )
+        let bowlSlots = CFBBowlSeason.calendarSlots(seasonYear: year, settings: rules.bowlSeason ?? .default)
         seasonDateRangeByWeekId = Dictionary(
-            uniqueKeysWithValues: calendarWeeks.map { ($0.id, $0.dateRangeLabel) }
+            uniqueKeysWithValues: (calendarWeeks + bowlSlots).map { ($0.id, $0.dateRangeLabel) }
         )
-        let league = leagueForWeekLoading(groupId: groupId)
-        let rules = league?.rules ?? .default
         let memberCount = max(league?.memberCount ?? 1, 1)
         var byId = Dictionary(uniqueKeysWithValues: weeks.map { ($0.id, $0) })
         for slot in calendarWeeks where byId[slot.id] == nil {
@@ -367,6 +368,15 @@ final class GroupService {
                     seasonType: cfbWeek?.seasonType ?? 2,
                     label: slot.dateRangeLabel
                 ),
+                rules: rules,
+                memberCount: memberCount
+            )
+        }
+        for slot in bowlSlots where byId[slot.id] == nil {
+            guard let bowl = CFBBowlSeason.parseWeekId(slot.id) else { continue }
+            byId[slot.id] = CFBBowlSeason.makeWeekSummary(
+                id: slot.id,
+                slot: bowl.slot,
                 rules: rules,
                 memberCount: memberCount
             )
@@ -490,6 +500,27 @@ final class GroupService {
     }
 
     private func weekInfo(forWeekId weekId: String) -> CFBWeekInfo {
+        if let bowl = CFBBowlSeason.parseWeekId(weekId) {
+            return CFBWeekInfo(
+                seasonYear: bowl.seasonYear,
+                weekNumber: CFBBowlSeason.espnPostseasonWeek,
+                seasonType: CFBBowlSeason.postseasonSeasonType,
+                label: CFBBowlSeason.displayLabel(
+                    for: WeekSummary(
+                        id: weekId,
+                        seasonYear: bowl.seasonYear,
+                        weekNumber: bowl.slot.sortWeekNumber,
+                        status: .selection,
+                        slateSize: 1,
+                        selectionMode: .commissioner,
+                        selectionsPerMember: 1,
+                        nominationCount: 0,
+                        seasonType: CFBBowlSeason.postseasonSeasonType,
+                        bowlSlot: bowl.slot.rawValue
+                    )
+                )
+            )
+        }
         let parsed = CFBWeekSync.parseWeekId(weekId)
         let year = parsed?.seasonYear ?? cfbWeek?.seasonYear ?? CFBSeasonCalendar.seasonYear()
         let appWeek = parsed?.weekNumber ?? 0
@@ -502,20 +533,7 @@ final class GroupService {
     }
 
     private static func sortedWeeksAscending(_ weeks: [WeekSummary]) -> [WeekSummary] {
-        weeks.sorted {
-            let a = PickemsWeekSort.rank(
-                seasonYear: $0.seasonYear,
-                weekId: $0.id,
-                weekNumber: $0.weekNumber
-            )
-            let b = PickemsWeekSort.rank(
-                seasonYear: $1.seasonYear,
-                weekId: $1.id,
-                weekNumber: $1.weekNumber
-            )
-            if a.seasonYear != b.seasonYear { return a.seasonYear < b.seasonYear }
-            return a.ordinal < b.ordinal
-        }
+        weeks.sorted(by: CFBBowlSeason.compareWeekOrder)
     }
 
     private func ensureWeekDocumentExists(

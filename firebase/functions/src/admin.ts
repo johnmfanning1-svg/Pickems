@@ -24,6 +24,7 @@ import {
   resolveWeekPickMode,
 } from "./scoring";
 import { isRollingLock } from "./pickLock";
+import { bowlCountsTowardSeason, isBowlWeekId } from "./bowlWeek";
 import { rejectedPickIds, type GameLockInput } from "./spreadLock";
 import { assertWeekOperator, coordinatorsAfterCommissionerTransfer } from "./coordinators";
 
@@ -589,6 +590,7 @@ export const adminRescoreWeek = onCall(async (request) => {
     allowLatePicks?: boolean;
     latePickPenaltyWins?: number;
     pickMode?: unknown;
+    bowlSeason?: { countsTowardSeasonStandings?: boolean };
   };
   const lateOptions = {
     allowLatePicks: rules.allowLatePicks === true,
@@ -621,6 +623,11 @@ export const adminRescoreWeek = onCall(async (request) => {
       targetPicks = picks;
       targetPickMode = weekPickMode;
     }
+    const bowlWeek = isBowlWeekId(weekDoc.id);
+    const bowlInSeason = bowlWeek && bowlCountsTowardSeason(rules);
+    if (bowlWeek && !bowlInSeason && weekDoc.id !== weekId) {
+      continue;
+    }
     const missedPickIsLoss = missedPickIsLossForSeasonWeek({
       targetWeekId: weekId,
       targetWeekNumber: week.weekNumber,
@@ -642,11 +649,13 @@ export const adminRescoreWeek = onCall(async (request) => {
           deadline: weekData.pickDeadline,
         }
       );
-      const running = seasonTotals.get(member.id) ?? { wins: 0, losses: 0 };
-      seasonTotals.set(member.id, {
-        wins: running.wins + scored.wins,
-        losses: running.losses + scored.losses,
-      });
+      if (!bowlWeek || bowlInSeason) {
+        const running = seasonTotals.get(member.id) ?? { wins: 0, losses: 0 };
+        seasonTotals.set(member.id, {
+          wins: running.wins + scored.wins,
+          losses: running.losses + scored.losses,
+        });
+      }
     }
   }
 

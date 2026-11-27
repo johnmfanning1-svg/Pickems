@@ -32,6 +32,8 @@ const ESPN_2026: Array<{ weekNumber: number; label: string }> = [
   { weekNumber: 13, label: "Nov 23-29" },
   { weekNumber: 14, label: "Nov 30-Dec 6" },
   { weekNumber: 15, label: "Dec 7-12" },
+  { weekNumber: 901, label: "Dec 12-Jan 1" },
+  { weekNumber: 902, label: "Jan 2-Jan 25" },
 ];
 
 /** Bowl week windows (ESPN postseason). Keep in sync with iOS `CFBWeekCalendar` bowl labels. */

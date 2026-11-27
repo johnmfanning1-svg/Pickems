@@ -158,6 +158,8 @@ struct GroupRules: Codable, Equatable {
     var vetoVotesNeeded: Int
     /// Optional league default for member Selection deadlines. Missing = off.
     var defaultSelectionLock: DefaultSelectionLock? = nil
+    /// Bowl Season (Mode A) commissioner configuration. Missing = disabled defaults.
+    var bowlSeason: CFBBowlSeason.Settings? = nil
 
     /// Expected unique games for a week under the active mode.
     /// Member mode is always `members × Selections per person`, never the unused
@@ -180,6 +182,7 @@ struct GroupRules: Codable, Equatable {
         case pickMode
         case vetoEnabled, vetoVotesNeeded
         case defaultSelectionLock
+        case bowlSeason
     }
 
     init(
@@ -196,7 +199,8 @@ struct GroupRules: Codable, Equatable {
         pickMode: PickMode = .ats,
         vetoEnabled: Bool = false,
         vetoVotesNeeded: Int = SelectionVetoPolicy.defaultVotesNeeded,
-        defaultSelectionLock: DefaultSelectionLock? = nil
+        defaultSelectionLock: DefaultSelectionLock? = nil,
+        bowlSeason: CFBBowlSeason.Settings? = nil
     ) {
         self.selectionMode = selectionMode
         self.selectionsPerMember = selectionsPerMember
@@ -212,6 +216,7 @@ struct GroupRules: Codable, Equatable {
         self.vetoEnabled = vetoEnabled
         self.vetoVotesNeeded = vetoVotesNeeded
         self.defaultSelectionLock = defaultSelectionLock
+        self.bowlSeason = bowlSeason
     }
 
     func encode(to encoder: Encoder) throws {
@@ -230,6 +235,7 @@ struct GroupRules: Codable, Equatable {
         try container.encode(vetoEnabled, forKey: .vetoEnabled)
         try container.encode(vetoVotesNeeded, forKey: .vetoVotesNeeded)
         try container.encodeIfPresent(defaultSelectionLock, forKey: .defaultSelectionLock)
+        try container.encodeIfPresent(bowlSeason, forKey: .bowlSeason)
     }
 
     init(from decoder: Decoder) throws {
@@ -249,6 +255,7 @@ struct GroupRules: Codable, Equatable {
         vetoVotesNeeded = try container.decodeIfPresent(Int.self, forKey: .vetoVotesNeeded)
             ?? SelectionVetoPolicy.defaultVotesNeeded
         defaultSelectionLock = try container.decodeIfPresent(DefaultSelectionLock.self, forKey: .defaultSelectionLock)
+        bowlSeason = try container.decodeIfPresent(CFBBowlSeason.Settings.self, forKey: .bowlSeason)
     }
 
     static let `default` = GroupRules(

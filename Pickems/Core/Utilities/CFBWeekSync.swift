@@ -17,9 +17,8 @@ enum CFBWeekSync {
     }
 
     static func parseWeekId(_ id: String) -> (seasonYear: Int, weekNumber: Int)? {
-        if id.range(of: #"^\d{4}-BOWL\d*$"#, options: .regularExpression) != nil {
-            guard let year = Int(id.prefix(4)) else { return nil }
-            return (year, 0)
+        if let bowl = CFBBowlSeason.parseWeekId(id) {
+            return (bowl.seasonYear, bowl.slot.sortWeekNumber)
         }
         let parts = id.split(separator: "-")
         guard parts.count == 2, let year = Int(parts[0]) else { return nil }
@@ -77,8 +76,10 @@ enum CFBWeekSync {
     ) -> WeekSummary {
         let parsed = parseWeekId(id)
         let seasonYear = parsed?.seasonYear ?? info.seasonYear
-        let weekNumber = parsed?.weekNumber ?? CFBWeekCalendar.resolve(espn: info, now: now).weekNumber
+        let resolved = CFBWeekCalendar.resolve(espn: info, now: now)
+        let weekNumber = parsed?.weekNumber ?? resolved.weekNumber
         let isFixed = weekNumber == 0
+        let isBowl = CFBBowlSeason.isBowlWeekId(id)
         var week = WeekSummary(
             id: id,
             seasonYear: seasonYear,
@@ -93,8 +94,17 @@ enum CFBWeekSync {
             selectionDeadline: nil,
             selectionDeadlineSetAt: nil,
             selectionDeadlineSetBy: nil,
-            slateSource: isFixed ? CFBWeekCalendar.weekZeroSlateSource : nil
+            slateSource: isFixed ? CFBWeekCalendar.weekZeroSlateSource : nil,
+            seasonType: isBowl ? CFBBowlSeason.postseasonSeasonType : info.seasonType,
+            bowlSlot: CFBBowlSeason.parseWeekId(id)?.slot.rawValue
         )
+        if isBowl {
+            let bowlRules = rules.bowlSeason ?? .default
+            week.slateSize = bowlRules.resolvedPickCount(rules: rules)
+            if bowlRules.suggestedRollingLock {
+                week.pickLockMode = .rolling
+            }
+        }
         if let lock = rules.defaultSelectionLock {
             DefaultSelectionLockStamp.apply(to: &week, lock: lock, stampedAt: now)
         }

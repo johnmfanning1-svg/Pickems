@@ -116,16 +116,21 @@ actor ESPNService {
 
     func fetchScoreboard(
         for week: WeekSummary,
-        seasonType: Int = 2,
+        seasonType: Int? = nil,
         live: Bool = false,
         forceRefresh: Bool = false
     ) async throws -> [ESPNGame] {
+        let resolvedType = seasonType ?? week.resolvedSeasonType
         let games = try await fetchScoreboard(
             week: week.espnScoreboardWeek,
-            seasonType: seasonType,
+            seasonType: resolvedType,
             live: live,
             forceRefresh: forceRefresh
         )
+        if CFBBowlSeason.isBowlWeek(week) {
+            let now = Date()
+            return games.filter { CFBBowlSeason.catalogEligible(kickoff: $0.kickoff, now: now) }
+        }
         return games.matching(seasonYear: week.seasonYear, appWeekNumber: week.weekNumber)
     }
 

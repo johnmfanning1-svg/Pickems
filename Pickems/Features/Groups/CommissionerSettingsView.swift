@@ -134,6 +134,13 @@ struct CommissionerSettingsView: View {
                 leagueIdentitySection
                 membersRowSection
                 CommissionerScoringSection(groupId: group.id, rules: $rules, model: scoringSwitch)
+                CommissionerBowlSeasonSection(
+                    group: liveGroup,
+                    rules: $rules,
+                    canEditMode: appState.isCommissioner,
+                    pickemsWeekNumber: appState.groupService.currentWeek?.weekNumber,
+                    espnSeasonType: appState.groupService.cfbWeek?.seasonType
+                )
                 slateConfigurationSection
                 pickemsLockSection
                 tiesSection

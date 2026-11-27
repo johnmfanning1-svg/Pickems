@@ -2,18 +2,22 @@ import Foundation
 
 /// This Week / Season segment on the Leagues leaderboard.
 enum LeaderboardScope {
-    enum Scope: Hashable {
+    enum Scope: Hashable, CaseIterable {
         case thisWeek
         case season
+        case bowl
 
         var showsWeeklyRecord: Bool {
-            switch self {
-            case .thisWeek:
-                return true
-            case .season:
-                return false
-            }
+            self == .thisWeek
         }
+
+        var showsBowlRecord: Bool {
+            self == .bowl
+        }
+    }
+
+    static func showsBowlScope(rules: GroupRules) -> Bool {
+        rules.bowlSeason?.isConfigured == true
     }
 
     /// A picker move the member made for one league. Cleared when they switch leagues.

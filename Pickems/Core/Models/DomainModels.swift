@@ -125,6 +125,8 @@ struct GroupMember: Codable, Identifiable, Equatable {
     var joinedAt: Date
     var seasonWins: Int
     var seasonLosses: Int
+    var bowlWins: Int? = nil
+    var bowlLosses: Int? = nil
     /// Profile photo URL mirrored from `users/{uid}.avatarImageURL` when set.
     var avatarImageURL: String? = nil
     /// Per-league chat mute. When true, this league's chat pushes are suppressed.
@@ -235,9 +237,13 @@ struct WeekSummary: Codable, Identifiable, Equatable {
     /// current week takes the new mode or keeps the old one, and locked/scored
     /// weeks are pinned to the mode they were graded with.
     var pickMode: PickMode? = nil
+  /// ESPN season type for scoreboard fetches. Bowls use `3` (postseason).
+    var seasonType: Int? = nil
+  /// `"BOWL1"` / `"BOWL2"` for non-`W{n}` week ids.
+    var bowlSlot: String? = nil
 
     var displayLabel: String {
-        "Season \(seasonYear.pickemsYearString) | Week \(weekNumber)"
+        CFBBowlSeason.displayLabel(for: self)
     }
 
     var skipsSelection: Bool {
@@ -245,7 +251,11 @@ struct WeekSummary: Codable, Identifiable, Equatable {
     }
 
     var espnScoreboardWeek: Int {
-        CFBWeekCalendar.espnScoreboardWeek(weekNumber)
+        CFBBowlSeason.espnScoreboardWeek(for: self)
+    }
+
+    var resolvedSeasonType: Int {
+        seasonType ?? (CFBBowlSeason.isBowlWeek(self) ? CFBBowlSeason.postseasonSeasonType : 2)
     }
 
     /// True when a selection deadline is set and has passed.

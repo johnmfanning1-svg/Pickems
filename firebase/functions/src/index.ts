@@ -25,6 +25,12 @@ import {
   seasonYearToArchive,
 } from "./autoCloseSeasonsLogic";
 import {
+  BOWL_SEASON_TYPE,
+  ESPN_POSTSEASON_WEEK,
+  bowlCountsTowardSeason,
+  isBowlWeekId,
+} from "./bowlWeek";
+import {
   DEFAULT_SELECTION_STAMP,
   futureDefaultSelectionDeadline,
   shouldStampDefaultSelection,
@@ -568,33 +574,46 @@ export const deadlineReminders = onSchedule("every 15 minutes", async () => {
   }
 });
 
-async function loadScoreboardPages(weekNumbers: Iterable<number>): Promise<{
+async function loadScoreboardPages(
+  weekNumbers: Iterable<number>,
+  options?: { includePostseason?: boolean }
+): Promise<{
   byWeek: Map<number, EspnEvent[]>;
+  postseason: EspnEvent[];
   byId: Map<string, EspnEvent>;
 }> {
   const weeks = [...new Set([...weekNumbers].map((n) => espnScoreboardWeek(n)))]
     .filter((n) => Number.isFinite(n) && n > 0);
-  const targets: Array<number | undefined> = weeks.length === 0 ? [undefined] : weeks;
+  const targets: Array<{ week?: number; seasonType: number }> =
+    weeks.length === 0 ? [{ seasonType: 2 }] : weeks.map((week) => ({ week, seasonType: 2 }));
+  if (options?.includePostseason) {
+    targets.push({ week: ESPN_POSTSEASON_WEEK, seasonType: BOWL_SEASON_TYPE });
+  }
   const pages = await Promise.all(
-    targets.map(async (week) => {
+    targets.map(async ({ week, seasonType }) => {
       try {
         const events = await fetchScoreboard(
-          week == null ? { seasonType: 2 } : { week, seasonType: 2 }
+          week == null ? { seasonType } : { week, seasonType }
         );
-        return { week, events };
+        return { week, seasonType, events };
       } catch (err) {
         logger.error("ESPN fetch failed", err);
-        return { week, events: [] as EspnEvent[] };
+        return { week, seasonType, events: [] as EspnEvent[] };
       }
     })
   );
   const byWeek = new Map<number, EspnEvent[]>();
+  let postseason: EspnEvent[] = [];
   const byId = new Map<string, EspnEvent>();
   for (const page of pages) {
-    if (page.week != null) byWeek.set(page.week, page.events);
+    if (page.seasonType === BOWL_SEASON_TYPE) {
+      postseason = page.events;
+    } else if (page.week != null) {
+      byWeek.set(page.week, page.events);
+    }
     for (const event of page.events) byId.set(event.id, event);
   }
-  return { byWeek, byId };
+  return { byWeek, postseason, byId };
 }
 
 /**
@@ -604,11 +623,17 @@ async function loadScoreboardPages(weekNumbers: Iterable<number>): Promise<{
  */
 async function publishSelectionKickoffCatalog(
   weekDoc: QueryDocumentSnapshot,
-  eventsByScoreboardWeek: Map<number, EspnEvent[]>
+  eventsByScoreboardWeek: Map<number, EspnEvent[]>,
+  postseasonEvents: EspnEvent[]
 ): Promise<void> {
   const weekNumber = weekDoc.data().weekNumber;
   if (typeof weekNumber !== "number") return;
-  const events = eventsByScoreboardWeek.get(espnScoreboardWeek(weekNumber));
+  const bowl =
+    isBowlWeekId(weekDoc.id) ||
+    (weekDoc.data().seasonType as number | undefined) === BOWL_SEASON_TYPE;
+  const events = bowl
+    ? postseasonEvents
+  : eventsByScoreboardWeek.get(espnScoreboardWeek(weekNumber));
   if (!events || events.length === 0) return;
   const millisById = kickoffsMillisByEspnEventId(events);
   const ids = Object.keys(millisById);
@@ -641,6 +666,7 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
     selectionWeeks: QueryDocumentSnapshot[];
   }> = [];
   const weekNumbers = new Set<number>();
+  let needsPostseason = false;
 
   for (const groupDoc of groups.docs) {
     const memberIds = (groupDoc.data().memberIds as string[]) ?? [];
@@ -653,17 +679,25 @@ export const lockAndScoreWeeks = onSchedule("every 5 minutes", async () => {
     for (const weekDoc of weeks.docs) {
       const number = weekDoc.data().weekNumber;
       if (typeof number === "number") weekNumbers.add(number);
+      if (
+        isBowlWeekId(weekDoc.id) ||
+        (weekDoc.data().seasonType as number | undefined) === BOWL_SEASON_TYPE
+      ) {
+        needsPostseason = true;
+      }
       if (weekDoc.data().status === "selection") selectionWeeks.push(weekDoc);
       else scoringWeeks.push(weekDoc);
     }
     activeWeeksByGroup.push({ groupDoc, memberIds, scoringWeeks, selectionWeeks });
   }
 
-  const { byWeek, byId: eventById } = await loadScoreboardPages(weekNumbers);
+  const { byWeek, postseason, byId: eventById } = await loadScoreboardPages(weekNumbers, {
+    includePostseason: needsPostseason,
+  });
 
   for (const { selectionWeeks } of activeWeeksByGroup) {
     for (const weekDoc of selectionWeeks) {
-      await publishSelectionKickoffCatalog(weekDoc, byWeek);
+      await publishSelectionKickoffCatalog(weekDoc, byWeek, postseason);
     }
   }
 
@@ -1370,7 +1404,10 @@ async function scoreWeek(
       allowLatePicks?: boolean;
       latePickPenaltyWins?: number;
       pickMode?: unknown;
+      bowlSeason?: { countsTowardSeasonStandings?: boolean };
     };
+    const isBowl = isBowlWeekId(weekId) || (week?.seasonType as number | undefined) === BOWL_SEASON_TYPE;
+    const bowlTowardSeason = isBowl && bowlCountsTowardSeason(rules);
     const deadline = week?.pickDeadline;
     const mode = resolveWeekPickMode(week?.pickMode ?? pickMode, rules.pickMode);
 
@@ -1393,9 +1430,23 @@ async function scoreWeek(
           deadline,
         }
       );
-      const seasonWins = (member.seasonWins ?? 0) + scored.wins;
-      const seasonLosses = (member.seasonLosses ?? 0) + scored.losses;
-      tx.update(membersCol.doc(member.id), { seasonWins, seasonLosses });
+      let seasonWins = member.seasonWins ?? 0;
+      let seasonLosses = member.seasonLosses ?? 0;
+      let bowlWins = member.bowlWins ?? 0;
+      let bowlLosses = member.bowlLosses ?? 0;
+      if (isBowl) {
+        if (bowlTowardSeason) {
+          seasonWins += scored.wins;
+          seasonLosses += scored.losses;
+        } else {
+          bowlWins += scored.wins;
+          bowlLosses += scored.losses;
+        }
+      } else {
+        seasonWins += scored.wins;
+        seasonLosses += scored.losses;
+      }
+      tx.update(membersCol.doc(member.id), { seasonWins, seasonLosses, bowlWins, bowlLosses });
       weeklyEntries.push({
         id: member.id,
         displayName: member.displayName,
