@@ -65,12 +65,41 @@ final class ShareCardLayoutTests: XCTestCase {
         XCTAssertFalse(ShareCardLayout.leaderboardPeriodLabel(scope: .bowl).localizedCaseInsensitiveContains("Mode"))
     }
 
-    func testChartColumnMetricsFillInnerWidth() {
-        let metrics = ShareCardLayout.chartColumnMetrics()
-        XCTAssertGreaterThanOrEqual(metrics.maxMemberColumns, 10)
-        let usedWidth = metrics.gameColumnWidth + metrics.memberColumnWidth * CGFloat(metrics.maxMemberColumns)
-        XCTAssertEqual(usedWidth, ShareCardLayout.chartInnerWidth, accuracy: 0.5)
-        XCTAssertGreaterThanOrEqual(metrics.memberColumnWidth, ShareCardLayout.minMemberColumnWidth - 0.01)
+    func testShareCardTableSpansFullContentWidth() {
+        let inner = ShareCardLayout.chartInnerWidth
+        for memberCount in [1, 4, 12] {
+            let members = (1 ... memberCount).map { member(id: "m\($0)", name: "M\($0)", wins: $0) }
+            let games = [slateGame(id: "g1")]
+            let chart = ShareCardLayout.pickemsChart(
+                members: members,
+                games: games,
+                picksByUserId: [:],
+                hiddenGameIds: [],
+                pickMode: .ats,
+                currentUserId: "m1",
+                liveCards: [:]
+            )
+            let pickemsWidth = ShareCardLayout.tableContentWidth(
+                leadWidth: chart.metrics.leadColumnWidth,
+                memberWidth: chart.metrics.memberColumnWidth,
+                memberCount: chart.columns.count
+            )
+            XCTAssertEqual(pickemsWidth, inner, accuracy: 0.5, "pickems chart memberCount=\(memberCount)")
+            if memberCount <= 4 {
+                XCTAssertLessThanOrEqual(chart.metrics.memberColumnWidth, ShareCardLayout.maxMemberColumnWidth + 0.01)
+            }
+
+            let data = ledgerData(memberIds: members.map(\.id))
+            let ledger = ShareCardLayout.seasonLedger(data: data, members: members, currentUserId: "m1")
+            let ledgerWidth = ShareCardLayout.tableContentWidth(
+                leadWidth: ledger.weekColumnWidth,
+                memberWidth: ledger.memberColumnWidth,
+                memberCount: ledger.columns.count
+            )
+            XCTAssertEqual(ledgerWidth, inner, accuracy: 0.5, "season ledger memberCount=\(memberCount)")
+        }
+        let maxSlots = ShareCardLayout.maxMemberColumnSlots()
+        XCTAssertGreaterThanOrEqual(maxSlots, 10)
     }
 
     func testMembersForShareColumnsViewerFirstAndNearestStandings() {
@@ -99,9 +128,9 @@ final class ShareCardLayoutTests: XCTestCase {
         let members = (1 ... 15).map { member(id: "m\($0)", name: "M\($0)", wins: 20 - $0) }
         let data = ledgerData(memberIds: members.map(\.id))
         let layout = ShareCardLayout.seasonLedger(data: data, members: members, currentUserId: "m15")
-        let metrics = ShareCardLayout.chartColumnMetrics(extraGameInset: 120 - ShareCardLayout.minGameColumnWidth)
-        XCTAssertEqual(layout.columns.count, metrics.maxMemberColumns)
-        XCTAssertEqual(layout.omittedMemberCount, 15 - metrics.maxMemberColumns)
+        let slotCap = ShareCardLayout.maxMemberColumnSlots(minimumLeadWidth: ShareCardLayout.ledgerWeekColumnWidth)
+        XCTAssertEqual(layout.columns.count, slotCap)
+        XCTAssertEqual(layout.omittedMemberCount, 15 - slotCap)
     }
 
     func testLedgerWeekTitles() {
@@ -156,8 +185,8 @@ final class ShareCardLayoutTests: XCTestCase {
             currentUserId: "m12",
             liveCards: [:]
         )
-        XCTAssertEqual(layout.columns.count, layout.metrics.maxMemberColumns)
-        XCTAssertEqual(layout.omittedMemberCount, 12 - layout.metrics.maxMemberColumns)
+        XCTAssertEqual(layout.columns.count, layout.metrics.maxMemberColumnSlots)
+        XCTAssertEqual(layout.omittedMemberCount, 12 - layout.metrics.maxMemberColumnSlots)
         XCTAssertEqual(layout.columns.first?.shortName, "You")
     }
 

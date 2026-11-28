@@ -124,8 +124,8 @@ struct LeaguePickemsShareCard: View {
     private func cellView(_ cell: ShareChartCell) -> some View {
         switch cell.kind {
         case .locked:
-            Text("—")
-                .font(.system(size: 16, weight: .bold))
+            Image(systemName: "lock.fill")
+                .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(PickemsColors.textSecondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(PickemsColors.cardBackground)

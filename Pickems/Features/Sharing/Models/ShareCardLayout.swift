@@ -6,7 +6,9 @@ enum ShareCardLayout {
     static let renderWidth: CGFloat = 1080
     static let chromeHorizontalPadding: CGFloat = 48
     static let minMemberColumnWidth: CGFloat = 72
+    static let maxMemberColumnWidth: CGFloat = 120
     static let minGameColumnWidth: CGFloat = 164
+    static let ledgerWeekColumnWidth: CGFloat = 120
     static let maxChartGameRows = 14
 
     /// Inner chart width inside `ShareCardChrome` (full card width minus horizontal padding).
@@ -15,9 +17,45 @@ enum ShareCardLayout {
     }
 
     struct ChartColumnMetrics: Equatable, Sendable {
-        let gameColumnWidth: CGFloat
+        let leadColumnWidth: CGFloat
         let memberColumnWidth: CGFloat
-        let maxMemberColumns: Int
+        let maxMemberColumnSlots: Int
+    }
+
+    static func tableContentWidth(
+        leadWidth: CGFloat,
+        memberWidth: CGFloat,
+        memberCount: Int
+    ) -> CGFloat {
+        leadWidth + CGFloat(max(0, memberCount)) * memberWidth
+    }
+
+    static func maxMemberColumnSlots(minimumLeadWidth: CGFloat = minGameColumnWidth) -> Int {
+        max(1, Int(floor((chartInnerWidth - minimumLeadWidth) / minMemberColumnWidth)))
+    }
+
+    /// Sizes lead (game/week) and member columns to span `chartInnerWidth`, expanding the lead column when the league is small.
+    static func tableColumnMetrics(
+        memberCount: Int,
+        minimumLeadWidth: CGFloat = minGameColumnWidth
+    ) -> ChartColumnMetrics {
+        let count = max(1, memberCount)
+        let inner = chartInnerWidth
+        var memberWidth = min(
+            maxMemberColumnWidth,
+            max(minMemberColumnWidth, (inner - minimumLeadWidth) / CGFloat(count))
+        )
+        var leadWidth = inner - CGFloat(count) * memberWidth
+        if leadWidth < minimumLeadWidth {
+            memberWidth = (inner - minimumLeadWidth) / CGFloat(count)
+            leadWidth = minimumLeadWidth
+        }
+        let slots = maxMemberColumnSlots(minimumLeadWidth: minimumLeadWidth)
+        return ChartColumnMetrics(
+            leadColumnWidth: leadWidth,
+            memberColumnWidth: memberWidth,
+            maxMemberColumnSlots: slots
+        )
     }
 
     struct LeaderboardLayout: Equatable, Sendable {
@@ -52,25 +90,11 @@ enum ShareCardLayout {
         }
     }
 
-    static func chartColumnMetrics(extraGameInset: CGFloat = 0) -> ChartColumnMetrics {
-        let innerWidth = chartInnerWidth - extraGameInset
-        let gameColumnWidth = minGameColumnWidth
-        let memberArea = max(0, innerWidth - gameColumnWidth)
-        let maxMemberColumns = max(1, Int(floor(memberArea / minMemberColumnWidth)))
-        let memberColumnWidth = memberArea / CGFloat(maxMemberColumns)
-        return ChartColumnMetrics(
-            gameColumnWidth: gameColumnWidth,
-            memberColumnWidth: memberColumnWidth,
-            maxMemberColumns: maxMemberColumns
-        )
-    }
-
     static func standingsRankedMembers(_ members: [GroupMember]) -> [GroupMember] {
         members.sorted { lhs, rhs in
             if lhs.seasonWins != rhs.seasonWins { return lhs.seasonWins > rhs.seasonWins }
             if lhs.seasonLosses != rhs.seasonLosses { return lhs.seasonLosses < rhs.seasonLosses }
-            if lhs.id != rhs.id { return lhs.id < rhs.id }
-            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+            return lhs.id < rhs.id
         }
     }
 
@@ -163,11 +187,15 @@ enum ShareCardLayout {
         members: [GroupMember],
         currentUserId: String?
     ) -> SeasonLedgerLayout {
-        let metrics = chartColumnMetrics(extraGameInset: 120 - minGameColumnWidth)
+        let slotCap = maxMemberColumnSlots(minimumLeadWidth: ledgerWeekColumnWidth)
         let trimmed = membersForShareColumns(
             members: members,
             currentUserId: currentUserId,
-            limit: metrics.maxMemberColumns
+            limit: slotCap
+        )
+        let metrics = tableColumnMetrics(
+            memberCount: trimmed.count,
+            minimumLeadWidth: ledgerWeekColumnWidth
         )
         let omittedMemberCount = max(0, members.count - trimmed.count)
 
@@ -207,7 +235,7 @@ enum ShareCardLayout {
             gamesBack: gamesBack,
             omittedMemberCount: omittedMemberCount,
             memberColumnWidth: metrics.memberColumnWidth,
-            weekColumnWidth: 120
+            weekColumnWidth: metrics.leadColumnWidth
         )
     }
 
@@ -220,12 +248,13 @@ enum ShareCardLayout {
         currentUserId: String?,
         liveCards: [String: ESPNLiveGameCard]
     ) -> PickemsChartLayout {
-        let metrics = chartColumnMetrics()
+        let slotCap = maxMemberColumnSlots()
         let trimmed = membersForShareColumns(
             members: members,
             currentUserId: currentUserId,
-            limit: metrics.maxMemberColumns
+            limit: slotCap
         )
+        let metrics = tableColumnMetrics(memberCount: trimmed.count)
         let omittedMemberCount = max(0, members.count - trimmed.count)
 
         let columns = trimmed.map {
@@ -262,11 +291,7 @@ enum ShareCardLayout {
                 live: live,
                 showsSpreads: pickMode.showsSpreads
             )
-            return ShareChartGameRow(
-                matchup: matchup,
-                scoreLine: nil,
-                cells: cells
-            )
+            return ShareChartGameRow(matchup: matchup, cells: cells)
         }
 
         let stillToPlay = stillToPlayStrip(
@@ -302,9 +327,8 @@ enum ShareCardLayout {
             guard let pickedId, !pickedId.isEmpty else { return nil }
             return pickAbbreviation(game: game, pickedTeamId: pickedId)
         }
-        let allPreKick = !games.isEmpty
         let picksHidden = games.contains { hiddenGameIds.contains($0.id) }
-        let note = allPreKick && picksHidden ? "Picks hidden until kickoff" : nil
+        let note = picksHidden ? "Picks hidden until kickoff" : nil
         return ShareStillToPlayStrip(chips: chips, picksHiddenNote: note)
     }
 

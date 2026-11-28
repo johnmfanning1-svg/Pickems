@@ -115,7 +115,6 @@ struct ShareChartMemberColumn: Equatable, Sendable {
 
 struct ShareChartGameRow: Equatable, Sendable {
     let matchup: String
-    let scoreLine: String?
     let cells: [ShareChartCell]
 }
 
@@ -215,7 +214,7 @@ extension ScreenShareContent {
             omittedGameCount: layout.omittedGameCount,
             pickMode: pickMode,
             showsSpreads: pickMode.showsSpreads,
-            gameColumnWidth: layout.metrics.gameColumnWidth,
+            gameColumnWidth: layout.metrics.leadColumnWidth,
             memberColumnWidth: layout.metrics.memberColumnWidth
         )
         return .pickemsChart(model)
