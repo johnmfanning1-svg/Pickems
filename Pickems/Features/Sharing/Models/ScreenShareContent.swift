@@ -25,12 +25,25 @@ enum ScreenShareContent: Equatable, Sendable {
         }
     }
 
+    var groupId: String? {
+        switch self {
+        case .leaderboard(let model): return model.groupId
+        case .seasonLedger(let model): return model.groupId
+        case .pickemsChart(let model): return model.groupId
+        }
+    }
+
     var caption: String {
-        ScreenShareTextBuilder.caption(leagueName: leagueName, contextLine: contextLabel)
+        ScreenShareTextBuilder.caption(
+            leagueName: leagueName,
+            contextLine: contextLabel,
+            groupId: groupId
+        )
     }
 }
 
 struct LeaderboardShareModel: Equatable, Sendable {
+    let groupId: String
     let leagueName: String
     let periodLabel: String
     let rows: [ShareLeaderboardRow]
@@ -38,6 +51,7 @@ struct LeaderboardShareModel: Equatable, Sendable {
 }
 
 struct SeasonLedgerShareModel: Equatable, Sendable {
+    let groupId: String
     let leagueName: String
     let columns: [ShareLedgerMemberColumn]
     let weeks: [ShareLedgerWeekRow]
@@ -47,6 +61,7 @@ struct SeasonLedgerShareModel: Equatable, Sendable {
 }
 
 struct PickemsChartShareModel: Equatable, Sendable {
+    let groupId: String
     let leagueName: String
     let periodLabel: String
     let columns: [ShareChartMemberColumn]
@@ -105,6 +120,7 @@ struct ShareChartCell: Equatable, Sendable {
 
 extension ScreenShareContent {
     static func makeLeaderboard(
+        groupId: String,
         leagueName: String,
         scope: LeaderboardScope.Scope,
         entries: [StandingEntry],
@@ -119,6 +135,7 @@ extension ScreenShareContent {
             leaderWins: leaderWins
         )
         let model = LeaderboardShareModel(
+            groupId: groupId,
             leagueName: leagueName,
             periodLabel: ShareCardLayout.leaderboardPeriodLabel(scope: scope),
             rows: layout.rows,
@@ -128,6 +145,7 @@ extension ScreenShareContent {
     }
 
     static func makeSeasonLedger(
+        groupId: String,
         leagueName: String,
         data: SeasonLedgerSeasonData,
         members: [GroupMember],
@@ -140,6 +158,7 @@ extension ScreenShareContent {
             currentUserId: currentUserId
         )
         let model = SeasonLedgerShareModel(
+            groupId: groupId,
             leagueName: leagueName,
             columns: layout.columns,
             weeks: layout.weeks,
@@ -151,6 +170,7 @@ extension ScreenShareContent {
     }
 
     static func makePickemsChart(
+        groupId: String,
         leagueName: String,
         periodLabel: String,
         members: [GroupMember],
@@ -172,6 +192,7 @@ extension ScreenShareContent {
             liveCards: liveCards
         )
         let model = PickemsChartShareModel(
+            groupId: groupId,
             leagueName: leagueName,
             periodLabel: periodLabel,
             columns: layout.columns,

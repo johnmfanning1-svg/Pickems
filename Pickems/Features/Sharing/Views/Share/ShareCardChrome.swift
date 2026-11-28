@@ -6,6 +6,7 @@ struct ShareCardChrome<Body: View>: View {
     let contextTitle: String
   /// Optional subtitle under the context line (e.g. standings scope hint).
     var detailSubtitle: String? = nil
+    var leagueShareURL: String? = nil
     @ViewBuilder let bodyContent: () -> Body
 
     var body: some View {
@@ -62,6 +63,13 @@ struct ShareCardChrome<Body: View>: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let leagueShareURL {
+                Text(leagueShareURL)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(PickemsColors.textSecondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+            }
             Text("Get Pickems on the App Store")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(PickemsColors.accent)

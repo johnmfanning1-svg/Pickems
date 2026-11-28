@@ -5,6 +5,7 @@ import XCTest
 final class ShareCardRendererTests: XCTestCase {
     func testRendersLeaderboardCardImage() {
         let model = LeaderboardShareModel(
+            groupId: "g1",
             leagueName: "Test League",
             periodLabel: "This Week",
             rows: [
@@ -29,6 +30,7 @@ final class ShareCardRendererTests: XCTestCase {
 
     func testRendersSeasonLedgerCardImage() {
         let model = SeasonLedgerShareModel(
+            groupId: "g1",
             leagueName: "Ledger League",
             columns: [ShareLedgerMemberColumn(shortName: "You", isViewer: true)],
             weeks: [ShareLedgerWeekRow(title: "Week 1", records: [ShareLedgerWLPair(wins: 2, losses: 1)])],
@@ -44,6 +46,7 @@ final class ShareCardRendererTests: XCTestCase {
 
     func testRendersPickemsChartCardImage() {
         let model = PickemsChartShareModel(
+            groupId: "g1",
             leagueName: "Chart League",
             periodLabel: "Week 2",
             columns: [

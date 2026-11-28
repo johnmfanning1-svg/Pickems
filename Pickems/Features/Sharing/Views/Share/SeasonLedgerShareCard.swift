@@ -10,7 +10,8 @@ struct SeasonLedgerShareCard: View {
         ShareCardChrome(
             leagueName: model.leagueName,
             periodLabel: "Season",
-            contextTitle: "Season Ledger"
+            contextTitle: "Season Ledger",
+            leagueShareURL: AppConfig.leagueShareURL(groupId: model.groupId)
         ) {
             VStack(alignment: .leading, spacing: 0) {
                 headerRow

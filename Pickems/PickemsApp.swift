@@ -45,6 +45,7 @@ struct PickemsApp: App {
                         .onChange(of: appState.groupService.hasCompletedInitialGroupLoad) { _, loaded in
                             if loaded {
                                 appState.flushPendingNotificationRoute()
+                                appState.flushPendingSharedLeagueLink()
                                 appState.migrateWidgetFollowIfNeeded()
                             }
                         }

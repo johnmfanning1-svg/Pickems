@@ -81,12 +81,13 @@ struct SeasonLedgerView: View {
                 HStack(spacing: 4) {
                     if loader.data != nil, !(loader.data?.weeks.isEmpty ?? true),
                        let data = loader.data,
-                       let leagueName = appState.groupService.selectedGroup?.name {
+                       let group = appState.groupService.selectedGroup {
                         ShareScreenButton(
                             accessibilityLabel: "Share season ledger",
                             buildContent: {
                                 ScreenShareContent.makeSeasonLedger(
-                                    leagueName: leagueName,
+                                    groupId: group.id,
+                                    leagueName: group.name,
                                     data: data,
                                     members: members,
                                     currentUserId: appState.currentUserId
@@ -187,12 +188,13 @@ struct SeasonLedgerExpandedView: View {
                     .accessibilityLabel("Exit full screen")
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    if let leagueName = appState.groupService.selectedGroup?.name, !data.weeks.isEmpty {
+                    if let group = appState.groupService.selectedGroup, !data.weeks.isEmpty {
                         ShareScreenButton(
                             accessibilityLabel: "Share season ledger",
                             buildContent: {
                                 ScreenShareContent.makeSeasonLedger(
-                                    leagueName: leagueName,
+                                    groupId: group.id,
+                                    leagueName: group.name,
                                     data: data,
                                     members: members,
                                     currentUserId: currentUserId

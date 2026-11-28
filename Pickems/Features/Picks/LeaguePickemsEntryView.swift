@@ -22,40 +22,7 @@ struct LeaguePickemsEntryView: View {
             }
         }
         .toolbar {
-            if showsBoard {
-                ToolbarItem(placement: .topBarTrailing) {
-                    chartShareToolbar
-                }
-            }
             HelpToolbarItem(topic: PickemsHelp.leaguePickems(for: appState.selectedPickMode))
-        }
-    }
-
-    @ViewBuilder
-    private var chartShareToolbar: some View {
-        if let leagueName = appState.groupService.selectedGroup?.name,
-           let week = appState.groupService.currentWeek,
-           !appState.pickService.slateGames.isEmpty,
-           !appState.groupService.members.isEmpty {
-            ShareScreenButton(
-                accessibilityLabel: "Share league Pickems chart",
-                buildContent: {
-                    ScreenShareContent.makePickemsChart(
-                        leagueName: leagueName,
-                        periodLabel: SeasonLedgerWeekTitle.rowTitle(for: week),
-                        members: appState.groupService.members,
-                        games: appState.pickService.slateGames.sortedByKickoff,
-                        picksByUserId: appState.pickService.boardPicksByUserId(
-                            members: appState.groupService.members,
-                            ownUserId: appState.currentUserId
-                        ),
-                        hiddenGameIds: leaguePickemsHiddenGameIds(week: week),
-                        pickMode: appState.selectedPickMode,
-                        currentUserId: appState.currentUserId,
-                        liveCards: appState.picksViewModel.livePickCards
-                    )
-                }
-            )
         }
     }
 

@@ -6,8 +6,6 @@ enum ShareCardLayout {
     static let ledgerMemberColumnLimit = 6
     static let chartOtherMemberLimit = 5
     static let renderWidth: CGFloat = 1080
-    static let minRenderHeight: CGFloat = 1080
-    static let maxRenderHeight: CGFloat = 1920
     static let maxChartGameRows = 14
 
     struct LeaderboardLayout: Equatable, Sendable {
@@ -141,16 +139,10 @@ enum ShareCardLayout {
         guard members.count > ledgerMemberColumnLimit else { return members }
         let viewer = members.first { $0.id == currentUserId }
         let others = members.filter { $0.id != currentUserId }
-        let ranked = others.sorted { lhs, rhs in
-            let left = data.seasonRecord(for: lhs.id).wins
-            let right = data.seasonRecord(for: rhs.id).wins
-            if left != right { return left > right }
-            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
-        }
         var result: [GroupMember] = []
         if let viewer { result.append(viewer) }
         let slots = ledgerMemberColumnLimit - result.count
-        result.append(contentsOf: ranked.prefix(slots))
+        result.append(contentsOf: others.prefix(slots))
         return result
     }
 
@@ -223,25 +215,9 @@ enum ShareCardLayout {
         let viewer = members.first { $0.id == currentUserId }
         let others = members.filter { $0.id != currentUserId }
 
-        func pickCount(for member: GroupMember) -> Int {
-            guard let pick = picksByUserId[member.id] else { return 0 }
-            return games.reduce(0) { partial, game in
-                partial + (pick.picks[game.id] != nil ? 1 : 0)
-            }
-        }
-
-        let ranked = others.sorted { lhs, rhs in
-            let left = pickCount(for: lhs)
-            let right = pickCount(for: rhs)
-            if left != right { return left > right }
-            return lhs.seasonWins != rhs.seasonWins
-                ? lhs.seasonWins > rhs.seasonWins
-                : lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
-        }
-
         var result: [GroupMember] = []
         if let viewer { result.append(viewer) }
-        result.append(contentsOf: ranked.prefix(chartOtherMemberLimit))
+        result.append(contentsOf: others.prefix(chartOtherMemberLimit))
         return result
     }
 

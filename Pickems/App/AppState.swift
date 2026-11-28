@@ -35,6 +35,8 @@ final class AppState {
     var pendingDeadlineEditor: CommissionerDeadlineTarget?
     /// League to select when a push/deep link includes `groupId`.
     var pendingDeepLinkGroupId: String?
+    /// Shared league link waiting for the membership list before join/open resolution.
+    var pendingSharedLeagueGroupId: String?
     /// Game-final / no-pick / lead route waiting for the membership list (cold launch).
     var pendingNotificationRoute: DeepLinkAction?
     /// Game to scroll to and present after a game-final or single no-pick tap.
@@ -239,8 +241,7 @@ final class AppState {
             selectDeepLinkGroup(groupId)
             selectedTab = .selections
         case .openLeagues(let groupId):
-            selectDeepLinkGroup(groupId)
-            selectedTab = .leagues
+            handleSharedLeagueDeepLink(groupId: groupId)
         case .openHome:
             selectedTab = .home
         case .openDiscover:
@@ -259,6 +260,41 @@ final class AppState {
     func flushPendingNotificationRoute() {
         guard let pending = pendingNotificationRoute else { return }
         handleDeepLink(pending)
+    }
+
+    func flushPendingSharedLeagueLink() {
+        guard let groupId = pendingSharedLeagueGroupId else { return }
+        guard groupService.hasCompletedInitialGroupLoad else { return }
+        pendingSharedLeagueGroupId = nil
+        handleSharedLeagueDeepLink(groupId: groupId)
+    }
+
+    private func handleSharedLeagueDeepLink(groupId: String?) {
+        guard let groupId, !groupId.isEmpty else {
+            selectedTab = .leagues
+            return
+        }
+        if groupService.groups.contains(where: { $0.id == groupId }) {
+            selectDeepLinkGroup(groupId)
+            selectedTab = .leagues
+            return
+        }
+        if groupService.hasCompletedInitialGroupLoad {
+            Task { await presentJoinForSharedLeague(groupId: groupId) }
+        } else {
+            pendingSharedLeagueGroupId = groupId
+            selectedTab = .leagues
+        }
+    }
+
+    private func presentJoinForSharedLeague(groupId: String) async {
+        selectedTab = .leagues
+        guard authService.isAuthenticated else { return }
+        if let listing = await groupService.fetchPublicLeagueListing(groupId: groupId),
+           let code = PublicLeagueBrowse.joinCode(for: listing) {
+            pendingInviteCode = code
+        }
+        present(.joinGroup)
     }
 
     private func applyNotificationLaunch(_ launch: NotificationLaunch, action: DeepLinkAction) {
@@ -321,6 +357,7 @@ final class AppState {
         presentedSheet = nil
         pendingDeadlineEditor = nil
         pendingNotificationRoute = nil
+        pendingSharedLeagueGroupId = nil
         focusedGameId = nil
         focusedWeekId = nil
         requestedLeaderboardThisWeek = false
