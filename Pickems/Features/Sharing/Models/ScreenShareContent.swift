@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Share payloads for leaderboard, Season Ledger, and league Pickems chart cards.
@@ -58,6 +59,8 @@ struct SeasonLedgerShareModel: Equatable, Sendable {
     let seasonTotals: [ShareLedgerWLPair]
     let gamesBack: [String]
     let omittedMemberCount: Int
+    let memberColumnWidth: CGFloat
+    let weekColumnWidth: CGFloat
 }
 
 struct PickemsChartShareModel: Equatable, Sendable {
@@ -66,10 +69,18 @@ struct PickemsChartShareModel: Equatable, Sendable {
     let periodLabel: String
     let columns: [ShareChartMemberColumn]
     let games: [ShareChartGameRow]
+    let stillToPlay: ShareStillToPlayStrip?
     let omittedMemberCount: Int
     let omittedGameCount: Int
     let pickMode: PickMode
     let showsSpreads: Bool
+    let gameColumnWidth: CGFloat
+    let memberColumnWidth: CGFloat
+}
+
+struct ShareStillToPlayStrip: Equatable, Sendable {
+    let chips: [String]
+    let picksHiddenNote: String?
 }
 
 struct ShareLeaderboardRow: Equatable, Sendable {
@@ -164,7 +175,9 @@ extension ScreenShareContent {
             weeks: layout.weeks,
             seasonTotals: layout.seasonTotals,
             gamesBack: layout.gamesBack,
-            omittedMemberCount: layout.omittedMemberCount
+            omittedMemberCount: layout.omittedMemberCount,
+            memberColumnWidth: layout.memberColumnWidth,
+            weekColumnWidth: layout.weekColumnWidth
         )
         return .seasonLedger(model)
     }
@@ -197,10 +210,13 @@ extension ScreenShareContent {
             periodLabel: periodLabel,
             columns: layout.columns,
             games: layout.games,
+            stillToPlay: layout.stillToPlay,
             omittedMemberCount: layout.omittedMemberCount,
             omittedGameCount: layout.omittedGameCount,
             pickMode: pickMode,
-            showsSpreads: pickMode.showsSpreads
+            showsSpreads: pickMode.showsSpreads,
+            gameColumnWidth: layout.metrics.gameColumnWidth,
+            memberColumnWidth: layout.metrics.memberColumnWidth
         )
         return .pickemsChart(model)
     }

@@ -3,8 +3,12 @@ import SwiftUI
 struct SeasonLedgerShareCard: View {
     let model: SeasonLedgerShareModel
 
-    private let weekWidth: CGFloat = 120
-    private let memberWidth: CGFloat = 76
+    private var weekWidth: CGFloat { model.weekColumnWidth }
+    private var memberWidth: CGFloat { model.memberColumnWidth }
+
+    private var tableWidth: CGFloat {
+        weekWidth + CGFloat(model.columns.count) * memberWidth
+    }
 
     var body: some View {
         ShareCardChrome(
@@ -27,6 +31,7 @@ struct SeasonLedgerShareCard: View {
                         .padding(.top, 12)
                 }
             }
+            .frame(width: tableWidth, alignment: .leading)
             .background(PickemsColors.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(

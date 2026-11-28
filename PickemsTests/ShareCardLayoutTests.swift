@@ -65,6 +65,24 @@ final class ShareCardLayoutTests: XCTestCase {
         XCTAssertFalse(ShareCardLayout.leaderboardPeriodLabel(scope: .bowl).localizedCaseInsensitiveContains("Mode"))
     }
 
+    func testChartColumnMetricsFillInnerWidth() {
+        let metrics = ShareCardLayout.chartColumnMetrics()
+        XCTAssertGreaterThanOrEqual(metrics.maxMemberColumns, 10)
+        let usedWidth = metrics.gameColumnWidth + metrics.memberColumnWidth * CGFloat(metrics.maxMemberColumns)
+        XCTAssertEqual(usedWidth, ShareCardLayout.chartInnerWidth, accuracy: 0.5)
+        XCTAssertGreaterThanOrEqual(metrics.memberColumnWidth, ShareCardLayout.minMemberColumnWidth - 0.01)
+    }
+
+    func testMembersForShareColumnsViewerFirstAndNearestStandings() {
+        let members = (1 ... 12).map { member(id: "m\($0)", name: "M\($0)", wins: $0) }
+        let picked = ShareCardLayout.membersForShareColumns(
+            members: members,
+            currentUserId: "m6",
+            limit: 5
+        )
+        XCTAssertEqual(picked.map(\.id), ["m6", "m7", "m5", "m8", "m4"])
+    }
+
     func testLedgerKeepsViewerColumn() {
         let members = [
             member(id: "a", name: "Alpha", wins: 10),
@@ -78,11 +96,12 @@ final class ShareCardLayoutTests: XCTestCase {
     }
 
     func testLedgerTrimsMembersWithOmittedCount() {
-        let members = (1 ... 10).map { member(id: "m\($0)", name: "M\($0)", wins: 20 - $0) }
+        let members = (1 ... 15).map { member(id: "m\($0)", name: "M\($0)", wins: 20 - $0) }
         let data = ledgerData(memberIds: members.map(\.id))
-        let layout = ShareCardLayout.seasonLedger(data: data, members: members, currentUserId: "m10")
-        XCTAssertEqual(layout.columns.count, ShareCardLayout.ledgerMemberColumnLimit)
-        XCTAssertEqual(layout.omittedMemberCount, 4)
+        let layout = ShareCardLayout.seasonLedger(data: data, members: members, currentUserId: "m15")
+        let metrics = ShareCardLayout.chartColumnMetrics(extraGameInset: 120 - ShareCardLayout.minGameColumnWidth)
+        XCTAssertEqual(layout.columns.count, metrics.maxMemberColumns)
+        XCTAssertEqual(layout.omittedMemberCount, 15 - metrics.maxMemberColumns)
     }
 
     func testLedgerWeekTitles() {
@@ -125,7 +144,7 @@ final class ShareCardLayoutTests: XCTestCase {
         XCTAssertTrue(layout.columns.contains(where: { $0.isViewer }))
     }
 
-    func testChartTrimsMembers() {
+    func testChartTrimsMembersUsingWidthCap() {
         let members = (1 ... 12).map { member(id: "m\($0)", name: "M\($0)", wins: $0) }
         let games = [slateGame(id: "g1")]
         let layout = ShareCardLayout.pickemsChart(
@@ -137,8 +156,9 @@ final class ShareCardLayoutTests: XCTestCase {
             currentUserId: "m12",
             liveCards: [:]
         )
-        XCTAssertEqual(layout.columns.count, ShareCardLayout.chartOtherMemberLimit + 1)
-        XCTAssertEqual(layout.omittedMemberCount, 6)
+        XCTAssertEqual(layout.columns.count, layout.metrics.maxMemberColumns)
+        XCTAssertEqual(layout.omittedMemberCount, 12 - layout.metrics.maxMemberColumns)
+        XCTAssertEqual(layout.columns.first?.shortName, "You")
     }
 
     func testChartDoesNotExposeHiddenRollingLockPickForOthers() {
@@ -174,6 +194,31 @@ final class ShareCardLayoutTests: XCTestCase {
         }
     }
 
+    func testChartKeepsScheduledGamesInStillToPlayStrip() {
+        let members = [member(id: "me", name: "Viewer", wins: 2)]
+        let finalGame = slateGame(id: "g-final", status: .final, kickoff: Date(timeIntervalSince1970: 100))
+        let scheduled = slateGame(id: "g-later", status: .scheduled, kickoff: Date(timeIntervalSince1970: 200))
+        let picks: [String: UserPick] = [
+            "me": userPick(userId: "me", picks: [
+                "g-final": "home",
+                "g-later": "away",
+            ]),
+        ]
+        let layout = ShareCardLayout.pickemsChart(
+            members: members,
+            games: [scheduled, finalGame],
+            picksByUserId: picks,
+            hiddenGameIds: ["g-later"],
+            pickMode: .ats,
+            currentUserId: "me",
+            liveCards: [:]
+        )
+        XCTAssertEqual(layout.games.count, 1)
+        XCTAssertEqual(layout.games.first?.matchup, "AWY @ HOM  17–21")
+        XCTAssertEqual(layout.stillToPlay?.chips, ["AWY"])
+        XCTAssertEqual(layout.stillToPlay?.picksHiddenNote, "Picks hidden until kickoff")
+    }
+
     func testCaptionContainsAppStoreURL() {
         let content = ScreenShareContent.makeLeaderboard(
             groupId: "core-4",
@@ -191,12 +236,11 @@ final class ShareCardLayoutTests: XCTestCase {
         XCTAssertFalse(content?.caption.contains("@") == true)
     }
 
-    func testLedgerPreservesMemberOrderWhenTrimming() {
-        let members = (1 ... 8).map { member(id: "m\($0)", name: "M\($0)", wins: 0) }
-        let data = ledgerData(memberIds: members.map(\.id))
-        let layout = ShareCardLayout.seasonLedger(data: data, members: members, currentUserId: "m8")
-        XCTAssertEqual(layout.columns.count, ShareCardLayout.ledgerMemberColumnLimit)
-        XCTAssertEqual(layout.columns.map(\.shortName), ["You", "M1", "M2", "M3", "M4", "M5"])
+    func testLeagueShareURLFormatForFooter() {
+        XCTAssertEqual(
+            AppConfig.leagueShareURL(groupId: "abc"),
+            "https://pickems-fb.web.app/l/abc"
+        )
     }
 
     // MARK: - Fixtures
@@ -263,7 +307,11 @@ final class ShareCardLayoutTests: XCTestCase {
         )
     }
 
-    private func slateGame(id: String) -> SlateGame {
+    private func slateGame(
+        id: String,
+        status: SlateGame.GameStatus = .final,
+        kickoff: Date = Date()
+    ) -> SlateGame {
         SlateGame(
             id: id,
             espnEventId: id,
@@ -277,8 +325,8 @@ final class ShareCardLayoutTests: XCTestCase {
             awayTeamLogoURL: nil,
             spread: 3,
             spreadTeamId: "home",
-            kickoff: Date(),
-            status: .final,
+            kickoff: kickoff,
+            status: status,
             homeScore: 21,
             awayScore: 17,
             winnerTeamId: "home"
