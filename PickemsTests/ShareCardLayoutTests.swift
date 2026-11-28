@@ -243,7 +243,7 @@ final class ShareCardLayoutTests: XCTestCase {
             liveCards: [:]
         )
         XCTAssertEqual(layout.games.count, 1)
-        XCTAssertEqual(layout.games.first?.matchup, "AWY @ HOM  17–21")
+        XCTAssertEqual(layout.games.first?.matchup, "AWY @ HOM*  17–21")
         XCTAssertEqual(layout.stillToPlay?.chips, ["AWY"])
         XCTAssertEqual(layout.stillToPlay?.picksHiddenNote, "Picks hidden until kickoff")
     }
