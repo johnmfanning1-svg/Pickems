@@ -169,8 +169,15 @@ struct GroupPicksView: View {
             teamRanks: appState.picksViewModel.teamRanks,
             currentUserId: currentUserId,
             hiddenGameIds: hiddenGameIds,
-            pickMode: appState.selectedPickMode
+            pickMode: appState.selectedPickMode,
+            shareLeagueName: appState.groupService.selectedGroup?.name,
+            sharePeriodLabel: chartSharePeriodLabel
         )
+    }
+
+    private var chartSharePeriodLabel: String? {
+        guard let week else { return nil }
+        return SeasonLedgerWeekTitle.rowTitle(for: week)
     }
 
     private var innerList: some View {
@@ -194,7 +201,9 @@ struct GroupPicksView: View {
                     currentUserId: currentUserId,
                     hiddenGameIds: hiddenGameIds,
                     pickMode: appState.selectedPickMode,
-                    onExpand: { showExpandedBoard = true }
+                    onExpand: { showExpandedBoard = true },
+                    shareLeagueName: embedded ? appState.groupService.selectedGroup?.name : nil,
+                    sharePeriodLabel: embedded ? chartSharePeriodLabel : nil
                 )
             } else {
                 ForEach(sortedMembers) { member in

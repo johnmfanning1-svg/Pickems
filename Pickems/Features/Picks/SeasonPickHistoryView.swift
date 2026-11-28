@@ -82,7 +82,10 @@ struct SeasonPickHistoryView: View {
         .pickemsScreenBackground()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                HelpInfoButton(topic: PickemsHelp.seasonHistory, size: .body)
+                HStack(spacing: 4) {
+                    historyChartShareButton
+                    HelpInfoButton(topic: PickemsHelp.seasonHistory, size: .body)
+                }
             }
         }
         .task {
@@ -107,7 +110,35 @@ struct SeasonPickHistoryView: View {
                 teamRanks: appState.picksViewModel.teamRanks,
                 currentUserId: appState.currentUserId,
                 hiddenGameIds: hiddenGameIds(for: week),
-                pickMode: appState.pickMode(for: week)
+                pickMode: appState.pickMode(for: week),
+                shareLeagueName: appState.groupService.selectedGroup?.name,
+                sharePeriodLabel: SeasonLedgerWeekTitle.rowTitle(for: week)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var historyChartShareButton: some View {
+        if let week = selectedWeek,
+           WeekTransition.pickemsShouldShowLeagueBoard(week),
+           !displayGames.isEmpty,
+           !appState.groupService.members.isEmpty,
+           let leagueName = appState.groupService.selectedGroup?.name {
+            ShareScreenButton(
+                accessibilityLabel: "Share league Pickems chart",
+                buildContent: {
+                    ScreenShareContent.makePickemsChart(
+                        leagueName: leagueName,
+                        periodLabel: SeasonLedgerWeekTitle.rowTitle(for: week),
+                        members: appState.groupService.members,
+                        games: displayGames,
+                        picksByUserId: picksByUserId,
+                        hiddenGameIds: hiddenGameIds(for: week),
+                        pickMode: appState.pickMode(for: week),
+                        currentUserId: appState.currentUserId,
+                        liveCards: historyLiveCards
+                    )
+                }
             )
         }
     }
@@ -213,7 +244,9 @@ struct SeasonPickHistoryView: View {
                     currentUserId: appState.currentUserId,
                     hiddenGameIds: hiddenGameIds(for: week),
                     pickMode: appState.pickMode(for: week),
-                    onExpand: { showExpandedBoard = true }
+                    onExpand: { showExpandedBoard = true },
+                    shareLeagueName: appState.groupService.selectedGroup?.name,
+                    sharePeriodLabel: SeasonLedgerWeekTitle.rowTitle(for: week)
                 )
                 .padding(.horizontal)
             } else if WeekTransition.pickemsShouldShowLeagueBoard(week) {

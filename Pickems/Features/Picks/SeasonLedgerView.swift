@@ -79,7 +79,20 @@ struct SeasonLedgerView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 4) {
-                    if loader.data != nil, !(loader.data?.weeks.isEmpty ?? true) {
+                    if loader.data != nil, !(loader.data?.weeks.isEmpty ?? true),
+                       let data = loader.data,
+                       let leagueName = appState.groupService.selectedGroup?.name {
+                        ShareScreenButton(
+                            accessibilityLabel: "Share season ledger",
+                            buildContent: {
+                                ScreenShareContent.makeSeasonLedger(
+                                    leagueName: leagueName,
+                                    data: data,
+                                    members: members,
+                                    currentUserId: appState.currentUserId
+                                )
+                            }
+                        )
                         Button {
                             showExpandedLedger = true
                         } label: {
@@ -128,6 +141,7 @@ struct SeasonLedgerExpandedView: View {
     let members: [GroupMember]
     let currentUserId: String?
 
+    @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themePalette) private var theme
 
@@ -171,6 +185,21 @@ struct SeasonLedgerExpandedView: View {
                             .font(.body.weight(.semibold))
                     }
                     .accessibilityLabel("Exit full screen")
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if let leagueName = appState.groupService.selectedGroup?.name, !data.weeks.isEmpty {
+                        ShareScreenButton(
+                            accessibilityLabel: "Share season ledger",
+                            buildContent: {
+                                ScreenShareContent.makeSeasonLedger(
+                                    leagueName: leagueName,
+                                    data: data,
+                                    members: members,
+                                    currentUserId: currentUserId
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }
