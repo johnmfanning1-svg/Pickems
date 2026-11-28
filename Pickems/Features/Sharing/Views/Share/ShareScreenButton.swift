@@ -89,7 +89,7 @@ struct ShareScreenButton: View {
             let caption = content.caption
             let title = content.contextLabel
             let payload = ScreenSharePayload(title: title, caption: caption, image: image)
-            let items: [Any] = [payload, caption]
+            let items: [Any] = [payload]
             let modal = ScreenModal.activity(items: items, id: UUID())
             PickemsPresentation.afterTap {
                 if let helpPresenter {

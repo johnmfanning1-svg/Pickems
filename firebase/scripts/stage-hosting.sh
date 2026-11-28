@@ -13,6 +13,7 @@ mkdir -p dist/.well-known dist/assets
 # Marketing homepage owns public /. Vite emits the SPA at dist/admin/.
 cp ../../web/index.html dist/index.html
 cp ../../web/join.html dist/join.html
+cp ../../web/league.html dist/league.html
 cp ../../web/support.html dist/support.html
 cp ../../web/robots.txt dist/robots.txt
 cp ../../web/sitemap.xml dist/sitemap.xml

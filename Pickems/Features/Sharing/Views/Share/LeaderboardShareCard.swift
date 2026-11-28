@@ -7,7 +7,8 @@ struct LeaderboardShareCard: View {
         ShareCardChrome(
             leagueName: model.leagueName,
             periodLabel: model.periodLabel,
-            contextTitle: "Leaderboard"
+            contextTitle: "Leaderboard",
+            leagueShareURL: AppConfig.leagueShareURL(groupId: model.groupId)
         ) {
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(Array(model.rows.enumerated()), id: \.offset) { _, row in

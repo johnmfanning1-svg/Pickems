@@ -1019,6 +1019,25 @@ final class GroupService {
         )
     }
 
+    /// Reads the discoverable index row for a shared league link. Nil when private or missing.
+    func fetchPublicLeagueListing(groupId: String) async -> PublicLeagueListing? {
+        let trimmed = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        do {
+            let doc = try await db.collection(PublicLeagueBrowse.indexCollection).document(trimmed).getDocument()
+            guard doc.exists else { return nil }
+            let row = try doc.data(as: PublicLeagueListing.self)
+            guard PublicLeagueBrowse.joinCode(for: row) != nil else { return nil }
+            return row
+        } catch {
+            AppLog.notice(AppLog.firestore, "public league lookup failed", metadata: [
+                "groupId": trimmed,
+                "error": AppLog.describe(error),
+            ])
+            return nil
+        }
+    }
+
     func joinGroup(
         inviteCode: String,
         userId: String,

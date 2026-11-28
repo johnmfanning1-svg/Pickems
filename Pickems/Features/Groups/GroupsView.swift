@@ -845,13 +845,14 @@ struct LeaderboardView: View {
     private var leaderboardTrailingControls: some View {
         HStack(spacing: 8) {
             if !allEntries.isEmpty,
-               let leagueName = appState.groupService.selectedGroup?.name {
+               let group = appState.groupService.selectedGroup {
                 ShareScreenButton(
                     accessibilityLabel: "Share leaderboard",
                     style: .headerAccessory,
                     buildContent: {
                         ScreenShareContent.makeLeaderboard(
-                            leagueName: leagueName,
+                            groupId: group.id,
+                            leagueName: group.name,
                             scope: scope,
                             entries: allEntries,
                             viewerId: appState.currentUserId,
@@ -987,12 +988,13 @@ struct FullLeaderboardView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 4) {
                     if !entries.isEmpty,
-                       let leagueName = appState.groupService.selectedGroup?.name {
+                       let group = appState.groupService.selectedGroup {
                         ShareScreenButton(
                             accessibilityLabel: "Share leaderboard",
                             buildContent: {
                                 ScreenShareContent.makeLeaderboard(
-                                    leagueName: leagueName,
+                                    groupId: group.id,
+                                    leagueName: group.name,
                                     scope: scope,
                                     entries: entries,
                                     viewerId: appState.currentUserId,

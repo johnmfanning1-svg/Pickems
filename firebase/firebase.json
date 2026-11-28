@@ -95,6 +95,22 @@
         "destination": "/join.html"
       },
       {
+        "source": "/l",
+        "destination": "/league.html"
+      },
+      {
+        "source": "/l/**",
+        "destination": "/league.html"
+      },
+      {
+        "source": "/league",
+        "destination": "/league.html"
+      },
+      {
+        "source": "/league/*",
+        "destination": "/league.html"
+      },
+      {
         "source": "/support",
         "destination": "/support.html"
       },
@@ -165,6 +181,15 @@
       },
       {
         "source": "/support.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          }
+        ]
+      },
+      {
+        "source": "/league.html",
         "headers": [
           {
             "key": "Cache-Control",

@@ -62,13 +62,20 @@ enum DeepLinkRouter {
     /// nonisolated: AppDelegate notification callbacks run off the main actor under Swift 6.
     nonisolated static func parse(url: URL) -> DeepLinkAction? {
         if url.scheme?.lowercased() == "pickems" {
-            if (url.host ?? "").lowercased() == "league" {
+            let host = (url.host ?? "").lowercased()
+            if host == "league" {
                 return parseLeaguePath(url.path)
+            }
+            if host == "l" {
+                return parseSharedLeagueId(from: url.path)
             }
             return parseHost(path: url.host ?? "", query: url.queryItems)
         }
         if isUniversalLinkHost(url.host) {
             let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if let shared = parseSharedLeagueLink(path: path) {
+                return shared
+            }
             if path.lowercased().hasPrefix("league/") || path.lowercased() == "league" {
                 return parseLeaguePath(path)
             }
@@ -125,6 +132,28 @@ enum DeepLinkRouter {
         }
     }
 
+    nonisolated static func parseSharedLeagueLink(path: String) -> DeepLinkAction? {
+        var parts = path
+            .split(separator: "/")
+            .map { segment -> String in
+                let text = String(segment)
+                return text.removingPercentEncoding ?? text
+            }
+        guard let head = parts.first?.lowercased() else { return nil }
+        guard head == "l" || head == "league" else { return nil }
+        parts.removeFirst()
+        guard parts.count == 1 else { return nil }
+        let groupId = parts[0]
+        return groupId.isEmpty ? nil : .openLeagues(groupId: groupId)
+    }
+
+    nonisolated static func parseSharedLeagueId(from rawPath: String) -> DeepLinkAction? {
+        let groupId = rawPath
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .removingPercentEncoding ?? rawPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return groupId.isEmpty ? nil : .openLeagues(groupId: groupId)
+    }
+
     nonisolated static func parseLeaguePath(_ rawPath: String) -> DeepLinkAction? {
         var parts = rawPath
             .split(separator: "/")
@@ -134,6 +163,10 @@ enum DeepLinkRouter {
             }
         if parts.first?.lowercased() == "league" {
             parts.removeFirst()
+        }
+        if parts.count == 1 {
+            let groupId = parts[0]
+            return groupId.isEmpty ? nil : .openLeagues(groupId: groupId)
         }
         guard parts.count >= 3, parts[1].lowercased() == "week" else { return nil }
         let groupId = parts[0]

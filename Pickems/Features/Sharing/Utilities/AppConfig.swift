@@ -18,6 +18,14 @@ enum AppConfig {
     static let inviteWebHost = "pickems-fb.web.app"
     static var inviteJoinBaseURL: String { "https://\(inviteWebHost)" }
 
+    /// Public league share links (Phase 2). Opens the app to this league, or join for public leagues.
+    static func leagueShareURL(groupId: String) -> String {
+        let trimmed = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return inviteJoinBaseURL }
+        let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? trimmed
+        return "\(inviteJoinBaseURL)/l/\(encoded)"
+    }
+
     /// Hosted legal pages on `main` (raw GitHub is publicly reachable HTTPS for App Review).
     static let privacyPolicyURL = URL(string: "https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/main/docs/privacy-policy.html")
     static let termsOfServiceURL = URL(string: "https://raw.githubusercontent.com/johnmfanning1-svg/Pickems/main/docs/terms.html")

@@ -170,6 +170,7 @@ struct GroupPicksView: View {
             currentUserId: currentUserId,
             hiddenGameIds: hiddenGameIds,
             pickMode: appState.selectedPickMode,
+            shareGroupId: appState.groupService.selectedGroup?.id,
             shareLeagueName: appState.groupService.selectedGroup?.name,
             sharePeriodLabel: chartSharePeriodLabel
         )
@@ -202,6 +203,7 @@ struct GroupPicksView: View {
                     hiddenGameIds: hiddenGameIds,
                     pickMode: appState.selectedPickMode,
                     onExpand: { showExpandedBoard = true },
+                    shareGroupId: embedded ? appState.groupService.selectedGroup?.id : nil,
                     shareLeagueName: embedded ? appState.groupService.selectedGroup?.name : nil,
                     sharePeriodLabel: embedded ? chartSharePeriodLabel : nil
                 )

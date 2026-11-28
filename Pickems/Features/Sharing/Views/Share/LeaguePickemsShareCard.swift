@@ -10,7 +10,8 @@ struct LeaguePickemsShareCard: View {
         ShareCardChrome(
             leagueName: model.leagueName,
             periodLabel: model.periodLabel,
-            contextTitle: "League Pickems"
+            contextTitle: "League Pickems",
+            leagueShareURL: AppConfig.leagueShareURL(groupId: model.groupId)
         ) {
             VStack(alignment: .leading, spacing: 16) {
                 colorKey

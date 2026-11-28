@@ -176,6 +176,7 @@ final class ShareCardLayoutTests: XCTestCase {
 
     func testCaptionContainsAppStoreURL() {
         let content = ScreenShareContent.makeLeaderboard(
+            groupId: "core-4",
             leagueName: "Core 4",
             scope: .bowl,
             entries: [standing(rank: 1, id: "a", name: "Ace")],
@@ -184,9 +185,18 @@ final class ShareCardLayoutTests: XCTestCase {
         )
         XCTAssertNotNil(content)
         XCTAssertTrue(content?.caption.contains(AppConfig.appStoreURL) == true)
+        XCTAssertTrue(content?.caption.contains(AppConfig.leagueShareURL(groupId: "core-4")) == true)
         XCTAssertTrue(content?.caption.contains("Core 4") == true)
         XCTAssertFalse(content?.caption.contains("invite") == true)
         XCTAssertFalse(content?.caption.contains("@") == true)
+    }
+
+    func testLedgerPreservesMemberOrderWhenTrimming() {
+        let members = (1 ... 8).map { member(id: "m\($0)", name: "M\($0)", wins: 0) }
+        let data = ledgerData(memberIds: members.map(\.id))
+        let layout = ShareCardLayout.seasonLedger(data: data, members: members, currentUserId: "m8")
+        XCTAssertEqual(layout.columns.count, ShareCardLayout.ledgerMemberColumnLimit)
+        XCTAssertEqual(layout.columns.map(\.shortName), ["You", "M1", "M2", "M3", "M4", "M5"])
     }
 
     // MARK: - Fixtures

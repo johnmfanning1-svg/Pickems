@@ -17,6 +17,7 @@ struct LeaguePickemsBoard: View {
     var pickMode: PickMode = .ats
     /// Screen root presents the fullscreen chart. Nil hides the expand control.
     var onExpand: (() -> Void)? = nil
+    var shareGroupId: String? = nil
     var shareLeagueName: String? = nil
     var sharePeriodLabel: String? = nil
 
@@ -68,12 +69,17 @@ struct LeaguePickemsBoard: View {
     }
 
     private var allowsShare: Bool {
-        shareLeagueName != nil && sharePeriodLabel != nil && !members.isEmpty && !games.isEmpty
+        shareGroupId != nil
+            && shareLeagueName != nil
+            && sharePeriodLabel != nil
+            && !members.isEmpty
+            && !games.isEmpty
     }
 
     private var chartShareContent: ScreenShareContent? {
-        guard let shareLeagueName, let sharePeriodLabel else { return nil }
+        guard let shareGroupId, let shareLeagueName, let sharePeriodLabel else { return nil }
         return ScreenShareContent.makePickemsChart(
+            groupId: shareGroupId,
             leagueName: shareLeagueName,
             periodLabel: sharePeriodLabel,
             members: members,
@@ -471,6 +477,7 @@ struct LeaguePickemsExpandedBoard: View {
     var hiddenGameIds: Set<String> = []
     var fillsAvailableWidth: Bool = false
     var pickMode: PickMode = .ats
+    var shareGroupId: String? = nil
     var shareLeagueName: String? = nil
     var sharePeriodLabel: String? = nil
 
@@ -491,6 +498,7 @@ struct LeaguePickemsExpandedBoard: View {
                     hiddenGameIds: hiddenGameIds,
                     fillsAvailableWidth: fillsAvailableWidth,
                     pickMode: pickMode,
+                    shareGroupId: shareGroupId,
                     shareLeagueName: shareLeagueName,
                     sharePeriodLabel: sharePeriodLabel
                 )
@@ -502,29 +510,6 @@ struct LeaguePickemsExpandedBoard: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    if let leagueName = shareLeagueName,
-                       let period = sharePeriodLabel,
-                       !members.isEmpty,
-                       !games.isEmpty {
-                        ShareScreenButton(
-                            accessibilityLabel: "Share league Pickems chart",
-                            buildContent: {
-                                ScreenShareContent.makePickemsChart(
-                                    leagueName: leagueName,
-                                    periodLabel: period,
-                                    members: members,
-                                    games: games,
-                                    picksByUserId: picksByUserId,
-                                    hiddenGameIds: hiddenGameIds,
-                                    pickMode: pickMode,
-                                    currentUserId: currentUserId,
-                                    liveCards: liveCards
-                                )
-                            }
-                        )
-                    }
                 }
             }
         }
