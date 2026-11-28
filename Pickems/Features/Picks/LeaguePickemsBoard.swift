@@ -17,6 +17,8 @@ struct LeaguePickemsBoard: View {
     var pickMode: PickMode = .ats
     /// Screen root presents the fullscreen chart. Nil hides the expand control.
     var onExpand: (() -> Void)? = nil
+    var shareLeagueName: String? = nil
+    var sharePeriodLabel: String? = nil
 
     @Environment(\.themePalette) private var theme
     @AppStorage(DensityPicker.leagueChartStorageKey) private var isDense = DensityPicker.leagueChartDefaultsDense
@@ -65,6 +67,25 @@ struct LeaguePickemsBoard: View {
         columns.filter { $0.id != currentUserId }
     }
 
+    private var allowsShare: Bool {
+        shareLeagueName != nil && sharePeriodLabel != nil && !members.isEmpty && !games.isEmpty
+    }
+
+    private var chartShareContent: ScreenShareContent? {
+        guard let shareLeagueName, let sharePeriodLabel else { return nil }
+        return ScreenShareContent.makePickemsChart(
+            leagueName: shareLeagueName,
+            periodLabel: sharePeriodLabel,
+            members: members,
+            games: games,
+            picksByUserId: picksByUserId,
+            hiddenGameIds: hiddenGameIds,
+            pickMode: pickMode,
+            currentUserId: currentUserId,
+            liveCards: liveCards
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             colorKey
@@ -96,6 +117,12 @@ struct LeaguePickemsBoard: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(PickemsColors.textSecondary)
                 Spacer(minLength: 8)
+                if allowsShare {
+                    ShareScreenButton(
+                        accessibilityLabel: "Share league Pickems chart",
+                        buildContent: { chartShareContent }
+                    )
+                }
                 densityPicker
                 if allowsExpand, let onExpand {
                     expandChartButton(onExpand)
@@ -444,6 +471,8 @@ struct LeaguePickemsExpandedBoard: View {
     var hiddenGameIds: Set<String> = []
     var fillsAvailableWidth: Bool = false
     var pickMode: PickMode = .ats
+    var shareLeagueName: String? = nil
+    var sharePeriodLabel: String? = nil
 
     @Environment(\.dismiss) private var dismiss
 
@@ -461,7 +490,9 @@ struct LeaguePickemsExpandedBoard: View {
                     isExpandedLayout: true,
                     hiddenGameIds: hiddenGameIds,
                     fillsAvailableWidth: fillsAvailableWidth,
-                    pickMode: pickMode
+                    pickMode: pickMode,
+                    shareLeagueName: shareLeagueName,
+                    sharePeriodLabel: sharePeriodLabel
                 )
                 .padding()
             }
@@ -471,6 +502,29 @@ struct LeaguePickemsExpandedBoard: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if let leagueName = shareLeagueName,
+                       let period = sharePeriodLabel,
+                       !members.isEmpty,
+                       !games.isEmpty {
+                        ShareScreenButton(
+                            accessibilityLabel: "Share league Pickems chart",
+                            buildContent: {
+                                ScreenShareContent.makePickemsChart(
+                                    leagueName: leagueName,
+                                    periodLabel: period,
+                                    members: members,
+                                    games: games,
+                                    picksByUserId: picksByUserId,
+                                    hiddenGameIds: hiddenGameIds,
+                                    pickMode: pickMode,
+                                    currentUserId: currentUserId,
+                                    liveCards: liveCards
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }

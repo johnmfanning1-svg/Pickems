@@ -837,6 +837,29 @@ struct LeaderboardView: View {
             subtitle: standingsSubtitle,
             help: PickemsHelp.leaderboard(for: appState.selectedPickMode)
         ) {
+            leaderboardTrailingControls
+        }
+    }
+
+    @ViewBuilder
+    private var leaderboardTrailingControls: some View {
+        HStack(spacing: 8) {
+            if !allEntries.isEmpty,
+               let leagueName = appState.groupService.selectedGroup?.name {
+                ShareScreenButton(
+                    accessibilityLabel: "Share leaderboard",
+                    style: .headerAccessory,
+                    buildContent: {
+                        ScreenShareContent.makeLeaderboard(
+                            leagueName: leagueName,
+                            scope: scope,
+                            entries: allEntries,
+                            viewerId: appState.currentUserId,
+                            leaderWins: leaderWins
+                        )
+                    }
+                )
+            }
             seasonLedgerCapsule
         }
     }
@@ -961,6 +984,25 @@ struct FullLeaderboardView: View {
         .navigationTitle("Full Ranking")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                HStack(spacing: 4) {
+                    if !entries.isEmpty,
+                       let leagueName = appState.groupService.selectedGroup?.name {
+                        ShareScreenButton(
+                            accessibilityLabel: "Share leaderboard",
+                            buildContent: {
+                                ScreenShareContent.makeLeaderboard(
+                                    leagueName: leagueName,
+                                    scope: scope,
+                                    entries: entries,
+                                    viewerId: appState.currentUserId,
+                                    leaderWins: leaderWins
+                                )
+                            }
+                        )
+                    }
+                }
+            }
             HelpToolbarItem(topic: PickemsHelp.leaderboard(for: appState.selectedPickMode))
         }
     }
