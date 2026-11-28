@@ -20,7 +20,7 @@ struct ShareScreenButton: View {
     var body: some View {
         if isEnabled {
             button
-                .sheet(isPresented: $showFallbackSheet) {
+                .sheet(isPresented: $showFallbackSheet) { // presentation-ok: fallback when no screen presenter
                     ActivityView(items: shareItems)
                 }
         }
