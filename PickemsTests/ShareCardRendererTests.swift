@@ -159,16 +159,18 @@ final class ShareCardRendererTests: XCTestCase {
         }
 
         let image = ShareCardRenderer.renderScreenCard(content!)
-        XCTAssertNotNil(image)
+        guard let data = image?.pngData() else {
+            XCTFail("Expected PNG data")
+            return
+        }
+        XCTAssertGreaterThan(data.count, 10_000)
 
-        let mediaDir = "/cursor/stores/bc-f97379f5-cda9-4b47-911f-f6dd44e312a6/media"
+        let storeRoot = "/cursor/stores/bc-f97379f5-cda9-4b47-911f-f6dd44e312a6"
+        guard FileManager.default.fileExists(atPath: storeRoot) else { return }
+        let mediaDir = "\(storeRoot)/media"
         try FileManager.default.createDirectory(atPath: mediaDir, withIntermediateDirectories: true)
         let pngURL = URL(fileURLWithPath: "\(mediaDir)/share-pickems-card-sample-dark.png")
-        if let data = image?.pngData() {
-            try data.write(to: pngURL, options: .atomic)
-            XCTAssertTrue(FileManager.default.fileExists(atPath: pngURL.path))
-        } else {
-            XCTFail("Expected PNG data")
-        }
+        try data.write(to: pngURL, options: .atomic)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: pngURL.path))
     }
 }
