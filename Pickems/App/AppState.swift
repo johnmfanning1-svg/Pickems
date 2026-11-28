@@ -195,6 +195,9 @@ final class AppState {
 
         await notificationService.saveToken(for: userId)
         LiveActivityController.resume()
+        if groupService.hasCompletedInitialGroupLoad {
+            flushPendingSharedLeagueLink()
+        }
         CrashReport.breadcrumb("session.on_auth_ready_complete", metadata: [
             "gen": "\(generation)",
             "uid": AppEvents.shortUID(userId),
@@ -240,8 +243,10 @@ final class AppState {
         case .openSelections(let groupId):
             selectDeepLinkGroup(groupId)
             selectedTab = .selections
-        case .openLeagues(let groupId):
+        case .openSharedLeague(let groupId):
             handleSharedLeagueDeepLink(groupId: groupId)
+        case .openLeagues(let groupId):
+            handleNotificationLeaguesDeepLink(groupId: groupId)
         case .openHome:
             selectedTab = .home
         case .openDiscover:
@@ -269,8 +274,20 @@ final class AppState {
         handleSharedLeagueDeepLink(groupId: groupId)
     }
 
+    private func handleNotificationLeaguesDeepLink(groupId: String?) {
+        selectedTab = .leagues
+        guard let groupId, !groupId.isEmpty else { return }
+        guard groupService.groups.contains(where: { $0.id == groupId }) else { return }
+        selectDeepLinkGroup(groupId)
+    }
+
     private func handleSharedLeagueDeepLink(groupId: String?) {
         guard let groupId, !groupId.isEmpty else {
+            selectedTab = .leagues
+            return
+        }
+        guard authService.isAuthenticated else {
+            pendingSharedLeagueGroupId = groupId
             selectedTab = .leagues
             return
         }

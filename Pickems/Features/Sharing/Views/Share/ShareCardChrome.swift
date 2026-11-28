@@ -62,7 +62,12 @@ struct ShareCardChrome<Body: View>: View {
     }
 
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Join \(leagueName) on Pickems")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(PickemsColors.textPrimary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.75)
             if let leagueShareURL {
                 Text(leagueShareURL)
                     .font(.system(size: 18, weight: .medium))
@@ -70,14 +75,6 @@ struct ShareCardChrome<Body: View>: View {
                     .lineLimit(2)
                     .minimumScaleFactor(0.7)
             }
-            Text("Get Pickems on the App Store")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(PickemsColors.accent)
-            Text(AppConfig.appStoreURL)
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(PickemsColors.textSecondary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

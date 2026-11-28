@@ -40,7 +40,7 @@ set -e
 # ReopenSelectionsWriter success-path tests replace write-order constant (+1 net). Do not lower this.
 # Season Ledger polish adds 4 (collapsed weeks + column width).
 # Mode B bowl season adds 4 tests in CFBBowlSeasonTests.
-MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-873}"
+MIN_EXPECTED_TESTS="${MIN_EXPECTED_TESTS:-877}"
 grep -iE "error:|Test case .* failed|\*\* TEST" "$OUT/logs/test.log" | tail -n 200 || true
 summary="$OUT/logs/test-summary.json"
 if ! xcrun xcresulttool get test-results summary --path "$OUT/TestResults.xcresult" --format json > "$summary" 2>"$OUT/logs/xcresulttool.err"; then

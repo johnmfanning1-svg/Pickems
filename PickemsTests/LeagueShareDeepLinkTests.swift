@@ -4,12 +4,12 @@ import XCTest
 final class LeagueShareDeepLinkTests: XCTestCase {
     func testParseShortLeaguePathOnWebHost() {
         let url = URL(string: "https://pickems-fb.web.app/l/group-abc")!
-        XCTAssertEqual(DeepLinkRouter.parse(url: url), .openLeagues(groupId: "group-abc"))
+        XCTAssertEqual(DeepLinkRouter.parse(url: url), .openSharedLeague(groupId: "group-abc"))
     }
 
     func testParseLeagueSlugOnWebHost() {
         let url = URL(string: "https://pickems-fb.web.app/league/group-xyz")!
-        XCTAssertEqual(DeepLinkRouter.parse(url: url), .openLeagues(groupId: "group-xyz"))
+        XCTAssertEqual(DeepLinkRouter.parse(url: url), .openSharedLeague(groupId: "group-xyz"))
     }
 
     func testParseLeagueSlugRejectsWeekPaths() {
@@ -19,18 +19,18 @@ final class LeagueShareDeepLinkTests: XCTestCase {
 
     func testParseCustomSchemeShortHost() {
         let url = URL(string: "pickems://l/group-99")!
-        XCTAssertEqual(DeepLinkRouter.parse(url: url), .openLeagues(groupId: "group-99"))
+        XCTAssertEqual(DeepLinkRouter.parse(url: url), .openSharedLeague(groupId: "group-99"))
     }
 
     func testParsePickemsSchemeLeagueOnly() {
         let url = URL(string: "pickems://league/group-only")!
-        XCTAssertEqual(DeepLinkRouter.parse(url: url), .openLeagues(groupId: "group-only"))
+        XCTAssertEqual(DeepLinkRouter.parse(url: url), .openSharedLeague(groupId: "group-only"))
     }
 
     func testParseSharedLeagueLinkHelper() {
         XCTAssertEqual(
             DeepLinkRouter.parseSharedLeagueLink(path: "l/abc 123"),
-            .openLeagues(groupId: "abc 123")
+            .openSharedLeague(groupId: "abc 123")
         )
         XCTAssertNil(DeepLinkRouter.parseSharedLeagueLink(path: "l/a/b"))
         XCTAssertNil(DeepLinkRouter.parseSharedLeagueLink(path: "join/abc"))

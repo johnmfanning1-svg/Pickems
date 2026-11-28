@@ -4,7 +4,10 @@ enum DeepLinkAction: Equatable, Sendable {
     case joinGroup(inviteCode: String)
     case openPickems(groupId: String?)
     case openSelections(groupId: String?)
+    /// Push / in-app tab routes — never prompt join for a non-member.
     case openLeagues(groupId: String?)
+    /// Public league share links — may offer join for non-members.
+    case openSharedLeague(groupId: String)
     case openHome
     case openDiscover
     case openLiveSlate(groupId: String?)
@@ -144,14 +147,14 @@ enum DeepLinkRouter {
         parts.removeFirst()
         guard parts.count == 1 else { return nil }
         let groupId = parts[0]
-        return groupId.isEmpty ? nil : .openLeagues(groupId: groupId)
+        return groupId.isEmpty ? nil : .openSharedLeague(groupId: groupId)
     }
 
     nonisolated static func parseSharedLeagueId(from rawPath: String) -> DeepLinkAction? {
         let groupId = rawPath
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             .removingPercentEncoding ?? rawPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return groupId.isEmpty ? nil : .openLeagues(groupId: groupId)
+        return groupId.isEmpty ? nil : .openSharedLeague(groupId: groupId)
     }
 
     nonisolated static func parseLeaguePath(_ rawPath: String) -> DeepLinkAction? {
@@ -166,7 +169,7 @@ enum DeepLinkRouter {
         }
         if parts.count == 1 {
             let groupId = parts[0]
-            return groupId.isEmpty ? nil : .openLeagues(groupId: groupId)
+            return groupId.isEmpty ? nil : .openSharedLeague(groupId: groupId)
         }
         guard parts.count >= 3, parts[1].lowercased() == "week" else { return nil }
         let groupId = parts[0]

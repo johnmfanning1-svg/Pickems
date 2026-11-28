@@ -3,8 +3,9 @@ import SwiftUI
 struct LeaguePickemsShareCard: View {
     let model: PickemsChartShareModel
 
-    private let gameWidth: CGFloat = 200
-    private let columnWidth: CGFloat = 72
+    private var tableWidth: CGFloat {
+        model.gameColumnWidth + CGFloat(model.columns.count) * model.memberColumnWidth
+    }
 
     var body: some View {
         ShareCardChrome(
@@ -13,9 +14,10 @@ struct LeaguePickemsShareCard: View {
             contextTitle: "League Pickems",
             leagueShareURL: AppConfig.leagueShareURL(groupId: model.groupId)
         ) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 colorKey
                 chartTable
+                stillToPlayStrip
                 footnotes
             }
         }
@@ -41,60 +43,81 @@ struct LeaguePickemsShareCard: View {
             .clipShape(Capsule())
     }
 
+  @ViewBuilder
     private var chartTable: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                Text("Game")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(PickemsColors.textSecondary)
-                    .frame(width: gameWidth, alignment: .leading)
-                    .padding(.leading, 8)
-
-                ForEach(Array(model.columns.enumerated()), id: \.offset) { _, column in
-                    Text(column.shortName)
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(column.isViewer ? PickemsColors.accent : PickemsColors.textPrimary)
-                        .frame(width: columnWidth)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.7)
-                }
-            }
-            .padding(.vertical, 10)
-            .background(PickemsColors.cardBackground)
-
-            ForEach(Array(model.games.enumerated()), id: \.offset) { _, game in
+        if !model.games.isEmpty {
+            VStack(spacing: 0) {
                 HStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: 2) {
+                    Text("Game")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                        .frame(width: model.gameColumnWidth, alignment: .leading)
+                        .padding(.leading, 8)
+
+                    ForEach(Array(model.columns.enumerated()), id: \.offset) { _, column in
+                        Text(column.shortName)
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(column.isViewer ? PickemsColors.accent : PickemsColors.textPrimary)
+                            .frame(width: model.memberColumnWidth)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.7)
+                    }
+                }
+                .padding(.vertical, 8)
+                .background(PickemsColors.cardBackground)
+
+                ForEach(Array(model.games.enumerated()), id: \.offset) { _, game in
+                    HStack(spacing: 0) {
                         Text(game.matchup)
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(PickemsColors.textPrimary)
                             .lineLimit(2)
-                            .minimumScaleFactor(0.75)
-                        if let score = game.scoreLine {
-                            Text(score)
-                                .font(.system(size: 15, weight: .medium).monospacedDigit())
-                                .foregroundStyle(PickemsColors.textSecondary)
+                            .minimumScaleFactor(0.7)
+                            .frame(width: model.gameColumnWidth, alignment: .leading)
+                            .padding(.leading, 8)
+                            .padding(.vertical, 6)
+
+                        ForEach(Array(game.cells.enumerated()), id: \.offset) { index, cell in
+                            cellView(cell)
+                                .frame(width: model.memberColumnWidth, height: 40)
+                                .background(index < model.columns.count && model.columns[index].isViewer ? PickemsColors.hairlineSubtle.opacity(0.15) : Color.clear)
                         }
                     }
-                    .frame(width: gameWidth, alignment: .leading)
-                    .padding(.leading, 8)
-                    .padding(.vertical, 8)
-
-                    ForEach(Array(game.cells.enumerated()), id: \.offset) { index, cell in
-                        cellView(cell)
-                            .frame(width: columnWidth, height: 52)
-                            .background(index < model.columns.count && model.columns[index].isViewer ? PickemsColors.hairlineSubtle.opacity(0.15) : Color.clear)
-                    }
+                    .background(PickemsColors.cardBackground)
                 }
-                .background(PickemsColors.cardBackground)
             }
+            .frame(width: tableWidth, alignment: .leading)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(PickemsColors.hairline, lineWidth: 1)
+            )
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(PickemsColors.hairline, lineWidth: 1)
-        )
+    }
+
+    @ViewBuilder
+    private var stillToPlayStrip: some View {
+        if let strip = model.stillToPlay {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Still to play")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(PickemsColors.textSecondary)
+                if !strip.chips.isEmpty {
+                    Text(strip.chips.joined(separator: " · "))
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(PickemsColors.textPrimary)
+                        .lineLimit(4)
+                        .minimumScaleFactor(0.75)
+                }
+                if let note = strip.picksHiddenNote {
+                    Text(note)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(PickemsColors.textSecondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     @ViewBuilder
@@ -102,7 +125,7 @@ struct LeaguePickemsShareCard: View {
         switch cell.kind {
         case .locked:
             Image(systemName: "lock.fill")
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(PickemsColors.textSecondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(PickemsColors.cardBackground)
